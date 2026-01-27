@@ -20,10 +20,10 @@ import {
   COMMON_STYLES,
 } from '../constants/theme';
 
-const LoginScreen = () => {
+const SignUpScreen = () => {
   const navigation = useNavigation();
-  const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -38,7 +38,7 @@ const LoginScreen = () => {
           >
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Login to Your Account</Text>
+          <Text style={styles.headerTitle}>Create Your Account</Text>
           <Text style={styles.headerSubtitle}>
             Let's get started on your journey to better health. to better
             health.
@@ -46,58 +46,59 @@ const LoginScreen = () => {
         </SafeAreaView>
       </View>
 
-      {/* Login Form Container */}
+      {/* Form Container */}
       <View style={styles.formCard}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Email Field */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
+        >
+          {/* Email Input */}
           <Text style={styles.inputLabel}>Email</Text>
           <View style={styles.inputWrapper}>
             <Text style={styles.inputIcon}>✉</Text>
             <TextInput
               style={styles.input}
-              placeholder="andrew_ainsley@yourdomain.com"
-              placeholderTextColor="#333"
+              placeholder="john.doe@domain.com"
+              placeholderTextColor="#999"
             />
           </View>
 
-          {/* Password Field (Active State) */}
-          <Text style={styles.inputLabel}>Password</Text>
+          {/* Password Input (Focused/Active State) */}
+          <Text style={styles.inputLabel}>Create Password</Text>
           <View style={[styles.inputWrapper, styles.inputActive]}>
             <Text style={[styles.inputIcon, { color: '#FF7F0B' }]}>🔒</Text>
             <TextInput
               style={styles.input}
               secureTextEntry={!passwordVisible}
-              value="password12345"
+              value="123456789012" // Placeholder dots
             />
             <TouchableOpacity
               onPress={() => setPasswordVisible(!passwordVisible)}
             >
-              <Text style={[styles.eyeIcon, { color: '#FF7F0B' }]}>👁</Text>
+              <Text style={styles.eyeIcon}>👁</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Remember Me & Forgot Password Row */}
-          <View style={styles.optionsRow}>
+          {/* Confirm Password Input */}
+          <Text style={styles.inputLabel}>Confirm Password</Text>
+          <View style={styles.inputWrapper}>
+            <Text style={styles.inputIcon}>🔒</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm Password"
+              placeholderTextColor="#BBB"
+              secureTextEntry={!confirmPasswordVisible}
+            />
             <TouchableOpacity
-              style={styles.checkboxContainer}
-              onPress={() => setRememberMe(!rememberMe)}
+              onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
             >
-              <View
-                style={[styles.checkbox, rememberMe && styles.checkboxChecked]}
-              >
-                {rememberMe && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <Text style={styles.rememberText}>Remember me</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity>
-              <Text style={styles.forgotText}>Foregate Password</Text>
+              <Text style={styles.eyeIcon}>👁</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Sign In Button */}
-          <TouchableOpacity style={styles.signInButton}>
-            <Text style={styles.signInButtonText}>Sign in</Text>
+          {/* Sign Up Button */}
+          <TouchableOpacity style={styles.signUpButton}>
+            <Text style={styles.signUpButtonText}>Sign up</Text>
           </TouchableOpacity>
 
           {/* Divider */}
@@ -107,7 +108,7 @@ const LoginScreen = () => {
             <View style={styles.line} />
           </View>
 
-          {/* Social Icons */}
+          {/* Social Row */}
           <View style={styles.socialRow}>
             <TouchableOpacity style={styles.socialCircle}>
               <Text>FB</Text>
@@ -122,9 +123,9 @@ const LoginScreen = () => {
 
           {/* Footer */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-              <Text style={styles.signUpLink}>Sign up</Text>
+            <Text style={styles.footerText}>Already Have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.loginLink}>Login</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -164,7 +165,7 @@ const styles = StyleSheet.create({
   },
   formCard: {
     flex: 1,
-    marginTop: -SPACING.lg,
+    marginTop: -SPACING.lg, // Overlaps header slightly
     backgroundColor: COLORS.white,
     borderTopLeftRadius: BORDER_RADIUS.xxxl,
     borderTopRightRadius: BORDER_RADIUS.xxxl,
@@ -188,68 +189,31 @@ const styles = StyleSheet.create({
   },
   inputActive: {
     borderWidth: 1,
-    borderColor: '#FF7F0B',
-    backgroundColor: '#FFF5EE', // Subtle orange tint for active field
+    borderColor: '#FF7F0B', // Highlighted border
   },
   inputIcon: {
     fontSize: 18,
     marginRight: 10,
+    color: '#333',
   },
   input: {
     flex: 1,
     fontSize: 16,
     color: '#333',
-    fontWeight: '500',
   },
   eyeIcon: {
     fontSize: 18,
+    color: '#999',
   },
-  optionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#FF7F0B',
-    marginRight: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#FF7F0B',
-  },
-  checkmark: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  rememberText: {
-    color: '#666',
-    fontSize: 14,
-  },
-  forgotText: {
-    color: '#FF7F0B',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  signInButton: {
-    backgroundColor: '#32373D',
+  signUpButton: {
+    backgroundColor: '#32373D', // Dark button color
     borderRadius: 30,
     height: 65,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 35,
   },
-  signInButtonText: {
+  signUpButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
@@ -267,7 +231,7 @@ const styles = StyleSheet.create({
   orText: {
     marginHorizontal: 15,
     color: '#666',
-    fontSize: 14,
+    fontSize: 16,
   },
   socialRow: {
     flexDirection: 'row',
@@ -287,17 +251,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 40,
-    marginBottom: 20,
   },
   footerText: {
     color: '#999',
     fontSize: 15,
   },
-  signUpLink: {
+  loginLink: {
     color: '#FF7F0B',
     fontSize: 15,
     fontWeight: '600',
   },
 });
 
-export default LoginScreen;
+export default SignUpScreen;
