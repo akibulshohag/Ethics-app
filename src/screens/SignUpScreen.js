@@ -20,6 +20,8 @@ import {
   COMMON_STYLES,
 } from '../constants/theme';
 
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 const SignUpScreen = () => {
   const navigation = useNavigation();
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -55,7 +57,8 @@ const SignUpScreen = () => {
           {/* Email Input */}
           <Text style={styles.inputLabel}>Email</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputIcon}>✉</Text>
+            <Icon name="email" size={20} color="black" />
+
             <TextInput
               style={styles.input}
               placeholder="john.doe@domain.com"
@@ -66,7 +69,7 @@ const SignUpScreen = () => {
           {/* Password Input (Focused/Active State) */}
           <Text style={styles.inputLabel}>Create Password</Text>
           <View style={[styles.inputWrapper, styles.inputActive]}>
-            <Text style={[styles.inputIcon, { color: '#FF7F0B' }]}>🔒</Text>
+            <Icon name="lock" size={20} color="black" />
             <TextInput
               style={styles.input}
               secureTextEntry={!passwordVisible}
@@ -75,14 +78,18 @@ const SignUpScreen = () => {
             <TouchableOpacity
               onPress={() => setPasswordVisible(!passwordVisible)}
             >
-              <Text style={styles.eyeIcon}>👁</Text>
+              <Icon
+                name={passwordVisible ? 'eye' : 'eye-off'}
+                size={20}
+                color="black"
+              />
             </TouchableOpacity>
           </View>
 
           {/* Confirm Password Input */}
           <Text style={styles.inputLabel}>Confirm Password</Text>
           <View style={styles.inputWrapper}>
-            <Text style={styles.inputIcon}>🔒</Text>
+            <Icon name="lock" size={20} color="black" />
             <TextInput
               style={styles.input}
               placeholder="Confirm Password"
@@ -92,7 +99,11 @@ const SignUpScreen = () => {
             <TouchableOpacity
               onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
             >
-              <Text style={styles.eyeIcon}>👁</Text>
+              <Icon
+                name={confirmPasswordVisible ? 'eye' : 'eye-off'}
+                size={20}
+                color="black"
+              />
             </TouchableOpacity>
           </View>
 
@@ -111,13 +122,13 @@ const SignUpScreen = () => {
           {/* Social Row */}
           <View style={styles.socialRow}>
             <TouchableOpacity style={styles.socialCircle}>
-              <Text>FB</Text>
+              <Icon name="facebook" size={20} color="black" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.socialCircle}>
-              <Text>G</Text>
+              <Icon name="google" size={20} color="black" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.socialCircle}>
-              <Text></Text>
+              <Icon name="apple" size={20} color="black" />
             </TouchableOpacity>
           </View>
 
@@ -140,8 +151,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryOrange,
     paddingHorizontal: SPACING.xxl,
     paddingBottom: SPACING.xxl,
-    borderBottomLeftRadius: BORDER_RADIUS.xxxl,
-    borderBottomRightRadius: BORDER_RADIUS.xxxl,
   },
   backButton: {
     marginTop: SPACING.sm,
@@ -152,7 +161,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
   },
   headerTitle: {
-    fontSize: FONTS.xxxxl,
+    fontSize: FONTS.xxxl,
     fontWeight: FONTS.bold,
     color: COLORS.white,
     marginBottom: SPACING.sm,
@@ -162,13 +171,14 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     opacity: 0.9,
     lineHeight: 22,
+    marginBottom: SPACING.lg,
   },
   formCard: {
     flex: 1,
     marginTop: -SPACING.lg, // Overlaps header slightly
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: BORDER_RADIUS.xxxl,
-    borderTopRightRadius: BORDER_RADIUS.xxxl,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
     paddingHorizontal: SPACING.xxl,
     paddingTop: SPACING.xxl,
   },

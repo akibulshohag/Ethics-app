@@ -220,18 +220,19 @@ const styles = StyleSheet.create({
   dot: COMMON_STYLES.dot,
   activeDot: COMMON_STYLES.activeDot,
   textWrapper: {
-    alignItems: 'center',
     marginBottom: SPACING.xxxxl,
   },
   title: {
-    ...COMMON_STYLES.h2,
-    textAlign: 'center',
+    ...COMMON_STYLES.h1,
+    textAlign: 'left ',
   },
   subtitle: {
     ...COMMON_STYLES.bodyMedium,
-    textAlign: 'center',
+    textAlign: 'left',
     marginTop: SPACING.lg,
-    paddingHorizontal: SPACING.sm,
+    marginBottom: SPACING.xxxl,
+    paddingHorizontal: SPACING.xxl,
+    color: COLORS.gray700,
   },
   nextButton: {
     width: '100%',
