@@ -5,7 +5,6 @@ import {
   Text,
   ImageBackground,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   Dimensions,
@@ -21,6 +20,7 @@ import {
   DIMENSIONS,
   COMMON_STYLES,
 } from '../constants/theme';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SCREEN_WIDTH = DIMENSIONS.screenWidth;
 
