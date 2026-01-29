@@ -25,6 +25,12 @@ const ProfileScreen = () => {
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Log Out</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('VideoDetailsScreen')}>
+          <Text style={styles.logoutButtonText}>Videos Details</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('ChannelDetailsScreen')}>
+          <Text style={styles.logoutButtonText}>Channel Details</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );

@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
-import ProfileScreen from '../screens/ProfileScreen';
+import ProfileNavigation from './ProfileStack';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -70,7 +70,7 @@ const BottomNaivgation = () => {
           />
           <Tab.Screen
             name="Profile"
-            component={ProfileScreen}
+            component={ProfileNavigation}
             options={{
               tabBarLabel: 'Profile',
               tabBarIcon: ({ focused, color }) => (
