@@ -14,6 +14,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import CustomHeader from '../components/CustomHeader';
 import VideoCard from '../components/VideoCard';
 import CompactVideoCard from '../components/CompactVideoCard';
+import ShortsVideoCard from '../components/ShortsVideoCard';
 
 const MOCK_CHANNEL_VIDEOS = [
   {
@@ -78,6 +79,15 @@ const MOCK_CHANNEL_VIDEOS = [
     },
 ];
 
+const MOCK_SHORTS = [
+    { id: 's1', title: 'Only You - New Single Release Music by Worl...', views: '4.8M views', thumbnail: 'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 's2', title: 'International Bastau Concert Video Clips', views: '6.5M views', thumbnail: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 's3', title: 'International Music Competition in New York', views: '2.8M views', thumbnail: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 's4', title: 'Music & Dance Festival Sydney, Australia', views: '3.9M views', thumbnail: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 's5', title: 'Lorem ipsum dolor sit amet, consectetur adipis elit sed do eiusmod.', views: '000 views', thumbnail: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 's6', title: 'Lorem ipsum dolor sit amet, consectetur adipis elit sed do eiusmod.', views: '000 views', thumbnail: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+];
+
 const TABS = ['Home', 'Videos', 'Playlists', 'About'];
 const FILTERS = ['Videos', 'Shorts', 'Live'];
 
@@ -125,12 +135,14 @@ const ChannelDetailsScreen = () => {
       </View>
       )}
       
-      {activeTab === 'Videos' && (
+      {(activeTab === 'Videos' || activeTab === 'Playlists') &&(
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersWrapper}>
               <TouchableOpacity style={styles.sortByButton}>
                   <Text style={styles.sortByText}>Sort by</Text>
                   <MaterialCommunityIcons name="code-tags" size={16} color="#212121" style={{transform: [{rotate: '90deg'}]}} />
               </TouchableOpacity>
+              {activeTab == 'Videos' && (
+              <>
               {FILTERS.map(filter => (
                   <TouchableOpacity 
                     key={filter} 
@@ -140,6 +152,8 @@ const ChannelDetailsScreen = () => {
                       <Text style={[styles.filterChipText, activeFilter === filter && styles.activeFilterChipText]}>{filter}</Text>
                   </TouchableOpacity>
               ))}
+              </>
+          )}
           </ScrollView>
       )}
     </View>
@@ -147,9 +161,24 @@ const ChannelDetailsScreen = () => {
   
   const renderItem = ({ item }) => {
       if (activeTab === 'Videos') {
-          return <CompactVideoCard video={item} onPress={() => {}} />;
+          if (activeFilter === 'Shorts') {
+              return <ShortsVideoCard video={item} onPress={() => {}} />;
+          }
+           return <CompactVideoCard video={item} onPress={() => {}} />;
       }
       return <VideoCard video={item} onPress={() => {}} />;
+  };
+
+  const getData = () => {
+       if (activeTab === 'Videos' && activeFilter === 'Shorts') {
+           return MOCK_SHORTS;
+       }
+       return MOCK_CHANNEL_VIDEOS;
+  };
+
+  const getNumColumns = () => {
+      if (activeTab === 'Videos' && activeFilter === 'Shorts') return 2;
+      return 1;
   };
 
   return (
@@ -157,13 +186,16 @@ const ChannelDetailsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <CustomHeader title="Kristo Restaurant" />
       <FlatList
-        data={MOCK_CHANNEL_VIDEOS}
+        key={activeFilter} // Force re-render when changing layout (numColumns)
+        data={getData()}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        stickyHeaderIndices={[0]} 
+        stickyHeaderIndices={[0]}
+        numColumns={getNumColumns()}
+        columnWrapperStyle={getNumColumns() === 2 ? styles.columnWrapper : null}
       />
     </SafeAreaView>
   );
@@ -297,5 +329,9 @@ const styles = StyleSheet.create({
   },
   activeFilterChipText: {
       color: '#fff',
+  },
+  columnWrapper: {
+      justifyContent: 'space-between',
+      paddingHorizontal: 16, 
   },
 });
