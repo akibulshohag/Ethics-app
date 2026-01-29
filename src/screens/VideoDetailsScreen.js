@@ -19,6 +19,7 @@ import VideoCard from '../components/VideoCard';
 import DescriptionModal from '../components/DescriptionModal';
 import SaveModal from '../components/SaveModal';
 import CommentsModal from '../components/CommentsModal';
+import LiveChatModal from '../components/LiveChatModal';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 
@@ -90,6 +91,7 @@ const VideoDetailsScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [liveChatModalVisible, setLiveChatModalVisible] = useState(false);
   
   // Using the first mock video for the details
   const currentVideo = MOCK_VIDEO_DATA[0];
@@ -161,7 +163,7 @@ const VideoDetailsScreen = () => {
         <View style={styles.actionsContainer}>
           <ActionButton icon="thumb-up-outline" label="20K" />
           <ActionButton icon="thumb-down-outline" label="879" />
-          <ActionButton icon="comment-text-outline" label="Chat" onPress={() => setCommentsModalVisible(true)} />
+          <ActionButton icon="comment-text-outline" label="Chat" onPress={() => setLiveChatModalVisible(true)} />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
           <ActionButton icon="download-outline" label="Download" />
           <ActionButton icon="plus-box-outline" label="Save" onPress={() => setSaveModalVisible(true)} />
@@ -231,6 +233,10 @@ const VideoDetailsScreen = () => {
       <CommentsModal 
         visible={commentsModalVisible}
         onClose={() => setCommentsModalVisible(false)}
+      />
+      <LiveChatModal 
+        visible={liveChatModalVisible}
+        onClose={() => setLiveChatModalVisible(false)}
       />
     </SafeAreaView>
   );
