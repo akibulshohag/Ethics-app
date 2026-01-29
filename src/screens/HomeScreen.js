@@ -7,6 +7,10 @@ const HomeScreen = () => {
   return (
     <SafeAreaView>
       <Text>HomeScreen</Text>
+      <Button
+        title="Go to Video Details"
+        onPress={() => navigation.navigate('VideoDetailsScreen')}
+      />
     </SafeAreaView>
   );
 };
