@@ -16,6 +16,7 @@ import VideoCard from '../components/VideoCard';
 import CompactVideoCard from '../components/CompactVideoCard';
 import ShortsVideoCard from '../components/ShortsVideoCard';
 import PlaylistCard from '../components/PlaylistCard';
+import ChannelAbout from '../components/ChannelAbout';
 
 const MOCK_CHANNEL_VIDEOS = [
   {
@@ -178,6 +179,9 @@ const ChannelDetailsScreen = () => {
       if (activeTab === 'Playlists') {
           return <PlaylistCard playlist={item} onPress={() => {}} />;
       }
+      if (activeTab === 'About') {
+          return <ChannelAbout />;
+      }
       return <VideoCard video={item} onPress={() => {}} />;
   };
 
@@ -187,6 +191,9 @@ const ChannelDetailsScreen = () => {
        }
        if (activeTab === 'Playlists') {
            return MOCK_PLAYLISTS;
+       }
+       if (activeTab === 'About') {
+           return [{id: 'about'}]; // Dummy data for rendering the about component as item
        }
        return MOCK_CHANNEL_VIDEOS;
   };
@@ -204,7 +211,7 @@ const ChannelDetailsScreen = () => {
         key={activeFilter + activeTab} // Force re-render when changing activeTab or layout
         data={getData()}
         keyExtractor={(item) => item.id}
-        renderItem={renderItem}
+        renderItem={({ item }) => renderItem({ item })}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
