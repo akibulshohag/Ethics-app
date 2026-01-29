@@ -15,6 +15,7 @@ import CustomHeader from '../components/CustomHeader';
 import VideoCard from '../components/VideoCard';
 import CompactVideoCard from '../components/CompactVideoCard';
 import ShortsVideoCard from '../components/ShortsVideoCard';
+import PlaylistCard from '../components/PlaylistCard';
 
 const MOCK_CHANNEL_VIDEOS = [
   {
@@ -86,6 +87,14 @@ const MOCK_SHORTS = [
     { id: 's4', title: 'Music & Dance Festival Sydney, Australia', views: '3.9M views', thumbnail: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
     { id: 's5', title: 'Lorem ipsum dolor sit amet, consectetur adipis elit sed do eiusmod.', views: '000 views', thumbnail: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
     { id: 's6', title: 'Lorem ipsum dolor sit amet, consectetur adipis elit sed do eiusmod.', views: '000 views', thumbnail: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+];
+
+const MOCK_PLAYLISTS = [
+    { id: 'p1', title: 'Dance Competition 2022', videoCount: '120', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 'p2', title: 'Top Music of All Time', videoCount: '250', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 'p3', title: 'Most Listened Song in Century', videoCount: '300', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 'p4', title: 'International Music Festival', videoCount: '32', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
+    { id: 'p5', title: 'Most Epic Moment in Music Concert', videoCount: '50', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
 ];
 
 const TABS = ['Home', 'Videos', 'Playlists', 'About'];
@@ -166,12 +175,18 @@ const ChannelDetailsScreen = () => {
           }
            return <CompactVideoCard video={item} onPress={() => {}} />;
       }
+      if (activeTab === 'Playlists') {
+          return <PlaylistCard playlist={item} onPress={() => {}} />;
+      }
       return <VideoCard video={item} onPress={() => {}} />;
   };
 
   const getData = () => {
        if (activeTab === 'Videos' && activeFilter === 'Shorts') {
            return MOCK_SHORTS;
+       }
+       if (activeTab === 'Playlists') {
+           return MOCK_PLAYLISTS;
        }
        return MOCK_CHANNEL_VIDEOS;
   };
@@ -186,7 +201,7 @@ const ChannelDetailsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <CustomHeader title="Kristo Restaurant" />
       <FlatList
-        key={activeFilter} // Force re-render when changing layout (numColumns)
+        key={activeFilter + activeTab} // Force re-render when changing activeTab or layout
         data={getData()}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
