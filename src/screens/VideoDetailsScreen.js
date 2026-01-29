@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import VideoCard from '../components/VideoCard';
+import DescriptionModal from '../components/DescriptionModal';
 
 const { width } = Dimensions.get('window');
 
@@ -81,6 +82,10 @@ const ActionButton = ({ icon, label }) => (
 const VideoDetailsScreen = () => {
   const navigation = useNavigation();
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  
+  // Using the first mock video for the details
+  const currentVideo = MOCK_VIDEO_DATA[0];
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
@@ -115,14 +120,14 @@ const VideoDetailsScreen = () => {
         {/* Title */}
         <View style={styles.titleRow}>
           <Text style={styles.videoTitle}>
-            Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix
+            {currentVideo.title}
           </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => setModalVisible(true)}>
              <MaterialCommunityIcons name="chevron-down" size={24} color="#212121" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.viewCount}>2.5M views • 1 year ago</Text>
+        <Text style={styles.viewCount}>{currentVideo.views} • {currentVideo.publishedAt}</Text>
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
@@ -184,6 +189,11 @@ const VideoDetailsScreen = () => {
         renderItem={({ item }) => <VideoCard video={item} onPress={() => {}} />}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
+      />
+      <DescriptionModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        video={currentVideo}
       />
     </SafeAreaView>
   );
