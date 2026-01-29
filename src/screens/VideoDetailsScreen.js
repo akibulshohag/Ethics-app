@@ -10,6 +10,8 @@ import {
   StatusBar,
   ScrollView,
   TextInput,
+  Share,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -72,8 +74,8 @@ const MOCK_VIDEO_DATA = [
   },
 ];
 
-const ActionButton = ({ icon, label }) => (
-  <TouchableOpacity style={styles.actionButton}>
+const ActionButton = ({ icon, label, onPress }) => (
+  <TouchableOpacity style={styles.actionButton} onPress={onPress}>
     <MaterialCommunityIcons name={icon} size={24} color="#212121" />
     <Text style={styles.actionText}>{label}</Text>
   </TouchableOpacity>
@@ -86,6 +88,27 @@ const VideoDetailsScreen = () => {
   
   // Using the first mock video for the details
   const currentVideo = MOCK_VIDEO_DATA[0];
+
+  const onShare = async () => {
+    try {
+      const result = await Share.share({
+        message: `Check out this video: ${currentVideo.title}`,
+        url: 'https://youtube.com', // Placeholder URL
+        title: currentVideo.title,
+      });
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // shared with activity type of result.activityType
+        } else {
+          // shared
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // dismissed
+      }
+    } catch (error) {
+      Alert.alert(error.message);
+    }
+  };
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
@@ -134,7 +157,7 @@ const VideoDetailsScreen = () => {
           <ActionButton icon="thumb-up-outline" label="20K" />
           <ActionButton icon="thumb-down-outline" label="879" />
           <ActionButton icon="comment-text-outline" label="Chat" />
-          <ActionButton icon="share-outline" label="Share" />
+          <ActionButton icon="share-outline" label="Share" onPress={onShare} />
           <ActionButton icon="download-outline" label="Download" />
           <ActionButton icon="plus-box-outline" label="Save" />
         </View>
