@@ -15,9 +15,11 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import VideoCard from '../components/VideoCard';
 import DescriptionModal from '../components/DescriptionModal';
+import SaveModal from '../components/SaveModal';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
 
 const { width } = Dimensions.get('window');
 
@@ -85,6 +87,7 @@ const VideoDetailsScreen = () => {
   const navigation = useNavigation();
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
   
   // Using the first mock video for the details
   const currentVideo = MOCK_VIDEO_DATA[0];
@@ -159,7 +162,7 @@ const VideoDetailsScreen = () => {
           <ActionButton icon="comment-text-outline" label="Chat" />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
           <ActionButton icon="download-outline" label="Download" />
-          <ActionButton icon="plus-box-outline" label="Save" />
+          <ActionButton icon="plus-box-outline" label="Save" onPress={() => setSaveModalVisible(true)} />
         </View>
 
         {/* Channel Info */}
@@ -217,6 +220,10 @@ const VideoDetailsScreen = () => {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         video={currentVideo}
+      />
+      <SaveModal
+        visible={saveModalVisible}
+        onClose={() => setSaveModalVisible(false)}
       />
     </SafeAreaView>
   );
