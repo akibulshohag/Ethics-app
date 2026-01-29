@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import VideoCard from '../components/VideoCard';
 import DescriptionModal from '../components/DescriptionModal';
 import SaveModal from '../components/SaveModal';
+import CommentsModal from '../components/CommentsModal';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 
@@ -88,6 +89,7 @@ const VideoDetailsScreen = () => {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [commentsModalVisible, setCommentsModalVisible] = useState(false);
   
   // Using the first mock video for the details
   const currentVideo = MOCK_VIDEO_DATA[0];
@@ -159,7 +161,7 @@ const VideoDetailsScreen = () => {
         <View style={styles.actionsContainer}>
           <ActionButton icon="thumb-up-outline" label="20K" />
           <ActionButton icon="thumb-down-outline" label="879" />
-          <ActionButton icon="comment-text-outline" label="Chat" />
+          <ActionButton icon="comment-text-outline" label="Chat" onPress={() => setCommentsModalVisible(true)} />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
           <ActionButton icon="download-outline" label="Download" />
           <ActionButton icon="plus-box-outline" label="Save" onPress={() => setSaveModalVisible(true)} />
@@ -186,7 +188,7 @@ const VideoDetailsScreen = () => {
         </View>
 
         {/* Comments Preview */}
-         <View style={styles.commentsPreview}>
+         <TouchableOpacity style={styles.commentsPreview} onPress={() => setCommentsModalVisible(true)} activeOpacity={0.8}>
             <View style={styles.commentsHeader}>
                 <Text style={styles.commentsTitle}>Comments <Text style={styles.commentsCount}>3.8K</Text></Text>
                 <MaterialCommunityIcons name="unfold-more-horizontal" size={24} color="#212121" />
@@ -198,10 +200,11 @@ const VideoDetailsScreen = () => {
                         placeholder="Add a comment..."
                         placeholderTextColor="#606060"
                         style={styles.commentInputText}
+                        editable={false} // Make it just a trigger for the modal
                      />
                  </View>
             </View>
-         </View>
+         </TouchableOpacity>
       </View>
     </View>
   );
@@ -224,6 +227,10 @@ const VideoDetailsScreen = () => {
       <SaveModal
         visible={saveModalVisible}
         onClose={() => setSaveModalVisible(false)}
+      />
+      <CommentsModal 
+        visible={commentsModalVisible}
+        onClose={() => setCommentsModalVisible(false)}
       />
     </SafeAreaView>
   );
