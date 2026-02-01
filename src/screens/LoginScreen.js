@@ -103,7 +103,13 @@ const LoginScreen = () => {
           </View>
 
           {/* Sign In Button */}
-          <TouchableOpacity style={styles.signInButton}>
+
+          <TouchableOpacity
+            style={styles.signInButton}
+            onPress={() =>
+              navigation.navigate('Profile', { screen: 'ProfileScreen' })
+            }
+          >
             <Text style={styles.signInButtonText}>Sign in</Text>
           </TouchableOpacity>
 

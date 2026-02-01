@@ -12,6 +12,9 @@ import ForgotPassword from '../screens/ForgotPassword';
 import OtpVerification from '../screens/OtpVerification';
 import CreateNewPassword from '../screens/CreateNewPassword';
 import HomeVersion from '../screens/HomeVersion';
+import ProfileScreen from '../screens/ProfileScreen';
+import VideoDetailsScreen from '../screens/VideoDetailsScreen';
+import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
 
 const AccountNav = createStackNavigator();
 
@@ -33,6 +36,16 @@ const AuthStack = () => {
         component={CreateNewPassword}
       />
       <AccountNav.Screen name="Home" component={HomeVersion} />
+      <AccountNav.Screen name="ProfileScreen" component={ProfileScreen} />
+      <AccountNav.Screen name="Profile" component={ProfileScreen} />
+      <AccountNav.Screen
+        name="VideoDetailsScreen"
+        component={VideoDetailsScreen}
+      />
+      <AccountNav.Screen
+        name="ChannelDetailsScreen"
+        component={ChannelDetailsScreen}
+      />
     </AccountNav.Navigator>
   );
 };
