@@ -215,7 +215,7 @@ const ChannelDetailsScreen = () => {
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        stickyHeaderIndices={[0]}
+        // stickyHeaderIndices={[0]}
         numColumns={getNumColumns()}
         columnWrapperStyle={getNumColumns() === 2 ? styles.columnWrapper : null}
       />
