@@ -14,6 +14,9 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import TrendingView from './TrendingView';
+import NotificationScreen from './NotificationScreen';
+import SearchScreen from './SearchScreen';
 
 const { width } = Dimensions.get('window');
 
@@ -22,8 +25,16 @@ const CATEGORIES = ['Trending', 'All', 'For You', 'Live'];
 const STORIES = ['Tomato Guy', 'Fire Baking', 'Tomato Girl'];
 
 const CONTINUE_WATCHING_DATA = [
-  { id: 'c1', image: 'https://picsum.photos/id/237/400/225' },
-  { id: 'c2', image: 'https://picsum.photos/id/238/400/225' },
+  {
+    id: 'c1',
+    image:
+      'https://images.unsplash.com/photo-1563805042-7684c019e1cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+  },
+  {
+    id: 'c2',
+    image:
+      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=699&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+  },
 ];
 
 const SHORTS_DATA = [
@@ -31,13 +42,15 @@ const SHORTS_DATA = [
     id: 's1',
     title: 'Beauty Makeup Tutorials Before You Go Out...',
     views: '3.4M views',
-    image: 'https://picsum.photos/400/700',
+    image:
+      'https://images.unsplash.com/photo-1532550907401-a500c9a57435?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
   },
   {
     id: 's2',
     title: 'Be Beautiful with Make-up Made from Natural...',
     views: '2.8M views',
-    image: 'https://picsum.photos/401/701',
+    image:
+      'https://images.unsplash.com/photo-1600891964092-4316c288032e?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
   },
 ];
 
@@ -61,7 +74,8 @@ const MAIN_FEED = [
     views: '9.5M views',
     time: '5 months ago',
     duration: '15:27',
-    thumbnail: 'https://picsum.photos/800/450',
+    thumbnail:
+      'https://plus.unsplash.com/premium_photo-1693221705583-e446be9ac4f3?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
   },
   {
     type: 'VIDEO',
@@ -71,7 +85,8 @@ const MAIN_FEED = [
     views: '2.1M views',
     time: '2 months ago',
     duration: '10:45',
-    thumbnail: 'https://picsum.photos/801/451',
+    thumbnail:
+      'https://plus.unsplash.com/premium_photo-1675252371648-7a6481df8226?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
   },
   { type: 'CONTINUE', id: 'continue-watching' },
   {
@@ -82,18 +97,21 @@ const MAIN_FEED = [
     views: '9.5M views',
     time: '5 months ago',
     duration: '15:27',
-    thumbnail: 'https://picsum.photos/802/452',
+    thumbnail:
+      'https://plus.unsplash.com/premium_photo-1693221705583-e446be9ac4f3?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
   },
   { type: 'SHORTS', id: 'footer-shorts' },
 ];
 
 const HomeVersion = () => {
   const navigation = useNavigation();
+  const [activeTab, setActiveTab] = useState('All');
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
 
-  // --- UI Components ---
   const StoryCircle = ({ label }) => (
     <View style={styles.storyContainer}>
       <View style={styles.storyBorder}>
@@ -120,7 +138,6 @@ const HomeVersion = () => {
     }, 100);
   };
 
-  // --- Render Functions for Feed ---
   const renderItem = ({ item }) => {
     if (item.type === 'SHORTS')
       return (
@@ -210,6 +227,26 @@ const HomeVersion = () => {
     return null;
   };
 
+  if (showSearch) {
+    return <SearchScreen onBack={() => setShowSearch(false)} />;
+  }
+
+  if (showNotifications) {
+    return <NotificationScreen onBack={() => setShowNotifications(false)} />;
+  }
+
+  if (activeTab === 'Trending') {
+    return (
+      <View style={styles.container}>
+        <TrendingView
+          onBack={() => setActiveTab('All')}
+          videoData={MAIN_FEED.filter(i => i.type === 'VIDEO')}
+          renderVideoItem={renderItem}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header Section */}
@@ -218,12 +255,23 @@ const HomeVersion = () => {
           eat<Text style={{ color: COLORS.primaryOrange }}>ix</Text>
         </Text>
         <View style={styles.navIcons}>
-          <Icon
-            name="magnify"
-            size={26}
-            color={COLORS.textPrimary}
-            style={styles.iconSpaced}
-          />
+          <TouchableOpacity onPress={() => setShowSearch(true)}>
+            <Icon
+              name="magnify"
+              size={26}
+              color={COLORS.textPrimary}
+              style={styles.iconSpaced}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => setShowNotifications(true)}>
+            <Icon
+              name="bell-outline"
+              size={26}
+              color={COLORS.textPrimary}
+              style={styles.iconSpaced}
+            />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.profileMini}
@@ -235,7 +283,6 @@ const HomeVersion = () => {
         </View>
       </View>
 
-      {/* Main Content Area */}
       <FlatList
         data={MAIN_FEED}
         keyExtractor={item => item.id}
@@ -243,7 +290,6 @@ const HomeVersion = () => {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <>
-            {/* Categories Chips */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -252,6 +298,7 @@ const HomeVersion = () => {
               {CATEGORIES.map((cat, i) => (
                 <TouchableOpacity
                   key={cat}
+                  onPress={() => setActiveTab(cat)}
                   style={[styles.chip, i === 0 && styles.chipActive]}
                 >
                   <Text
@@ -263,7 +310,6 @@ const HomeVersion = () => {
               ))}
             </ScrollView>
 
-            {/* Stories Section */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -277,7 +323,6 @@ const HomeVersion = () => {
         }
       />
 
-      {/* Bottom Tab Bar */}
       <View style={styles.tabBar}>
         <Icon name="home" size={28} color={COLORS.primaryOrange} />
         <Icon
@@ -292,7 +337,6 @@ const HomeVersion = () => {
         <Icon name="library-outline" size={28} color={COLORS.gray500} />
       </View>
 
-      {/* --- Modals --- */}
       <Modal
         animationType="slide"
         transparent
