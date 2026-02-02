@@ -15,6 +15,7 @@ import HomeVersion from '../screens/HomeVersion';
 import ProfileScreen from '../screens/ProfileScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
+import SubscriptionScreen from '../screens/SubscriptionScreen';
 
 const AccountNav = createStackNavigator();
 
@@ -45,6 +46,10 @@ const AuthStack = () => {
       <AccountNav.Screen
         name="ChannelDetailsScreen"
         component={ChannelDetailsScreen}
+      />
+      <AccountNav.Screen
+        name="SubscriptionScreen"
+        component={SubscriptionScreen}
       />
     </AccountNav.Navigator>
   );
