@@ -37,6 +37,9 @@ const ProfileScreen = () => {
         <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('SubscriptionScreen')}>
           <Text style={styles.logoutButtonText}>Subscriptions</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.logoutButton} onPress={() => navigation.navigate('LibraryScreen')}>
+          <Text style={styles.logoutButtonText}>Library</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
