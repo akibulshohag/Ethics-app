@@ -16,6 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
+import CommentsModal from '../components/CommentsModal';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -71,7 +72,7 @@ const MOCK_VIDEOS = [
     }
 ];
 
-const VideoItem = ({ item, isActive, index, screenHeight }) => {
+const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments }) => {
     const [paused, setPaused] = useState(!isActive);
     const insets = useSafeAreaInsets();
     
@@ -143,7 +144,7 @@ const VideoItem = ({ item, isActive, index, screenHeight }) => {
                     <Text style={styles.actionText}>{item.dislikes}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionItem}>
+                <TouchableOpacity style={styles.actionItem} onPress={onOpenComments}>
                     <Ionicons name="chatbubble-ellipses-outline" size={28} color="white" style={styles.shadow} />
                     <Text style={styles.actionText}>{item.comments}</Text>
                 </TouchableOpacity>
@@ -187,6 +188,7 @@ const VideoItem = ({ item, isActive, index, screenHeight }) => {
 
 const ShortsVideoScreen = () => {
     const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+    const [commentsVisible, setCommentsVisible] = useState(false);
     
     // Standard Tab Bar Height calculation
     const tabHeight = Platform.OS === 'ios' ? 82 : 68;
@@ -216,6 +218,7 @@ const ShortsVideoScreen = () => {
                         isActive={activeVideoIndex === index} 
                         index={index} 
                         screenHeight={screenHeight}
+                        onOpenComments={() => setCommentsVisible(true)}
                     />
                 )}
                 keyExtractor={item => item.id}
@@ -235,6 +238,10 @@ const ShortsVideoScreen = () => {
                 getItemLayout={(data, index) => (
                     {length: screenHeight, offset: screenHeight * index, index}
                 )}
+            />
+            <CommentsModal 
+                visible={commentsVisible}
+                onClose={() => setCommentsVisible(false)}
             />
         </View>
     );
