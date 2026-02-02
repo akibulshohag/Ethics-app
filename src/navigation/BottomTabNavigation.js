@@ -71,8 +71,17 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Profile"
             component={ProfileNavigation}
-            options={{
+            options={({ route }) => ({
               tabBarLabel: 'Profile',
+              tabBarStyle: {
+                backgroundColor: '#FEFEFE',
+                borderTopWidth: 1,
+                borderTopColor: '#FEFEFE',
+                height: tabHeight,
+                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+                paddingTop: 8,
+                ...getTabBarStyle(route),
+              },
               tabBarIcon: ({ focused, color }) => (
                 <Icon
                   name="account-circle-outline"
@@ -81,7 +90,7 @@ const BottomNaivgation = () => {
                   style={{ opacity: focused ? 1 : 0.7 }}
                 />
               ),
-            }}
+            })}
           />
         </Tab.Navigator>
       </KeyboardAvoidingView>
