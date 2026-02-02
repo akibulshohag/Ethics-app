@@ -17,6 +17,7 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import CommentsModal from '../components/CommentsModal';
+import SettingsModal from '../components/SettingsModal';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -72,7 +73,7 @@ const MOCK_VIDEOS = [
     }
 ];
 
-const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments }) => {
+const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings }) => {
     const [paused, setPaused] = useState(!isActive);
     const insets = useSafeAreaInsets();
     
@@ -154,7 +155,7 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments }) => {
                     <Text style={styles.actionText}>{item.shares}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionItem}>
+                <TouchableOpacity style={styles.actionItem} onPress={onOpenSettings}>
                     <Ionicons name="ellipsis-horizontal" size={28} color="white" style={styles.shadow} />
                 </TouchableOpacity>
             </View>
@@ -189,6 +190,7 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments }) => {
 const ShortsVideoScreen = () => {
     const [activeVideoIndex, setActiveVideoIndex] = useState(0);
     const [commentsVisible, setCommentsVisible] = useState(false);
+    const [settingsVisible, setSettingsVisible] = useState(false);
     
     // Standard Tab Bar Height calculation
     const tabHeight = Platform.OS === 'ios' ? 82 : 68;
@@ -219,6 +221,7 @@ const ShortsVideoScreen = () => {
                         index={index} 
                         screenHeight={screenHeight}
                         onOpenComments={() => setCommentsVisible(true)}
+                        onOpenSettings={() => setSettingsVisible(true)}
                     />
                 )}
                 keyExtractor={item => item.id}
@@ -242,6 +245,10 @@ const ShortsVideoScreen = () => {
             <CommentsModal 
                 visible={commentsVisible}
                 onClose={() => setCommentsVisible(false)}
+            />
+            <SettingsModal
+                visible={settingsVisible}
+                onClose={() => setSettingsVisible(false)}
             />
         </View>
     );
