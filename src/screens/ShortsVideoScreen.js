@@ -73,7 +73,7 @@ const MOCK_VIDEOS = [
     }
 ];
 
-const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings }) => {
+const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings, navigation }) => {
     const [paused, setPaused] = useState(!isActive);
     const insets = useSafeAreaInsets();
     
@@ -176,8 +176,12 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
 
                 {/* User Row */}
                 <View style={styles.userRow}>
-                    <Image source={{ uri: item.user.avatar }} style={styles.avatar} />
-                    <Text style={styles.username}>{item.user.username}</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate('ChannelProfileScreen')}>
+                         <Image source={{ uri: item.user.avatar }} style={styles.avatar} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => navigation.navigate('ChannelProfileScreen')}>
+                        <Text style={styles.username}>{item.user.username}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.subscribeButton}>
                         <Text style={styles.subscribeText}>Subscribe</Text>
                     </TouchableOpacity>
@@ -187,7 +191,7 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
     );
 };
 
-const ShortsVideoScreen = () => {
+const ShortsVideoScreen = ({ navigation }) => {
     const [activeVideoIndex, setActiveVideoIndex] = useState(0);
     const [commentsVisible, setCommentsVisible] = useState(false);
     const [settingsVisible, setSettingsVisible] = useState(false);
@@ -222,6 +226,7 @@ const ShortsVideoScreen = () => {
                         screenHeight={screenHeight}
                         onOpenComments={() => setCommentsVisible(true)}
                         onOpenSettings={() => setSettingsVisible(true)}
+                        navigation={navigation}
                     />
                 )}
                 keyExtractor={item => item.id}
