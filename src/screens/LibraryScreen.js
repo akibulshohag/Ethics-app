@@ -60,7 +60,7 @@ const HISTORY_DATA = [
 ];
 
 const LibraryScreen = () => {
-  const [currentView, setCurrentView] = useState('library'); // 'library', 'history', 'yourVideos', 'downloads', 'watchLater'
+  const [currentView, setCurrentView] = useState('library');
   const [modalVisible, setModalVisible] = useState(false);
   const [playlistTitle, setPlaylistTitle] = useState('Best Songs All The Time');
 
@@ -71,6 +71,7 @@ const LibraryScreen = () => {
     if (currentView === 'yourVideos') title = 'Your Videos';
     if (currentView === 'downloads') title = 'Downloads';
     if (currentView === 'watchLater') title = 'Watch Later';
+    if (currentView === 'favorites') title = 'My Favorite Songs';
 
     return (
       <View style={styles.header}>
@@ -217,39 +218,36 @@ const LibraryScreen = () => {
     </SafeAreaView>
   );
 
-  // --- WATCH LATER VIEW ---
-  if (currentView === 'watchLater') {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        {renderHeader()}
-        <FlatList
-          data={HISTORY_DATA}
-          keyExtractor={item => item.id}
-          ListHeaderComponent={() => (
-            <View style={styles.playlistHeader}>
-              <View style={styles.playlistActionRow}>
-                <TouchableOpacity style={styles.playAllButton}>
-                  <MaterialCommunityIcons name="play" size={24} color="#fff" />
-                  <Text style={styles.playAllText}>Play all</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.shuffleButton}>
-                  <MaterialCommunityIcons
-                    name="shuffle"
-                    size={24}
-                    color="#333"
-                  />
-                  <Text style={styles.shuffleText}>Shuffle</Text>
-                </TouchableOpacity>
-              </View>
+  const renderPlaylistDetailView = data => (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      {renderHeader()}
+      <FlatList
+        data={data}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={() => (
+          <View style={styles.playlistHeader}>
+            <View style={styles.playlistActionRow}>
+              <TouchableOpacity style={styles.playAllButton}>
+                <MaterialCommunityIcons name="play" size={24} color="#fff" />
+                <Text style={styles.playAllText}>Play all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.shuffleButton}>
+                <MaterialCommunityIcons name="shuffle" size={24} color="#333" />
+                <Text style={styles.shuffleText}>Shuffle</Text>
+              </TouchableOpacity>
             </View>
-          )}
-          renderItem={({ item }) => (
-            <CompactVideoCard video={item} onPress={() => {}} />
-          )}
-        />
-      </SafeAreaView>
-    );
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <CompactVideoCard video={item} onPress={() => {}} />
+        )}
+      />
+    </SafeAreaView>
+  );
+
+  if (currentView === 'watchLater' || currentView === 'favorites') {
+    return renderPlaylistDetailView(HISTORY_DATA);
   }
 
   if (currentView === 'history') {
@@ -291,7 +289,6 @@ const LibraryScreen = () => {
       {renderNewPlaylistModal()}
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* History Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>History</Text>
           <TouchableOpacity onPress={() => setCurrentView('history')}>
@@ -362,7 +359,6 @@ const LibraryScreen = () => {
         </TouchableOpacity>
         <View style={styles.divider} />
 
-        {/* Playlists Section */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Playlists</Text>
           <TouchableOpacity style={styles.recentlyAdded}>
@@ -385,7 +381,6 @@ const LibraryScreen = () => {
           <Text style={styles.menuText}>New Playlist</Text>
         </TouchableOpacity>
 
-        {/* --- WATCH LATER CLICKABLE --- */}
         <TouchableOpacity
           style={styles.playlistItem}
           onPress={() => setCurrentView('watchLater')}
@@ -412,16 +407,23 @@ const LibraryScreen = () => {
             <Text style={styles.subText}>260 videos</Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.playlistItem}>
+
+        <TouchableOpacity
+          style={styles.playlistItem}
+          onPress={() => setCurrentView('favorites')}
+        >
           <View style={styles.menuIconContainer}>
-            <MaterialCommunityIcons name="heart-outline" size={24} color="#F97507" />
+            <MaterialCommunityIcons
+              name="heart-outline"
+              size={24}
+              color="#F97507"
+            />
           </View>
           <View>
             <Text style={styles.menuText}>My Favorite Songs</Text>
             <Text style={styles.subText}>125 videos</Text>
           </View>
         </TouchableOpacity>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -547,7 +549,6 @@ const styles = StyleSheet.create({
   },
   subText: { fontSize: 12, color: '#666', marginTop: 2 },
 
-  // --- NEW WATCH LATER STYLES ---
   playlistHeader: { padding: 16 },
   playlistActionRow: { flexDirection: 'row', justifyContent: 'space-between' },
   playAllButton: {
@@ -573,7 +574,6 @@ const styles = StyleSheet.create({
   },
   shuffleText: { color: '#333', fontWeight: 'bold', marginLeft: 8 },
 
-  // MODAL STYLES
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
