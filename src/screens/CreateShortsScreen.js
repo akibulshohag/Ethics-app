@@ -13,12 +13,14 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import EffectsModal from '../components/EffectsModal';
+import SoundsModal from '../components/SoundsModal';
 
 const {width, height} = Dimensions.get('window');
 
 const CreateShortsScreen = ({navigation}) => {
   const [activeDuration, setActiveDuration] = useState('15s');
   const [effectsVisible, setEffectsVisible] = useState(false);
+  const [soundsVisible, setSoundsVisible] = useState(false);
   const insets = useSafeAreaInsets();
 
   const ActionItem = ({icon, label, iconType = 'Ionicons'}) => {
@@ -48,7 +50,9 @@ const CreateShortsScreen = ({navigation}) => {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
               <Ionicons name="close" size={30} color="white" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.addSoundPill}>
+            <TouchableOpacity 
+              style={styles.addSoundPill}
+              onPress={() => setSoundsVisible(true)}>
               <Ionicons name="musical-notes" size={18} color="white" />
               <Text style={styles.addSoundText}>Add Sound</Text>
             </TouchableOpacity>
@@ -102,6 +106,10 @@ const CreateShortsScreen = ({navigation}) => {
       <EffectsModal 
         visible={effectsVisible}
         onClose={() => setEffectsVisible(false)}
+      />
+      <SoundsModal
+        visible={soundsVisible}
+        onClose={() => setSoundsVisible(false)}
       />
     </View>
   );
