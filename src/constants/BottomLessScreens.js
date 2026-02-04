@@ -1,3 +1,4 @@
 export const BottomTabLessScreens = [
-    'ChannelProfileScreen'
+    'ChannelProfileScreen',
+    'CreateShortsScreen'
 ];

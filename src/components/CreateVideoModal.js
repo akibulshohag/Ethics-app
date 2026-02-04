@@ -10,10 +10,18 @@ import {
   Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {useNavigation} from '@react-navigation/native';
 
 const { height } = Dimensions.get('window');
 
 const CreateVideoModal = ({ visible, onClose }) => {
+  const navigation = useNavigation();
+
+  const handleCreateShort = () => {
+    onClose();
+    navigation.navigate('CreateShortsScreen');
+  };
+
   return (
     <Modal
       animationType="slide"
@@ -36,7 +44,7 @@ const CreateVideoModal = ({ visible, onClose }) => {
 
               <View style={styles.optionsContainer}>
                 {/* Create a Short */}
-                <TouchableOpacity style={styles.optionItem} onPress={onClose}>
+                <TouchableOpacity style={styles.optionItem} onPress={handleCreateShort}>
                   <View style={styles.iconContainer}>
                     <Ionicons name="videocam" size={24} color="#FF8C00" />
                   </View>
