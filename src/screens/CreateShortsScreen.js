@@ -58,7 +58,7 @@ const CreateShortsScreen = ({navigation}) => {
             <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" />
             <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" />
             <ActionItem icon="timer-outline" label="Timer" />
-            <ActionItem icon="chat-bubble-outline" label="Com..." />
+            <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
             <ActionItem icon="flash" label="Flash" />
           </View>
           <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
