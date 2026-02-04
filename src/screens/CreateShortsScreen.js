@@ -12,11 +12,13 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import EffectsModal from '../components/EffectsModal';
 
 const {width, height} = Dimensions.get('window');
 
 const CreateShortsScreen = ({navigation}) => {
   const [activeDuration, setActiveDuration] = useState('15s');
+  const [effectsVisible, setEffectsVisible] = useState(false);
   const insets = useSafeAreaInsets();
 
   const ActionItem = ({icon, label, iconType = 'Ionicons'}) => {
@@ -69,14 +71,14 @@ const CreateShortsScreen = ({navigation}) => {
                   onPress={() => setActiveDuration(d)}
                   style={[
                     styles.durationItem,
-                    activeDuration === d && styles.durationItemActive,
+                    activeDuration === d ? styles.durationItemActive : null,
                   ]}>
                   <Text style={styles.durationText}>{d}</Text>
                 </TouchableOpacity>
               ))}
             </View>
             <View style={styles.mainBottomRow}>
-              <TouchableOpacity style={styles.bottomAuxButton}>
+              <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setEffectsVisible(true)}>
                 <View style={styles.effectsIconContainer}>
                    <MaterialCommunityIcons name="heart-multiple" size={30} color="#FF8C00" />
                 </View>
@@ -97,6 +99,10 @@ const CreateShortsScreen = ({navigation}) => {
           </View>
         </View>
       </ImageBackground>
+      <EffectsModal 
+        visible={effectsVisible}
+        onClose={() => setEffectsVisible(false)}
+      />
     </View>
   );
 };
