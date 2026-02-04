@@ -21,7 +21,15 @@ const CreateShortsScreen = ({navigation}) => {
   const [activeDuration, setActiveDuration] = useState('15s');
   const [effectsVisible, setEffectsVisible] = useState(false);
   const [soundsVisible, setSoundsVisible] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedSound, setSelectedSound] = useState(null);
   const insets = useSafeAreaInsets();
+
+  const handleSoundSelect = (sound) => {
+    setSelectedSound(sound);
+    setSoundsVisible(false);
+    setIsEditing(true);
+  };
 
   const ActionItem = ({icon, label, iconType = 'Ionicons'}) => {
     const IconComp =
@@ -46,61 +54,104 @@ const CreateShortsScreen = ({navigation}) => {
         style={styles.background}
         resizeMode="cover">
         <View style={styles.overlay}>
-          <View style={[styles.topControls, { marginTop: insets.top + 10 }]}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
-              <Ionicons name="close" size={30} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.addSoundPill}
-              onPress={() => setSoundsVisible(true)}>
-              <Ionicons name="musical-notes" size={18} color="white" />
-              <Text style={styles.addSoundText}>Add Sound</Text>
-            </TouchableOpacity>
-            <View style={{width: 40}} />
-          </View>
-          <View style={[styles.rightSidebar, { top: insets.top + 80 }]}>
-            <ActionItem icon="camera-reverse-outline" label="Flip" />
-            <ActionItem icon="speedometer-outline" label="Speed" />
-            <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" />
-            <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" />
-            <ActionItem icon="timer-outline" label="Timer" />
-            <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
-            <ActionItem icon="flash" label="Flash" />
-          </View>
-          <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.durationSelector}>
-              {['3m', '60s', '15s'].map(d => (
-                <TouchableOpacity
-                  key={d}
-                  onPress={() => setActiveDuration(d)}
-                  style={[
-                    styles.durationItem,
-                    activeDuration === d ? styles.durationItemActive : null,
-                  ]}>
-                  <Text style={styles.durationText}>{d}</Text>
+          {isEditing ? (
+            <View style={styles.editingModeOverlay}>
+              <View style={[styles.progressBarContainer, { top: insets.top }]}>
+                <View style={styles.progressBarActive} />
+                <View style={styles.progressBarInactive} />
+              </View>
+
+              <View style={[styles.topControls, { marginTop: insets.top + 15 }]}>
+                <TouchableOpacity onPress={() => setIsEditing(false)} style={styles.closeButton}>
+                  <Ionicons name="arrow-back" size={30} color="white" />
                 </TouchableOpacity>
-              ))}
+                <TouchableOpacity style={styles.selectedSoundPill}>
+                  <Ionicons name="musical-notes" size={16} color="white" />
+                  <Text style={styles.selectedSoundText} numberOfLines={1}>
+                    {selectedSound ? `${selectedSound.title} - ${selectedSound.artist}` : 'No sound selected'}
+                  </Text>
+                </TouchableOpacity>
+                <View style={{width: 40}} />
+              </View>
+
+              <View style={[styles.rightSidebar, { top: insets.top + 80 }]}>
+                 <ActionItem icon="format-text" label="Text" iconType="MaterialCommunityIcons" />
+                 <ActionItem icon="emoticon-outline" label="Sticker" iconType="MaterialCommunityIcons" />
+                 <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" />
+                 <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" />
+                 <ActionItem icon="speedometer-outline" label="Speed" />
+                 <ActionItem icon="closed-caption-outline" label="Subtit..." iconType="MaterialCommunityIcons" />
+                 <ActionItem icon="comment-outline" label="Com..." iconType="MaterialCommunityIcons" />
+              </View>
+
+              <View style={[styles.bottomEditingRow, { paddingBottom: insets.bottom + 20 }]}>
+                <TouchableOpacity style={styles.draftButton}>
+                  <Text style={styles.draftButtonText}>Draft</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.nextButton}>
+                  <Text style={styles.nextButtonText}>Next</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.mainBottomRow}>
-              <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setEffectsVisible(true)}>
-                <View style={styles.effectsIconContainer}>
-                   <MaterialCommunityIcons name="heart-multiple" size={30} color="#FF8C00" />
+          ) : (
+            <View style={styles.recordingModeOverlay}>
+              <View style={[styles.topControls, { marginTop: insets.top + 10 }]}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                  <Ionicons name="close" size={30} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.addSoundPill}
+                  onPress={() => setSoundsVisible(true)}>
+                  <Ionicons name="musical-notes" size={18} color="white" />
+                  <Text style={styles.addSoundText}>Add Sound</Text>
+                </TouchableOpacity>
+                <View style={{width: 40}} />
+              </View>
+              <View style={[styles.rightSidebar, { top: insets.top + 80 }]}>
+                <ActionItem icon="camera-reverse-outline" label="Flip" />
+                <ActionItem icon="speedometer-outline" label="Speed" />
+                <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" />
+                <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" />
+                <ActionItem icon="timer-outline" label="Timer" />
+                <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
+                <ActionItem icon="flash" label="Flash" />
+              </View>
+              <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
+                <View style={styles.durationSelector}>
+                  {['3m', '60s', '15s'].map(d => (
+                    <TouchableOpacity
+                      key={d}
+                      onPress={() => setActiveDuration(d)}
+                      style={[
+                        styles.durationItem,
+                        activeDuration === d ? styles.durationItemActive : null,
+                      ]}>
+                      <Text style={styles.durationText}>{d}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <Text style={styles.bottomAuxLabel}>Effects</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.recordButtonOuter}>
-                <View style={styles.recordButtonInner}>
-                   <Ionicons name="videocam" size={36} color="white" />
+                <View style={styles.mainBottomRow}>
+                  <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setEffectsVisible(true)}>
+                    <View style={styles.effectsIconContainer}>
+                       <MaterialCommunityIcons name="heart-multiple" size={30} color="#FF8C00" />
+                    </View>
+                    <Text style={styles.bottomAuxLabel}>Effects</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.recordButtonOuter}>
+                    <View style={styles.recordButtonInner}>
+                       <Ionicons name="videocam" size={36} color="white" />
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.bottomAuxButton}>
+                    <View style={styles.uploadIconContainer}>
+                      <Ionicons name="cloud-upload-outline" size={30} color="white" />
+                    </View>
+                    <Text style={styles.bottomAuxLabel}>Upload</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.bottomAuxButton}>
-                <View style={styles.uploadIconContainer}>
-                  <Ionicons name="cloud-upload-outline" size={30} color="white" />
-                </View>
-                <Text style={styles.bottomAuxLabel}>Upload</Text>
-              </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </ImageBackground>
       <EffectsModal 
@@ -110,6 +161,7 @@ const CreateShortsScreen = ({navigation}) => {
       <SoundsModal
         visible={soundsVisible}
         onClose={() => setSoundsVisible(false)}
+        onSelect={handleSoundSelect}
       />
     </View>
   );
@@ -125,14 +177,37 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
+  },
+  recordingModeOverlay: {
+    flex: 1,
     justifyContent: 'space-between',
+  },
+  editingModeOverlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  progressBarContainer: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    height: 4,
+    flexDirection: 'row',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarActive: {
+    flex: 0.65,
+    backgroundColor: '#FF8C00',
+  },
+  progressBarInactive: {
+    flex: 0.35,
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
   topControls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginTop: 10,
   },
   closeButton: {
     padding: 5,
@@ -151,10 +226,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
+  selectedSoundPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    maxWidth: width * 0.6,
+  },
+  selectedSoundText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
   rightSidebar: {
     position: 'absolute',
     right: 15,
-    top: height * 0.15,
     alignItems: 'center',
   },
   actionItem: {
@@ -244,6 +333,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 6,
     fontWeight: '500',
+  },
+  bottomEditingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    width: '100%',
+  },
+  draftButton: {
+    flex: 1,
+    backgroundColor: '#FFF2B2',
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  draftButtonText: {
+    color: '#FF8C00',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  nextButton: {
+    flex: 1,
+    backgroundColor: '#FF8C00',
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  nextButtonText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

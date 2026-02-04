@@ -26,10 +26,15 @@ const SOUNDS_DATA = [
   { id: '7', title: 'Heat Waves', artist: 'Glass Animals', duration: '01:00', usage: '86.67K', image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&q=80', isFavorite: false, isSelected: false },
 ];
 
-const SoundsModal = ({visible, onClose}) => {
+const SoundsModal = ({visible, onClose, onSelect}) => {
   const [activeTab, setActiveTab] = useState('Discover');
   const [selectedId, setSelectedId] = useState('1');
   const [favorites, setFavorites] = useState(['4', '6']);
+
+  const handleSelect = (item) => {
+    setSelectedId(item.id);
+    onSelect(item);
+  };
 
   const toggleFavorite = (id) => {
     setFavorites(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
@@ -42,7 +47,7 @@ const SoundsModal = ({visible, onClose}) => {
     return (
       <TouchableOpacity 
         style={styles.soundItem}
-        onPress={() => setSelectedId(item.id)}>
+        onPress={() => handleSelect(item)}>
         <View style={styles.thumbnailContainer}>
           <Image source={{uri: item.image}} style={styles.thumbnail} />
           <View style={styles.playIconOverlay}>
