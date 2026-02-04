@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
+import CreateVideoModal from '../components/CreateVideoModal';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -73,7 +74,7 @@ const MOCK_VIDEOS = [
     }
 ];
 
-const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings, navigation }) => {
+const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings, onOpenCreate, navigation }) => {
     const [paused, setPaused] = useState(!isActive);
     const insets = useSafeAreaInsets();
     
@@ -124,7 +125,7 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
                 <TouchableOpacity style={styles.iconButton}>
                     <Ionicons name="search-outline" size={26} color="white" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton}>
+                <TouchableOpacity style={styles.iconButton} onPress={onOpenCreate}>
                     <Ionicons name="camera-outline" size={26} color="white" />
                 </TouchableOpacity>
             </View>
@@ -195,6 +196,7 @@ const ShortsVideoScreen = ({ navigation }) => {
     const [activeVideoIndex, setActiveVideoIndex] = useState(0);
     const [commentsVisible, setCommentsVisible] = useState(false);
     const [settingsVisible, setSettingsVisible] = useState(false);
+    const [createVisible, setCreateVisible] = useState(false);
     
     // Standard Tab Bar Height calculation
     const tabHeight = Platform.OS === 'ios' ? 82 : 68;
@@ -226,6 +228,7 @@ const ShortsVideoScreen = ({ navigation }) => {
                         screenHeight={screenHeight}
                         onOpenComments={() => setCommentsVisible(true)}
                         onOpenSettings={() => setSettingsVisible(true)}
+                        onOpenCreate={() => setCreateVisible(true)}
                         navigation={navigation}
                     />
                 )}
@@ -254,6 +257,10 @@ const ShortsVideoScreen = ({ navigation }) => {
             <SettingsModal
                 visible={settingsVisible}
                 onClose={() => setSettingsVisible(false)}
+            />
+            <CreateVideoModal 
+                visible={createVisible}
+                onClose={() => setCreateVisible(false)}
             />
         </View>
     );
