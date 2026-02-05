@@ -9,6 +9,8 @@ import {
   ScrollView,
   StatusBar,
   TextInput,
+  Modal,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -58,7 +60,9 @@ const HISTORY_DATA = [
 ];
 
 const LibraryScreen = () => {
-  const [currentView, setCurrentView] = useState('library'); // 'library', 'history', 'yourVideos', 'downloads'
+  const [currentView, setCurrentView] = useState('library');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [playlistTitle, setPlaylistTitle] = useState('Best Songs All The Time');
 
   const renderHeader = () => {
     const isLibrary = currentView === 'library';
@@ -66,6 +70,8 @@ const LibraryScreen = () => {
     if (currentView === 'history') title = 'History';
     if (currentView === 'yourVideos') title = 'Your Videos';
     if (currentView === 'downloads') title = 'Downloads';
+    if (currentView === 'watchLater') title = 'Watch Later';
+    if (currentView === 'favorites') title = 'My Favorite Songs';
 
     return (
       <View style={styles.header}>
@@ -115,6 +121,66 @@ const LibraryScreen = () => {
     );
   };
 
+  const renderNewPlaylistModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={modalVisible}
+      onRequestClose={() => setModalVisible(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalHeaderTitle}>New Playlist</Text>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Playlist Title</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={playlistTitle}
+                  onChangeText={setPlaylistTitle}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Privacy</Text>
+                <TouchableOpacity style={styles.privacySelector}>
+                  <View style={styles.privacyLeft}>
+                    <MaterialCommunityIcons
+                      name="lock-outline"
+                      size={20}
+                      color="#333"
+                    />
+                    <Text style={styles.privacyText}>Private</Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name="menu-down"
+                    size={24}
+                    color="#333"
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.createButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Text style={styles.createButtonText}>Create</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+
   const renderListView = data => (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -152,6 +218,38 @@ const LibraryScreen = () => {
     </SafeAreaView>
   );
 
+  const renderPlaylistDetailView = data => (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      {renderHeader()}
+      <FlatList
+        data={data}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={() => (
+          <View style={styles.playlistHeader}>
+            <View style={styles.playlistActionRow}>
+              <TouchableOpacity style={styles.playAllButton}>
+                <MaterialCommunityIcons name="play" size={24} color="#fff" />
+                <Text style={styles.playAllText}>Play all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.shuffleButton}>
+                <MaterialCommunityIcons name="shuffle" size={24} color="#333" />
+                <Text style={styles.shuffleText}>Shuffle</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        renderItem={({ item }) => (
+          <CompactVideoCard video={item} onPress={() => {}} />
+        )}
+      />
+    </SafeAreaView>
+  );
+
+  if (currentView === 'watchLater' || currentView === 'favorites') {
+    return renderPlaylistDetailView(HISTORY_DATA);
+  }
+
   if (currentView === 'history') {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -188,6 +286,7 @@ const LibraryScreen = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       {renderHeader()}
+      {renderNewPlaylistModal()}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.sectionHeader}>
@@ -196,7 +295,6 @@ const LibraryScreen = () => {
             <Text style={styles.viewAllText}>View All</Text>
           </TouchableOpacity>
         </View>
-
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -233,7 +331,6 @@ const LibraryScreen = () => {
         </ScrollView>
 
         <View style={styles.divider} />
-
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => setCurrentView('yourVideos')}
@@ -247,7 +344,6 @@ const LibraryScreen = () => {
           </View>
           <Text style={styles.menuText}>Your Videos</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => setCurrentView('downloads')}
@@ -261,7 +357,6 @@ const LibraryScreen = () => {
           </View>
           <Text style={styles.menuText}>Downloads</Text>
         </TouchableOpacity>
-
         <View style={styles.divider} />
 
         <View style={styles.sectionHeader}>
@@ -276,14 +371,20 @@ const LibraryScreen = () => {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.playlistItem}>
+        <TouchableOpacity
+          style={styles.playlistItem}
+          onPress={() => setModalVisible(true)}
+        >
           <View style={styles.menuIconContainer}>
             <MaterialCommunityIcons name="plus" size={28} color="#F97507" />
           </View>
           <Text style={styles.menuText}>New Playlist</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.playlistItem}>
+        <TouchableOpacity
+          style={styles.playlistItem}
+          onPress={() => setCurrentView('watchLater')}
+        >
           <View style={styles.menuIconContainer}>
             <MaterialCommunityIcons
               name="clock-outline"
@@ -294,6 +395,33 @@ const LibraryScreen = () => {
           <View>
             <Text style={styles.menuText}>Watch Later</Text>
             <Text style={styles.subText}>24 unwatched videos</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.playlistItem}>
+          <View style={styles.menuIconContainer}>
+            <MaterialCommunityIcons name="thumb-up" size={24} color="#F97507" />
+          </View>
+          <View>
+            <Text style={styles.menuText}>Liked Videos</Text>
+            <Text style={styles.subText}>260 videos</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.playlistItem}
+          onPress={() => setCurrentView('favorites')}
+        >
+          <View style={styles.menuIconContainer}>
+            <MaterialCommunityIcons
+              name="heart-outline"
+              size={24}
+              color="#F97507"
+            />
+          </View>
+          <View>
+            <Text style={styles.menuText}>My Favorite Songs</Text>
+            <Text style={styles.subText}>125 videos</Text>
           </View>
         </TouchableOpacity>
       </ScrollView>
@@ -420,6 +548,106 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   subText: { fontSize: 12, color: '#666', marginTop: 2 },
+
+  playlistHeader: { padding: 16 },
+  playlistActionRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  playAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F97507',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    flex: 0.48,
+    justifyContent: 'center',
+  },
+  playAllText: { color: '#fff', fontWeight: 'bold', marginLeft: 8 },
+  shuffleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    flex: 0.48,
+    justifyContent: 'center',
+  },
+  shuffleText: { color: '#333', fontWeight: 'bold', marginLeft: 8 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  modalHeaderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#333',
+  },
+  inputContainer: { marginBottom: 20 },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  modalInput: {
+    fontSize: 14,
+    color: '#666',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingVertical: 10,
+  },
+  privacySelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingVertical: 10,
+  },
+  privacyLeft: { flexDirection: 'row', alignItems: 'center' },
+  privacyText: { fontSize: 14, color: '#666', marginLeft: 10 },
+  modalActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#FFF5EE',
+    paddingVertical: 14,
+    borderRadius: 25,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  cancelButtonText: { color: '#F97507', fontWeight: 'bold', fontSize: 16 },
+  createButton: {
+    flex: 1,
+    backgroundColor: '#F97507',
+    paddingVertical: 14,
+    borderRadius: 25,
+    marginLeft: 10,
+    alignItems: 'center',
+  },
+  createButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
 
 export default LibraryScreen;

@@ -91,7 +91,6 @@ const SubscriptionScreen = () => {
     }
   };
 
-  // UI for the Full Channel List (image_0f7c8e.png)
   const renderChannelListItem = ({ item }) => (
     <TouchableOpacity style={styles.channelRowFull}>
       <View style={styles.channelRowLeft}>
@@ -344,7 +343,6 @@ const styles = StyleSheet.create({
   activeChipText: { color: '#fff', fontWeight: 'bold' },
   chipText: { color: '#F97507', fontWeight: '600' },
 
-  // Channel List View Styles
   filterSection: { padding: 16 },
   relevanceBtn: {
     flexDirection: 'row',
