@@ -18,6 +18,7 @@ import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
+import VideoDescriptionModal from './VideoDescriptionModal';
 
 const { width } = Dimensions.get('window');
 
@@ -25,11 +26,14 @@ const VideoUploadSettings = ({ visible, onClose }) => {
   const [title, setTitle] = useState('');
   
   // Modal Visibility State
+  const [descriptionModalVisible, setDescriptionModalVisible] = useState(false);
   const [visibilityModalVisible, setVisibilityModalVisible] = useState(false);
   const [audienceModalVisible, setAudienceModalVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
 
   // Values State
+  const [description, setDescription] = useState('');
+  const [hashtags, setHashtags] = useState([]);
   const [visibility, setVisibility] = useState('Public');
   const [audience, setAudience] = useState({ madeForKids: null, ageRestricted: null });
   const [comments, setComments] = useState('Allow all comments');
@@ -110,6 +114,7 @@ const VideoUploadSettings = ({ visible, onClose }) => {
             <SettingItem
               icon={{ type: 'Ionicons', name: 'pencil-outline' }}
               label="Add Description"
+              onPress={() => setDescriptionModalVisible(true)}
             />
             <SettingItem
               icon={{ type: 'Ionicons', name: 'eye-outline' }}
@@ -151,6 +156,14 @@ const VideoUploadSettings = ({ visible, onClose }) => {
         </ScrollView>
 
         {/* Sub Modals */}
+        <VideoDescriptionModal
+          visible={descriptionModalVisible}
+          onClose={() => setDescriptionModalVisible(false)}
+          description={description}
+          setDescription={setDescription}
+          hashtags={hashtags}
+          setHashtags={setHashtags}
+        />
         <SetVisibilityModal
           visible={visibilityModalVisible}
           onClose={() => setVisibilityModalVisible(false)}
