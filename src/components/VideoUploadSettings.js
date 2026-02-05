@@ -19,6 +19,7 @@ import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
 import VideoDescriptionModal from './VideoDescriptionModal';
+import LocationSearchModal from './LocationSearchModal';
 
 const { width } = Dimensions.get('window');
 
@@ -30,6 +31,7 @@ const VideoUploadSettings = ({ visible, onClose }) => {
   const [visibilityModalVisible, setVisibilityModalVisible] = useState(false);
   const [audienceModalVisible, setAudienceModalVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
 
   // Values State
   const [description, setDescription] = useState('');
@@ -37,6 +39,7 @@ const VideoUploadSettings = ({ visible, onClose }) => {
   const [visibility, setVisibility] = useState('Public');
   const [audience, setAudience] = useState({ madeForKids: null, ageRestricted: null });
   const [comments, setComments] = useState('Allow all comments');
+  const [location, setLocation] = useState('');
 
   const SettingItem = ({ icon, label, value, showArrow = true, isPlus = false, onPress }) => (
     <TouchableOpacity style={styles.settingItem} onPress={onPress}>
@@ -141,6 +144,8 @@ const VideoUploadSettings = ({ visible, onClose }) => {
             <SettingItem
               icon={{ type: 'Ionicons', name: 'location-outline' }}
               label="Location"
+              value={location}
+              onPress={() => setLocationModalVisible(true)}
             />
             <SettingItem
               icon={{ type: 'Ionicons', name: 'play-circle-outline' }}
@@ -181,6 +186,11 @@ const VideoUploadSettings = ({ visible, onClose }) => {
           onClose={() => setCommentsModalVisible(false)}
           initialValue={comments}
           onApply={(val) => setComments(val)}
+        />
+        <LocationSearchModal
+          visible={locationModalVisible}
+          onClose={() => setLocationModalVisible(false)}
+          onSelect={(val) => setLocation(val)}
         />
       </SafeAreaView>
     </Modal>
