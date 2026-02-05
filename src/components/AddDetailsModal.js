@@ -14,12 +14,15 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
+import CommentsSettingsModal from './CommentsSettingsModal';
 
 const AddDetailsModal = ({visible, onClose}) => {
   const [visibilityModalVisible, setVisibilityModalVisible] = React.useState(false);
   const [visibility, setVisibility] = React.useState('Public');
   const [audienceModalVisible, setAudienceModalVisible] = React.useState(false);
   const [audience, setAudience] = React.useState({ madeForKids: null, ageRestricted: null });
+  const [commentsModalVisible, setCommentsModalVisible] = React.useState(false);
+  const [comments, setComments] = React.useState('Allow all comments');
   return (
     <Modal
       animationType="slide"
@@ -104,13 +107,16 @@ const AddDetailsModal = ({visible, onClose}) => {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => setCommentsModalVisible(true)}
+            >
               <View style={styles.optionLeft}>
                 <Ionicons name="chatbubble-ellipses-outline" size={24} color="#333" style={styles.optionIcon} />
                 <Text style={styles.optionLabel}>Comments</Text>
               </View>
               <View style={styles.optionRight}>
-                <Text style={styles.optionValue}>Allow all comments</Text>
+                <Text style={styles.optionValue} numberOfLines={1} style={{maxWidth: 150}}>{comments}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#333" />
               </View>
             </TouchableOpacity>
@@ -135,6 +141,12 @@ const AddDetailsModal = ({visible, onClose}) => {
           onClose={() => setAudienceModalVisible(false)}
           initialValue={audience}
           onApply={(val) => setAudience(val)}
+        />
+        <CommentsSettingsModal
+          visible={commentsModalVisible}
+          onClose={() => setCommentsModalVisible(false)}
+          initialValue={comments}
+          onApply={(val) => setComments(val)}
         />
       </SafeAreaView>
     </Modal>
