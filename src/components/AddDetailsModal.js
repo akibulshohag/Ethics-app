@@ -12,8 +12,11 @@ import {
   StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import SetVisibilityModal from './SetVisibilityModal';
 
 const AddDetailsModal = ({visible, onClose}) => {
+  const [visibilityModalVisible, setVisibilityModalVisible] = React.useState(false);
+  const [visibility, setVisibility] = React.useState('Public');
   return (
     <Modal
       animationType="slide"
@@ -59,15 +62,17 @@ const AddDetailsModal = ({visible, onClose}) => {
 
           <View style={styles.divider} />
 
-          {/* Options List */}
           <View style={styles.optionsList}>
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => setVisibilityModalVisible(true)}
+            >
               <View style={styles.optionLeft}>
                 <Ionicons name="eye-outline" size={24} color="#333" style={styles.optionIcon} />
                 <Text style={styles.optionLabel}>Visibility</Text>
               </View>
               <View style={styles.optionRight}>
-                <Text style={styles.optionValue}>Public</Text>
+                <Text style={styles.optionValue}>{visibility}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#333" />
               </View>
             </TouchableOpacity>
@@ -112,6 +117,13 @@ const AddDetailsModal = ({visible, onClose}) => {
             <Text style={styles.uploadButtonText}>Upload Shorts</Text>
           </TouchableOpacity>
         </View>
+
+        <SetVisibilityModal
+          visible={visibilityModalVisible}
+          onClose={() => setVisibilityModalVisible(false)}
+          initialValue={visibility}
+          onApply={(val) => setVisibility(val)}
+        />
       </SafeAreaView>
     </Modal>
   );
