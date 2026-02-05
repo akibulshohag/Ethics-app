@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -14,6 +14,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { useNavigation } from '@react-navigation/native';
+import VideoUploadSettings from '../components/VideoUploadSettings';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - SPACING.lg * 3) / 2;
@@ -83,9 +84,13 @@ const MOCK_VIDEOS = [
 
 const UploadVideoScreen = () => {
   const navigation = useNavigation();
+  const [modalVisible, setModalVisible] = useState(false);
 
   const renderVideoItem = ({ item }) => (
-    <TouchableOpacity style={styles.videoItem}>
+    <TouchableOpacity 
+      style={styles.videoItem} 
+      onPress={() => setModalVisible(true)}
+    >
       <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
       <View style={styles.durationBadge}>
         <Text style={styles.durationText}>{item.duration}</Text>
@@ -118,6 +123,11 @@ const UploadVideoScreen = () => {
         numColumns={2}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+      />
+
+      <VideoUploadSettings 
+        visible={modalVisible} 
+        onClose={() => setModalVisible(false)} 
       />
     </SafeAreaView>
   );
