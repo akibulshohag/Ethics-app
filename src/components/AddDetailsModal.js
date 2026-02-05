@@ -13,10 +13,13 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import SetVisibilityModal from './SetVisibilityModal';
+import SelectAudienceModal from './SelectAudienceModal';
 
 const AddDetailsModal = ({visible, onClose}) => {
   const [visibilityModalVisible, setVisibilityModalVisible] = React.useState(false);
   const [visibility, setVisibility] = React.useState('Public');
+  const [audienceModalVisible, setAudienceModalVisible] = React.useState(false);
+  const [audience, setAudience] = React.useState({ madeForKids: null, ageRestricted: null });
   return (
     <Modal
       animationType="slide"
@@ -77,7 +80,10 @@ const AddDetailsModal = ({visible, onClose}) => {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => setAudienceModalVisible(true)}
+            >
               <View style={styles.optionLeft}>
                 <Ionicons name="people-outline" size={24} color="#333" style={styles.optionIcon} />
                 <Text style={styles.optionLabel}>Select Audience</Text>
@@ -123,6 +129,12 @@ const AddDetailsModal = ({visible, onClose}) => {
           onClose={() => setVisibilityModalVisible(false)}
           initialValue={visibility}
           onApply={(val) => setVisibility(val)}
+        />
+        <SelectAudienceModal
+          visible={audienceModalVisible}
+          onClose={() => setAudienceModalVisible(false)}
+          initialValue={audience}
+          onApply={(val) => setAudience(val)}
         />
       </SafeAreaView>
     </Modal>
