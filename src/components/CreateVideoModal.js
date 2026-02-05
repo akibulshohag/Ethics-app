@@ -22,6 +22,11 @@ const CreateVideoModal = ({ visible, onClose }) => {
     navigation.navigate('CreateShortsScreen');
   };
 
+  const handleUploadVideo = () => {
+    onClose();
+    navigation.navigate('UploadVideoScreen');
+  };
+
   return (
     <Modal
       animationType="slide"
@@ -52,7 +57,7 @@ const CreateVideoModal = ({ visible, onClose }) => {
                 </TouchableOpacity>
 
                 {/* Upload a Video */}
-                <TouchableOpacity style={styles.optionItem} onPress={onClose}>
+                <TouchableOpacity style={styles.optionItem} onPress={handleUploadVideo}>
                   <View style={styles.iconContainer}>
                     <Ionicons name="cloud-upload" size={24} color="#FF8C00" />
                   </View>

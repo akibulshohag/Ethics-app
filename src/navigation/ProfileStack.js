@@ -6,7 +6,10 @@ import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
 import ShortsVideoScreen from '../screens/ShortsVideoScreen';
 import ChannelProfileScreen from '../screens/ChannelProfileScreen';
 import CreateShortsScreen from '../screens/CreateShortsScreen';
+import UploadVideoScreen from '../screens/UploadVideoScreen';
+
 const ProfileStack = createStackNavigator();
+
 const ProfileNavigation = () => {
   return (
     <ProfileStack.Navigator
@@ -18,6 +21,7 @@ const ProfileNavigation = () => {
       <ProfileStack.Screen name="ShortsVideoScreen" component={ShortsVideoScreen} />
       <ProfileStack.Screen name="ChannelProfileScreen" component={ChannelProfileScreen} />
       <ProfileStack.Screen name="CreateShortsScreen" component={CreateShortsScreen} />
+      <ProfileStack.Screen name="UploadVideoScreen" component={UploadVideoScreen} />
     </ProfileStack.Navigator>
   );
 };
