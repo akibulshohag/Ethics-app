@@ -15,14 +15,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import SetVisibilityModal from './SetVisibilityModal';
+import SelectAudienceModal from './SelectAudienceModal';
+import CommentsSettingsModal from './CommentsSettingsModal';
 
 const { width } = Dimensions.get('window');
 
 const VideoUploadSettings = ({ visible, onClose }) => {
   const [title, setTitle] = useState('');
+  
+  // Modal Visibility State
+  const [visibilityModalVisible, setVisibilityModalVisible] = useState(false);
+  const [audienceModalVisible, setAudienceModalVisible] = useState(false);
+  const [commentsModalVisible, setCommentsModalVisible] = useState(false);
 
-  const SettingItem = ({ icon, label, value, showArrow = true, isPlus = false }) => (
-    <TouchableOpacity style={styles.settingItem}>
+  // Values State
+  const [visibility, setVisibility] = useState('Public');
+  const [audience, setAudience] = useState({ madeForKids: null, ageRestricted: null });
+  const [comments, setComments] = useState('Allow all comments');
+
+  const SettingItem = ({ icon, label, value, showArrow = true, isPlus = false, onPress }) => (
+    <TouchableOpacity style={styles.settingItem} onPress={onPress}>
       <View style={styles.settingLeft}>
         <View style={styles.iconContainer}>
           {icon.type === 'Ionicons' ? (
@@ -34,7 +47,7 @@ const VideoUploadSettings = ({ visible, onClose }) => {
         <Text style={styles.settingLabel}>{label}</Text>
       </View>
       <View style={styles.settingRight}>
-        {value && <Text style={styles.settingValue}>{value}</Text>}
+        {value && <Text style={styles.settingValue} numberOfLines={1}>{value}</Text>}
         {isPlus ? (
           <Ionicons name="add-circle-outline" size={24} color="#333" />
         ) : (
@@ -101,11 +114,13 @@ const VideoUploadSettings = ({ visible, onClose }) => {
             <SettingItem
               icon={{ type: 'Ionicons', name: 'eye-outline' }}
               label="Visibility"
-              value="Public"
+              value={visibility}
+              onPress={() => setVisibilityModalVisible(true)}
             />
             <SettingItem
               icon={{ type: 'Ionicons', name: 'people-outline' }}
               label="Select Audience"
+              onPress={() => setAudienceModalVisible(true)}
             />
             <SettingItem
               icon={{ type: 'Ionicons', name: 'calendar-outline' }}
@@ -115,7 +130,8 @@ const VideoUploadSettings = ({ visible, onClose }) => {
             <SettingItem
               icon={{ type: 'Ionicons', name: 'chatbubble-outline' }}
               label="Comments"
-              value="Allow all comments"
+              value={comments}
+              onPress={() => setCommentsModalVisible(true)}
             />
             <SettingItem
               icon={{ type: 'Ionicons', name: 'location-outline' }}
@@ -133,6 +149,26 @@ const VideoUploadSettings = ({ visible, onClose }) => {
             <Text style={styles.uploadButtonText}>Upload Video</Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {/* Sub Modals */}
+        <SetVisibilityModal
+          visible={visibilityModalVisible}
+          onClose={() => setVisibilityModalVisible(false)}
+          initialValue={visibility}
+          onApply={(val) => setVisibility(val)}
+        />
+        <SelectAudienceModal
+          visible={audienceModalVisible}
+          onClose={() => setAudienceModalVisible(false)}
+          initialValue={audience}
+          onApply={(val) => setAudience(val)}
+        />
+        <CommentsSettingsModal
+          visible={commentsModalVisible}
+          onClose={() => setCommentsModalVisible(false)}
+          initialValue={comments}
+          onApply={(val) => setComments(val)}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -231,11 +267,14 @@ const styles = StyleSheet.create({
   settingRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   settingValue: {
     fontSize: 14,
     color: '#666',
     marginRight: 8,
+    maxWidth: 120,
   },
   uploadButton: {
     backgroundColor: '#FF7F06',
