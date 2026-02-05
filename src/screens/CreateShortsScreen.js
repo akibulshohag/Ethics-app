@@ -14,6 +14,7 @@ import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import EffectsModal from '../components/EffectsModal';
 import SoundsModal from '../components/SoundsModal';
+import AddDetailsModal from '../components/AddDetailsModal';
 
 const {width, height} = Dimensions.get('window');
 
@@ -21,6 +22,7 @@ const CreateShortsScreen = ({navigation}) => {
   const [activeDuration, setActiveDuration] = useState('15s');
   const [effectsVisible, setEffectsVisible] = useState(false);
   const [soundsVisible, setSoundsVisible] = useState(false);
+  const [addDetailsVisible, setAddDetailsVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedSound, setSelectedSound] = useState(null);
   const insets = useSafeAreaInsets();
@@ -88,7 +90,9 @@ const CreateShortsScreen = ({navigation}) => {
                 <TouchableOpacity style={styles.draftButton}>
                   <Text style={styles.draftButtonText}>Draft</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.nextButton}>
+                <TouchableOpacity 
+                  style={styles.nextButton}
+                  onPress={() => setAddDetailsVisible(true)}>
                   <Text style={styles.nextButtonText}>Next</Text>
                 </TouchableOpacity>
               </View>
@@ -162,6 +166,10 @@ const CreateShortsScreen = ({navigation}) => {
         visible={soundsVisible}
         onClose={() => setSoundsVisible(false)}
         onSelect={handleSoundSelect}
+      />
+      <AddDetailsModal
+        visible={addDetailsVisible}
+        onClose={() => setAddDetailsVisible(false)}
       />
     </View>
   );
