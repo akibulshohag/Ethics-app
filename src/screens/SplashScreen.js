@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import {
   StyleSheet,
   View,
+  Image,
   Text,
   ActivityIndicator,
   StatusBar,
@@ -30,9 +31,11 @@ const SplashScreen = ({ navigation }) => {
         <View style={styles.content}>
           {/* Logo Section */}
           <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>
-              <Text style={styles.logoIcon}>e</Text>thics
-            </Text>
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
 
           {/* Loading Indicator */}
@@ -62,6 +65,10 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     marginBottom: 50,
+  },
+  logoImage: {
+    width: width * 0.6,
+    height: 150,
   },
   logoText: {
     fontSize: 80,

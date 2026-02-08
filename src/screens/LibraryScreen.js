@@ -71,7 +71,7 @@ const LibraryScreen = () => {
     if (currentView === 'yourVideos') title = 'Your Videos';
     if (currentView === 'downloads') title = 'Downloads';
     if (currentView === 'watchLater') title = 'Watch Later';
-    if (currentView === 'favorites') title = 'My Favorite Songs';
+    if (currentView === 'favorites') title = 'My Favorite Videos';
 
     return (
       <View style={styles.header}>
@@ -420,7 +420,7 @@ const LibraryScreen = () => {
             />
           </View>
           <View>
-            <Text style={styles.menuText}>My Favorite Songs</Text>
+            <Text style={styles.menuText}>My Favorite Videos</Text>
             <Text style={styles.subText}>125 videos</Text>
           </View>
         </TouchableOpacity>
