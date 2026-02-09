@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  Pressable,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -104,14 +105,19 @@ const LoginScreen = () => {
 
           {/* Sign In Button */}
 
-          <TouchableOpacity
-            style={styles.signInButton}
+          <Pressable
+            style={({ hovered, pressed }) => [
+              styles.signInButton,
+              {
+                backgroundColor: hovered || pressed ? '#F97507' : '#32373D',
+              },
+            ]}
             onPress={() =>
               navigation.navigate('Profile', { screen: 'ProfileScreen' })
             }
           >
             <Text style={styles.signInButtonText}>Sign in</Text>
-          </TouchableOpacity>
+          </Pressable>
 
           {/* Divider */}
           <View style={styles.dividerContainer}>

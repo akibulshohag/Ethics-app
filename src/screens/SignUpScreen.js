@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  Pressable,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -108,12 +109,17 @@ const SignUpScreen = () => {
           </View>
 
           {/* Sign Up Button */}
-          <TouchableOpacity
-            style={styles.signUpButton}
+          <Pressable
+            style={({ hovered, pressed }) => [
+              styles.signUpButton,
+              {
+                backgroundColor: hovered || pressed ? '#F97507' : '#32373D',
+              },
+            ]}
             onPress={() => navigation.navigate('Account')}
           >
             <Text style={styles.signUpButtonText}>Sign up</Text>
-          </TouchableOpacity>
+          </Pressable>
 
           {/* Divider */}
           <View style={styles.dividerContainer}>
@@ -219,7 +225,7 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   signUpButton: {
-    backgroundColor: '#32373D', // Dark button color
+    backgroundColor: '#32373D',
     borderRadius: 30,
     height: 65,
     justifyContent: 'center',

@@ -8,6 +8,7 @@ import {
   StatusBar,
   ScrollView,
   Dimensions,
+  Pressable,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -32,8 +33,9 @@ const SLIDES = [
     title: 'Tasty Meal\nDelivered Faster\nThan You Think !',
     subtitle:
       "Hi! You haven't added any medicines yet. Want me to help you set up the first one?",
-    buttonColor: '#1A1D1E',
-    arrowColor: '#1A1D1E',
+    buttonColor: '#1A1A1A',
+    buttonHoverColor: '#F97507',
+    arrowColor: '#1A1A1A',
     gradientColors: ['transparent', 'rgba(255,255,255,0.8)', '#ffffff'],
   },
   {
@@ -43,8 +45,9 @@ const SLIDES = [
     title: 'See The Video\nChose Your\nFavorite Food !',
     subtitle:
       "Hi! You haven't added any medicines yet. Want me to help you set up the first one?",
-    buttonColor: COLORS.primaryOrange,
-    arrowColor: COLORS.primaryOrange,
+    buttonColor: '#1A1A1A',
+    buttonHoverColor: '#F97507',
+    arrowColor: '#1A1A1A',
     gradientColors: ['transparent', 'rgba(255,255,255,0.7)', COLORS.white],
     showBack: true,
   },
@@ -55,8 +58,9 @@ const SLIDES = [
     title: 'Enjoy Your Day\nand Make a\nHealthy Life',
     subtitle:
       "Hi! You haven't added any medicines yet. Want me to help you set up the first one?",
-    buttonColor: '#1A1D1E',
-    arrowColor: '#1A1D1E',
+    buttonColor: '#1A1A1A',
+    buttonHoverColor: '#F97507',
+    arrowColor: '#1A1A1A',
     gradientColors: ['transparent', 'rgba(255,255,255,0.8)', '#ffffff'],
     isLast: true,
   },
@@ -152,10 +156,14 @@ const OnboardingScreen = () => {
                     <Text style={styles.subtitle}>{slide.subtitle}</Text>
                   </View>
 
-                  <TouchableOpacity
-                    style={[
+                  <Pressable
+                    style={({ pressed }) => [
                       styles.nextButton,
-                      { backgroundColor: slide.buttonColor },
+                      {
+                        backgroundColor: pressed
+                          ? slide.buttonHoverColor
+                          : slide.buttonColor,
+                      },
                     ]}
                     onPress={handleNext}
                   >
@@ -169,7 +177,7 @@ const OnboardingScreen = () => {
                         →
                       </Text>
                     </View>
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
               </LinearGradient>
             </ImageBackground>
