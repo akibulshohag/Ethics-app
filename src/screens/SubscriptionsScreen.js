@@ -4,12 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, SPACING } from '../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const LibraryScreen = () => {
+const SubscriptionsScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Icon name="library-outline" size={80} color={COLORS.primaryOrange} />
-        <Text style={styles.title}>Library</Text>
+        <Icon
+          name="youtube-subscription"
+          size={80}
+          color={COLORS.primaryOrange}
+        />
+        <Text style={styles.title}>Subscriptions</Text>
         <Text style={styles.subtitle}>Coming Soon</Text>
       </View>
     </SafeAreaView>
@@ -39,4 +43,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LibraryScreen;
+export default SubscriptionsScreen;

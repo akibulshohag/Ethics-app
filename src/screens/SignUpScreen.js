@@ -8,8 +8,13 @@ import {
   StatusBar,
   ScrollView,
   Pressable,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { config } from '../../config';
 import {
   COLORS,
   FONTS,
@@ -25,8 +30,76 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const SignUpScreen = () => {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSignUp = async () => {
+    if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
+      setTimeout(() => {
+        Alert.alert('Error', 'Please fill in all fields');
+      }, 100);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setTimeout(() => {
+        Alert.alert('Error', 'Passwords do not match');
+      }, 100);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Call register API
+      const response = await fetch(`${config.apiBaseUrl}/users/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password: password.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
+      }
+
+      // Save user data to Redux (which persists to AsyncStorage)
+      const userData = {
+        id: data.user.id,
+        name: data.user.name || 'New User',
+        email: data.user.email,
+        phone: data.user.phone || '',
+        nickname: data.user.nickname || '',
+        gender: data.user.gender || 'others',
+        token: data.token,
+      };
+
+      dispatch(appSetUser(userData));
+
+      // Navigate to AccountScreen to complete profile setup
+      navigation.navigate('Account');
+    } catch (error) {
+      console.error('Sign up error:', error);
+      setTimeout(() => {
+        Alert.alert(
+          'Error',
+          error.message || 'Registration failed. Please try again.',
+        );
+      }, 100);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -64,6 +137,10 @@ const SignUpScreen = () => {
               style={styles.input}
               placeholder="john.doe@domain.com"
               placeholderTextColor="#999"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
 
@@ -74,7 +151,9 @@ const SignUpScreen = () => {
             <TextInput
               style={styles.input}
               secureTextEntry={!passwordVisible}
-              value="123456789012" // Placeholder dots
+              placeholder="Enter password"
+              value={password}
+              onChangeText={setPassword}
             />
             <TouchableOpacity
               onPress={() => setPasswordVisible(!passwordVisible)}
@@ -96,6 +175,8 @@ const SignUpScreen = () => {
               placeholder="Confirm Password"
               placeholderTextColor="#BBB"
               secureTextEntry={!confirmPasswordVisible}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
             />
             <TouchableOpacity
               onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
@@ -116,9 +197,14 @@ const SignUpScreen = () => {
                 backgroundColor: hovered || pressed ? '#F97507' : '#32373D',
               },
             ]}
-            onPress={() => navigation.navigate('Account')}
+            onPress={handleSignUp}
+            disabled={loading}
           >
-            <Text style={styles.signUpButtonText}>Sign up</Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.signUpButtonText}>Sign up</Text>
+            )}
           </Pressable>
 
           {/* Divider */}

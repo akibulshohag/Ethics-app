@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,9 +7,14 @@ import {
   StatusBar,
   FlatList,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { config } from '../../config';
 import NotificationModal from './NotificationModal';
 import {
   COLORS,
@@ -39,14 +44,95 @@ const INTERESTS = [
 
 const ChooseInterests = () => {
   const navigation = useNavigation();
-  const [selectedIds, setSelectedIds] = useState(['1', '7', '10']);
+  const dispatch = useDispatch();
+  const { user } = useSelector(state => state.app);
+
+  // Initialize with user's existing interests or empty array
+  const [selectedIds, setSelectedIds] = useState(user?.interests || []);
   const [showNotification, setShowNotification] = useState(false);
   const [showGoHome, setShowGoHome] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isUpdateMode, setIsUpdateMode] = useState(false);
+
+  useEffect(() => {
+    // Check if user already has interests selected
+    if (user?.interests && user.interests.length > 0) {
+      setIsUpdateMode(true);
+      setSelectedIds(user.interests);
+    }
+  }, []);
 
   const toggleInterest = id => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id],
     );
+  };
+
+  const handleSkip = () => {
+    // Navigate to Home
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Root' }],
+    });
+  };
+
+  const handleSave = async () => {
+    if (selectedIds.length === 0) {
+      setTimeout(() => {
+        Alert.alert('Info', 'Please select at least one interest');
+      }, 100);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Call API to save interests
+      const response = await fetch(`${config.apiBaseUrl}/users/${user.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          interests: selectedIds,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save interests');
+      }
+
+      // Update Redux store
+      const updatedUser = {
+        ...user,
+        interests: selectedIds,
+      };
+
+      dispatch(appSetUser(updatedUser));
+
+      // Show notification modal or go to home
+      if (isUpdateMode) {
+        setTimeout(() => {
+          Alert.alert('Success', 'Interests updated successfully', [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+        }, 100);
+      } else {
+        setShowNotification(true);
+      }
+    } catch (error) {
+      console.error('Save interests error:', error);
+      setTimeout(() => {
+        Alert.alert(
+          'Error',
+          error.message || 'Failed to save interests. Please try again.',
+        );
+      }, 100);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderItem = ({ item }) => {
@@ -77,9 +163,15 @@ const ChooseInterests = () => {
       <StatusBar barStyle="light-content" backgroundColor="#FF7A00" />
 
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Choose Your Interests Foods</Text>
+        <Text style={styles.headerTitle}>
+          {isUpdateMode
+            ? 'Update Your Interests Foods'
+            : 'Choose Your Interests Foods'}
+        </Text>
         <Text style={styles.headerSubtitle}>
-          Let's get started on your journey to better health.
+          {isUpdateMode
+            ? 'Add or remove your food interests'
+            : "Let's get started on your journey to better health."}
         </Text>
       </View>
 
@@ -95,13 +187,19 @@ const ChooseInterests = () => {
         />
 
         <View style={styles.footer}>
-          <TouchableOpacity style={[styles.button, styles.skipButton]}>
+          <TouchableOpacity
+            style={[styles.button, styles.skipButton]}
+            onPress={handleSkip}
+            disabled={loading}
+          >
             <Text style={[styles.buttonText, styles.skipText]}>Skip</Text>
           </TouchableOpacity>
           {showGoHome ? (
             <TouchableOpacity
               style={[styles.button, styles.nextButton]}
-              onPress={() => navigation.navigate('Home')}
+              onPress={() =>
+                navigation.reset({ index: 0, routes: [{ name: 'Root' }] })
+              }
             >
               <Text style={[styles.buttonText, styles.nextText]}>
                 Go to Home
@@ -110,9 +208,16 @@ const ChooseInterests = () => {
           ) : (
             <TouchableOpacity
               style={[styles.button, styles.nextButton]}
-              onPress={() => setShowNotification(true)}
+              onPress={handleSave}
+              disabled={loading}
             >
-              <Text style={[styles.buttonText, styles.nextText]}>Next</Text>
+              {loading ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <Text style={[styles.buttonText, styles.nextText]}>
+                  {isUpdateMode ? 'Save Changes' : 'Next'}
+                </Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -124,7 +229,10 @@ const ChooseInterests = () => {
           setShowNotification(false);
           setShowGoHome(true);
         }}
-        onDecline={() => setShowNotification(false)}
+        onDecline={() => {
+          setShowNotification(false);
+          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+        }}
       />
     </SafeAreaView>
   );

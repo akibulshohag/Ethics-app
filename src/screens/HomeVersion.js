@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -250,38 +251,40 @@ const HomeVersion = () => {
   return (
     <View style={styles.container}>
       {/* Header Section */}
-      <View style={styles.navBar}>
-        <Text style={styles.logoText}>
-          eat<Text style={{ color: COLORS.primaryOrange }}>ix</Text>
-        </Text>
-        <View style={styles.navIcons}>
-          <TouchableOpacity onPress={() => setShowSearch(true)}>
-            <Icon
-              name="magnify"
-              size={26}
-              color={COLORS.textPrimary}
-              style={styles.iconSpaced}
-            />
-          </TouchableOpacity>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <View style={styles.navBar}>
+          <Text style={styles.logoText}>
+            eat<Text style={{ color: COLORS.primaryOrange }}>ix</Text>
+          </Text>
+          <View style={styles.navIcons}>
+            <TouchableOpacity onPress={() => setShowSearch(true)}>
+              <Icon
+                name="magnify"
+                size={26}
+                color={COLORS.textPrimary}
+                style={styles.iconSpaced}
+              />
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => setShowNotifications(true)}>
-            <Icon
-              name="bell-outline"
-              size={26}
-              color={COLORS.textPrimary}
-              style={styles.iconSpaced}
-            />
-          </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowNotifications(true)}>
+              <Icon
+                name="bell-outline"
+                size={26}
+                color={COLORS.textPrimary}
+                style={styles.iconSpaced}
+              />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.profileMini}
-            onPress={() =>
-              navigation.navigate('Profile', { screen: 'ProfileScreen' })
-            }
-            activeOpacity={0.7}
-          />
+            <TouchableOpacity
+              style={styles.profileMini}
+              onPress={() =>
+                navigation.navigate('Library', { screen: 'ProfileScreen' })
+              }
+              activeOpacity={0.7}
+            />
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
 
       <FlatList
         data={MAIN_FEED}
@@ -322,20 +325,6 @@ const HomeVersion = () => {
           </>
         }
       />
-
-      <View style={styles.tabBar}>
-        <Icon name="home" size={28} color={COLORS.primaryOrange} />
-        <Icon
-          name="play-box-multiple-outline"
-          size={28}
-          color={COLORS.gray500}
-        />
-        <View style={styles.fabContainer}>
-          <Icon name="plus" size={30} color={COLORS.white} />
-        </View>
-        <Icon name="youtube-subscription" size={28} color={COLORS.gray500} />
-        <Icon name="library-outline" size={28} color={COLORS.gray500} />
-      </View>
 
       <Modal
         animationType="slide"
@@ -444,13 +433,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,
-    paddingTop: SPACING.xxl,
+  },
+  safeArea: {
+    backgroundColor: COLORS.white,
   },
   navBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     alignItems: 'center',
+    backgroundColor: COLORS.white,
   },
   logoText: { fontSize: FONTS.xxl, fontWeight: FONTS.bold },
   navIcons: { flexDirection: 'row', alignItems: 'center' },
@@ -566,24 +559,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   videoMetaMerged: { fontSize: 12, color: '#606060', marginTop: 2 },
-  tabBar: {
-    height: 70,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderColor: COLORS.gray200,
-    backgroundColor: '#fff',
-  },
-  fabContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.primaryOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: -20,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

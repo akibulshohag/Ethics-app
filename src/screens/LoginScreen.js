@@ -8,8 +8,13 @@ import {
   StatusBar,
   ScrollView,
   Pressable,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { config } from '../../config';
 import {
   COLORS,
   FONTS,
@@ -24,8 +29,78 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const LoginScreen = () => {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      setTimeout(() => {
+        Alert.alert('Error', 'Please enter email and password');
+      }, 100);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Call login API
+      const response = await fetch(`${config.apiBaseUrl}/users/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          password: password.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      // Save user data to Redux (which persists to AsyncStorage)
+      const userData = {
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        phone: data.user.phone,
+        nickname: data.user.nickname,
+        gender: data.user.gender,
+        pin: data.user.pin, // Boolean indicating if user has PIN
+        rememberMe: rememberMe,
+        token: data.token,
+      };
+
+      dispatch(appSetUser(userData));
+
+      // Navigate based on profile completion status
+      // If user has PIN, go directly to Home (RootStack will handle this)
+      // If no PIN, go to AccountScreen to complete profile
+      if (data.user.pin) {
+        // User has completed setup, let App.js switch to RootStack
+        // The navigation will happen automatically via App.js conditional rendering
+      } else {
+        // User needs to complete profile setup
+        navigation.navigate('Account');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setTimeout(() => {
+        Alert.alert(
+          'Error',
+          error.message || 'Login failed. Please try again.',
+        );
+      }, 100);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -57,8 +132,12 @@ const LoginScreen = () => {
             <Icon name="email" size={20} color="black" />
             <TextInput
               style={styles.input}
-              placeholder="andrew_ainsley@yourdomain.com"
+              placeholder="Enter your email"
               placeholderTextColor="#333"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
           </View>
 
@@ -69,7 +148,9 @@ const LoginScreen = () => {
             <TextInput
               style={styles.input}
               secureTextEntry={!passwordVisible}
-              value="password12345"
+              placeholder="Enter your password"
+              value={password}
+              onChangeText={setPassword}
             />
             <TouchableOpacity
               onPress={() => setPasswordVisible(!passwordVisible)}
@@ -112,11 +193,14 @@ const LoginScreen = () => {
                 backgroundColor: hovered || pressed ? '#F97507' : '#32373D',
               },
             ]}
-            onPress={() =>
-              navigation.navigate('Profile', { screen: 'ProfileScreen' })
-            }
+            onPress={handleLogin}
+            disabled={loading}
           >
-            <Text style={styles.signInButtonText}>Sign in</Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.signInButtonText}>Sign in</Text>
+            )}
           </Pressable>
 
           {/* Divider */}

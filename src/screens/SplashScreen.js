@@ -11,10 +11,10 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 
 const SplashScreen = ({ navigation }) => {
-  // Navigate to the Onboarding screen after 3 seconds
+  // Navigate to the Login screen after 3 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigation.replace('Onboarding');
+      navigation.replace('Login');
     }, 3000);
     return () => clearTimeout(timer);
   }, [navigation]);

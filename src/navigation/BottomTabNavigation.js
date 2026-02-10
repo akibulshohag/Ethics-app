@@ -1,13 +1,23 @@
 import React from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  View,
+  TouchableOpacity,
+} from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
 import ProfileNavigation from './ProfileStack';
+import ShortsScreen from '../screens/ShortsScreen';
+import SubscriptionsScreen from '../screens/SubscriptionsScreen';
+import LibraryScreen from '../screens/LibraryScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { COLORS } from '../constants/theme';
 
 const getTabBarStyle = route => {
   const routeName = getFocusedRouteNameFromRoute(route) ?? '';
@@ -32,27 +42,27 @@ const BottomNaivgation = () => {
             headerShown: false,
             popToTopOnBlur: true,
             tabBarStyle: {
-              backgroundColor: '#FEFEFE',
+              backgroundColor: COLORS.white,
               borderTopWidth: 1,
-              borderTopColor: '#FEFEFE',
+              borderTopColor: COLORS.gray200,
               height: tabHeight,
               paddingBottom: Platform.OS === 'ios' ? 20 : 8,
               paddingTop: 8,
             },
-            tabBarActiveTintColor: '#4275c2',
-            tabBarInactiveTintColor: '#b42d2d',
+            tabBarActiveTintColor: COLORS.primaryOrange,
+            tabBarInactiveTintColor: COLORS.gray500,
             tabBarLabelStyle: styles.tabBarLabelStyle,
+            tabBarShowLabel: false,
           }}
         >
           <Tab.Screen
             name="Home"
             component={HomeNavigation}
             options={({ route }) => ({
-              tabBarLabel: 'Home',
               tabBarStyle: {
-                backgroundColor: '#FEFEFE',
+                backgroundColor: COLORS.white,
                 borderTopWidth: 1,
-                borderTopColor: 'red',
+                borderTopColor: COLORS.gray200,
                 height: tabHeight,
                 paddingBottom: Platform.OS === 'ios' ? 20 : 8,
                 paddingTop: 8,
@@ -60,23 +70,69 @@ const BottomNaivgation = () => {
               },
               tabBarIcon: ({ focused, color }) => (
                 <Icon
-                  name="home-outline"
-                  size={26}
-                  color={color}
-                  style={{ opacity: focused ? 1 : 0.7 }}
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
               ),
             })}
           />
+
           <Tab.Screen
-            name="Profile"
+            name="Shorts"
+            component={ShortsScreen}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="play-box-multiple-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Create"
+            component={View}
+            listeners={({ navigation }) => ({
+              tabPress: e => {
+                e.preventDefault();
+                // TODO: Open create video modal or screen
+                console.log('Create button pressed');
+              },
+            })}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <View style={styles.fabContainer}>
+                  <Icon name="plus" size={30} color={COLORS.white} />
+                </View>
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Subscriptions"
+            component={SubscriptionsScreen}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="youtube-subscription"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Library"
             component={ProfileNavigation}
             options={({ route }) => ({
-              tabBarLabel: 'Profile',
               tabBarStyle: {
-                backgroundColor: '#FEFEFE',
+                backgroundColor: COLORS.white,
                 borderTopWidth: 1,
-                borderTopColor: '#FEFEFE',
+                borderTopColor: COLORS.gray200,
                 height: tabHeight,
                 paddingBottom: Platform.OS === 'ios' ? 20 : 8,
                 paddingTop: 8,
@@ -84,10 +140,9 @@ const BottomNaivgation = () => {
               },
               tabBarIcon: ({ focused, color }) => (
                 <Icon
-                  name="account-circle-outline"
-                  size={26}
-                  color={color}
-                  style={{ opacity: focused ? 1 : 0.7 }}
+                  name="library-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
               ),
             })}
@@ -103,6 +158,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '400',
     marginTop: 4,
+  },
+  fabContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.primaryOrange,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
   },
 });
 

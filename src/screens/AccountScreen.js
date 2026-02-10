@@ -8,11 +8,16 @@ import {
   StatusBar,
   ScrollView,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { config } from '../../config';
 import {
   COLORS,
   FONTS,
@@ -24,21 +29,117 @@ import {
 
 const AccountScreen = () => {
   const navigation = useNavigation();
-  const [gender, setGender] = useState(null);
+  const dispatch = useDispatch();
+  const { user } = useSelector(state => state.app);
+  const [gender, setGender] = useState(user?.gender || null);
+  const [isFocusGender, setIsFocusGender] = useState(false);
   const [focusedInput, setFocusedInput] = useState(null);
+  const [fullName, setFullName] = useState(user?.name || '');
+  const [nickname, setNickname] = useState(user?.nickname || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [loading, setLoading] = useState(false);
+
+  const handleSkip = () => {
+    // Navigate to CreatePin if user doesn't have PIN
+    // If user has PIN, they're just updating profile, go back or to home
+    if (user?.pin) {
+      // User already has PIN, just go back
+      navigation.goBack();
+    } else {
+      // New user needs to create PIN
+      navigation.navigate('CreatePin');
+    }
+  };
+
+  const handleSave = async () => {
+    if (!fullName.trim()) {
+      setTimeout(() => {
+        Alert.alert('Error', 'Please enter your full name');
+      }, 100);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Call actual API to update user profile
+      const response = await fetch(`${config.apiBaseUrl}/users/${user.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({
+          name: fullName,
+          nickname,
+          phone,
+          gender,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update profile');
+      }
+
+      const data = await response.json();
+
+      // Update Redux store with response data
+      const updatedUser = {
+        ...user,
+        name: data.userUpdate?.name || fullName,
+        nickname: data.userUpdate?.nickname || nickname,
+        phone: data.userUpdate?.phone || phone,
+        gender: data.userUpdate?.gender || gender,
+      };
+
+      dispatch(appSetUser(updatedUser));
+
+      // Show success message and navigate
+      setTimeout(() => {
+        Alert.alert(
+          'Success',
+          'Profile updated successfully',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to ChooseInterests after profile save
+                navigation.navigate('ChooseInterests');
+              },
+            },
+          ],
+          { cancelable: false },
+        );
+      }, 100);
+    } catch (error) {
+      console.error('Profile update error:', error);
+      setTimeout(() => {
+        Alert.alert(
+          'Error',
+          error.message || 'Failed to update profile. Please try again.',
+        );
+      }, 100);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const genderData = [
-    { label: 'Male', value: '1' },
-    { label: 'Female', value: '2' },
+    { label: 'Male', value: 'male' },
+    { label: 'Female', value: 'female' },
+    { label: 'Others', value: 'others' },
   ];
 
   const InputField = ({
     label,
     value,
+    onChangeText,
     placeholder,
     icon,
     id,
     keyboardType = 'default',
+    editable = true,
   }) => (
     <View style={styles.inputContainer}>
       <Text style={styles.label}>{label}</Text>
@@ -46,14 +147,17 @@ const AccountScreen = () => {
         style={[
           styles.inputWrapper,
           focusedInput === id && styles.inputWrapperFocused,
+          !editable && styles.inputDisabled,
         ]}
       >
         <TextInput
           style={styles.input}
-          defaultValue={value}
+          value={value}
+          onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor="#C1C1C1"
           keyboardType={keyboardType}
+          editable={editable}
           onFocus={() => setFocusedInput(id)}
           onBlur={() => setFocusedInput(null)}
         />
@@ -73,7 +177,10 @@ const AccountScreen = () => {
       <StatusBar barStyle="light-content" backgroundColor="#FF7A00" />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
           <Icon name="arrow-left" size={28} color={COLORS.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Fill Your Profile</Text>
@@ -96,14 +203,29 @@ const AccountScreen = () => {
         </View>
 
         <View style={styles.form}>
-          <InputField label="Full Name" value="Habibur Rahman" id="fullname" />
-          <InputField label="Nickname" value="Habib" id="nickname" />
+          <InputField
+            label="Full Name"
+            value={fullName}
+            onChangeText={setFullName}
+            placeholder="Enter your full name"
+            id="fullname"
+          />
+          <InputField
+            label="Nickname"
+            value={nickname}
+            onChangeText={setNickname}
+            placeholder="Enter your nickname"
+            id="nickname"
+          />
           <InputField
             label="Email"
-            value="habib.hc.bd@gmail.com"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Enter your email"
             icon="email"
             id="email"
             keyboardType="email-address"
+            editable={false}
           />
 
           <View style={styles.inputContainer}>
@@ -119,6 +241,8 @@ const AccountScreen = () => {
               <TextInput
                 style={styles.input}
                 placeholder="Phone Number"
+                value={phone}
+                onChangeText={setPhone}
                 keyboardType="phone-pad"
               />
             </View>
@@ -127,31 +251,67 @@ const AccountScreen = () => {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Gender</Text>
             <Dropdown
-              style={styles.dropdown}
+              style={[
+                styles.dropdown,
+                isFocusGender && {
+                  borderColor: COLORS.primaryOrange,
+                  backgroundColor: '#FFF8F2',
+                },
+              ]}
+              containerStyle={styles.dropdownContainer}
+              placeholderStyle={styles.dropdownPlaceholder}
+              selectedTextStyle={styles.dropdownSelectedText}
+              itemTextStyle={styles.dropdownItemText}
               data={genderData}
+              maxHeight={300}
               labelField="label"
               valueField="value"
-              placeholder="Gender"
+              placeholder="Select Gender"
               value={gender}
-              onChange={item => setGender(item.value)}
+              onFocus={() => setIsFocusGender(true)}
+              onBlur={() => setIsFocusGender(false)}
+              onChange={item => {
+                setGender(item.value);
+                setIsFocusGender(false);
+              }}
+              renderLeftIcon={() => (
+                <Icon
+                  name="gender-male-female"
+                  size={20}
+                  color={isFocusGender ? COLORS.primaryOrange : COLORS.gray500}
+                  style={{ marginRight: SPACING.sm }}
+                />
+              )}
               renderRightIcon={() => (
-                <Icon name="chevron-down" size={20} color="#9E9E9E" />
+                <Icon
+                  name="chevron-down"
+                  size={20}
+                  color={isFocusGender ? COLORS.primaryOrange : COLORS.gray500}
+                />
               )}
             />
           </View>
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={[styles.button, styles.skipButton]}>
+          <TouchableOpacity
+            style={[styles.button, styles.skipButton]}
+            onPress={handleSkip}
+          >
             <Text style={[styles.buttonText, styles.skipText]}>Skip</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.button, styles.continueButton]}
-            onPress={() => navigation.navigate('CreatePin')}
+            onPress={handleSave}
+            disabled={loading}
           >
-            <Text style={[styles.buttonText, styles.continueText]}>
-              Continue
-            </Text>
+            {loading ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={[styles.buttonText, styles.continueText]}>
+                Save & Continue
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -246,6 +406,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primaryOrange,
     backgroundColor: '#FFF8F2',
   },
+  inputDisabled: {
+    backgroundColor: COLORS.gray100,
+    opacity: 0.7,
+  },
   input: {
     flex: 1,
     color: COLORS.textPrimary,
@@ -264,7 +428,37 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     height: DIMENSIONS.inputHeight,
-    ...COMMON_STYLES.inputWrapper,
+    backgroundColor: COLORS.backgroundLight,
+    borderRadius: BORDER_RADIUS.xxxl,
+    paddingHorizontal: SPACING.xl,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  dropdownContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    marginTop: SPACING.xs,
+    elevation: 5,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  dropdownPlaceholder: {
+    fontSize: FONTS.base,
+    color: COLORS.gray400,
+  },
+  dropdownSelectedText: {
+    fontSize: FONTS.base,
+    color: COLORS.textPrimary,
+    fontWeight: FONTS.medium,
+  },
+  dropdownItemText: {
+    fontSize: FONTS.base,
+    color: COLORS.textPrimary,
+    padding: SPACING.sm,
   },
   buttonContainer: {
     flexDirection: 'row',
