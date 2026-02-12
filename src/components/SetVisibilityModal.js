@@ -5,13 +5,15 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const SetVisibilityModal = ({ visible, onClose, initialValue, onApply }) => {
-  const [selectedOption, setSelectedOption] = useState(initialValue || 'Public');
+  const [selectedOption, setSelectedOption] = useState(
+    initialValue || 'Public',
+  );
 
   useEffect(() => {
     if (visible && initialValue) {
@@ -25,16 +27,18 @@ const SetVisibilityModal = ({ visible, onClose, initialValue, onApply }) => {
   };
 
   const VisibilityOption = ({ title, description, value }) => (
-    <TouchableOpacity 
-      style={styles.optionContainer} 
+    <TouchableOpacity
+      style={styles.optionContainer}
       onPress={() => setSelectedOption(value)}
       activeOpacity={0.7}
     >
       <View style={styles.radioContainer}>
-        <View style={[
-          styles.radioOuter,
-          selectedOption === value && styles.radioOuterSelected
-        ]}>
+        <View
+          style={[
+            styles.radioOuter,
+            selectedOption === value && styles.radioOuterSelected,
+          ]}
+        >
           {selectedOption === value && <View style={styles.radioInner} />}
         </View>
       </View>
@@ -50,34 +54,35 @@ const SetVisibilityModal = ({ visible, onClose, initialValue, onApply }) => {
       animationType="slide"
       transparent={false}
       visible={visible}
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="white" />
-        
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.headerButton}>
             <Ionicons name="arrow-back" size={24} color="black" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Set Visibility</Text>
-          <View style={{ width: 24 }} /> 
+          <View style={{ width: 24 }} />
         </View>
 
         <View style={styles.content}>
-          <VisibilityOption 
-            title="Public" 
-            description="Anyone can search for and view" 
-            value="Public" 
+          <VisibilityOption
+            title="Public"
+            description="Anyone can search for and view"
+            value="Public"
           />
-          <VisibilityOption 
-            title="Unlisted" 
-            description="Anyone with the link can view" 
-            value="Unlisted" 
+          <VisibilityOption
+            title="Unlisted"
+            description="Anyone with the link can view"
+            value="Unlisted"
           />
-          <VisibilityOption 
-            title="Private" 
-            description="Only people who choose can view" 
-            value="Private" 
+          <VisibilityOption
+            title="Private"
+            description="Only people who choose can view"
+            value="Private"
           />
         </View>
 

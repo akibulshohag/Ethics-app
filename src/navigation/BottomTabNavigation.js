@@ -10,9 +10,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
 import ProfileNavigation from './ProfileStack';
-import ShortsScreen from '../screens/ShortsScreen';
+import CreateShortsScreen from '../screens/CreateShortsScreen';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
-import LibraryScreen from '../screens/LibraryScreen';
+import UploadVideoScreen from '../screens/UploadVideoScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -80,7 +80,7 @@ const BottomNaivgation = () => {
 
           <Tab.Screen
             name="Shorts"
-            component={ShortsScreen}
+            component={CreateShortsScreen}
             options={{
               tabBarIcon: ({ focused, color }) => (
                 <Icon
@@ -94,14 +94,7 @@ const BottomNaivgation = () => {
 
           <Tab.Screen
             name="Create"
-            component={View}
-            listeners={({ navigation }) => ({
-              tabPress: e => {
-                e.preventDefault();
-                // TODO: Open create video modal or screen
-                console.log('Create button pressed');
-              },
-            })}
+            component={UploadVideoScreen}
             options={{
               tabBarIcon: ({ focused }) => (
                 <View style={styles.fabContainer}>
