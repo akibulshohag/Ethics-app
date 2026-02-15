@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,106 +10,72 @@ import {
   FlatList,
   Image,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import {
+  getComments,
+  addComment,
+  toggleCommentLike,
+  toggleCommentDislike,
+} from '../services/videoService';
 
 const { height } = Dimensions.get('window');
 
-const COMMENTS_DATA = [
-  {
-    id: '1',
-    user: {
-      name: 'Freida Varnes',
-      avatar: 'https://ui-avatars.com/api/?name=Freida+Varnes&background=FF8A65&color=fff',
-    },
-    time: '2 months ago',
-    text: 'The wolf is so beautiful 😍. Love it! I want one at home, but it seems impossible because the animal is protected 😂😂',
-    likes: '3.2K',
-    dislikes: '368',
-    replies: '675',
-    hasReplyLink: true,
-    repliesList: [
-        {
-            id: 'r1',
-            user: {
-                name: 'John Doe',
-                avatar: 'https://ui-avatars.com/api/?name=John+Doe&background=E57373&color=fff',
-            },
-            time: '1 month ago',
-            text: 'Absolutely agree! Wolves are majestic creatures.',
-            likes: '45',
-            dislikes: '2',
-        },
-         {
-            id: 'r2',
-            user: {
-                name: 'Jane Smith',
-                avatar: 'https://ui-avatars.com/api/?name=Jane+Smith&background=BA68C8&color=fff',
-            },
-            time: '3 weeks ago',
-            text: 'I saw one in the wild once, it was breathtaking.',
-            likes: '120',
-            dislikes: '5',
-        }
-    ]
-  },
-  {
-    id: '2',
-    user: {
-      name: 'Merrill Kervin',
-      avatar: 'https://ui-avatars.com/api/?name=Merrill+Kervin&background=7986CB&color=fff',
-    },
-    time: '1 months ago',
-    text: 'Vitae proin sagittis nisl rhoncus. Metus aliquam eleifend mi in nulla posuere sollicitudin aliquam ultrices.',
-    likes: '2.9K',
-    dislikes: '342',
-    replies: '466',
-    hasReplyLink: false,
-    repliesList: []
-  },
-  {
-    id: '3',
-    user: {
-      name: 'Marx Hershey',
-      avatar: 'https://ui-avatars.com/api/?name=Marx+Hershey&background=FFD54F&color=fff',
-    },
-    time: '1 year ago',
-    text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Quam pellentesque nec nam aliquam sem',
-    likes: '000',
-    dislikes: '000',
-    replies: '000',
-    hasReplyLink: false,
-    repliesList: []
-  },
-  {
-    id: '4',
-    user: {
-      name: 'Marx Hershey',
-      avatar: 'https://ui-avatars.com/api/?name=Marx+Hershey&background=FFD54F&color=fff',
-    },
-    time: '1 year ago',
-    text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Quam pellentesque nec nam aliquam sem',
-    likes: '000',
-    dislikes: '000',
-    replies: '000',
-    hasReplyLink: false,
-    repliesList: []
-  },
-  {
-    id: '5',
-    user: {
-      name: 'Marx Hershey',
-      avatar: 'https://ui-avatars.com/api/?name=Marx+Hershey&background=FFD54F&color=fff',
-    },
-    time: '1 year ago',
-    text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Quam pellentesque nec nam aliquam sem',
-    likes: '000',
-    dislikes: '000',
-    replies: '000',
-    hasReplyLink: false,
-    repliesList: []
-  },
-];
+const formatTimeAgo = dateStr => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  if (diffYears > 0) return `${diffYears}y ago`;
+  if (diffMonths > 0) return `${diffMonths}mo ago`;
+  if (diffDays > 0) return `${diffDays}d ago`;
+  if (diffHours > 0) return `${diffHours}h ago`;
+  if (diffMins > 0) return `${diffMins}m ago`;
+  return 'Just now';
+};
+
+const formatCount = n => {
+  if (!n || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+};
+
+const mapApiCommentToDisplay = (c, currentUser) => {
+  const u = c.user || {};
+  // Use logged-in user's name/nickname for own comments (API may return different display name)
+  const isCurrentUser = currentUser?.id && String(c.userId) === String(currentUser.id);
+  const displayName = isCurrentUser
+    ? (currentUser.nickname || currentUser.name || u.nickname || u.name || 'Unknown')
+    : (u.nickname || u.name || 'Unknown');
+  const avatar =
+    (isCurrentUser && (currentUser.photos?.[0] || (Array.isArray(currentUser.photos) && currentUser.photos[0])))
+    || u.photos?.[0]
+    || (Array.isArray(u.photos) && u.photos[0])
+    || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=111&color=fff`;
+  const repliesList = (c.replies || []).map(r => mapApiCommentToDisplay(r, currentUser));
+  return {
+    id: c.id,
+    userId: c.userId,
+    user: { name: displayName, avatar },
+    time: formatTimeAgo(c.createdAt),
+    text: c.content || '',
+    likeCount: c.likeCount ?? 0,
+    dislikeCount: c.dislikeCount ?? 0,
+    likes: formatCount(c.likeCount || 0),
+    dislikes: formatCount(c.dislikeCount || 0),
+    isLiked: c.isLiked ?? false,
+    isDisliked: c.isDisliked ?? false,
+    replies: formatCount(repliesList.length),
+    repliesList,
+  };
+};
 
 const FilterButton = ({ label, active, onPress }) => (
   <TouchableOpacity
@@ -122,106 +88,397 @@ const FilterButton = ({ label, active, onPress }) => (
   </TouchableOpacity>
 );
 
-const ReplyItem = ({ item }) => (
-    <View style={styles.replyItem}>
-        <Image source={{ uri: item.user.avatar }} style={styles.replyAvatar} />
-        <View style={styles.replyContent}>
-            <View style={styles.commentHeader}>
-                <Text style={styles.commentUser}>{item.user.name}  <Text style={styles.commentTime}>•  {item.time}</Text></Text>
-                 <TouchableOpacity>
-                    <MaterialCommunityIcons name="dots-vertical" size={16} color="#212121" />
-                </TouchableOpacity>
-            </View>
-            <Text style={styles.commentText}>{item.text}</Text>
-             <View style={styles.commentActions}>
-                <View style={styles.actionItem}>
-                    <MaterialCommunityIcons name="thumb-up-outline" size={16} color="#212121" />
-                    <Text style={styles.actionText}>{item.likes}</Text>
-                </View>
-                <View style={styles.actionItem}>
-                    <MaterialCommunityIcons name="thumb-down-outline" size={16} color="#212121" />
-                    <Text style={styles.actionText}>{item.dislikes}</Text>
-                </View>
-                 <View style={styles.actionItem}>
-                    <Text style={[styles.actionText, {marginLeft: 0, fontWeight: '600'}]}>Reply</Text>
-                </View>
-            </View>
-        </View>
+const ReplyItem = ({
+  item,
+  onLike,
+  onDislike,
+  canInteract,
+}) => (
+  <View style={styles.replyItem}>
+    <Image source={{ uri: item.user.avatar }} style={styles.replyAvatar} />
+    <View style={styles.replyContent}>
+      <View style={styles.commentHeader}>
+        <Text style={styles.commentUser}>
+          {item.user.name}{' '}
+          <Text style={styles.commentTime}>• {item.time}</Text>
+        </Text>
+        <TouchableOpacity>
+          <MaterialCommunityIcons
+            name="dots-vertical"
+            size={16}
+            color="#212121"
+          />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.commentText}>{item.text}</Text>
+      <View style={styles.commentActions}>
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={canInteract ? () => onLike?.(item) : undefined}
+          disabled={!canInteract}
+        >
+          <MaterialCommunityIcons
+            name={item.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+            size={16}
+            color={item.isLiked ? '#F97507' : '#212121'}
+          />
+          <Text style={styles.actionText}>{item.likes}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={canInteract ? () => onDislike?.(item) : undefined}
+          disabled={!canInteract}
+        >
+          <MaterialCommunityIcons
+            name={item.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+            size={16}
+            color={item.isDisliked ? '#F97507' : '#212121'}
+          />
+          <Text style={styles.actionText}>{item.dislikes}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
+  </View>
 );
 
-const CommentItem = ({ item }) => {
+const CommentItem = ({
+  item,
+  userAvatar,
+  onSubmitReply,
+  onLike,
+  onDislike,
+  canReply,
+  canInteract,
+}) => {
   const [showReplies, setShowReplies] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmitReply = async () => {
+    if (!replyText.trim() || !onSubmitReply) return;
+    setSubmitting(true);
+    try {
+      await onSubmitReply(item.id, replyText.trim());
+      setReplyText('');
+      setShowReplyInput(false);
+      setShowReplies(true);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const replyCount = item.repliesList?.length || 0;
 
   return (
-      <View style={styles.commentItem}>
-        <Image source={{ uri: item.user.avatar }} style={styles.commentAvatar} />
-        <View style={styles.commentContent}>
-          <View style={styles.commentHeader}>
-            <Text style={styles.commentUser}>{item.user.name}  <Text style={styles.commentTime}>•  {item.time}</Text></Text>
-            <TouchableOpacity>
-                <MaterialCommunityIcons name="dots-vertical" size={20} color="#212121" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.commentText}>{item.text}</Text>
-          
-          <View style={styles.commentActions}>
-            <TouchableOpacity style={styles.actionItem}>
-                <MaterialCommunityIcons name="thumb-up-outline" size={18} color="#212121" />
-                <Text style={styles.actionText}>{item.likes}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem}>
-                <MaterialCommunityIcons name="thumb-down-outline" size={18} color="#212121" />
-                <Text style={styles.actionText}>{item.dislikes}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionItem} onPress={() => item.repliesList?.length > 0 && setShowReplies(!showReplies)}>
-                <MaterialCommunityIcons name="comment-text-outline" size={18} color="#212121" />
-                <Text style={styles.actionText}>{item.replies}</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <TouchableOpacity onPress={() => setShowReplyInput(!showReplyInput)}>
-             <Text style={styles.replyLink}>{item.replies} Reply</Text>
+    <View style={styles.commentItem}>
+      <Image source={{ uri: item.user.avatar }} style={styles.commentAvatar} />
+      <View style={styles.commentContent}>
+        <View style={styles.commentHeader}>
+          <Text style={styles.commentUser}>
+            {item.user.name}{' '}
+            <Text style={styles.commentTime}>• {item.time}</Text>
+          </Text>
+          <TouchableOpacity>
+            <MaterialCommunityIcons
+              name="dots-vertical"
+              size={20}
+              color="#212121"
+            />
           </TouchableOpacity>
-
-            {showReplyInput && (
-                <View style={styles.replyInputContainer}>
-                     <Image source={{ uri: 'https://ui-avatars.com/api/?name=My+User' }} style={styles.userAvatarSmallReply} />
-                     <View style={{flex: 1}}>
-                        <View style={styles.replyInputWrapper}>
-                            <TextInput 
-                                placeholder="Add a reply..."
-                                placeholderTextColor="#9E9E9E"
-                                style={styles.input}
-                                value={replyText}
-                                onChangeText={setReplyText}
-                                autoFocus
-                            />
-                        </View>
-                        <View style={styles.replyButtonContainer}>
-                            <TouchableOpacity onPress={() => setShowReplyInput(false)} style={styles.cancelReplyButton}>
-                                <Text style={styles.cancelReplyText}>Cancel</Text>
-                            </TouchableOpacity>
-                             <TouchableOpacity style={[styles.submitReplyButton, { backgroundColor: replyText ? '#F97507' : '#E0E0E0' }]} disabled={!replyText}>
-                                <Text style={[styles.submitReplyText, { color: replyText ? '#fff' : '#9E9E9E' }]}>Reply</Text>
-                            </TouchableOpacity>
-                        </View>
-                     </View>
-                </View>
-            )}
-
-          {showReplies && item.repliesList && item.repliesList.map(reply => (
-              <ReplyItem key={reply.id} item={reply} />
-          ))}
         </View>
+        <Text style={styles.commentText}>{item.text}</Text>
+
+        <View style={styles.commentActions}>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={canInteract ? () => onLike?.(item) : undefined}
+            disabled={!canInteract}
+          >
+            <MaterialCommunityIcons
+              name={item.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+              size={18}
+              color={item.isLiked ? '#F97507' : '#212121'}
+            />
+            <Text style={styles.actionText}>{item.likes}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={canInteract ? () => onDislike?.(item) : undefined}
+            disabled={!canInteract}
+          >
+            <MaterialCommunityIcons
+              name={item.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+              size={18}
+              color={item.isDisliked ? '#F97507' : '#212121'}
+            />
+            <Text style={styles.actionText}>{item.dislikes}</Text>
+          </TouchableOpacity>
+          {replyCount > 0 && (
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => setShowReplies(!showReplies)}
+            >
+              <MaterialCommunityIcons
+                name="comment-text-outline"
+                size={18}
+                color="#212121"
+              />
+              <Text style={styles.actionText}>{item.replies}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.replyLinksRow}>
+          {replyCount > 0 && (
+            <TouchableOpacity
+              onPress={() => setShowReplies(!showReplies)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.replyLink}>
+                {showReplies
+                  ? `Hide ${item.replies} ${replyCount === 1 ? 'reply' : 'replies'}`
+                  : `View ${item.replies} ${replyCount === 1 ? 'reply' : 'replies'}`}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {canReply && (
+            <TouchableOpacity
+              onPress={() => setShowReplyInput(!showReplyInput)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.replyLink, replyCount > 0 && styles.replyLinkSpacing]}>
+                Reply
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {showReplyInput && canReply && (
+          <View style={styles.replyInputContainer}>
+            <Image
+              source={{ uri: userAvatar }}
+              style={styles.userAvatarSmallReply}
+            />
+            <View style={{ flex: 1 }}>
+              <View style={styles.replyInputWrapper}>
+                <TextInput
+                  placeholder="Add a reply..."
+                  placeholderTextColor="#9E9E9E"
+                  style={styles.input}
+                  value={replyText}
+                  onChangeText={setReplyText}
+                  autoFocus
+                  editable={!submitting}
+                />
+              </View>
+              <View style={styles.replyButtonContainer}>
+                <TouchableOpacity
+                  onPress={() => setShowReplyInput(false)}
+                  style={styles.cancelReplyButton}
+                >
+                  <Text style={styles.cancelReplyText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.submitReplyButton,
+                    {
+                      backgroundColor: replyText.trim()
+                        ? '#F97507'
+                        : '#E0E0E0',
+                    },
+                  ]}
+                  disabled={!replyText.trim() || submitting}
+                  onPress={handleSubmitReply}
+                >
+                  <Text
+                    style={[
+                      styles.submitReplyText,
+                      { color: replyText.trim() ? '#fff' : '#9E9E9E' },
+                    ]}
+                  >
+                    {submitting ? '...' : 'Reply'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+          {showReplies &&
+            item.repliesList &&
+            item.repliesList.map(reply => (
+              <ReplyItem
+                key={reply.id}
+                item={reply}
+                onLike={onLike}
+                onDislike={onDislike}
+                canInteract={canInteract}
+              />
+            ))}
       </View>
+    </View>
   );
 };
 
-const CommentsModal = ({ visible, onClose }) => {
+const CommentsModal = ({
+  visible,
+  onClose,
+  videoId,
+  video,
+  user,
+  onCommentAdded,
+}) => {
   const [activeFilter, setActiveFilter] = useState('Top');
+  const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  const userAvatar =
+    user?.photos?.[0] ||
+    (Array.isArray(user?.photos) && user?.photos[0]) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      user?.nickname || user?.name || 'User',
+    )}&background=111&color=fff`;
+
+  const loadComments = useCallback(
+    async (reset = false) => {
+      if (!videoId) return;
+      const p = reset ? 1 : page;
+      if (p === 1) setLoading(true);
+      try {
+        const res = await getComments(videoId, p, 20, user?.id);
+        const list = (res?.comments || []).map(c => mapApiCommentToDisplay(c, user));
+        setComments(prev => (reset ? list : [...prev, ...list]));
+        setHasMore(
+          (res?.pagination?.totalPages || 1) > (res?.pagination?.page || 1),
+        );
+        if (reset) setPage(1);
+        else setPage(p);
+      } catch {
+        if (reset) setComments([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [videoId, page, user?.id],
+  );
+
+  useEffect(() => {
+    if (visible && videoId) {
+      loadComments(true);
+    }
+  }, [visible, videoId]);
+
+  const handleAddComment = async () => {
+    if (!commentText.trim() || !user?.id || !videoId) return;
+    setSubmitting(true);
+    try {
+      await addComment(videoId, user.id, commentText.trim());
+      setCommentText('');
+      onCommentAdded?.(false);
+      loadComments(true);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmitReply = useCallback(
+    async (parentId, content) => {
+      if (!user?.id || !videoId) return;
+      await addComment(videoId, user.id, content, parentId);
+      onCommentAdded?.(true);
+      loadComments(true);
+    },
+    [videoId, user?.id, onCommentAdded],
+  );
+
+  const updateCommentInList = useCallback((commentId, updater) => {
+    setComments(prev =>
+      prev.map(c => {
+        if (c.id === commentId) return updater(c);
+        return {
+          ...c,
+          repliesList: (c.repliesList || []).map(r =>
+            r.id === commentId ? updater(r) : r,
+          ),
+        };
+      }),
+    );
+  }, []);
+
+  const handleCommentLike = useCallback(
+    async comment => {
+      if (!user?.id) return;
+      const wasLiked = comment.isLiked;
+      const wasDisliked = comment.isDisliked;
+      updateCommentInList(comment.id, c => ({
+        ...c,
+        isLiked: !wasLiked,
+        isDisliked: wasLiked ? c.isDisliked : false,
+        likeCount: c.likeCount + (wasLiked ? -1 : 1),
+        dislikeCount: wasDisliked && !wasLiked ? c.dislikeCount - 1 : c.dislikeCount,
+        likes: formatCount(
+          (c.likeCount ?? 0) + (wasLiked ? -1 : 1),
+        ),
+        dislikes: formatCount(
+          wasDisliked && !wasLiked ? (c.dislikeCount ?? 0) - 1 : (c.dislikeCount ?? 0),
+        ),
+      }));
+      try {
+        await toggleCommentLike(comment.id, user.id);
+      } catch {
+        updateCommentInList(comment.id, c => ({
+          ...c,
+          isLiked: wasLiked,
+          isDisliked: wasDisliked,
+          likeCount: c.likeCount,
+          dislikeCount: c.dislikeCount,
+          likes: formatCount(c.likeCount ?? 0),
+          dislikes: formatCount(c.dislikeCount ?? 0),
+        }));
+      }
+    },
+    [user?.id, updateCommentInList],
+  );
+
+  const handleCommentDislike = useCallback(
+    async comment => {
+      if (!user?.id) return;
+      const wasDisliked = comment.isDisliked;
+      const wasLiked = comment.isLiked;
+      updateCommentInList(comment.id, c => ({
+        ...c,
+        isDisliked: !wasDisliked,
+        isLiked: wasDisliked ? c.isLiked : false,
+        dislikeCount: c.dislikeCount + (wasDisliked ? -1 : 1),
+        likeCount: wasLiked && !wasDisliked ? c.likeCount - 1 : c.likeCount,
+        dislikes: formatCount(
+          (c.dislikeCount ?? 0) + (wasDisliked ? -1 : 1),
+        ),
+        likes: formatCount(
+          wasLiked && !wasDisliked ? (c.likeCount ?? 0) - 1 : (c.likeCount ?? 0),
+        ),
+      }));
+      try {
+        await toggleCommentDislike(comment.id, user.id);
+      } catch {
+        updateCommentInList(comment.id, c => ({
+          ...c,
+          isLiked: wasLiked,
+          isDisliked: wasDisliked,
+          likeCount: c.likeCount,
+          dislikeCount: c.dislikeCount,
+          likes: formatCount(c.likeCount ?? 0),
+          dislikes: formatCount(c.dislikeCount ?? 0),
+        }));
+      }
+    },
+    [user?.id, updateCommentInList],
+  );
 
   return (
     <Modal
@@ -235,46 +492,105 @@ const CommentsModal = ({ visible, onClose }) => {
           <TouchableWithoutFeedback>
             <View style={styles.container}>
               <View style={styles.dragHandle} />
-              
-              {/* Header */}
+
               <View style={styles.header}>
-                <Text style={styles.headerTitle}>Comments</Text>
+                <Text style={styles.headerTitle}>
+                  Comments {video ? `(${video.topLevelCommentCount ?? video.commentCount ?? 0})` : ''}
+                </Text>
                 <TouchableOpacity onPress={onClose}>
-                  <MaterialCommunityIcons name="close" size={24} color="#212121" />
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={24}
+                    color="#212121"
+                  />
                 </TouchableOpacity>
               </View>
 
               <View style={styles.divider} />
 
-              {/* Filters */}
               <View style={styles.filtersContainer}>
-                <FilterButton label="Top" active={activeFilter === 'Top'} onPress={() => setActiveFilter('Top')} />
-                <FilterButton label="Newest" active={activeFilter === 'Newest'} onPress={() => setActiveFilter('Newest')} />
-                <FilterButton label="Most Liked" active={activeFilter === 'Most Liked'} onPress={() => setActiveFilter('Most Liked')} />
+                <FilterButton
+                  label="Top"
+                  active={activeFilter === 'Top'}
+                  onPress={() => setActiveFilter('Top')}
+                />
+                <FilterButton
+                  label="Newest"
+                  active={activeFilter === 'Newest'}
+                  onPress={() => setActiveFilter('Newest')}
+                />
+                <FilterButton
+                  label="Most Liked"
+                  active={activeFilter === 'Most Liked'}
+                  onPress={() => setActiveFilter('Most Liked')}
+                />
               </View>
 
-              {/* Add Comment Input */}
               <View style={styles.addCommentContainer}>
-                <Image source={{ uri: 'https://ui-avatars.com/api/?name=My+User' }} style={styles.userAvatar} />
+                <Image source={{ uri: userAvatar }} style={styles.userAvatar} />
                 <View style={styles.inputWrapper}>
-                     <TextInput 
-                        placeholder="Add a comment..."
-                        placeholderTextColor="#9E9E9E"
-                        style={styles.input} 
-                     />
+                  <TextInput
+                    placeholder={
+                      user?.id
+                        ? 'Add a comment...'
+                        : 'Sign in to comment'
+                    }
+                    placeholderTextColor="#9E9E9E"
+                    style={styles.input}
+                    value={commentText}
+                    onChangeText={setCommentText}
+                    editable={!!user?.id && !submitting}
+                    onSubmitEditing={handleAddComment}
+                    returnKeyType="send"
+                  />
                 </View>
+                {user?.id && commentText.trim() && (
+                  <TouchableOpacity
+                    style={styles.postButton}
+                    onPress={handleAddComment}
+                    disabled={submitting}
+                  >
+                    <Text
+                      style={[
+                        styles.postButtonText,
+                        { opacity: submitting ? 0.6 : 1 },
+                      ]}
+                    >
+                      Post
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              
+
               <View style={styles.divider} />
 
-              {/* Comments List */}
-              <FlatList
-                data={COMMENTS_DATA}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => <CommentItem item={item} />}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-              />
+              {loading && comments.length === 0 ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#F97507" />
+                  <Text style={styles.loadingText}>Loading comments...</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={comments}
+                  keyExtractor={item => item.id}
+                  renderItem={({ item }) => (
+                    <CommentItem
+                      item={item}
+                      userAvatar={userAvatar}
+                      onSubmitReply={handleSubmitReply}
+                      onLike={handleCommentLike}
+                      onDislike={handleCommentDislike}
+                      canReply={!!user?.id}
+                      canInteract={!!user?.id}
+                    />
+                  )}
+                  contentContainerStyle={styles.listContent}
+                  showsVerticalScrollIndicator={false}
+                  ListEmptyComponent={
+                    <Text style={styles.emptyText}>No comments yet</Text>
+                  }
+                />
+              )}
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -362,16 +678,41 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   inputWrapper: {
-      flex: 1,
-      backgroundColor: '#FAFAFA',
-      borderRadius: 25,
-      paddingHorizontal: 16,
-      height: 45,
-      justifyContent: 'center',
+    flex: 1,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    height: 45,
+    justifyContent: 'center',
   },
   input: {
-      fontSize: 14,
-      color: '#212121',
+    fontSize: 14,
+    color: '#212121',
+  },
+  postButton: {
+    marginLeft: 8,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  postButtonText: {
+    color: '#F97507',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#616161',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#9E9E9E',
+    marginTop: 24,
   },
   listContent: {
       paddingHorizontal: 20,
@@ -428,10 +769,18 @@ const styles = StyleSheet.create({
       marginLeft: 6,
       fontWeight: '500',
   },
+  replyLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
   replyLink: {
-      color: '#5382E7', // Blue color roughly matching image
-      fontSize: 14,
-      fontWeight: '600',
+    color: '#5382E7',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  replyLinkSpacing: {
+    marginLeft: 16,
   },
   replyItem: {
       flexDirection: 'row',

@@ -164,6 +164,34 @@ export const toggleLike = async (videoId, userId) => {
 };
 
 /**
+ * Dislike/Undislike video
+ */
+export const toggleDislike = async (videoId, userId) => {
+  try {
+    const response = await axios.post(`${API_URL}/dislike`, {
+      videoId,
+      userId,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error toggling dislike:', error);
+    throw error;
+  }
+};
+
+/**
+ * Record video share (increments shareCount)
+ */
+export const recordShare = async videoId => {
+  try {
+    const response = await axios.post(`${API_URL}/share`, { videoId });
+    return response.data;
+  } catch (error) {
+    // Non-critical: don't throw
+  }
+};
+
+/**
  * Add comment to video
  */
 export const addComment = async (videoId, userId, content, parentId = null) => {
@@ -184,14 +212,46 @@ export const addComment = async (videoId, userId, content, parentId = null) => {
 /**
  * Get comments for video
  */
-export const getComments = async (videoId, page = 1, limit = 20) => {
+export const getComments = async (videoId, page = 1, limit = 20, userId) => {
   try {
     const response = await axios.get(`${API_URL}/${videoId}/comments`, {
-      params: { page, limit },
+      params: { page, limit, userId },
     });
     return response.data;
   } catch (error) {
     console.error('Error fetching comments:', error);
+    throw error;
+  }
+};
+
+/**
+ * Like/Unlike comment
+ */
+export const toggleCommentLike = async (commentId, userId) => {
+  try {
+    const response = await axios.post(`${API_URL}/comment/like`, {
+      commentId,
+      userId,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error toggling comment like:', error);
+    throw error;
+  }
+};
+
+/**
+ * Dislike/Undislike comment
+ */
+export const toggleCommentDislike = async (commentId, userId) => {
+  try {
+    const response = await axios.post(`${API_URL}/comment/dislike`, {
+      commentId,
+      userId,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error toggling comment dislike:', error);
     throw error;
   }
 };

@@ -30,6 +30,10 @@ import {
   getVideos,
   recordView,
   toggleLike,
+  toggleDislike,
+  recordShare,
+  addComment,
+  getComments,
 } from '../services/videoService';
 
 const { width } = Dimensions.get('window');
@@ -87,7 +91,10 @@ const mapVideoApiToDisplay = v => {
   const user = v.user || {};
   const viewCount = v.viewCount ?? v._count?.views ?? 0;
   const likeCount = v.likeCount ?? v._count?.likes ?? 0;
+  const dislikeCount = v.dislikeCount ?? 0;
   const commentCount = v.commentCount ?? v._count?.comments ?? 0;
+  const topLevelCommentCount = v.topLevelCommentCount ?? commentCount;
+  const shareCount = v.shareCount ?? 0;
   const pubAt = v.publishedAt || v.createdAt;
   const channelName = user.nickname || user.name || 'Unknown';
   const channelAvatar =
@@ -104,7 +111,10 @@ const mapVideoApiToDisplay = v => {
     views: `${formatCount(viewCount)} views`,
     viewCount,
     likeCount,
+    dislikeCount,
     commentCount,
+    topLevelCommentCount,
+    shareCount,
     publishedAt: formatTimeAgo(pubAt),
     publishedDate: formatPublishedDate(pubAt),
     thumbnail:
@@ -116,6 +126,7 @@ const mapVideoApiToDisplay = v => {
     tags: Array.isArray(v.tags) ? v.tags : [],
     userId: v.userId,
     isLiked: v.isLiked ?? false,
+    isDisliked: v.isDisliked ?? false,
   };
 };
 
@@ -189,7 +200,11 @@ const VideoDetailsScreen = () => {
       progressUpdateRef.current = 0;
       isSeekingRef.current = false;
       setIsSliding(false);
-      recordView(videoId, user?.id);
+      recordView(videoId, user?.id).then(() => {
+        setCurrentVideo(prev =>
+          prev ? { ...prev, viewCount: prev.viewCount + 1 } : null,
+        );
+      });
     } catch (e) {
       setError(
         e?.response?.data?.message || e?.message || 'Failed to load video',
@@ -209,24 +224,52 @@ const VideoDetailsScreen = () => {
     if (!user?.id || !currentVideo) return;
     try {
       await toggleLike(currentVideo.id, user.id);
-      setCurrentVideo(prev => ({
-        ...prev,
-        isLiked: !prev.isLiked,
-        likeCount: prev.likeCount + (prev.isLiked ? -1 : 1),
-      }));
+      setCurrentVideo(prev => {
+        if (!prev) return prev;
+        const unliking = prev.isLiked;
+        return {
+          ...prev,
+          isLiked: !unliking,
+          isDisliked: unliking ? prev.isDisliked : false,
+          likeCount: prev.likeCount + (unliking ? -1 : 1),
+          dislikeCount: !unliking && prev.isDisliked ? prev.dislikeCount - 1 : prev.dislikeCount,
+        };
+      });
+    } catch {}
+  };
+
+  const handleDislike = async () => {
+    if (!user?.id || !currentVideo) return;
+    try {
+      await toggleDislike(currentVideo.id, user.id);
+      setCurrentVideo(prev => {
+        if (!prev) return prev;
+        const undisliking = prev.isDisliked;
+        return {
+          ...prev,
+          isDisliked: !undisliking,
+          isLiked: undisliking ? prev.isLiked : false,
+          dislikeCount: prev.dislikeCount + (undisliking ? -1 : 1),
+          likeCount: !undisliking && prev.isLiked ? prev.likeCount - 1 : prev.likeCount,
+        };
+      });
     } catch {}
   };
 
   const onShare = async () => {
     if (!currentVideo) return;
     try {
-      const result = await Share.share({
+      recordShare(currentVideo.id);
+      setCurrentVideo(prev =>
+        prev ? { ...prev, shareCount: prev.shareCount + 1 } : null,
+      );
+      await Share.share({
         message: `Check out this video: ${currentVideo.title}`,
         url: currentVideo.videoUrl || '',
         title: currentVideo.title,
       });
     } catch (error) {
-      Alert.alert(error.message);
+      Alert.alert(error?.message || 'Share failed');
     }
   };
 
@@ -525,11 +568,15 @@ const VideoDetailsScreen = () => {
             label={formatCount(currentVideo.likeCount)}
             onPress={handleLike}
           />
-          <ActionButton icon="thumb-down-outline" label="" />
+          <ActionButton
+            icon={currentVideo.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+            label={formatCount(currentVideo.dislikeCount)}
+            onPress={handleDislike}
+          />
           <ActionButton
             icon="comment-text-outline"
-            label="Chat"
-            onPress={() => setLiveChatModalVisible(true)}
+            label={formatCount(currentVideo.topLevelCommentCount ?? currentVideo.commentCount)}
+            onPress={() => setCommentsModalVisible(true)}
           />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
           <ActionButton icon="download-outline" label="Download" />
@@ -579,7 +626,7 @@ const VideoDetailsScreen = () => {
             <Text style={styles.commentsTitle}>
               Comments{' '}
               <Text style={styles.commentsCount}>
-                {formatCount(currentVideo.commentCount)}
+                {formatCount(currentVideo.topLevelCommentCount ?? currentVideo.commentCount)}
               </Text>
             </Text>
             <MaterialCommunityIcons
@@ -590,7 +637,14 @@ const VideoDetailsScreen = () => {
           </View>
           <View style={styles.addCommentRow}>
             <Image
-              source={{ uri: 'https://ui-avatars.com/api/?name=My+User' }}
+              source={{
+                uri:
+                  user?.photos?.[0] ||
+                  (Array.isArray(user?.photos) && user?.photos[0]) ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    user?.nickname || user?.name || 'User',
+                  )}&background=111&color=fff`,
+              }}
               style={styles.userAvatarSmall}
             />
             <View style={styles.commentInputPlaceholder}>
@@ -637,6 +691,19 @@ const VideoDetailsScreen = () => {
       <CommentsModal
         visible={commentsModalVisible}
         onClose={() => setCommentsModalVisible(false)}
+        videoId={videoId}
+        video={currentVideo}
+        user={user}
+        onCommentAdded={isReply => {
+          setCurrentVideo(prev => {
+            if (!prev) return null;
+            const next = { ...prev, commentCount: prev.commentCount + 1 };
+            if (!isReply) {
+              next.topLevelCommentCount = (prev.topLevelCommentCount ?? prev.commentCount) + 1;
+            }
+            return next;
+          });
+        }}
       />
       <LiveChatModal
         visible={liveChatModalVisible}
