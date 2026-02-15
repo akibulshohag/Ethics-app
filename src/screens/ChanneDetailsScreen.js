@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,110 +8,186 @@ import {
   TouchableOpacity,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import CustomHeader from '../components/CustomHeader';
 import VideoCard from '../components/VideoCard';
 import CompactVideoCard from '../components/CompactVideoCard';
 import ShortsVideoCard from '../components/ShortsVideoCard';
-import PlaylistCard from '../components/PlaylistCard';
 import ChannelAbout from '../components/ChannelAbout';
+import { getChannelProfile, updateChannelProfile } from '../services/channelService';
+import { getUserVideos } from '../services/videoService';
+import { shortsService } from '../services/shortsService';
 
-const MOCK_CHANNEL_VIDEOS = [
-  {
-    id: '1',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'BBC Earth',
-    views: '6.4M views',
-    publishedAt: '2 days ago',
-    thumbnail: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-    channelAvatar: 'https://ui-avatars.com/api/?name=BBC+Earth&background=000&color=fff',
-    duration: '06:42',
-  },
-  {
-    id: '2',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'BBC Earth',
-    views: '6.4M views',
-    publishedAt: '2 days ago',
-    thumbnail: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-    channelAvatar: 'https://ui-avatars.com/api/?name=BBC+Earth&background=000&color=fff',
-    duration: '04:20',
-  },
-  {
-      id: '3',
-      title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-      channelName: 'BBC Earth',
-      views: '6.4M views',
-      publishedAt: '2 days ago',
-      thumbnail: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-      channelAvatar: 'https://ui-avatars.com/api/?name=BBC+Earth&background=000&color=fff',
-      duration: '08:15',
-    },
-    {
-      id: '4',
-      title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-      channelName: 'BBC Earth',
-      views: '6.4M views',
-      publishedAt: '2 days ago',
-      thumbnail: 'https://images.unsplash.com/photo-1484723091739-30a097e8f959?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-      channelAvatar: 'https://ui-avatars.com/api/?name=BBC+Earth&background=000&color=fff',
-      duration: '05:30',
-    },
-    {
-      id: '5',
-      title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-      channelName: 'BBC Earth',
-      views: '6.4M views',
-      publishedAt: '2 days ago',
-      thumbnail: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-      channelAvatar: 'https://ui-avatars.com/api/?name=BBC+Earth&background=000&color=fff',
-      duration: '10:05',
-    },
-        {
-      id: '6',
-      title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-      channelName: 'BBC Earth',
-      views: '6.4M views',
-      publishedAt: '2 days ago',
-      thumbnail: 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-      channelAvatar: 'https://ui-avatars.com/api/?name=BBC+Earth&background=000&color=fff',
-      duration: '10:05',
-    },
-];
+const TABS = ['Home', 'Videos', 'About'];
+const FILTERS = ['Videos', 'Shorts'];
 
-const MOCK_SHORTS = [
-    { id: 's1', title: 'Only You - New Single Release Music by Worl...', views: '4.8M views', thumbnail: 'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 's2', title: 'International Bastau Concert Video Clips', views: '6.5M views', thumbnail: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 's3', title: 'International Music Competition in New York', views: '2.8M views', thumbnail: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 's4', title: 'Music & Dance Festival Sydney, Australia', views: '3.9M views', thumbnail: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 's5', title: 'Lorem ipsum dolor sit amet, consectetur adipis elit sed do eiusmod.', views: '000 views', thumbnail: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 's6', title: 'Lorem ipsum dolor sit amet, consectetur adipis elit sed do eiusmod.', views: '000 views', thumbnail: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-];
+const formatCount = n => {
+  if (!n || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+};
 
-const MOCK_PLAYLISTS = [
-    { id: 'p1', title: 'Dance Competition 2022', videoCount: '120', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 'p2', title: 'Top Music of All Time', videoCount: '250', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 'p3', title: 'Most Listened Song in Century', videoCount: '300', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 'p4', title: 'International Music Festival', videoCount: '32', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-    { id: 'p5', title: 'Most Epic Moment in Music Concert', videoCount: '50', channelName: 'World of Music', thumbnail: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80' },
-];
+// Ensure Image uri is always a string (avoids "cannot cast Boolean to String" crash)
+const safeUri = val => (typeof val === 'string' && val.trim().length > 0 ? val.trim() : 'https://via.placeholder.com/100');
 
-const TABS = ['Home', 'Videos', 'Playlists', 'About'];
-const FILTERS = ['Videos', 'Shorts', 'Live'];
+const formatDuration = seconds => {
+  if (!seconds || seconds < 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
+const formatTimeAgo = dateStr => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
+  if (diffMonths > 0) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+  if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return 'Recently';
+};
+
+const mapVideoApiToDisplay = v => {
+  const user = v.user || {};
+  const viewCount = v.viewCount ?? v._count?.views ?? 0;
+  const channelName = user.nickname || user.name || 'Unknown';
+  const rawAvatar = user.photos?.[0]?.src ?? (Array.isArray(user.photos) && user.photos[0]?.src);
+  const channelAvatar = safeUri(rawAvatar) === 'https://via.placeholder.com/100'
+    ? `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=111&color=fff`
+    : safeUri(rawAvatar);
+  const pubAt = v.publishedAt || v.createdAt;
+  return {
+    id: v.id,
+    title: v.title || 'Untitled',
+    channelName,
+    channelAvatar,
+    views: `${formatCount(viewCount)} views`,
+    publishedAt: formatTimeAgo(pubAt),
+    thumbnail: safeUri(v.thumbnailUrl || v.videoUrl) || 'https://via.placeholder.com/300',
+    duration: formatDuration(v.duration),
+    userId: v.userId,
+  };
+};
+
+const mapShortApiToDisplay = s => {
+  const viewCount = s.viewCount ?? s._count?.views ?? 0;
+  return {
+    id: s.id,
+    title: (s.title || 'Untitled').slice(0, 50) + (s.title?.length > 50 ? '...' : ''),
+    views: `${formatCount(viewCount)} views`,
+    thumbnail: safeUri(s.thumbnailUrl || s.videoUrl) || 'https://via.placeholder.com/300',
+  };
+};
 
 const ChannelDetailsScreen = () => {
+  const route = useRoute();
+  const navigation = useNavigation();
+  const { user: currentUser } = useSelector(state => state.app) || {};
+  const userId = route.params?.userId;
+
+  const [profile, setProfile] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const [shorts, setShorts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [videosLoading, setVideosLoading] = useState(false);
+  const [shortsLoading, setShortsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Home');
   const [activeFilter, setActiveFilter] = useState('Videos');
 
+  const isOwnChannel = !!userId && !!currentUser?.id && currentUser.id === userId;
+
+  const loadProfile = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const data = await getChannelProfile(userId);
+      setProfile(data);
+    } catch (e) {
+      console.error('Failed to load channel profile:', e);
+    }
+  }, [userId]);
+
+  const loadVideos = useCallback(async () => {
+    if (!userId) return;
+    setVideosLoading(true);
+    try {
+      const res = await getUserVideos(userId, 1, 50);
+      const list = Array.isArray(res.videos) ? res.videos : res?.data || [];
+      setVideos(list.map(mapVideoApiToDisplay));
+    } catch (e) {
+      console.error('Failed to load videos:', e);
+      setVideos([]);
+    } finally {
+      setVideosLoading(false);
+    }
+  }, [userId]);
+
+  const loadShorts = useCallback(async () => {
+    if (!userId) return;
+    setShortsLoading(true);
+    try {
+      const res = await shortsService.getUserShorts(userId, 1, 50);
+      const list = Array.isArray(res.shorts) ? res.shorts : res?.data || [];
+      setShorts(list.map(mapShortApiToDisplay));
+    } catch (e) {
+      console.error('Failed to load shorts:', e);
+      setShorts([]);
+    } finally {
+      setShortsLoading(false);
+    }
+  }, [userId]);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadProfile(), loadVideos(), loadShorts()]);
+    setRefreshing(false);
+  }, [loadProfile, loadVideos, loadShorts]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const init = async () => {
+      setLoading(true);
+      await loadProfile();
+      await loadVideos();
+      await loadShorts();
+      setLoading(false);
+    };
+    init();
+  }, [userId, loadProfile, loadVideos, loadShorts]);
+
+  const handleSaveChannel = async data => {
+    if (!userId || !isOwnChannel) return;
+    await updateChannelProfile(userId, data);
+    await loadProfile();
+  };
+
+  const handleVideoPress = item => {
+    navigation.navigate('VideoDetailsScreen', { videoId: item.id });
+  };
+
+  const handleShortPress = item => {
+    navigation.navigate('ShortsVideoScreen', { shortId: item.id });
+  };
+
+  const goToAbout = () => setActiveTab('About');
+
   const renderHeader = () => (
     <View style={styles.headerContent}>
-      {/* Tabs */}
       <View style={styles.tabsContainer}>
-        {TABS.map((tab, index) => (
-          <TouchableOpacity 
-            key={tab} 
+        {TABS.map(tab => (
+          <TouchableOpacity
+            key={tab}
             style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
             onPress={() => setActiveTab(tab)}
           >
@@ -120,105 +196,143 @@ const ChannelDetailsScreen = () => {
         ))}
       </View>
 
-      {activeTab === 'Home' && (
-      /* Channel Profile - Only visible in Home tab */
-      <View style={styles.profileContainer}>
-        <Image 
-          source={{ uri: 'https://ui-avatars.com/api/?name=Bang+Bang+Chicken&background=111&color=fff&size=128' }} 
-          style={styles.profileAvatar} 
-        />
-        <View style={styles.nameContainer}>
-             <Text style={styles.profileName}>Bang Bang Chicken</Text>
-             <MaterialCommunityIcons name="check-decagram" size={16} color="#3ea6ff" style={styles.verifiedIcon} />
-        </View>
-        
-        <TouchableOpacity style={styles.subscribeButton}>
+      {activeTab === 'Home' && profile && (
+        <View style={styles.profileContainer}>
+          <Image source={{ uri: safeUri(profile.channelAvatar) }} style={styles.profileAvatar} />
+          <View style={styles.nameContainer}>
+            <Text style={styles.profileName}>{profile.channelName}</Text>
+            <MaterialCommunityIcons name="check-decagram" size={16} color="#3ea6ff" style={styles.verifiedIcon} />
+          </View>
+          <TouchableOpacity style={styles.subscribeButton}>
             <Text style={styles.subscribeText}>Subscribe</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.statsText}>9.5M subscribers  •  769 videos</Text>
-        
-        <TouchableOpacity style={styles.moreInfoContainer}>
+          </TouchableOpacity>
+          <Text style={styles.statsText}>
+            {formatCount(profile.videoCount + profile.shortCount)} videos  •  {formatCount(profile.totalViews)} views
+          </Text>
+          <TouchableOpacity style={styles.moreInfoContainer} onPress={goToAbout}>
             <Text style={styles.moreInfoText}>More about this channel</Text>
             <MaterialCommunityIcons name="chevron-right" size={16} color="#616161" />
-        </TouchableOpacity>
-      </View>
+          </TouchableOpacity>
+        </View>
       )}
-      
-      {(activeTab === 'Videos' || activeTab === 'Playlists') &&(
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersWrapper}>
-              <TouchableOpacity style={styles.sortByButton}>
-                  <Text style={styles.sortByText}>Sort by</Text>
-                  <MaterialCommunityIcons name="code-tags" size={16} color="#212121" style={{transform: [{rotate: '90deg'}]}} />
-              </TouchableOpacity>
-              {activeTab == 'Videos' && (
-              <>
-              {FILTERS.map(filter => (
-                  <TouchableOpacity 
-                    key={filter} 
-                    style={[styles.filterChip, activeFilter === filter && styles.activeFilterChip]}
-                    onPress={() => setActiveFilter(filter)}
-                  >
-                      <Text style={[styles.filterChipText, activeFilter === filter && styles.activeFilterChipText]}>{filter}</Text>
-                  </TouchableOpacity>
-              ))}
-              </>
-          )}
-          </ScrollView>
+
+      {(activeTab === 'Videos') && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersWrapper}
+        >
+          {FILTERS.map(filter => (
+            <TouchableOpacity
+              key={filter}
+              style={[styles.filterChip, activeFilter === filter && styles.activeFilterChip]}
+              onPress={() => setActiveFilter(filter)}
+            >
+              <Text style={[styles.filterChipText, activeFilter === filter && styles.activeFilterChipText]}>{filter}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       )}
     </View>
   );
-  
+
   const renderItem = ({ item }) => {
-      if (activeTab === 'Videos') {
-          if (activeFilter === 'Shorts') {
-              return <ShortsVideoCard video={item} onPress={() => {}} />;
-          }
-           return <CompactVideoCard video={item} onPress={() => {}} />;
+    if (activeTab === 'Videos') {
+      if (activeFilter === 'Shorts') {
+        return <ShortsVideoCard video={item} onPress={() => handleShortPress(item)} />;
       }
-      if (activeTab === 'Playlists') {
-          return <PlaylistCard playlist={item} onPress={() => {}} />;
-      }
-      if (activeTab === 'About') {
-          return <ChannelAbout />;
-      }
-      return <VideoCard video={item} onPress={() => {}} />;
+      return <CompactVideoCard video={item} onPress={() => handleVideoPress(item)} />;
+    }
+    if (activeTab === 'About' && profile) {
+      return (
+        <ChannelAbout
+          channelAbout={profile.channelAbout}
+          channelName={profile.channelName}
+          createdAt={profile.createdAt}
+          totalViews={profile.totalViews}
+          canEdit={isOwnChannel}
+          onSave={handleSaveChannel}
+        />
+      );
+    }
+    return <VideoCard video={item} onPress={() => handleVideoPress(item)} />;
   };
 
   const getData = () => {
-       if (activeTab === 'Videos' && activeFilter === 'Shorts') {
-           return MOCK_SHORTS;
-       }
-       if (activeTab === 'Playlists') {
-           return MOCK_PLAYLISTS;
-       }
-       if (activeTab === 'About') {
-           return [{id: 'about'}]; // Dummy data for rendering the about component as item
-       }
-       return MOCK_CHANNEL_VIDEOS;
+    if (activeTab === 'Videos') {
+      if (activeFilter === 'Shorts') return shorts;
+      return videos;
+    }
+    if (activeTab === 'About') return [{ id: 'about' }];
+    return videos;
   };
 
-  const getNumColumns = () => {
-      if (activeTab === 'Videos' && activeFilter === 'Shorts') return 2;
-      return 1;
-  };
+  const getNumColumns = () => (activeTab === 'Videos' && activeFilter === 'Shorts' ? 2 : 1);
+
+  const isLoadingData =
+    (activeTab === 'Videos' && activeFilter === 'Videos' && videosLoading) ||
+    (activeTab === 'Videos' && activeFilter === 'Shorts' && shortsLoading);
+
+  if (!userId) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <CustomHeader title="Channel" />
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Channel not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading && !profile) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <CustomHeader title="Channel" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#F97507" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const headerTitle = profile?.channelName || 'Channel';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <CustomHeader title="Kristo Restaurant" />
+      <CustomHeader title={headerTitle} />
       <FlatList
-        key={activeFilter + activeTab} // Force re-render when changing activeTab or layout
+        key={activeFilter + activeTab}
         data={getData()}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => renderItem({ item })}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
         ListHeaderComponent={renderHeader}
+        ListEmptyComponent={
+          isLoadingData ? null : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {activeTab === 'Videos' && activeFilter === 'Videos' && 'No videos yet'}
+                {activeTab === 'Videos' && activeFilter === 'Shorts' && 'No shorts yet'}
+                {activeTab === 'Home' && 'No videos yet'}
+              </Text>
+            </View>
+          )
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} colors={['#F97507']} />
+        }
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        // stickyHeaderIndices={[0]}
+        contentContainerStyle={[styles.listContent, getData().length === 0 && styles.listContentEmpty]}
         numColumns={getNumColumns()}
         columnWrapperStyle={getNumColumns() === 2 ? styles.columnWrapper : null}
       />
+      {isLoadingData && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#F97507" />
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -226,134 +340,63 @@ const ChannelDetailsScreen = () => {
 export default ChannelDetailsScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  listContent: {
-      paddingBottom: 20,
-  },
-  headerContent: {
-      backgroundColor: '#fff',
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  listContent: { paddingBottom: 20 },
+  listContentEmpty: { flexGrow: 1 },
+  headerContent: { backgroundColor: '#fff' },
   tabsContainer: {
-      paddingHorizontal: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: '#f2f2f2',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f2f2f2',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
   },
-  tabItem: {
-      marginRight: 24,
-      paddingVertical: 8,
-      paddingHorizontal: 8,
-  },
-  activeTabItem: {
-      borderBottomWidth: 2,
-      borderBottomColor: '#F97507',
-  },
-  tabText: {
-      fontSize: 16,
-      color: '#616161',
-      fontWeight: '500',
-  },
-  activeTabText: {
-      color: '#F97507',
-      fontWeight: '600',
-  },
-  profileContainer: {
-      alignItems: 'center',
-      paddingVertical: 24,
-  },
+  tabItem: { marginRight: 24, paddingVertical: 8, paddingHorizontal: 8 },
+  activeTabItem: { borderBottomWidth: 2, borderBottomColor: '#F97507' },
+  tabText: { fontSize: 16, color: '#616161', fontWeight: '500' },
+  activeTabText: { color: '#F97507', fontWeight: '600' },
+  profileContainer: { alignItems: 'center', paddingVertical: 24 },
   profileAvatar: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: '#111',
-      marginBottom: 12,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#111',
+    marginBottom: 12,
   },
-  nameContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 12,
-  },
-  profileName: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: '#212121',
-  },
-  verifiedIcon: {
-      marginLeft: 4,
-  },
+  nameContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  profileName: { fontSize: 20, fontWeight: '700', color: '#212121' },
+  verifiedIcon: { marginLeft: 4 },
   subscribeButton: {
-      backgroundColor: '#F97507',
-      paddingHorizontal: 24,
-      paddingVertical: 10,
-      borderRadius: 20,
-      marginBottom: 12,
+    backgroundColor: '#F97507',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginBottom: 12,
   },
-  subscribeText: {
-      color: '#fff',
-      fontWeight: '600',
-      fontSize: 14,
-  },
-  statsText: {
-      fontSize: 12,
-      color: '#616161',
-      marginBottom: 8,
-  },
-  moreInfoContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-  },
-  moreInfoText: {
-      fontSize: 12,
-      color: '#616161',
-      marginRight: 4,
-  },
-  filtersWrapper: {
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      alignItems: 'center',
-      backgroundColor: '#fff',
-  },
-  sortByButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginRight: 12,
-      borderWidth: 1,
-      borderColor: '#F97507',
-      borderRadius: 20,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-  },
-  sortByText: {
-      fontSize: 14,
-      color: '#F97507',
-      marginRight: 4,
-      fontWeight: '500',
-  },
+  subscribeText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  statsText: { fontSize: 12, color: '#616161', marginBottom: 8 },
+  moreInfoContainer: { flexDirection: 'row', alignItems: 'center' },
+  moreInfoText: { fontSize: 12, color: '#616161', marginRight: 4 },
+  filtersWrapper: { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', backgroundColor: '#fff', flexDirection: 'row' },
   filterChip: {
-      marginRight: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: '#F97507',
+    marginRight: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F97507',
   },
-  activeFilterChip: {
-      backgroundColor: '#F97507',
-  },
-  filterChipText: {
-      color: '#F97507',
-      fontWeight: '500',
-      fontSize: 14,
-  },
-  activeFilterChipText: {
-      color: '#fff',
-  },
-  columnWrapper: {
-      justifyContent: 'space-between',
-      paddingHorizontal: 16, 
+  activeFilterChip: { backgroundColor: '#F97507' },
+  filterChipText: { color: '#F97507', fontWeight: '500', fontSize: 14 },
+  activeFilterChipText: { color: '#fff' },
+  columnWrapper: { justifyContent: 'space-between', paddingHorizontal: 16 },
+  emptyState: { padding: 32, alignItems: 'center' },
+  emptyText: { fontSize: 16, color: '#616161' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

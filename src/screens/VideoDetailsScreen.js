@@ -232,7 +232,10 @@ const VideoDetailsScreen = () => {
           isLiked: !unliking,
           isDisliked: unliking ? prev.isDisliked : false,
           likeCount: prev.likeCount + (unliking ? -1 : 1),
-          dislikeCount: !unliking && prev.isDisliked ? prev.dislikeCount - 1 : prev.dislikeCount,
+          dislikeCount:
+            !unliking && prev.isDisliked
+              ? prev.dislikeCount - 1
+              : prev.dislikeCount,
         };
       });
     } catch {}
@@ -250,7 +253,8 @@ const VideoDetailsScreen = () => {
           isDisliked: !undisliking,
           isLiked: undisliking ? prev.isLiked : false,
           dislikeCount: prev.dislikeCount + (undisliking ? -1 : 1),
-          likeCount: !undisliking && prev.isLiked ? prev.likeCount - 1 : prev.likeCount,
+          likeCount:
+            !undisliking && prev.isLiked ? prev.likeCount - 1 : prev.likeCount,
         };
       });
     } catch {}
@@ -575,7 +579,9 @@ const VideoDetailsScreen = () => {
           />
           <ActionButton
             icon="comment-text-outline"
-            label={formatCount(currentVideo.topLevelCommentCount ?? currentVideo.commentCount)}
+            label={formatCount(
+              currentVideo.topLevelCommentCount ?? currentVideo.commentCount,
+            )}
             onPress={() => setCommentsModalVisible(true)}
           />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
@@ -589,7 +595,16 @@ const VideoDetailsScreen = () => {
 
         {/* Channel Info */}
         <View style={styles.channelRow}>
-          <View style={styles.channelInfo}>
+          <TouchableOpacity
+            style={styles.channelInfo}
+            onPress={() =>
+              navigation.navigate('Library', {
+                screen: 'ChannelDetailsScreen',
+                params: { userId: currentVideo.userId },
+              })
+            }
+            activeOpacity={0.7}
+          >
             <Image
               source={{ uri: currentVideo.channelAvatar }}
               style={styles.channelAvatar}
@@ -610,7 +625,7 @@ const VideoDetailsScreen = () => {
                 {formatCount(currentVideo.viewCount)} views
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.subscribeButton}>
             <Text style={styles.subscribeText}>Subscribe</Text>
           </TouchableOpacity>
@@ -626,7 +641,10 @@ const VideoDetailsScreen = () => {
             <Text style={styles.commentsTitle}>
               Comments{' '}
               <Text style={styles.commentsCount}>
-                {formatCount(currentVideo.topLevelCommentCount ?? currentVideo.commentCount)}
+                {formatCount(
+                  currentVideo.topLevelCommentCount ??
+                    currentVideo.commentCount,
+                )}
               </Text>
             </Text>
             <MaterialCommunityIcons
@@ -664,10 +682,7 @@ const VideoDetailsScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled
-      >
+      <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled>
         {renderHeader()}
         {relatedVideos.map(item => (
           <VideoCard
@@ -715,7 +730,8 @@ const VideoDetailsScreen = () => {
             if (!prev) return null;
             const next = { ...prev, commentCount: prev.commentCount + 1 };
             if (!isReply) {
-              next.topLevelCommentCount = (prev.topLevelCommentCount ?? prev.commentCount) + 1;
+              next.topLevelCommentCount =
+                (prev.topLevelCommentCount ?? prev.commentCount) + 1;
             }
             return next;
           });
