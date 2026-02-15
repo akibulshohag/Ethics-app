@@ -11,6 +11,7 @@ import {
   Image,
   TextInput,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
@@ -18,6 +19,7 @@ import {
   addComment,
   toggleCommentLike,
   toggleCommentDislike,
+  deleteComment,
 } from '../services/videoService';
 
 const { height } = Dimensions.get('window');
@@ -92,7 +94,8 @@ const ReplyItem = ({
   item,
   onLike,
   onDislike,
-  canInteract,
+  onDelete,
+  isOwnComment,
 }) => (
   <View style={styles.replyItem}>
     <Image source={{ uri: item.user.avatar }} style={styles.replyAvatar} />
@@ -102,13 +105,20 @@ const ReplyItem = ({
           {item.user.name}{' '}
           <Text style={styles.commentTime}>• {item.time}</Text>
         </Text>
-        <TouchableOpacity>
-          <MaterialCommunityIcons
-            name="dots-vertical"
-            size={16}
-            color="#212121"
-          />
-        </TouchableOpacity>
+        {isOwnComment ? (
+          <TouchableOpacity
+            onPress={() => onDelete?.(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialCommunityIcons
+              name="dots-vertical"
+              size={16}
+              color="#212121"
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 24, height: 24 }} />
+        )}
       </View>
       <Text style={styles.commentText}>{item.text}</Text>
       <View style={styles.commentActions}>
@@ -147,8 +157,11 @@ const CommentItem = ({
   onSubmitReply,
   onLike,
   onDislike,
+  onDelete,
   canReply,
   canInteract,
+  isOwnComment,
+  currentUserId,
 }) => {
   const [showReplies, setShowReplies] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
@@ -179,13 +192,20 @@ const CommentItem = ({
             {item.user.name}{' '}
             <Text style={styles.commentTime}>• {item.time}</Text>
           </Text>
-          <TouchableOpacity>
-            <MaterialCommunityIcons
-              name="dots-vertical"
-              size={20}
-              color="#212121"
-            />
-          </TouchableOpacity>
+          {isOwnComment ? (
+            <TouchableOpacity
+              onPress={() => onDelete?.(item)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MaterialCommunityIcons
+                name="dots-vertical"
+                size={20}
+                color="#212121"
+              />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 24, height: 24 }} />
+          )}
         </View>
         <Text style={styles.commentText}>{item.text}</Text>
 
@@ -313,7 +333,8 @@ const CommentItem = ({
                 item={reply}
                 onLike={onLike}
                 onDislike={onDislike}
-                canInteract={canInteract}
+                onDelete={onDelete}
+                isOwnComment={currentUserId ? String(reply.userId) === String(currentUserId) : false}
               />
             ))}
       </View>
@@ -328,6 +349,7 @@ const CommentsModal = ({
   video,
   user,
   onCommentAdded,
+  onCommentDeleted,
 }) => {
   const [activeFilter, setActiveFilter] = useState('Top');
   const [comments, setComments] = useState([]);
@@ -480,6 +502,34 @@ const CommentsModal = ({
     [user?.id, updateCommentInList],
   );
 
+  const handleDeleteComment = useCallback(
+    comment => {
+      if (!user?.id) return;
+      Alert.alert(
+        'Delete comment',
+        'Are you sure you want to delete this comment?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const res = await deleteComment(comment.id, user.id);
+                const replyCount = comment.repliesList?.length ?? 0;
+                onCommentDeleted?.(res?.wasTopLevel ?? !comment.parentId, 1 + replyCount);
+                loadComments(true);
+              } catch {
+                Alert.alert('Error', 'Could not delete comment');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [user?.id, loadComments, onCommentDeleted],
+  );
+
   return (
     <Modal
       animationType="slide"
@@ -580,8 +630,11 @@ const CommentsModal = ({
                       onSubmitReply={handleSubmitReply}
                       onLike={handleCommentLike}
                       onDislike={handleCommentDislike}
+                      onDelete={handleDeleteComment}
                       canReply={!!user?.id}
                       canInteract={!!user?.id}
+                      isOwnComment={user?.id ? String(item.userId) === String(user.id) : false}
+                      currentUserId={user?.id}
                     />
                   )}
                   contentContainerStyle={styles.listContent}

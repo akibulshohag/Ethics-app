@@ -694,6 +694,22 @@ const VideoDetailsScreen = () => {
         videoId={videoId}
         video={currentVideo}
         user={user}
+        onCommentDeleted={(wasTopLevel, deletedCount) => {
+          setCurrentVideo(prev => {
+            if (!prev) return null;
+            const next = {
+              ...prev,
+              commentCount: Math.max(0, prev.commentCount - deletedCount),
+            };
+            if (wasTopLevel) {
+              next.topLevelCommentCount = Math.max(
+                0,
+                (prev.topLevelCommentCount ?? prev.commentCount) - 1,
+              );
+            }
+            return next;
+          });
+        }}
         onCommentAdded={isReply => {
           setCurrentVideo(prev => {
             if (!prev) return null;

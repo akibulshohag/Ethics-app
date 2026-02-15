@@ -241,6 +241,22 @@ export const toggleCommentLike = async (commentId, userId) => {
 };
 
 /**
+ * Delete own comment or reply
+ */
+export const deleteComment = async (commentId, userId) => {
+  try {
+    const response = await axios.post(`${API_URL}/comment/delete`, {
+      commentId,
+      userId,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    throw error;
+  }
+};
+
+/**
  * Dislike/Undislike comment
  */
 export const toggleCommentDislike = async (commentId, userId) => {
