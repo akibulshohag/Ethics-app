@@ -35,6 +35,11 @@ import {
   addComment,
   getComments,
 } from '../services/videoService';
+import {
+  getChannelProfile,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+} from '../services/channelService';
 
 const { width } = Dimensions.get('window');
 
@@ -150,6 +155,11 @@ const VideoDetailsScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [channelSubscription, setChannelSubscription] = useState({
+    isSubscribed: false,
+    subscriberCount: 0,
+  });
+  const [subscribeLoading, setSubscribeLoading] = useState(false);
   const [liveChatModalVisible, setLiveChatModalVisible] = useState(false);
 
   // Video player states
@@ -183,7 +193,18 @@ const VideoDetailsScreen = () => {
         getVideoById(videoId, user?.id),
         getVideos({ page: 1, limit: 10 }),
       ]);
-      setCurrentVideo(mapVideoApiToDisplay(videoRes));
+      const video = mapVideoApiToDisplay(videoRes);
+      setCurrentVideo(video);
+      if (video?.userId) {
+        getChannelProfile(video.userId, user?.id)
+          .then(profile => {
+            setChannelSubscription({
+              isSubscribed: profile.isSubscribed ?? false,
+              subscriberCount: profile.subscriberCount ?? 0,
+            });
+          })
+          .catch(() => {});
+      }
       const others = (videosRes?.videos || [])
         .filter(v => v.id !== videoId)
         .map(mapVideoApiToDisplay);
@@ -211,6 +232,7 @@ const VideoDetailsScreen = () => {
       );
       setCurrentVideo(null);
       setRelatedVideos([]);
+      setChannelSubscription({ isSubscribed: false, subscriberCount: 0 });
     } finally {
       setLoading(false);
     }
@@ -219,6 +241,34 @@ const VideoDetailsScreen = () => {
   useEffect(() => {
     loadVideo();
   }, [loadVideo]);
+
+  const handleSubscribe = async () => {
+    if (!user?.id || !currentVideo?.userId) return;
+    if (currentVideo.userId === user.id) return; // own channel
+    setSubscribeLoading(true);
+    try {
+      const isSub = channelSubscription.isSubscribed;
+      if (isSub) {
+        await unsubscribeFromChannel(user.id, currentVideo.userId);
+        setChannelSubscription(prev => ({
+          ...prev,
+          isSubscribed: false,
+          subscriberCount: Math.max(0, prev.subscriberCount - 1),
+        }));
+      } else {
+        await subscribeToChannel(user.id, currentVideo.userId);
+        setChannelSubscription(prev => ({
+          ...prev,
+          isSubscribed: true,
+          subscriberCount: prev.subscriberCount + 1,
+        }));
+      }
+    } catch (e) {
+      console.error('Subscribe error:', e);
+    } finally {
+      setSubscribeLoading(false);
+    }
+  };
 
   const handleLike = async () => {
     if (!user?.id || !currentVideo) return;
@@ -622,13 +672,35 @@ const VideoDetailsScreen = () => {
                 />
               </View>
               <Text style={styles.subscriberCount}>
-                {formatCount(currentVideo.viewCount)} views
+                {channelSubscription.subscriberCount > 0
+                  ? `${formatCount(channelSubscription.subscriberCount)} subscribers`
+                  : `${formatCount(currentVideo.viewCount)} views`}
               </Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.subscribeButton}>
-            <Text style={styles.subscribeText}>Subscribe</Text>
-          </TouchableOpacity>
+          {currentVideo.userId !== user?.id && user?.id ? (
+            <TouchableOpacity
+              style={[
+                styles.subscribeButton,
+                channelSubscription.isSubscribed && styles.subscribedButton,
+              ]}
+              onPress={handleSubscribe}
+              disabled={subscribeLoading}
+            >
+              {subscribeLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text
+                  style={[
+                    styles.subscribeText,
+                    channelSubscription.isSubscribed && styles.subscribedText,
+                  ]}
+                >
+                  {channelSubscription.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Comments Preview */}
@@ -956,10 +1028,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 18,
   },
+  subscribedButton: {
+    backgroundColor: '#f2f2f2',
+  },
   subscribeText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  subscribedText: {
+    color: '#606060',
   },
   commentsPreview: {
     marginTop: 16,

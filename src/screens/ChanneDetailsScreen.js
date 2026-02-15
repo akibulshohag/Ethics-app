@@ -24,7 +24,12 @@ import VideoCard from '../components/VideoCard';
 import CompactVideoCard from '../components/CompactVideoCard';
 import ShortsVideoCard from '../components/ShortsVideoCard';
 import ChannelAbout from '../components/ChannelAbout';
-import { getChannelProfile, updateChannelProfile } from '../services/channelService';
+import {
+  getChannelProfile,
+  updateChannelProfile,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+} from '../services/channelService';
 import { getUserVideos } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 
@@ -109,18 +114,19 @@ const ChannelDetailsScreen = () => {
   const [shortsLoading, setShortsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Home');
   const [activeFilter, setActiveFilter] = useState('Videos');
+  const [subscribeLoading, setSubscribeLoading] = useState(false);
 
   const isOwnChannel = !!userId && !!currentUser?.id && currentUser.id === userId;
 
   const loadProfile = useCallback(async () => {
     if (!userId) return;
     try {
-      const data = await getChannelProfile(userId);
+      const data = await getChannelProfile(userId, currentUser?.id);
       setProfile(data);
     } catch (e) {
       console.error('Failed to load channel profile:', e);
     }
-  }, [userId]);
+  }, [userId, currentUser?.id]);
 
   const loadVideos = useCallback(async () => {
     if (!userId) return;
@@ -186,6 +192,41 @@ const ChannelDetailsScreen = () => {
 
   const goToAbout = () => setActiveTab('About');
 
+  const handleSubscribe = async () => {
+    if (!currentUser?.id || !userId || isOwnChannel) return;
+    setSubscribeLoading(true);
+    try {
+      const isSub = profile?.isSubscribed ?? false;
+      if (isSub) {
+        await unsubscribeFromChannel(currentUser.id, userId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: false,
+                subscriberCount: Math.max(0, (prev.subscriberCount ?? 0) - 1),
+              }
+            : prev,
+        );
+      } else {
+        await subscribeToChannel(currentUser.id, userId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: true,
+                subscriberCount: (prev.subscriberCount ?? 0) + 1,
+              }
+            : prev,
+        );
+      }
+    } catch (e) {
+      console.error('Subscribe error:', e);
+    } finally {
+      setSubscribeLoading(false);
+    }
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContent}>
       <View style={styles.tabsContainer}>
@@ -207,10 +248,33 @@ const ChannelDetailsScreen = () => {
             <Text style={styles.profileName}>{profile.channelName}</Text>
             <MaterialCommunityIcons name="check-decagram" size={16} color="#3ea6ff" style={styles.verifiedIcon} />
           </View>
-          <TouchableOpacity style={styles.subscribeButton}>
-            <Text style={styles.subscribeText}>Subscribe</Text>
-          </TouchableOpacity>
+          {!isOwnChannel && currentUser?.id && (
+            <TouchableOpacity
+              style={[
+                styles.subscribeButton,
+                profile.isSubscribed && styles.subscribedButton,
+              ]}
+              onPress={handleSubscribe}
+              disabled={subscribeLoading}
+            >
+              {subscribeLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text
+                  style={[
+                    styles.subscribeText,
+                    profile.isSubscribed && styles.subscribedText,
+                  ]}
+                >
+                  {profile.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
           <Text style={styles.statsText}>
+            {profile.subscriberCount > 0
+              ? `${formatCount(profile.subscriberCount)} subscribers  •  `
+              : ''}
             {profile.videoCount} {profile.videoCount === 1 ? 'video' : 'videos'} & {profile.shortCount} {profile.shortCount === 1 ? 'short' : 'shorts'}
             {profile.totalViews > 0 ? `  •  ${formatCount(profile.totalViews)} views` : ''}
           </Text>
@@ -405,7 +469,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 12,
   },
+  subscribedButton: {
+    backgroundColor: '#f2f2f2',
+  },
   subscribeText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  subscribedText: { color: '#606060' },
   statsText: { fontSize: 12, color: '#616161', marginBottom: 8 },
   moreInfoContainer: { flexDirection: 'row', alignItems: 'center' },
   moreInfoText: { fontSize: 12, color: '#616161', marginRight: 4 },
