@@ -198,6 +198,7 @@ export const getComments = async (videoId, page = 1, limit = 20) => {
 
 /**
  * Record video view
+ * Silently ignores errors - view tracking is non-critical for UX
  */
 export const recordView = async (
   videoId,
@@ -206,16 +207,16 @@ export const recordView = async (
   completed = false,
 ) => {
   try {
-    const response = await axios.post(`${API_URL}/view`, {
+    const body = {
       videoId,
-      userId,
-      watchTime,
-      completed,
-    });
+      watchTime: Number(watchTime) || 0,
+      completed: Boolean(completed),
+    };
+    if (userId) body.userId = userId;
+    const response = await axios.post(`${API_URL}/view`, body);
     return response.data;
   } catch (error) {
-    console.error('Error recording view:', error);
-    throw error;
+    // Non-critical: don't throw or log to avoid disrupting video playback
   }
 };
 

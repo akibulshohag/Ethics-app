@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,6 +10,8 @@ import {
   Dimensions,
   Modal,
   Pressable,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -18,42 +20,42 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import TrendingView from './TrendingView';
 import NotificationScreen from './NotificationScreen';
 import SearchScreen from './SearchScreen';
+import { shortsService } from '../services/shortsService';
+import { getVideos } from '../services/videoService';
 
 const { width } = Dimensions.get('window');
 
-// --- Mock Data ---
+const formatCount = (n) => {
+  if (!n || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+};
+
+const formatDuration = (seconds) => {
+  if (!seconds || seconds < 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
+const formatTimeAgo = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
+  if (diffMonths > 0) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+  if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return 'Recently';
+};
+
+// --- Static Data ---
 const CATEGORIES = ['Trending', 'All', 'For You', 'Live'];
 const STORIES = ['Tomato Guy', 'Fire Baking', 'Tomato Girl'];
-
-const CONTINUE_WATCHING_DATA = [
-  {
-    id: 'c1',
-    image:
-      'https://images.unsplash.com/photo-1563805042-7684c019e1cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-  },
-  {
-    id: 'c2',
-    image:
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=699&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  },
-];
-
-const SHORTS_DATA = [
-  {
-    id: 's1',
-    title: 'Beauty Makeup Tutorials Before You Go Out...',
-    views: '3.4M views',
-    image:
-      'https://images.unsplash.com/photo-1532550907401-a500c9a57435?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-  },
-  {
-    id: 's2',
-    title: 'Be Beautiful with Make-up Made from Natural...',
-    views: '2.8M views',
-    image:
-      'https://images.unsplash.com/photo-1600891964092-4316c288032e?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-  },
-];
 
 const REPORT_REASONS = [
   'Sexual Content',
@@ -65,44 +67,31 @@ const REPORT_REASONS = [
   'Others',
 ];
 
-const MAIN_FEED = [
-  { type: 'SHORTS', id: 'header-shorts' },
-  {
-    type: 'VIDEO',
-    id: 'v1',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    author: 'BBC Earth',
-    views: '9.5M views',
-    time: '5 months ago',
-    duration: '15:27',
-    thumbnail:
-      'https://plus.unsplash.com/premium_photo-1693221705583-e446be9ac4f3?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  },
-  {
-    type: 'VIDEO',
-    id: 'v2',
-    title: 'Classic Cheeseburger - Homemade Professional Style',
-    author: 'Food Network',
-    views: '2.1M views',
-    time: '2 months ago',
-    duration: '10:45',
-    thumbnail:
-      'https://plus.unsplash.com/premium_photo-1675252371648-7a6481df8226?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  },
-  { type: 'CONTINUE', id: 'continue-watching' },
-  {
-    type: 'VIDEO',
-    id: 'v3',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    author: 'BBC Earth',
-    views: '9.5M views',
-    time: '5 months ago',
-    duration: '15:27',
-    thumbnail:
-      'https://plus.unsplash.com/premium_photo-1693221705583-e446be9ac4f3?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  },
-  { type: 'SHORTS', id: 'footer-shorts' },
-];
+const mapShortToCard = (s) => {
+  const raw = s.title || s.description || 'Untitled';
+  const title = raw.length > 50 ? raw.substring(0, 47) + '...' : raw;
+  return {
+    id: s.id,
+    title,
+    views: `${formatCount(s.viewCount ?? s._count?.views ?? 0)} views`,
+    image: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+  };
+};
+
+const mapVideoToCard = (v) => {
+  const user = v.user || {};
+  const viewCount = v.viewCount ?? v._count?.views ?? 0;
+  const pubAt = v.publishedAt || v.createdAt;
+  return {
+    id: v.id,
+    title: v.title || 'Untitled',
+    author: user.nickname || user.name || 'Unknown',
+    views: `${formatCount(viewCount)} views`,
+    time: formatTimeAgo(pubAt),
+    duration: formatDuration(v.duration),
+    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+  };
+};
 
 const HomeVersion = () => {
   const navigation = useNavigation();
@@ -112,6 +101,46 @@ const HomeVersion = () => {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
+  const [shortsData, setShortsData] = useState([]);
+  const [videosData, setVideosData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadFeed = useCallback(async () => {
+    try {
+      const [shortsRes, videosRes] = await Promise.all([
+        shortsService.getShorts({ page: 1, limit: 20 }),
+        getVideos({ page: 1, limit: 20 }),
+      ]);
+      const shorts = (shortsRes?.shorts || []).filter(s => s.videoUrl && String(s.videoUrl).trim());
+      const videos = videosRes?.videos || [];
+      setShortsData(shorts.map(mapShortToCard));
+      setVideosData(videos.map(mapVideoToCard));
+    } catch (e) {
+      setShortsData([]);
+      setVideosData([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadFeed();
+  };
+
+  const mainFeed = [
+    { type: 'SHORTS', id: 'header-shorts', data: shortsData },
+    ...videosData.slice(0, 2).map(v => ({ type: 'VIDEO', ...v })),
+    { type: 'CONTINUE', id: 'continue-watching', data: videosData.slice(0, 3) },
+    ...videosData.slice(2).map(v => ({ type: 'VIDEO', ...v })),
+    { type: 'SHORTS', id: 'footer-shorts', data: shortsData },
+  ];
 
   const StoryCircle = ({ label }) => (
     <View style={styles.storyContainer}>
@@ -139,14 +168,24 @@ const HomeVersion = () => {
     }, 100);
   };
 
+  const handleShortPress = (shortId) => {
+    navigation.getParent()?.navigate('Shorts');
+  };
+
+  const handleVideoPress = (videoId) => {
+    navigation.navigate('VideoDetailsScreen', { videoId });
+  };
+
   const renderItem = ({ item }) => {
-    if (item.type === 'SHORTS')
+    if (item.type === 'SHORTS') {
+      const shorts = item.data || [];
+      if (shorts.length === 0) return null;
       return (
         <View style={styles.whiteSection}>
           <SectionHeader icon="video-outline" title="Shorts" />
           <FlatList
             horizontal
-            data={SHORTS_DATA}
+            data={shorts}
             keyExtractor={s => s.id}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{
@@ -154,7 +193,11 @@ const HomeVersion = () => {
               paddingBottom: 20,
             }}
             renderItem={({ item: short }) => (
-              <View style={styles.shortCard}>
+              <TouchableOpacity
+                style={styles.shortCard}
+                onPress={() => handleShortPress(short.id)}
+                activeOpacity={0.9}
+              >
                 <Image
                   source={{ uri: short.image }}
                   style={styles.shortImage}
@@ -171,13 +214,16 @@ const HomeVersion = () => {
                 >
                   <Icon name="dots-vertical" size={18} color="#fff" />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             )}
           />
         </View>
       );
+    }
 
-    if (item.type === 'CONTINUE')
+    if (item.type === 'CONTINUE') {
+      const continueData = item.data || [];
+      if (continueData.length === 0) return null;
       return (
         <View style={styles.continueSection}>
           <SectionHeader icon="video-vintage" title="Continue watching" />
@@ -186,29 +232,39 @@ const HomeVersion = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
           >
-            {CONTINUE_WATCHING_DATA.map(c => (
-              <View key={c.id} style={styles.continueCard}>
-                <Image source={{ uri: c.image }} style={styles.continueImage} />
+            {continueData.map(c => (
+              <TouchableOpacity
+                key={c.id}
+                style={styles.continueCard}
+                onPress={() => handleVideoPress(c.id)}
+                activeOpacity={0.9}
+              >
+                <Image source={{ uri: c.thumbnail }} style={styles.continueImage} />
                 <View style={styles.playButtonSmall}>
                   <Icon name="play" size={16} color="#fff" />
                 </View>
                 <View style={styles.progressBar} />
-              </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
       );
+    }
 
     if (item.type === 'VIDEO')
       return (
-        <View style={styles.videoCard}>
+        <TouchableOpacity
+          style={styles.videoCard}
+          onPress={() => handleVideoPress(item.id)}
+          activeOpacity={1}
+        >
           <View style={styles.thumbnailWrapper}>
             <Image
               source={{ uri: item.thumbnail }}
               style={styles.videoThumbnail}
             />
             <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{item.duration}</Text>
+              <Text style={styles.durationText}>{item.duration || '0:00'}</Text>
             </View>
           </View>
           <View style={styles.videoDetails}>
@@ -223,7 +279,7 @@ const HomeVersion = () => {
               <Icon name="dots-vertical" size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       );
     return null;
   };
@@ -241,9 +297,18 @@ const HomeVersion = () => {
       <View style={styles.container}>
         <TrendingView
           onBack={() => setActiveTab('All')}
-          videoData={MAIN_FEED.filter(i => i.type === 'VIDEO')}
+          videoData={mainFeed.filter(i => i.type === 'VIDEO')}
           renderVideoItem={renderItem}
         />
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={COLORS.primaryOrange} />
+        <Text style={styles.loadingText}>Loading feed...</Text>
       </View>
     );
   }
@@ -287,10 +352,18 @@ const HomeVersion = () => {
       </SafeAreaView>
 
       <FlatList
-        data={MAIN_FEED}
+        data={mainFeed}
         keyExtractor={item => item.id}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primaryOrange]}
+            tintColor={COLORS.primaryOrange}
+          />
+        }
         ListHeaderComponent={
           <>
             <ScrollView
@@ -433,6 +506,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: COLORS.gray500,
   },
   safeArea: {
     backgroundColor: COLORS.white,

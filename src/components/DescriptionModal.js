@@ -14,7 +14,22 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 
 const { height } = Dimensions.get('window');
 
+const formatCount = (n) => {
+  if (!n || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+};
+
 const DescriptionModal = ({ visible, onClose, video }) => {
+  if (!video) return null;
+  const likes = video.likeCount ?? 0;
+  const views = video.viewCount ?? 0;
+  const viewsStr = typeof video.views === 'string' ? video.views.split(' ')[0] : formatCount(views);
+  const tags = Array.isArray(video.tags) ? video.tags : [];
+  const tagStr = tags.map((t) => (String(t).startsWith('#') ? t : `#${t}`)).join(' ');
+  const description = video.description || 'No description available.';
+
   return (
     <Modal
       animationType="slide"
@@ -57,42 +72,28 @@ const DescriptionModal = ({ visible, onClose, video }) => {
                 {/* Stats Row */}
                 <View style={styles.statsRow}>
                     <View style={styles.statItem}>
-                        <Text style={styles.statValue}>20K</Text>
+                        <Text style={styles.statValue}>{formatCount(likes)}</Text>
                         <Text style={styles.statLabel}>Likes</Text>
                     </View>
                     <View style={styles.statItem}>
-                        <Text style={styles.statValue}>879</Text>
-                        <Text style={styles.statLabel}>Dislikes</Text>
-                    </View>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statValue}>{video.views.split(' ')[0]}</Text>
+                        <Text style={styles.statValue}>{viewsStr}</Text>
                         <Text style={styles.statLabel}>Views</Text>
                     </View>
                     <View style={styles.statItem}>
-                        <Text style={styles.statValue}>Dec 24</Text>
-                        <Text style={styles.statLabel}>2022</Text>
+                        <Text style={styles.statValue}>{video.publishedDate || '-'}</Text>
+                        <Text style={styles.statLabel}>Published</Text>
                     </View>
                 </View>
 
                 <View style={styles.divider} />
 
                 {/* Tags */}
-                <Text style={styles.tags}>
-                    #food #restaurant #bbq #chicken
-                </Text>
+                {tagStr ? (
+                  <Text style={styles.tags}>{tagStr}</Text>
+                ) : null}
 
                 {/* Description Body */}
-                <Text style={styles.descriptionText}>
-                    Taken Kristo Restauranth II
-                    {'\n\n'}
-                    A cozy restaurant serving fresh, delicious food made with quality ingredients. Enjoy great taste, warm service, and a comfortable dining experience.
-                    {'\n\n'}
-                    We offer a modern dining experience with carefully crafted dishes, fresh ingredients, and excellent service. A perfect place for family, friends, and food lovers.
-                    {'\n\n'}
-                    Good food, good mood! Our restaurant is all about tasty meals, friendly vibes, and moments worth sharing with your loved ones.
-                    Good food, good mood! Our restaurant is all about tasty meals, friendly vibes, and moments worth sharing with your loved ones.
-                    Good food, good mood! Our restaurant is all about tasty meals, friendly vibes, and moments worth sharing with your loved ones.
-                </Text>
+                <Text style={styles.descriptionText}>{description}</Text>
 
               </ScrollView>
             </View>
