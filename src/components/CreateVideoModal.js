@@ -14,17 +14,40 @@ import {useNavigation} from '@react-navigation/native';
 
 const { height } = Dimensions.get('window');
 
-const CreateVideoModal = ({ visible, onClose }) => {
+const CreateVideoModal = ({
+  visible,
+  onClose,
+  onCreateShort: onCreateShortProp,
+  onUploadVideo: onUploadVideoProp,
+  onGoLive: onGoLiveProp,
+}) => {
   const navigation = useNavigation();
 
   const handleCreateShort = () => {
-    onClose();
-    navigation.navigate('CreateShortsScreen');
+    onClose?.();
+    if (onCreateShortProp) {
+      onCreateShortProp();
+    } else {
+      navigation.navigate('CreateShortsScreen', { isLive: false });
+    }
   };
 
   const handleUploadVideo = () => {
-    onClose();
-    navigation.navigate('UploadVideoScreen');
+    onClose?.();
+    if (onUploadVideoProp) {
+      onUploadVideoProp();
+    } else {
+      navigation.navigate('Library', { screen: 'UploadVideoScreen' });
+    }
+  };
+
+  const handleGoLive = () => {
+    onClose?.();
+    if (onGoLiveProp) {
+      onGoLiveProp();
+    } else {
+      navigation.navigate('CreateShortsScreen', { isLive: true });
+    }
   };
 
   return (
@@ -65,7 +88,7 @@ const CreateVideoModal = ({ visible, onClose }) => {
                 </TouchableOpacity>
 
                 {/* Go Live */}
-                <TouchableOpacity style={styles.optionItem} onPress={onClose}>
+                <TouchableOpacity style={styles.optionItem} onPress={handleGoLive}>
                   <View style={styles.iconContainer}>
                     <Ionicons name="play-circle" size={24} color="#FF8C00" />
                   </View>

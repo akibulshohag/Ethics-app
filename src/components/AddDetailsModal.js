@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,152 @@ import {
   Image,
   TextInput,
   ScrollView,
-  SafeAreaView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+const DEFAULT_THUMBNAIL = 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
+import {launchImageLibrary} from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
+import { shortsService } from '../services/shortsService';
 
-const AddDetailsModal = ({visible, onClose}) => {
-  const [visibilityModalVisible, setVisibilityModalVisible] = React.useState(false);
-  const [visibility, setVisibility] = React.useState('Public');
-  const [audienceModalVisible, setAudienceModalVisible] = React.useState(false);
-  const [audience, setAudience] = React.useState({ madeForKids: null, ageRestricted: null });
-  const [commentsModalVisible, setCommentsModalVisible] = React.useState(false);
-  const [comments, setComments] = React.useState('Allow all comments');
+const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false, onVideoPicked}) => {
+  const [visibilityModalVisible, setVisibilityModalVisible] = useState(false);
+  const [visibility, setVisibility] = useState('Public');
+  const [audienceModalVisible, setAudienceModalVisible] = useState(false);
+  const [audience, setAudience] = useState({ madeForKids: null, ageRestricted: null });
+  const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [comments, setComments] = useState('Allow all comments');
+  const [caption, setCaption] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [localVideo, setLocalVideo] = useState(null);
+  const [localThumb, setLocalThumb] = useState(null);
+
+  const videoUri = shortsMetadata?.videoUri || localVideo?.uri;
+  const videoMeta = localVideo || shortsMetadata;
+
+  const pickVideoInModal = () => {
+    launchImageLibrary(
+      {mediaType: 'video', videoMaxDuration: 180},
+      (res) => {
+        if (res.didCancel) return;
+        const asset = res.assets?.[0];
+        if (asset?.uri) {
+          setLocalVideo({
+            uri: asset.uri,
+            type: asset.type || 'video/mp4',
+            name: asset.fileName || 'short.mp4',
+          });
+          if (onVideoPicked) onVideoPicked(asset);
+        }
+      },
+    );
+  };
+
+  const pickThumbnailInModal = () => {
+    launchImageLibrary({mediaType: 'photo'}, (res) => {
+      if (res.didCancel) return;
+      const asset = res.assets?.[0];
+      if (asset?.uri) {
+        setLocalThumb({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || 'thumb.jpg',
+        });
+      }
+    });
+  };
+
+  const mapToVisibility = (v) => {
+    if (v === 'Public') return 'public';
+    if (v === 'Private') return 'private';
+    if (v === 'Unlisted') return 'unlisted';
+    return 'public';
+  };
+
+  const mapToCommentSetting = (c) => {
+    if (c?.includes('all')) return 'allow';
+    if (c?.includes('hold')) return 'hold';
+    if (c?.includes('Disable')) return 'disable';
+    return 'allow';
+  };
+
+  const handleUploadShorts = async () => {
+    if (!shortsMetadata?.userId) {
+      Alert.alert('Error', 'Please sign in to upload shorts');
+      return;
+    }
+    if (!videoUri) {
+      Alert.alert('Error', 'Please record or select a video first');
+      return;
+    }
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('files', {
+        uri: videoUri,
+        type: videoMeta.videoType || videoMeta.type || 'video/mp4',
+        name: videoMeta.videoName || videoMeta.name || 'short.mp4',
+      });
+      const thumbUri = shortsMetadata.thumbnailUri || localThumb?.uri;
+      if (thumbUri) {
+        formData.append('files', {
+          uri: thumbUri,
+          type: shortsMetadata.thumbnailType || localThumb?.type || 'image/jpeg',
+          name: shortsMetadata.thumbnailName || localThumb?.name || 'thumb.jpg',
+        });
+      }
+      formData.append('userId', shortsMetadata.userId);
+      formData.append('title', caption || 'Untitled Short');
+      formData.append('description', caption || '');
+      formData.append('durationLimit', isLive ? '10s' : (shortsMetadata.activeDuration || '60'));
+      formData.append('visibility', mapToVisibility(visibility));
+      formData.append('commentSetting', mapToCommentSetting(comments));
+      if (shortsMetadata.selectedFilter?.id) {
+        formData.append('filterId', shortsMetadata.selectedFilter.id);
+        formData.append('filterName', shortsMetadata.selectedFilter.name);
+      }
+      if (shortsMetadata.selectedSound) {
+        formData.append('soundId', shortsMetadata.selectedSound.id);
+        formData.append('soundTitle', shortsMetadata.selectedSound.title);
+        formData.append('soundArtist', shortsMetadata.selectedSound.artist || '');
+        if (shortsMetadata.selectedSound.soundUrl) {
+          formData.append('soundUrl', shortsMetadata.selectedSound.soundUrl);
+        }
+      }
+      if (shortsMetadata.beautyLevel) {
+        formData.append('beautyLevel', String(shortsMetadata.beautyLevel));
+      }
+      if (shortsMetadata.selectedTimer) {
+        formData.append('timerSeconds', String(shortsMetadata.selectedTimer));
+      }
+      if (shortsMetadata.speedFactor) {
+        formData.append('speedFactor', String(shortsMetadata.speedFactor));
+      }
+      if (shortsMetadata.cameraFacing) {
+        formData.append('cameraFacing', shortsMetadata.cameraFacing);
+      }
+      if (isLive) {
+        formData.append('isLive', 'true');
+      }
+      await shortsService.uploadShort(formData);
+      Alert.alert('Success', 'Short uploaded successfully', [{ text: 'OK', onPress: onClose }]);
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Failed to upload short';
+      const isNetwork = e?.message === 'Network Error' || e?.code === 'ERR_NETWORK';
+      const hint = isNetwork
+        ? '\n\nEnsure:\n1. Backend is running: cd ethics-backend && npm run start:dev\n2. Port 3000 is correct\n3. For physical device: set LOCAL_OVERRIDE in config.js to your computer IP (e.g. http://192.168.1.x:3000/v1)'
+        : '';
+      Alert.alert('Upload Failed', msg + hint);
+    } finally {
+      setUploading(false);
+    }
+  };
   return (
     <Modal
       animationType="slide"
@@ -44,17 +175,17 @@ const AddDetailsModal = ({visible, onClose}) => {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Top Section: Cover & Caption */}
           <View style={styles.topSection}>
-            <View style={styles.coverContainer}>
-              <Image 
-                source={{uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60'}} 
-                style={styles.coverImage} 
+            <TouchableOpacity style={styles.coverContainer} onPress={pickThumbnailInModal}>
+              <Image
+                source={{uri: (shortsMetadata.thumbnailUri || localThumb?.uri) || DEFAULT_THUMBNAIL}}
+                style={styles.coverImage}
+                resizeMode="cover"
               />
               <View style={styles.selectCoverOverlay}>
                 <Text style={styles.selectCoverText}>Select Cover</Text>
               </View>
-            </View>
+            </TouchableOpacity>
             <View style={styles.captionContainer}>
               <TextInput 
                 placeholder="Caption your shorts..."
@@ -62,9 +193,24 @@ const AddDetailsModal = ({visible, onClose}) => {
                 multiline
                 style={styles.captionInput}
                 textAlignVertical="top"
+                value={caption}
+                onChangeText={setCaption}
               />
             </View>
           </View>
+
+          {!videoUri && (
+            <TouchableOpacity style={styles.selectVideoBtn} onPress={pickVideoInModal}>
+              <Ionicons name="videocam-outline" size={24} color="#FF8C00" />
+              <Text style={styles.selectVideoText}>Select Video</Text>
+            </TouchableOpacity>
+          )}
+          {videoUri && (
+            <View style={styles.videoSelectedRow}>
+              <Ionicons name="checkmark-circle" size={20} color="#12B76A" />
+              <Text style={styles.videoSelectedText}>Video selected</Text>
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -116,7 +262,7 @@ const AddDetailsModal = ({visible, onClose}) => {
                 <Text style={styles.optionLabel}>Comments</Text>
               </View>
               <View style={styles.optionRight}>
-                <Text style={styles.optionValue} numberOfLines={1} style={{maxWidth: 150}}>{comments}</Text>
+                <Text style={[styles.optionValue, {maxWidth: 150}]} numberOfLines={1}>{comments}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#333" />
               </View>
             </TouchableOpacity>
@@ -125,8 +271,18 @@ const AddDetailsModal = ({visible, onClose}) => {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.uploadButton}>
-            <Text style={styles.uploadButtonText}>Upload Shorts</Text>
+          <TouchableOpacity
+            style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
+            onPress={() => handleUploadShorts()}
+            disabled={uploading}
+            activeOpacity={0.7}>
+            {uploading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.uploadButtonText}>
+                Upload Video
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -181,6 +337,7 @@ const styles = StyleSheet.create({
   topSection: {
     flexDirection: 'row',
     padding: 16,
+    alignItems: 'flex-start',
   },
   coverContainer: {
     width: 100,
@@ -193,6 +350,36 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  selectVideoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: '#FFF8F0',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE0C0',
+  },
+  selectVideoText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF8C00',
+    marginLeft: 8,
+  },
+  videoSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  videoSelectedText: {
+    fontSize: 14,
+    color: '#12B76A',
+    marginLeft: 6,
   },
   selectCoverOverlay: {
     position: 'absolute',
@@ -272,6 +459,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  uploadButtonDisabled: {
+    opacity: 0.7,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef, useEffect} from 'react';
 import {
   View,
   Text,
@@ -7,25 +7,178 @@ import {
   Dimensions,
   StatusBar,
   ImageBackground,
+  Alert,
 } from 'react-native';
+import Video from 'react-native-video';
+import {launchImageLibrary} from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import EffectsModal from '../components/EffectsModal';
+import {useSelector} from 'react-redux';
 import SoundsModal from '../components/SoundsModal';
 import AddDetailsModal from '../components/AddDetailsModal';
+import FilterModal from '../components/FilterModal';
+import TimerModal from '../components/TimerModal';
+import BeautyModal from '../components/BeautyModal';
+import SpeedModal from '../components/SpeedModal';
+import CameraShortsView from '../components/CameraShortsView';
+import {getFilterOverlayStyle} from '../constants/filterEffects';
 
 const {width, height} = Dimensions.get('window');
 
-const CreateShortsScreen = ({navigation}) => {
-  const [activeDuration, setActiveDuration] = useState('15s');
-  const [effectsVisible, setEffectsVisible] = useState(false);
+const CreateShortsScreen = ({navigation, route}) => {
+  const initialLive = route?.params?.isLive === true;
+  const [activeDuration, setActiveDuration] = useState(initialLive ? '10s' : '60s');
   const [soundsVisible, setSoundsVisible] = useState(false);
   const [addDetailsVisible, setAddDetailsVisible] = useState(false);
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [timerVisible, setTimerVisible] = useState(false);
+  const [beautyVisible, setBeautyVisible] = useState(false);
+  const [speedVisible, setSpeedVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(initialLive);
   const [selectedSound, setSelectedSound] = useState(null);
+  const [selectedFilter, setSelectedFilter] = useState(null);
+  const [selectedTimer, setSelectedTimer] = useState(0);
+  const [beautyLevel, setBeautyLevel] = useState(0);
+  const [speedFactor, setSpeedFactor] = useState(1);
+  const [cameraFacing, setCameraFacing] = useState('back');
+  const [pickedVideo, setPickedVideo] = useState(null);
+  const [pickedThumbnail, setPickedThumbnail] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [countdown, setCountdown] = useState(null);
+  const cameraRef = useRef(null);
+  const maxDurationTimerRef = useRef(null);
+  const isRecordingRef = useRef(false);
   const insets = useSafeAreaInsets();
+
+  const parseDurationSeconds = (d) => {
+    if (d === '10s') return 10;
+    if (d === '15s') return 15;
+    if (d === '30s') return 30;
+    if (d === '60s') return 60;
+    if (d === '3m') return 180;
+    return isLiveMode ? 10 : 60;
+  };
+
+  useEffect(() => {
+    return () => {
+      if (maxDurationTimerRef.current) clearTimeout(maxDurationTimerRef.current);
+    };
+  }, []);
+
+  const stopRecording = () => {
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    if (maxDurationTimerRef.current) {
+      clearTimeout(maxDurationTimerRef.current);
+      maxDurationTimerRef.current = null;
+    }
+    if (cameraRef.current?.stopRecording) {
+      cameraRef.current.stopRecording().catch(() => {
+        // Ignore "no recording in progress" when stop called twice
+      });
+    }
+  };
+
+  const handleRecordingFinished = (video) => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    const path = video?.path ?? video;
+    if (path) {
+      const uri = path.startsWith('file://') ? path : `file://${path}`;
+      setPickedVideo({
+        uri,
+        type: 'video/mp4',
+        name: 'short.mp4',
+      });
+      setIsEditing(true);
+    }
+  };
+
+  const handleRecordPress = () => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    if (showCamera && !cameraRef.current?.startRecording) return;
+    const start = () => {
+      if (!cameraRef.current?.startRecording) return;
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      cameraRef.current.startRecording({
+        onRecordingFinished: handleRecordingFinished,
+        onRecordingError: (e) => {
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          Alert.alert('Recording Error', e?.message || 'Failed to record');
+        },
+      });
+      const maxSec = parseDurationSeconds(activeDuration);
+      maxDurationTimerRef.current = setTimeout(stopRecording, maxSec * 1000);
+    };
+    if (selectedTimer > 0) {
+      setCountdown(selectedTimer);
+      let n = selectedTimer;
+      const iv = setInterval(() => {
+        n -= 1;
+        setCountdown(n);
+        if (n <= 0) {
+          clearInterval(iv);
+          setCountdown(null);
+          start();
+        }
+      }, 1000);
+    } else {
+      start();
+    }
+  };
+
+  const pickVideo = () => {
+    launchImageLibrary(
+      {
+        mediaType: 'video',
+        videoMaxDuration: 180,
+        quality: 1,
+      },
+      (res) => {
+        if (res.didCancel) return;
+        if (res.errorCode) {
+          Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+          return;
+        }
+        const asset = res.assets?.[0];
+        if (asset?.uri) {
+          setPickedVideo({
+            uri: asset.uri,
+            type: asset.type || 'video/mp4',
+            name: asset.fileName || 'short.mp4',
+          });
+          setIsEditing(true);
+        }
+      },
+    );
+  };
+
+  const pickThumbnail = () => {
+    launchImageLibrary(
+      {mediaType: 'photo'},
+      (res) => {
+        if (res.didCancel) return;
+        const asset = res.assets?.[0];
+        if (asset?.uri) {
+          setPickedThumbnail({
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.fileName || 'thumb.jpg',
+          });
+        }
+      },
+    );
+  };
+  const user = useSelector(state => state?.app?.user);
 
   const handleSoundSelect = (sound) => {
     setSelectedSound(sound);
@@ -33,7 +186,7 @@ const CreateShortsScreen = ({navigation}) => {
     setIsEditing(true);
   };
 
-  const ActionItem = ({icon, label, iconType = 'Ionicons'}) => {
+  const ActionItem = ({icon, label, iconType = 'Ionicons', onPress}) => {
     const IconComp =
       iconType === 'MaterialCommunityIcons'
         ? MaterialCommunityIcons
@@ -41,21 +194,66 @@ const CreateShortsScreen = ({navigation}) => {
         ? MaterialIcons
         : Ionicons;
     return (
-      <TouchableOpacity style={styles.actionItem}>
+      <TouchableOpacity style={styles.actionItem} onPress={onPress}>
         <IconComp name={icon} size={28} color="white" style={styles.shadow} />
         <Text style={styles.actionLabel}>{label}</Text>
       </TouchableOpacity>
     );
   };
 
+  const filterOverlayStyle = getFilterOverlayStyle(selectedFilter);
+
+  const shortsMetadata = {
+    activeDuration,
+    selectedSound,
+    selectedFilter,
+    selectedTimer,
+    beautyLevel,
+    speedFactor,
+    cameraFacing,
+    isLiveMode,
+    userId: user?.id,
+    videoUri: pickedVideo?.uri,
+    videoType: pickedVideo?.type,
+    videoName: pickedVideo?.name,
+    thumbnailUri: pickedThumbnail?.uri,
+    thumbnailType: pickedThumbnail?.type,
+    thumbnailName: pickedThumbnail?.name,
+  };
+
+  const toggleCameraFlip = () => {
+    setCameraFacing(f => (f === 'back' ? 'front' : 'back'));
+  };
+
+  const showCamera = !isEditing && (isLiveMode || !pickedVideo);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <ImageBackground
-        source={{uri: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80'}}
-        style={styles.background}
-        resizeMode="cover">
-        <View style={styles.overlay}>
+      {showCamera ? (
+        <CameraShortsView
+          ref={cameraRef}
+          facing={cameraFacing}
+          style={styles.background}
+          isActive={true}>
+          {filterOverlayStyle && (
+            <View
+              style={[
+                styles.filterOverlay,
+                {
+                  backgroundColor: filterOverlayStyle.backgroundColor,
+                  opacity: filterOverlayStyle.opacity,
+                },
+              ]}
+              pointerEvents="none"
+            />
+          )}
+          {countdown !== null && countdown > 0 && (
+            <View style={styles.countdownOverlay} pointerEvents="none">
+              <Text style={styles.countdownText}>{countdown}</Text>
+            </View>
+          )}
+          <View style={styles.overlay}>
           {isEditing ? (
             <View style={styles.editingModeOverlay}>
               <View style={[styles.progressBarContainer, { top: insets.top }]}>
@@ -79,9 +277,13 @@ const CreateShortsScreen = ({navigation}) => {
               <View style={[styles.rightSidebar, { top: insets.top + 80 }]}>
                  <ActionItem icon="format-text" label="Text" iconType="MaterialCommunityIcons" />
                  <ActionItem icon="emoticon-outline" label="Sticker" iconType="MaterialCommunityIcons" />
-                 <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" />
-                 <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" />
-                 <ActionItem icon="speedometer-outline" label="Speed" />
+                 <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" onPress={() => setBeautyVisible(true)} />
+                 <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
+                 <ActionItem
+                  icon="speedometer-outline"
+                  label="Speed"
+                  onPress={() => setSpeedVisible(true)}
+                />
                  <ActionItem icon="closed-caption-outline" label="Subtit..." iconType="MaterialCommunityIcons" />
                  <ActionItem icon="comment-outline" label="Com..." iconType="MaterialCommunityIcons" />
               </View>
@@ -90,7 +292,7 @@ const CreateShortsScreen = ({navigation}) => {
                 <TouchableOpacity style={styles.draftButton}>
                   <Text style={styles.draftButtonText}>Draft</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.nextButton}
                   onPress={() => setAddDetailsVisible(true)}>
                   <Text style={styles.nextButtonText}>Next</Text>
@@ -103,26 +305,42 @@ const CreateShortsScreen = ({navigation}) => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
                   <Ionicons name="close" size={30} color="white" />
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.addSoundPill}
-                  onPress={() => setSoundsVisible(true)}>
-                  <Ionicons name="musical-notes" size={18} color="white" />
-                  <Text style={styles.addSoundText}>Add Sound</Text>
-                </TouchableOpacity>
-                <View style={{width: 40}} />
+                <View style={styles.topRightRow}>
+                  <TouchableOpacity 
+                    style={styles.addSoundPill}
+                    onPress={() => setSoundsVisible(true)}>
+                    <Ionicons name="musical-notes" size={18} color="white" />
+                    <Text style={styles.addSoundText}>Add Sound</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.liveModePill, isLiveMode && styles.liveModePillActive]}
+                    onPress={() => setIsLiveMode(!isLiveMode)}>
+                    <MaterialCommunityIcons name="broadcast" size={16} color={isLiveMode ? '#fff' : 'rgba(255,255,255,0.9)'} />
+                    <Text style={[styles.liveModeText, isLiveMode && styles.liveModeTextActive]}>Live</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={[styles.rightSidebar, { top: insets.top + 80 }]}>
-                <ActionItem icon="camera-reverse-outline" label="Flip" />
-                <ActionItem icon="speedometer-outline" label="Speed" />
-                <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" />
-                <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" />
-                <ActionItem icon="timer-outline" label="Timer" />
+                <ActionItem
+                  icon="camera-reverse-outline"
+                  label="Flip"
+                  onPress={toggleCameraFlip}
+                />
+                <ActionItem
+                  icon="speedometer-outline"
+                  label="Speed"
+                  onPress={() => setSpeedVisible(true)}
+                />
+                <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
+                <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" onPress={() => setBeautyVisible(true)} />
+                <ActionItem icon="timer-outline" label="Timer" onPress={() => setTimerVisible(true)} />
                 <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
                 <ActionItem icon="flash" label="Flash" />
               </View>
               <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
+                {!isLiveMode && (
                 <View style={styles.durationSelector}>
-                  {['3m', '60s', '15s'].map(d => (
+                  {(isLiveMode ? ['10s'] : ['15s', '30s', '60s', '3m']).map(d => (
                     <TouchableOpacity
                       key={d}
                       onPress={() => setActiveDuration(d)}
@@ -134,34 +352,194 @@ const CreateShortsScreen = ({navigation}) => {
                     </TouchableOpacity>
                   ))}
                 </View>
-                <View style={styles.mainBottomRow}>
-                  <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setEffectsVisible(true)}>
+                )}
+                <View style={[styles.mainBottomRow, {paddingHorizontal: 20}]}>
+                  {!isLiveMode && (
+                  <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setFilterVisible(true)}>
                     <View style={styles.effectsIconContainer}>
-                       <MaterialCommunityIcons name="heart-multiple" size={30} color="#FF8C00" />
+                       <MaterialCommunityIcons name="filter-variant" size={30} color="#FF8C00" />
                     </View>
-                    <Text style={styles.bottomAuxLabel}>Effects</Text>
+                    <Text style={styles.bottomAuxLabel}>Filters</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.recordButtonOuter}>
-                    <View style={styles.recordButtonInner}>
-                       <Ionicons name="videocam" size={36} color="white" />
+                  )}
+                  <TouchableOpacity
+                    style={[
+                      styles.recordButtonOuter,
+                      isLiveMode && styles.liveButtonOuter,
+                      isRecording && styles.recordButtonRecording,
+                    ]}
+                    onPress={handleRecordPress}>
+                    <View style={[styles.recordButtonInner, isLiveMode && styles.liveButtonInner]}>
+                       <MaterialCommunityIcons
+                         name={isLiveMode ? 'broadcast' : isRecording ? 'stop' : 'videocam'}
+                         size={36}
+                         color="white"
+                       />
                     </View>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.bottomAuxButton}>
+                  {!isLiveMode && (
+                  <TouchableOpacity style={styles.bottomAuxButton} onPress={pickVideo}>
                     <View style={styles.uploadIconContainer}>
                       <Ionicons name="cloud-upload-outline" size={30} color="white" />
                     </View>
                     <Text style={styles.bottomAuxLabel}>Upload</Text>
                   </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </View>
           )}
+          </View>
+        </CameraShortsView>
+      ) : (
+        <View style={styles.background}>
+          {pickedVideo?.uri ? (
+            <Video
+              source={{uri: pickedVideo.uri}}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+              repeat
+              paused={false}
+              muted={false}
+            />
+          ) : (
+            <ImageBackground
+              source={{
+                uri: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
+              }}
+              style={styles.background}
+              resizeMode="cover"
+            />
+          )}
+          {filterOverlayStyle && (
+            <View
+              style={[
+                styles.filterOverlay,
+                {
+                  backgroundColor: filterOverlayStyle.backgroundColor,
+                  opacity: filterOverlayStyle.opacity,
+                },
+              ]}
+              pointerEvents="none"
+            />
+          )}
+          <View style={styles.overlay}>
+            {isEditing ? (
+              <View style={styles.editingModeOverlay}>
+                <View style={[styles.progressBarContainer, {top: insets.top}]}>
+                  <View style={styles.progressBarActive} />
+                  <View style={styles.progressBarInactive} />
+                </View>
+                <View style={[styles.topControls, {marginTop: insets.top + 15}]}>
+                  <TouchableOpacity onPress={() => setIsEditing(false)} style={styles.closeButton}>
+                    <Ionicons name="arrow-back" size={30} color="white" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSoundsVisible(true)}
+                    style={styles.selectedSoundPill}>
+                    <Ionicons name="musical-notes" size={16} color="white" />
+                    <Text style={styles.selectedSoundText} numberOfLines={1}>
+                      {selectedSound ? `${selectedSound.title} - ${selectedSound.artist}` : 'Add sound'}
+                    </Text>
+                  </TouchableOpacity>
+                  <View style={{width: 40}} />
+                </View>
+                <View style={[styles.rightSidebar, {top: insets.top + 80}]}>
+                  <ActionItem icon="format-text" label="Text" iconType="MaterialCommunityIcons" />
+                  <ActionItem icon="emoticon-outline" label="Sticker" iconType="MaterialCommunityIcons" />
+                  <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" onPress={() => setBeautyVisible(true)} />
+                  <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
+                  <ActionItem icon="speedometer-outline" label="Speed" onPress={() => setSpeedVisible(true)} />
+                  <ActionItem icon="closed-caption-outline" label="Subtit..." iconType="MaterialCommunityIcons" />
+                  <ActionItem icon="comment-outline" label="Com..." iconType="MaterialCommunityIcons" />
+                </View>
+                <View style={[styles.bottomEditingRow, {paddingBottom: insets.bottom + 20}]}>
+                  <TouchableOpacity style={styles.draftButton}>
+                    <Text style={styles.draftButtonText}>Draft</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.nextButton}
+                    onPress={() => setAddDetailsVisible(true)}>
+                    <Text style={styles.nextButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.recordingModeOverlay}>
+                <View style={[styles.topControls, {marginTop: insets.top + 10}]}>
+                  <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                    <Ionicons name="close" size={30} color="white" />
+                  </TouchableOpacity>
+                  <View style={styles.topRightRow}>
+                    <TouchableOpacity style={styles.addSoundPill} onPress={() => setSoundsVisible(true)}>
+                      <Ionicons name="musical-notes" size={18} color="white" />
+                      <Text style={styles.addSoundText}>Add Sound</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.liveModePill, isLiveMode && styles.liveModePillActive]}
+                      onPress={() => setIsLiveMode(!isLiveMode)}>
+                      <MaterialCommunityIcons name="broadcast" size={16} color={isLiveMode ? '#fff' : 'rgba(255,255,255,0.9)'} />
+                      <Text style={[styles.liveModeText, isLiveMode && styles.liveModeTextActive]}>Live</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View style={[styles.rightSidebar, {top: insets.top + 80}]}>
+                  <ActionItem icon="camera-reverse-outline" label="Flip" onPress={toggleCameraFlip} />
+                  <ActionItem icon="speedometer-outline" label="Speed" onPress={() => setSpeedVisible(true)} />
+                  <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
+                  <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" onPress={() => setBeautyVisible(true)} />
+                  <ActionItem icon="timer-outline" label="Timer" onPress={() => setTimerVisible(true)} />
+                  <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
+                  <ActionItem icon="flash" label="Flash" />
+                </View>
+                <View style={[styles.bottomControls, {paddingBottom: insets.bottom + 20}]}>
+                  {!isLiveMode && (
+                    <View style={styles.durationSelector}>
+                      {(isLiveMode ? ['10s'] : ['15s', '30s', '60s', '3m']).map(d => (
+                        <TouchableOpacity
+                          key={d}
+                          onPress={() => setActiveDuration(d)}
+                          style={[styles.durationItem, activeDuration === d ? styles.durationItemActive : null]}>
+                          <Text style={styles.durationText}>{d}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <View style={[styles.mainBottomRow, {paddingHorizontal: 20}]}>
+                    {!isLiveMode && (
+                      <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setFilterVisible(true)}>
+                        <View style={styles.effectsIconContainer}>
+                          <MaterialCommunityIcons name="filter-variant" size={30} color="#FF8C00" />
+                        </View>
+                        <Text style={styles.bottomAuxLabel}>Filters</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[
+                        styles.recordButtonOuter,
+                        isLiveMode && styles.liveButtonOuter,
+                        isRecording && styles.recordButtonRecording,
+                      ]}
+                      onPress={handleRecordPress}>
+                      <View style={[styles.recordButtonInner, isLiveMode && styles.liveButtonInner]}>
+                        <MaterialCommunityIcons name={isLiveMode ? 'broadcast' : isRecording ? 'stop' : 'videocam'} size={36} color="white" />
+                      </View>
+                    </TouchableOpacity>
+                    {!isLiveMode && (
+                      <TouchableOpacity style={styles.bottomAuxButton} onPress={pickVideo}>
+                        <View style={styles.uploadIconContainer}>
+                          <Ionicons name="cloud-upload-outline" size={30} color="white" />
+                        </View>
+                        <Text style={styles.bottomAuxLabel}>Upload</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
         </View>
-      </ImageBackground>
-      <EffectsModal 
-        visible={effectsVisible}
-        onClose={() => setEffectsVisible(false)}
-      />
+      )}
       <SoundsModal
         visible={soundsVisible}
         onClose={() => setSoundsVisible(false)}
@@ -170,6 +548,33 @@ const CreateShortsScreen = ({navigation}) => {
       <AddDetailsModal
         visible={addDetailsVisible}
         onClose={() => setAddDetailsVisible(false)}
+        shortsMetadata={shortsMetadata}
+        isLive={isLiveMode}
+      />
+      <FilterModal
+        visible={filterVisible}
+        onClose={() => setFilterVisible(false)}
+        onSelect={setSelectedFilter}
+        onPreviewChange={setSelectedFilter}
+        selectedFilter={selectedFilter}
+      />
+      <TimerModal
+        visible={timerVisible}
+        onClose={() => setTimerVisible(false)}
+        onSelect={setSelectedTimer}
+        selectedTimer={selectedTimer}
+      />
+      <BeautyModal
+        visible={beautyVisible}
+        onClose={() => setBeautyVisible(false)}
+        onApply={setBeautyLevel}
+        initialLevel={beautyLevel}
+      />
+      <SpeedModal
+        visible={speedVisible}
+        onClose={() => setSpeedVisible(false)}
+        onSelect={setSpeedFactor}
+        selectedSpeed={speedFactor}
       />
     </View>
   );
@@ -182,6 +587,10 @@ const styles = StyleSheet.create({
   },
   background: {
     flex: 1,
+  },
+  filterOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   overlay: {
     flex: 1,
@@ -233,6 +642,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  topRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  liveModePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  liveModePillActive: {
+    backgroundColor: '#E53935',
+  },
+  liveModeText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  liveModeTextActive: {
+    color: 'white',
+  },
+  liveButtonOuter: {
+    borderColor: '#E53935',
+  },
+  liveButtonInner: {
+    backgroundColor: '#E53935',
   },
   selectedSoundPill: {
     flexDirection: 'row',
@@ -308,6 +748,21 @@ const styles = StyleSheet.create({
     borderColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  recordButtonRecording: {
+    borderColor: '#FF4444',
+    backgroundColor: 'rgba(255,68,68,0.2)',
+  },
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  countdownText: {
+    fontSize: 120,
+    fontWeight: 'bold',
+    color: 'white',
   },
   recordButtonInner: {
     width: 70,

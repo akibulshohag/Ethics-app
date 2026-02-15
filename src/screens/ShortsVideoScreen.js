@@ -9,20 +9,30 @@ import {
     TouchableOpacity, 
     Image, 
     StatusBar,
-    Platform
+    Platform,
+    ActivityIndicator,
 } from 'react-native';
 import Video from 'react-native-video';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
+import { useSelector } from 'react-redux';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
 import CreateVideoModal from '../components/CreateVideoModal';
+import { shortsService } from '../services/shortsService';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
-// Mock Data
+const formatCount = (n) => {
+  if (!n || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+};
+
+// Fallback mock data when API has no shorts
 const MOCK_VIDEOS = [
     {
         id: '1',
@@ -36,9 +46,13 @@ const MOCK_VIDEOS = [
         description: "Hello everyone, in this video I will See one of my favorite Foods ❤️❤️",
         hashtags: ['#Foods', '#resturent', '#love', '#eat'],
         likes: '27.8K',
+        likesDisplay: '27.8K',
         dislikes: '3.6K',
         comments: '2.4K',
+        commentsDisplay: '2.4K',
         shares: '2.2K',
+        sharesDisplay: '2.2K',
+        isLiked: false,
     },
     {
         id: '2',
@@ -52,9 +66,13 @@ const MOCK_VIDEOS = [
         description: "Best burger in town! You have to try this out. 🍔🍟",
         hashtags: ['#Burger', '#FoodPorn', '#Yummy'],
         likes: '125K',
+        likesDisplay: '125K',
         dislikes: '1.2K',
         comments: '8K',
+        commentsDisplay: '8K',
         shares: '15K',
+        sharesDisplay: '15K',
+        isLiked: false,
     },
     {
         id: '3',
@@ -68,13 +86,17 @@ const MOCK_VIDEOS = [
         description: "The beauty of nature is unmatched. 🌲🍃",
         hashtags: ['#Nature', '#Peace', '#Forest'],
         likes: '50K',
+        likesDisplay: '50K',
         dislikes: '200',
         comments: '500',
+        commentsDisplay: '500',
         shares: '3K',
+        sharesDisplay: '3K',
+        isLiked: false,
     }
 ];
 
-const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings, onOpenCreate, navigation }) => {
+const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpenSettings, onOpenCreate, onLike, navigation }) => {
     const [paused, setPaused] = useState(!isActive);
     const insets = useSafeAreaInsets();
     
@@ -87,8 +109,11 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
         setPaused(prev => !prev);
     };
 
+    const hasValidVideo = item.videoUrl && String(item.videoUrl).trim().length > 0;
+
     return (
         <View style={[styles.videoContainer, { height: screenHeight, width: width }]}>
+            {hasValidVideo ? (
             <Video
                 source={{ uri: item.videoUrl }}
                 style={styles.video}
@@ -99,6 +124,12 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
                 playWhenInactive={false}
                 ignoreSilentSwitch="ignore"
             />
+            ) : (
+            <View style={[styles.video, styles.videoPlaceholder]}>
+                <Ionicons name="videocam-off-outline" size={64} color="rgba(255,255,255,0.5)" />
+                <Text style={styles.videoPlaceholderText}>No video</Text>
+            </View>
+            )}
             
             {/* Transparent Touch Overlay for Play/Pause - ZIndex 1 */}
             <TouchableOpacity 
@@ -136,9 +167,9 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
                     <Ionicons name="flag-outline" size={28} color="white" style={styles.shadow} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionItem}>
-                    <Ionicons name="thumbs-up" size={30} color="white" style={styles.shadow} />
-                    <Text style={styles.actionText}>{item.likes}</Text>
+                <TouchableOpacity style={styles.actionItem} onPress={() => onLike?.(item)}>
+                    <Ionicons name={item.isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={30} color="white" style={styles.shadow} />
+                    <Text style={styles.actionText}>{item.likesDisplay}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.actionItem}>
@@ -148,12 +179,12 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
 
                 <TouchableOpacity style={styles.actionItem} onPress={onOpenComments}>
                     <Ionicons name="chatbubble-ellipses-outline" size={28} color="white" style={styles.shadow} />
-                    <Text style={styles.actionText}>{item.comments}</Text>
+                    <Text style={styles.actionText}>{item.commentsDisplay}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.actionItem}>
                     <FontAwesome name="share" size={28} color="white" style={styles.shadow} />
-                    <Text style={styles.actionText}>{item.shares}</Text>
+                    <Text style={styles.actionText}>{item.sharesDisplay}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.actionItem} onPress={onOpenSettings}>
@@ -169,7 +200,7 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
                         {item.description}
                     </Text>
                     <Text style={styles.hashtagsText}>
-                        {item.hashtags.map((tag, idx) => (
+                        {(item.hashtags || []).map((tag, idx) => (
                              <Text key={idx} style={styles.hashtag}>{tag} </Text>
                         ))}
                     </Text>
@@ -192,34 +223,104 @@ const VideoItem = ({ item, isActive, index, screenHeight, onOpenComments, onOpen
     );
 };
 
+const mapShortToItem = (s) => {
+    const likesCount = s._count?.likes ?? s.likeCount ?? 0;
+    const commentsCount = s._count?.comments ?? s.commentCount ?? 0;
+    const sharesCount = s.shareCount ?? 0;
+    const user = s.user || {};
+    const avatar = user.avatar || (Array.isArray(user.photos) && user.photos[0]) || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || user.nickname || 'User')}&background=FF8C00&color=fff`;
+    return {
+        id: s.id,
+        videoUrl: s.videoUrl,
+        user: {
+            id: user.id,
+            username: user.nickname || user.name || 'Unknown',
+            avatar,
+            isSubscribed: false,
+        },
+        description: s.description || s.title || '',
+        hashtags: Array.isArray(s.tags) ? s.tags.map(t => (String(t).startsWith('#') ? t : `#${t}`)) : [],
+        likesDisplay: formatCount(likesCount),
+        _likeCount: likesCount,
+        commentsDisplay: formatCount(commentsCount),
+        sharesDisplay: formatCount(sharesCount),
+        isLiked: s.isLiked ?? false,
+    };
+};
+
 const ShortsVideoScreen = ({ navigation }) => {
+    const user = useSelector(state => state?.app?.user);
+    const [videos, setVideos] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [activeVideoIndex, setActiveVideoIndex] = useState(0);
     const [commentsVisible, setCommentsVisible] = useState(false);
     const [settingsVisible, setSettingsVisible] = useState(false);
     const [createVisible, setCreateVisible] = useState(false);
     
-    // Standard Tab Bar Height calculation
     const tabHeight = Platform.OS === 'ios' ? 82 : 68;
-
-    // Calculate actual video height: Window Height - Tab Bar Height
-    // This allows the video to fill the space ABOVE the tab bar.
     const screenHeight = windowHeight - tabHeight;
+
+    useEffect(() => {
+        loadShorts();
+    }, []);
+
+    const loadShorts = async () => {
+        try {
+            setLoading(true);
+            const res = await shortsService.getShorts({ page: 1, limit: 50 });
+            if (res?.shorts?.length > 0) {
+                const filtered = res.shorts.filter(s => s.videoUrl && String(s.videoUrl).trim());
+                setVideos(filtered.map(mapShortToItem));
+            } else {
+                setVideos(MOCK_VIDEOS);
+            }
+        } catch (e) {
+            setVideos(MOCK_VIDEOS);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLike = async (item) => {
+        if (!user?.id) return;
+        try {
+            await shortsService.toggleLike(item.id, user.id);
+            setVideos(prev => prev.map(v => {
+                if (v.id !== item.id) return v;
+                const newLiked = !v.isLiked;
+                const delta = newLiked ? 1 : -1;
+                const newCount = Math.max(0, (v._likeCount ?? 0) + delta);
+                return { ...v, isLiked: newLiked, _likeCount: newCount, likesDisplay: formatCount(newCount) };
+            }));
+        } catch (e) {}
+    };
 
     const onViewableItemsChanged = useRef(({ viewableItems }) => {
         if (viewableItems && viewableItems.length > 0) {
-            setActiveVideoIndex(viewableItems[0].index);
+            const { index, item } = viewableItems[0];
+            setActiveVideoIndex(index);
+            if (item?.id) {
+                shortsService.recordView(item.id, user?.id || null).catch(() => {});
+            }
         }
     }).current;
 
     const viewabilityConfig = useRef({
-        itemVisiblePercentThreshold: 80 // Increased to ensure clear winner
+        itemVisiblePercentThreshold: 80
     }).current;
+
+    const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
 
     return (
         <View style={[styles.container, { height: screenHeight }]}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            {loading ? (
+                <View style={[styles.centerContent, { height: screenHeight }]}>
+                    <ActivityIndicator size="large" color="#FF8C00" />
+                </View>
+            ) : (
             <FlatList
-                data={MOCK_VIDEOS}
+                data={displayVideos}
                 renderItem={({ item, index }) => (
                     <VideoItem 
                         item={item} 
@@ -229,6 +330,7 @@ const ShortsVideoScreen = ({ navigation }) => {
                         onOpenComments={() => setCommentsVisible(true)}
                         onOpenSettings={() => setSettingsVisible(true)}
                         onOpenCreate={() => setCreateVisible(true)}
+                        onLike={handleLike}
                         navigation={navigation}
                     />
                 )}
@@ -250,6 +352,7 @@ const ShortsVideoScreen = ({ navigation }) => {
                     {length: screenHeight, offset: screenHeight * index, index}
                 )}
             />
+            )}
             <CommentsModal 
                 visible={commentsVisible}
                 onClose={() => setCommentsVisible(false)}
@@ -269,6 +372,10 @@ const ShortsVideoScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         backgroundColor: 'black',
+    },
+    centerContent: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     videoContainer: {
         position: 'relative',
@@ -295,6 +402,16 @@ const styles = StyleSheet.create({
         height: '100%',
         position: 'absolute',
         zIndex: 0,
+    },
+    videoPlaceholder: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#1a1a1a',
+    },
+    videoPlaceholderText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 14,
+        marginTop: 8,
     },
     gradient: {
         position: 'absolute',

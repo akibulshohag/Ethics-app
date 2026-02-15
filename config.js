@@ -1,12 +1,17 @@
+import { Platform } from 'react-native';
+
 export const APP_NAME = 'Ethics';
 export const TEL_NUMBER = '018********';
+
+// Override for physical device: use your computer's LAN IP (e.g. 192.168.1.x:3000)
+const LOCAL_OVERRIDE = null; // e.g. 'http://192.168.1.100:3000/v1'
 
 const checkConfig = server => {
   let config = {};
   switch (server) {
     case 'production':
       config = {
-        apiBaseUrl: 'https://api.example.com',
+        apiBaseUrl: 'https://eatixapi.pino7.com/v1',
       };
       break;
     case 'staging':
@@ -15,11 +20,16 @@ const checkConfig = server => {
       };
       break;
     case 'local':
-      config = {
-        // When running on Android emulator, the host machine is accessible as 10.0.2.2
-        // Backend (Nest) runs on port 3000 and uses a global "v1" prefix
-        apiBaseUrl: 'http://10.0.2.2:3000/v1',
-      };
+      if (LOCAL_OVERRIDE) {
+        config = { apiBaseUrl: LOCAL_OVERRIDE };
+      } else {
+        // Android emulator: 10.0.2.2 = host machine
+        // iOS simulator: localhost works
+        const host = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+        config = {
+          apiBaseUrl: `http://${host}:3000/v1`,
+        };
+      }
       break;
     default:
       break;
