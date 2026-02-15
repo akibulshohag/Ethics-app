@@ -10,7 +10,11 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
+
+const { width } = Dimensions.get('window');
+const SHORTS_CARD_WIDTH = (width - 48) / 2;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -207,7 +211,8 @@ const ChannelDetailsScreen = () => {
             <Text style={styles.subscribeText}>Subscribe</Text>
           </TouchableOpacity>
           <Text style={styles.statsText}>
-            {formatCount(profile.videoCount + profile.shortCount)} videos  •  {formatCount(profile.totalViews)} views
+            {profile.videoCount} {profile.videoCount === 1 ? 'video' : 'videos'} & {profile.shortCount} {profile.shortCount === 1 ? 'short' : 'shorts'}
+            {profile.totalViews > 0 ? `  •  ${formatCount(profile.totalViews)} views` : ''}
           </Text>
           <TouchableOpacity style={styles.moreInfoContainer} onPress={goToAbout}>
             <Text style={styles.moreInfoText}>More about this channel</Text>
@@ -237,6 +242,20 @@ const ChannelDetailsScreen = () => {
   );
 
   const renderItem = ({ item }) => {
+    if (item._type === 'section') {
+      return <Text style={styles.sectionTitle}>{item.title}</Text>;
+    }
+    if (item._type === 'shorts-grid') {
+      return (
+        <View style={styles.shortsGrid}>
+          {item.items.map(s => (
+            <View key={s.id} style={styles.shortsGridItem}>
+              <ShortsVideoCard video={s} onPress={() => handleShortPress(s)} />
+            </View>
+          ))}
+        </View>
+      );
+    }
     if (activeTab === 'Videos') {
       if (activeFilter === 'Shorts') {
         return <ShortsVideoCard video={item} onPress={() => handleShortPress(item)} />;
@@ -255,7 +274,10 @@ const ChannelDetailsScreen = () => {
         />
       );
     }
-    return <VideoCard video={item} onPress={() => handleVideoPress(item)} />;
+    if (item._type === 'video') {
+      return <VideoCard video={item} onPress={() => handleVideoPress(item)} />;
+    }
+    return null;
   };
 
   const getData = () => {
@@ -264,12 +286,22 @@ const ChannelDetailsScreen = () => {
       return videos;
     }
     if (activeTab === 'About') return [{ id: 'about' }];
-    return videos;
+    // Home tab: show both videos and shorts with section headers
+    const items = [];
+    items.push({ id: 'section-videos', _type: 'section', title: 'Videos' });
+    videos.forEach(v => items.push({ ...v, _type: 'video' }));
+    items.push({ id: 'section-shorts', _type: 'section', title: 'Shorts' });
+    items.push({ id: 'shorts-grid', _type: 'shorts-grid', items: shorts });
+    return items;
   };
 
-  const getNumColumns = () => (activeTab === 'Videos' && activeFilter === 'Shorts' ? 2 : 1);
+  const getNumColumns = () => {
+    if (activeTab === 'Home') return 1;
+    return activeTab === 'Videos' && activeFilter === 'Shorts' ? 2 : 1;
+  };
 
   const isLoadingData =
+    (activeTab === 'Home' && (videosLoading || shortsLoading)) ||
     (activeTab === 'Videos' && activeFilter === 'Videos' && videosLoading) ||
     (activeTab === 'Videos' && activeFilter === 'Shorts' && shortsLoading);
 
@@ -315,7 +347,7 @@ const ChannelDetailsScreen = () => {
               <Text style={styles.emptyText}>
                 {activeTab === 'Videos' && activeFilter === 'Videos' && 'No videos yet'}
                 {activeTab === 'Videos' && activeFilter === 'Shorts' && 'No shorts yet'}
-                {activeTab === 'Home' && 'No videos yet'}
+                {activeTab === 'Home' && 'No videos or shorts yet'}
               </Text>
             </View>
           )
@@ -390,6 +422,25 @@ const styles = StyleSheet.create({
   filterChipText: { color: '#F97507', fontWeight: '500', fontSize: 14 },
   activeFilterChipText: { color: '#fff' },
   columnWrapper: { justifyContent: 'space-between', paddingHorizontal: 16 },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#212121',
+    marginTop: 20,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  shortsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  shortsGridItem: {
+    width: SHORTS_CARD_WIDTH,
+    paddingRight: 16,
+    marginBottom: 16,
+  },
   emptyState: { padding: 32, alignItems: 'center' },
   emptyText: { fontSize: 16, color: '#616161' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
