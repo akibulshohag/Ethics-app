@@ -21,6 +21,7 @@ import {
   toggleCommentDislike,
   deleteComment,
 } from '../services/videoService';
+import { shortsService } from '../services/shortsService';
 
 const { height } = Dimensions.get('window');
 
@@ -96,6 +97,8 @@ const ReplyItem = ({
   onDislike,
   onDelete,
   isOwnComment,
+  canInteract = true,
+  canDelete = true,
 }) => (
   <View style={styles.replyItem}>
     <Image source={{ uri: item.user.avatar }} style={styles.replyAvatar} />
@@ -105,7 +108,7 @@ const ReplyItem = ({
           {item.user.name}{' '}
           <Text style={styles.commentTime}>• {item.time}</Text>
         </Text>
-        {isOwnComment ? (
+        {isOwnComment && canDelete ? (
           <TouchableOpacity
             onPress={() => onDelete?.(item)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -160,6 +163,7 @@ const CommentItem = ({
   onDelete,
   canReply,
   canInteract,
+  canDelete = true,
   isOwnComment,
   currentUserId,
 }) => {
@@ -192,7 +196,7 @@ const CommentItem = ({
             {item.user.name}{' '}
             <Text style={styles.commentTime}>• {item.time}</Text>
           </Text>
-          {isOwnComment ? (
+          {isOwnComment && canDelete ? (
             <TouchableOpacity
               onPress={() => onDelete?.(item)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -335,6 +339,8 @@ const CommentItem = ({
                 onDislike={onDislike}
                 onDelete={onDelete}
                 isOwnComment={currentUserId ? String(reply.userId) === String(currentUserId) : false}
+                canInteract={canInteract}
+                canDelete={canDelete}
               />
             ))}
       </View>
@@ -350,7 +356,12 @@ const CommentsModal = ({
   user,
   onCommentAdded,
   onCommentDeleted,
+  contentType = 'video',
+  contentId,
 }) => {
+  const isShort = contentType === 'short';
+  const contentIdResolved = isShort ? contentId : videoId;
+  const supportsCommentLikeDislike = true;
   const [activeFilter, setActiveFilter] = useState('Top');
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -368,11 +379,13 @@ const CommentsModal = ({
 
   const loadComments = useCallback(
     async (reset = false) => {
-      if (!videoId) return;
+      if (!contentIdResolved) return;
       const p = reset ? 1 : page;
       if (p === 1) setLoading(true);
       try {
-        const res = await getComments(videoId, p, 20, user?.id);
+        const res = isShort
+          ? await shortsService.getComments(contentIdResolved, p, 20, user?.id)
+          : await getComments(contentIdResolved, p, 20, user?.id);
         const list = (res?.comments || []).map(c => mapApiCommentToDisplay(c, user));
         setComments(prev => (reset ? list : [...prev, ...list]));
         setHasMore(
@@ -386,20 +399,24 @@ const CommentsModal = ({
         setLoading(false);
       }
     },
-    [videoId, page, user?.id],
+    [contentIdResolved, isShort, page, user?.id],
   );
 
   useEffect(() => {
-    if (visible && videoId) {
+    if (visible && contentIdResolved) {
       loadComments(true);
     }
-  }, [visible, videoId]);
+  }, [visible, contentIdResolved]);
 
   const handleAddComment = async () => {
-    if (!commentText.trim() || !user?.id || !videoId) return;
+    if (!commentText.trim() || !user?.id || !contentIdResolved) return;
     setSubmitting(true);
     try {
-      await addComment(videoId, user.id, commentText.trim());
+      if (isShort) {
+        await shortsService.addComment(contentIdResolved, user.id, commentText.trim());
+      } else {
+        await addComment(contentIdResolved, user.id, commentText.trim());
+      }
       setCommentText('');
       onCommentAdded?.(false);
       loadComments(true);
@@ -410,12 +427,16 @@ const CommentsModal = ({
 
   const handleSubmitReply = useCallback(
     async (parentId, content) => {
-      if (!user?.id || !videoId) return;
-      await addComment(videoId, user.id, content, parentId);
+      if (!user?.id || !contentIdResolved) return;
+      if (isShort) {
+        await shortsService.addComment(contentIdResolved, user.id, content, parentId);
+      } else {
+        await addComment(contentIdResolved, user.id, content, parentId);
+      }
       onCommentAdded?.(true);
       loadComments(true);
     },
-    [videoId, user?.id, onCommentAdded],
+    [contentIdResolved, isShort, user?.id, onCommentAdded],
   );
 
   const updateCommentInList = useCallback((commentId, updater) => {
@@ -434,7 +455,7 @@ const CommentsModal = ({
 
   const handleCommentLike = useCallback(
     async comment => {
-      if (!user?.id) return;
+      if (!user?.id || !supportsCommentLikeDislike) return;
       const wasLiked = comment.isLiked;
       const wasDisliked = comment.isDisliked;
       updateCommentInList(comment.id, c => ({
@@ -451,7 +472,11 @@ const CommentsModal = ({
         ),
       }));
       try {
-        await toggleCommentLike(comment.id, user.id);
+        if (isShort) {
+          await shortsService.toggleCommentLike(comment.id, user.id);
+        } else {
+          await toggleCommentLike(comment.id, user.id);
+        }
       } catch {
         updateCommentInList(comment.id, c => ({
           ...c,
@@ -464,12 +489,12 @@ const CommentsModal = ({
         }));
       }
     },
-    [user?.id, updateCommentInList],
+    [user?.id, supportsCommentLikeDislike, isShort, updateCommentInList],
   );
 
   const handleCommentDislike = useCallback(
     async comment => {
-      if (!user?.id) return;
+      if (!user?.id || !supportsCommentLikeDislike) return;
       const wasDisliked = comment.isDisliked;
       const wasLiked = comment.isLiked;
       updateCommentInList(comment.id, c => ({
@@ -486,7 +511,11 @@ const CommentsModal = ({
         ),
       }));
       try {
-        await toggleCommentDislike(comment.id, user.id);
+        if (isShort) {
+          await shortsService.toggleCommentDislike(comment.id, user.id);
+        } else {
+          await toggleCommentDislike(comment.id, user.id);
+        }
       } catch {
         updateCommentInList(comment.id, c => ({
           ...c,
@@ -499,12 +528,12 @@ const CommentsModal = ({
         }));
       }
     },
-    [user?.id, updateCommentInList],
+    [user?.id, supportsCommentLikeDislike, isShort, updateCommentInList],
   );
 
   const handleDeleteComment = useCallback(
     comment => {
-      if (!user?.id) return;
+      if (!user?.id || isShort) return;
       Alert.alert(
         'Delete comment',
         'Are you sure you want to delete this comment?',
@@ -632,7 +661,8 @@ const CommentsModal = ({
                       onDislike={handleCommentDislike}
                       onDelete={handleDeleteComment}
                       canReply={!!user?.id}
-                      canInteract={!!user?.id}
+                      canInteract={!!user?.id && supportsCommentLikeDislike}
+                      canDelete={!isShort}
                       isOwnComment={user?.id ? String(item.userId) === String(user.id) : false}
                       currentUserId={user?.id}
                     />

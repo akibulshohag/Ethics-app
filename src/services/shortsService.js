@@ -112,6 +112,19 @@ export const shortsService = {
   },
 
   /**
+   * Dislike/Undislike short
+   */
+  async toggleDislike(shortId, userId) {
+    const response = await axios.post(`${API_URL}/dislike`, {
+      shortId,
+      userId,
+    }, {
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  },
+
+  /**
    * Add comment
    */
   async addComment(shortId, userId, content, parentId = null) {
@@ -129,9 +142,37 @@ export const shortsService = {
   /**
    * Get comments for short
    */
-  async getComments(shortId, page = 1, limit = 20) {
+  async getComments(shortId, page = 1, limit = 20, userId) {
+    const params = { page, limit };
+    if (userId) params.userId = userId;
     const response = await axios.get(`${API_URL}/${shortId}/comments`, {
-      params: {page, limit},
+      params,
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  },
+
+  /**
+   * Toggle comment like
+   */
+  async toggleCommentLike(commentId, userId) {
+    const response = await axios.post(`${API_URL}/comment/like`, {
+      commentId,
+      userId,
+    }, {
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  },
+
+  /**
+   * Toggle comment dislike
+   */
+  async toggleCommentDislike(commentId, userId) {
+    const response = await axios.post(`${API_URL}/comment/dislike`, {
+      commentId,
+      userId,
+    }, {
       headers: getAuthHeaders(),
     });
     return response.data;
