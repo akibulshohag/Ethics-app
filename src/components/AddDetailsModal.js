@@ -141,7 +141,7 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
       if (isLive) {
         formData.append('isLive', 'true');
       }
-      await shortsService.uploadShort(formData);
+      await shortsService.uploadShort(formData, shortsMetadata.userId);
       Alert.alert('Success', 'Short uploaded successfully', [{ text: 'OK', onPress: onClose }]);
     } catch (e) {
       const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Failed to upload short';

@@ -20,6 +20,7 @@ import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import VideoUploadSettings from '../components/VideoUploadSettings';
 import { getUserVideos } from '../services/videoService';
+import { getUserSubscription } from '../services/subscriptionService';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - SPACING.lg * 3) / 2;
@@ -81,24 +82,29 @@ const UploadVideoScreen = () => {
   };
 
   // Pick video from device
-  const pickVideoFromDevice = () => {
-    // Check if user is logged in before allowing upload
+  const pickVideoFromDevice = async () => {
     if (!user || !user.id) {
       Alert.alert('Authentication Required', 'Please login to upload videos', [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Login',
-          onPress: () => {
-            // Navigate to login screen or handle login
-            // You may need to adjust this based on your navigation structure
-            navigation.navigate('Login');
-          },
-        },
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Login', onPress: () => navigation.navigate('Login') },
       ]);
       return;
+    }
+    try {
+      const sub = await getUserSubscription(user.id);
+      if (!sub.canUploadVideo) {
+        Alert.alert(
+          'Upload Limit Reached',
+          sub.message || 'You have reached your video upload limit. Upgrade your plan to upload more.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionScreen') },
+          ],
+        );
+        return;
+      }
+    } catch (e) {
+      console.error('Subscription check error:', e);
     }
 
     const options = {

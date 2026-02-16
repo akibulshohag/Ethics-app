@@ -7,6 +7,9 @@ const API_URL = `${config.apiBaseUrl}/videos`;
  * Upload video with thumbnail
  */
 export const uploadVideo = async videoData => {
+  if (!videoData?.userId) {
+    throw new Error('User ID is required. Please log in to upload videos.');
+  }
   try {
     const formData = new FormData();
 

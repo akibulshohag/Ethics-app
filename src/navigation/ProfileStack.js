@@ -2,6 +2,7 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import ProfileScreen from '../screens/ProfileScreen';
 import AccountScreen from '../screens/AccountScreen';
+import SubscriptionScreen from '../screens/SubscriptionScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
 import ShortsVideoScreen from '../screens/ShortsVideoScreen';
@@ -19,6 +20,10 @@ const ProfileNavigation = () => {
     >
       <ProfileStack.Screen name="ProfileScreen" component={ProfileScreen} />
       <ProfileStack.Screen name="AccountScreen" component={AccountScreen} />
+      <ProfileStack.Screen
+        name="SubscriptionScreen"
+        component={SubscriptionScreen}
+      />
       <ProfileStack.Screen
         name="VideoDetailsScreen"
         component={VideoDetailsScreen}

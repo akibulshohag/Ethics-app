@@ -121,14 +121,16 @@ const ProfileScreen = () => {
         </View>
 
         {/* Premium Banner */}
-        <TouchableOpacity style={styles.premiumBanner}>
+        <TouchableOpacity
+          style={styles.premiumBanner}
+          onPress={() => navigation.navigate('SubscriptionScreen')}
+        >
           <View style={styles.premiumLeft}>
             <Icon name="crown-outline" size={40} color={COLORS.white} />
             <View style={styles.premiumTextContainer}>
               <Text style={styles.premiumTitle}>Join Premium!</Text>
               <Text style={styles.premiumSubtitle}>
-                Enjoy watching Full-HD videos, without restrictions and without
-                ads
+                Manage your subscription and upload limits
               </Text>
             </View>
           </View>
@@ -137,6 +139,11 @@ const ProfileScreen = () => {
 
         {/* Menu List */}
         <View style={styles.menuList}>
+          <MenuItem
+            iconName="package-variant"
+            title="Subscription & Plans"
+            onPress={() => navigation.navigate('SubscriptionScreen')}
+          />
           <MenuItem iconName="play-circle-outline" title="Your Channel" />
           <MenuItem iconName="shield-check-outline" title="Turn on Incognito" />
           <MenuItem

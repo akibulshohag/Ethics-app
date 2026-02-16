@@ -16,6 +16,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useSelector} from 'react-redux';
+import {getUserSubscription} from '../services/subscriptionService';
 import SoundsModal from '../components/SoundsModal';
 import AddDetailsModal from '../components/AddDetailsModal';
 import FilterModal from '../components/FilterModal';
@@ -98,12 +99,30 @@ const CreateShortsScreen = ({navigation, route}) => {
     }
   };
 
-  const handleRecordPress = () => {
+  const handleRecordPress = async () => {
     if (isRecording) {
       stopRecording();
       return;
     }
     if (showCamera && !cameraRef.current?.startRecording) return;
+    if (user?.id) {
+      try {
+        const sub = await getUserSubscription(user.id);
+        if (!sub.canUploadShort) {
+          Alert.alert(
+            'Upload Limit Reached',
+            sub.message || 'You have reached your shorts limit. Upgrade your plan to upload more.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionScreen') },
+            ],
+          );
+          return;
+        }
+      } catch (e) {
+        console.error('Subscription check error:', e);
+      }
+    }
     const start = () => {
       if (!cameraRef.current?.startRecording) return;
       isRecordingRef.current = true;
@@ -136,7 +155,27 @@ const CreateShortsScreen = ({navigation, route}) => {
     }
   };
 
-  const pickVideo = () => {
+  const pickVideo = async () => {
+    if (!user?.id) {
+      Alert.alert('Authentication Required', 'Please login to upload shorts');
+      return;
+    }
+    try {
+      const sub = await getUserSubscription(user.id);
+      if (!sub.canUploadShort) {
+        Alert.alert(
+          'Upload Limit Reached',
+          sub.message || 'You have reached your shorts limit. Upgrade your plan to upload more.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionScreen') },
+          ],
+        );
+        return;
+      }
+    } catch (e) {
+      console.error('Subscription check error:', e);
+    }
     launchImageLibrary(
       {
         mediaType: 'video',

@@ -17,9 +17,13 @@ const getAuthHeaders = () => {
 
 export const shortsService = {
   /**
-   * Upload short video with thumbnail and metadata
+   * Upload short video with thumbnail and metadata.
+   * formData must include userId (logged-in user ID).
    */
-  async uploadShort(formData) {
+  async uploadShort(formData, userId) {
+    if (!userId) {
+      throw new Error('User ID is required. Please log in to upload shorts.');
+    }
     const response = await axios.post(`${API_URL}/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
