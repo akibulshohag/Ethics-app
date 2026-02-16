@@ -137,7 +137,6 @@ const ProfileScreen = () => {
           <Icon name="chevron-right" size={24} color={COLORS.white} />
         </TouchableOpacity>
 
-        {/* Menu List */}
         <View style={styles.menuList}>
           <MenuItem
             iconName="package-variant"
