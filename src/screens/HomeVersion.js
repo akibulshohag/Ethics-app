@@ -19,7 +19,6 @@ import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
-import SearchScreen from './SearchScreen';
 import { shortsService } from '../services/shortsService';
 import { getVideos, getVideoWatchHistory } from '../services/videoService';
 import { getChannelsList } from '../services/channelService';
@@ -110,7 +109,6 @@ const HomeVersion = () => {
   const { user: currentUser } = useSelector((state) => state.app) || {};
   const [activeTab, setActiveTab] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
@@ -434,10 +432,6 @@ const HomeVersion = () => {
     return null;
   };
 
-  if (showSearch) {
-    return <SearchScreen onBack={() => setShowSearch(false)} />;
-  }
-
   useEffect(() => {
     if (activeTab === 'Trending') {
       navigation.navigate('TrendingScreen');
@@ -473,7 +467,7 @@ const HomeVersion = () => {
             eat<Text style={{ color: COLORS.primaryOrange }}>ix</Text>
           </Text>
           <View style={styles.navIcons}>
-            <TouchableOpacity onPress={() => setShowSearch(true)}>
+            <TouchableOpacity onPress={() => navigation.navigate('SearchScreen')}>
               <Icon
                 name="magnify"
                 size={26}

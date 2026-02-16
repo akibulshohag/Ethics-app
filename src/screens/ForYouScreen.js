@@ -213,7 +213,7 @@ const ForYouScreen = () => {
         </TouchableOpacity>
         <Text style={styles.title}>For You</Text>
         <View style={styles.rightIcons}>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('SearchScreen')}>
             <Icon name="magnify" size={26} color="#000" style={{ marginRight: 15 }} />
           </TouchableOpacity>
           <TouchableOpacity>

@@ -100,7 +100,7 @@ const LiveShortsScreen = () => {
         </TouchableOpacity>
         <Text style={styles.title}>Live Shorts</Text>
         <View style={styles.rightIcons}>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('SearchScreen')}>
             <Icon name="magnify" size={26} color="#000" style={{ marginRight: 15 }} />
           </TouchableOpacity>
           <TouchableOpacity>

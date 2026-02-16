@@ -7,8 +7,13 @@ import ShortsVideoScreen from '../screens/ShortsVideoScreen';
 import TrendingScreen from '../screens/TrendingScreen';
 import ForYouScreen from '../screens/ForYouScreen';
 import LiveShortsScreen from '../screens/LiveShortsScreen';
+import SearchScreen from '../screens/SearchScreen';
 
 const HomeStack = createStackNavigator();
+
+const SearchScreenWithNav = ({ navigation }) => (
+  <SearchScreen onBack={() => navigation.goBack()} />
+);
 
 const HomeNavigation = () => {
   return (
@@ -17,6 +22,7 @@ const HomeNavigation = () => {
       initialRouteName="HomeScreen"
     >
       <HomeStack.Screen name="HomeScreen" component={HomeVersion} />
+      <HomeStack.Screen name="SearchScreen" component={SearchScreenWithNav} />
       <HomeStack.Screen name="VideoDetailsScreen" component={VideoDetailsScreen} />
       <HomeStack.Screen
         name="ChannelDetailsScreen"
