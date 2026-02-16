@@ -315,6 +315,21 @@ export const getUserVideos = async (userId, page = 1, limit = 20) => {
 };
 
 /**
+ * Get user's video watch history
+ */
+export const getVideoWatchHistory = async (userId, page = 1, limit = 50) => {
+  try {
+    const response = await axios.get(`${API_URL}/history`, {
+      params: { userId, page, limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching video watch history:', error);
+    throw error;
+  }
+};
+
+/**
  * Get all videos (public videos, no userId filter)
  */
 export const getAllVideos = async (params = {}) => {

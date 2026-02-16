@@ -153,6 +153,17 @@ export const shortsService = {
   },
 
   /**
+   * Get user shorts watch history
+   */
+  async getWatchHistory(userId, page = 1, limit = 50) {
+    const response = await axios.get(`${API_URL}/history`, {
+      params: { userId, page, limit },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  },
+
+  /**
    * Get user shorts
    */
   async getUserShorts(userId, page = 1, limit = 20) {

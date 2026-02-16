@@ -9,7 +9,7 @@ import {
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
-import ProfileNavigation from './ProfileStack';
+import LibraryNavigation from './LibraryStack';
 import ShortsNavigation from './ShortsStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
@@ -120,7 +120,7 @@ const BottomNaivgation = () => {
 
           <Tab.Screen
             name="Library"
-            component={ProfileNavigation}
+            component={LibraryNavigation}
             options={({ route }) => ({
               tabBarStyle: {
                 backgroundColor: COLORS.white,

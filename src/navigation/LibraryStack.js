@@ -11,47 +11,47 @@ import ChannelProfileScreen from '../screens/ChannelProfileScreen';
 import CreateShortsScreen from '../screens/CreateShortsScreen';
 import UploadVideoScreen from '../screens/UploadVideoScreen';
 
-const ProfileStack = createStackNavigator();
+const LibraryStack = createStackNavigator();
 
-const ProfileNavigation = () => {
+const LibraryNavigation = () => {
   return (
-    <ProfileStack.Navigator
+    <LibraryStack.Navigator
       screenOptions={{ headerShown: false }}
       initialRouteName="LibraryScreen"
     >
-      <ProfileStack.Screen name="LibraryScreen" component={LibraryScreen} />
-      <ProfileStack.Screen name="ProfileScreen" component={ProfileScreen} />
-      <ProfileStack.Screen name="AccountScreen" component={AccountScreen} />
-      <ProfileStack.Screen
+      <LibraryStack.Screen name="LibraryScreen" component={LibraryScreen} />
+      <LibraryStack.Screen name="ProfileScreen" component={ProfileScreen} />
+      <LibraryStack.Screen name="AccountScreen" component={AccountScreen} />
+      <LibraryStack.Screen
         name="SubscriptionScreen"
         component={SubscriptionScreen}
       />
-      <ProfileStack.Screen
+      <LibraryStack.Screen
         name="VideoDetailsScreen"
         component={VideoDetailsScreen}
       />
-      <ProfileStack.Screen
+      <LibraryStack.Screen
         name="ChannelDetailsScreen"
         component={ChannelDetailsScreen}
       />
-      <ProfileStack.Screen
+      <LibraryStack.Screen
         name="ShortsVideoScreen"
         component={ShortsVideoScreen}
       />
-      <ProfileStack.Screen
+      <LibraryStack.Screen
         name="ChannelProfileScreen"
         component={ChannelProfileScreen}
       />
-      <ProfileStack.Screen
+      <LibraryStack.Screen
         name="CreateShortsScreen"
         component={CreateShortsScreen}
       />
-      <ProfileStack.Screen
+      <LibraryStack.Screen
         name="UploadVideoScreen"
         component={UploadVideoScreen}
       />
-    </ProfileStack.Navigator>
+    </LibraryStack.Navigator>
   );
 };
 
-export default ProfileNavigation;
+export default LibraryNavigation;
