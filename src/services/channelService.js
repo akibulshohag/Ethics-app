@@ -68,6 +68,38 @@ export const unsubscribeFromChannel = async (subscriberId, channelUserId) => {
 };
 
 /**
+ * List channels (users with videos or shorts) - for Stories
+ */
+export const getChannelsList = async (limit = 20) => {
+  try {
+    const response = await axios.get(`${API_URL}/channels/list`, {
+      params: { limit },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching channels list:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get feed from subscribed channels (For You tab)
+ */
+export const getSubscribedFeed = async (userId, page = 1, limit = 30) => {
+  try {
+    const response = await axios.get(`${API_URL}/subscribed-feed`, {
+      params: { userId, page, limit },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching subscribed feed:', error);
+    throw error;
+  }
+};
+
+/**
  * Update channel profile (nickname, channelAbout) - only for own channel
  */
 export const updateChannelProfile = async (userId, data) => {

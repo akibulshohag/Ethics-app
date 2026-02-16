@@ -16,12 +16,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
-import TrendingView from './TrendingView';
 import NotificationScreen from './NotificationScreen';
 import SearchScreen from './SearchScreen';
 import { shortsService } from '../services/shortsService';
-import { getVideos } from '../services/videoService';
+import { getVideos, getVideoWatchHistory } from '../services/videoService';
+import { getChannelsList } from '../services/channelService';
 
 const { width } = Dimensions.get('window');
 
@@ -53,9 +54,8 @@ const formatTimeAgo = (dateStr) => {
   return 'Recently';
 };
 
-// --- Static Data ---
-const CATEGORIES = ['Trending', 'All', 'For You', 'Live'];
-const STORIES = ['Tomato Guy', 'Fire Baking', 'Tomato Girl'];
+// --- Categories: Live=shorts, Trending=most views, All=random, For You=subscribed ---
+const CATEGORIES = ['All', 'Trending', 'Live', 'For You'];
 
 const REPORT_REASONS = [
   'Sexual Content',
@@ -72,9 +72,11 @@ const mapShortToCard = (s) => {
   const title = raw.length > 50 ? raw.substring(0, 47) + '...' : raw;
   return {
     id: s.id,
+    type: 'short',
     title,
     views: `${formatCount(s.viewCount ?? s._count?.views ?? 0)} views`,
     image: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+    thumbnail: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
   };
 };
 
@@ -84,6 +86,7 @@ const mapVideoToCard = (v) => {
   const pubAt = v.publishedAt || v.createdAt;
   return {
     id: v.id,
+    type: 'video',
     title: v.title || 'Untitled',
     author: user.nickname || user.name || 'Unknown',
     views: `${formatCount(viewCount)} views`,
@@ -93,8 +96,18 @@ const mapVideoToCard = (v) => {
   };
 };
 
+const shuffle = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
 const HomeVersion = () => {
   const navigation = useNavigation();
+  const { user: currentUser } = useSelector((state) => state.app) || {};
   const [activeTab, setActiveTab] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -103,20 +116,65 @@ const HomeVersion = () => {
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
   const [shortsData, setShortsData] = useState([]);
   const [videosData, setVideosData] = useState([]);
+  const [continueData, setContinueData] = useState([]);
+  const [channelsData, setChannelsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const loadChannels = useCallback(async () => {
+    try {
+      const res = await getChannelsList(20);
+      setChannelsData(res?.channels || []);
+    } catch (e) {
+      setChannelsData([]);
+    }
+  }, []);
+
+  const loadContinueWatching = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const [vRes, sRes] = await Promise.all([
+        getVideoWatchHistory(currentUser.id, 1, 20),
+        shortsService.getWatchHistory(currentUser.id, 1, 20),
+      ]);
+      const vHistory = (vRes?.history || []).map(({ video, watchedAt }) => ({
+        ...mapVideoToCard(video),
+        watchedAt: new Date(watchedAt).getTime(),
+      }));
+      const sHistory = (sRes?.history || []).map(({ short: s, watchedAt }) => ({
+        ...mapShortToCard(s),
+        watchedAt: new Date(watchedAt).getTime(),
+      }));
+      const merged = [...vHistory, ...sHistory]
+        .sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0))
+        .slice(0, 10);
+      setContinueData(merged);
+    } catch (e) {
+      setContinueData([]);
+    }
+  }, [currentUser?.id]);
+
+  // Load ALL users' videos and shorts (no userId filter) - for "All" tab
   const loadFeed = useCallback(async () => {
     try {
+      // IMPORTANT: No userId passed - fetches ALL public videos/shorts from ALL users
       const [shortsRes, videosRes] = await Promise.all([
-        shortsService.getShorts({ page: 1, limit: 20 }),
-        getVideos({ page: 1, limit: 20 }),
+        shortsService.getShorts({ page: 1, limit: 100, sort: 'latest' }),
+        getVideos({ page: 1, limit: 100, sort: 'latest' }),
       ]);
-      const shorts = (shortsRes?.shorts || []).filter(s => s.videoUrl && String(s.videoUrl).trim());
+      const shorts = (shortsRes?.shorts || []).filter(
+        (s) => s.videoUrl && String(s.videoUrl).trim(),
+      );
       const videos = videosRes?.videos || [];
-      setShortsData(shorts.map(mapShortToCard));
-      setVideosData(videos.map(mapVideoToCard));
+      console.log('Loaded shorts:', shorts.length, 'videos:', videos.length);
+      // Shuffle to show random content from all users
+      const shuffledShorts = shuffle(shorts).map(mapShortToCard);
+      const shuffledVideos = shuffle(videos).map(mapVideoToCard);
+      console.log('Shuffled shorts:', shuffledShorts.length, 'videos:', shuffledVideos.length);
+      setShortsData(shuffledShorts);
+      setVideosData(shuffledVideos);
     } catch (e) {
+      console.error('Error loading feed:', e);
       setShortsData([]);
       setVideosData([]);
     } finally {
@@ -129,29 +187,110 @@ const HomeVersion = () => {
     loadFeed();
   }, [loadFeed]);
 
+  useEffect(() => {
+    loadChannels();
+  }, [loadChannels]);
+
+  useEffect(() => {
+    loadContinueWatching();
+  }, [loadContinueWatching]);
+
   const onRefresh = () => {
     setRefreshing(true);
     loadFeed();
+    loadChannels();
+    loadContinueWatching();
   };
 
-  const mainFeed = [
-    { type: 'SHORTS', id: 'header-shorts', data: shortsData },
-    ...videosData.slice(0, 2).map(v => ({ type: 'VIDEO', ...v })),
-    { type: 'CONTINUE', id: 'continue-watching', data: videosData.slice(0, 3) },
-    ...videosData.slice(2).map(v => ({ type: 'VIDEO', ...v })),
-    { type: 'SHORTS', id: 'footer-shorts', data: shortsData },
-  ];
+  const buildMainFeed = () => {
+    const shorts = shortsData || [];
+    const videos = videosData || [];
+    const feed = [];
+    let sIdx = 0;
+    let vIdx = 0;
 
-  const StoryCircle = ({ label }) => (
-    <View style={styles.storyContainer}>
+    console.log('Building feed - shorts:', shorts.length, 'videos:', videos.length);
+
+    // 1) First block: 2 shorts
+    const firstShorts = shorts.slice(sIdx, sIdx + 2);
+    sIdx += firstShorts.length;
+    if (firstShorts.length > 0) {
+      feed.push({ type: 'SHORTS', id: 's-2', data: firstShorts });
+    }
+
+    // 2) Then 2 videos
+    const firstVideos = videos.slice(vIdx, vIdx + 2);
+    vIdx += firstVideos.length;
+    if (firstVideos.length > 0) {
+      firstVideos.forEach(v => {
+        feed.push({ ...v, type: 'VIDEO' }); // Ensure type is VIDEO (uppercase) after spread
+      });
+      console.log('Added first 2 videos to feed');
+    } else {
+      console.log('No videos available to add');
+    }
+
+    // 3) Continue watching block
+    if (continueData.length > 0) {
+      feed.push({
+        type: 'CONTINUE',
+        id: 'continue-watching',
+        data: continueData.slice(0, 3),
+      });
+    }
+
+    // 4) Then blocks that grow: 4, 6, 8, ... shorts/videos
+    let blockSize = 4;
+    while (sIdx < shorts.length || vIdx < videos.length) {
+      const blockShorts = shorts.slice(sIdx, sIdx + blockSize);
+      sIdx += blockShorts.length;
+      if (blockShorts.length > 0) {
+        feed.push({
+          type: 'SHORTS',
+          id: `s-${sIdx}`,
+          data: blockShorts,
+        });
+      }
+
+      const blockVideos = videos.slice(vIdx, vIdx + blockSize);
+      vIdx += blockVideos.length;
+      if (blockVideos.length > 0) {
+        blockVideos.forEach(v => {
+          feed.push({ ...v, type: 'VIDEO' }); // Ensure type is VIDEO (uppercase) after spread
+        });
+        console.log(`Added ${blockVideos.length} videos (block size ${blockSize})`);
+      }
+
+      blockSize += 2;
+    }
+
+    const videoCount = feed.filter(f => f.type === 'VIDEO').length;
+    const shortsCount = feed.filter(f => f.type === 'SHORTS').length;
+    console.log('Final feed - videos:', videoCount, 'shorts blocks:', shortsCount, 'total items:', feed.length);
+    return feed;
+  };
+
+  const mainFeed = buildMainFeed();
+
+  const StoryCircle = ({ channel }) => (
+    <TouchableOpacity
+      style={styles.storyContainer}
+      onPress={() =>
+        channel?.id &&
+        navigation.navigate('ChannelDetailsScreen', { userId: channel.id })
+      }
+      activeOpacity={0.8}
+    >
       <View style={styles.storyBorder}>
         <Image
-          source={{ uri: 'https://via.placeholder.com/100' }}
+          source={{ uri: channel?.avatar || 'https://via.placeholder.com/100' }}
           style={styles.storyImage}
         />
       </View>
-      <Text style={styles.storyLabel}>{label}</Text>
-    </View>
+      <Text style={styles.storyLabel} numberOfLines={1}>
+        {channel?.name || 'Channel'}
+      </Text>
+    </TouchableOpacity>
   );
 
   const SectionHeader = ({ icon, title }) => (
@@ -174,6 +313,14 @@ const HomeVersion = () => {
 
   const handleVideoPress = (videoId) => {
     navigation.navigate('VideoDetailsScreen', { videoId });
+  };
+
+  const handleContinuePress = (item) => {
+    if (item?.type === 'short') {
+      navigation.navigate('ShortsVideoScreen', { shortId: item.id });
+    } else {
+      navigation.navigate('VideoDetailsScreen', { videoId: item.id });
+    }
   };
 
   const renderItem = ({ item }) => {
@@ -222,8 +369,8 @@ const HomeVersion = () => {
     }
 
     if (item.type === 'CONTINUE') {
-      const continueData = item.data || [];
-      if (continueData.length === 0) return null;
+      const continueItems = item.data || [];
+      if (continueItems.length === 0) return null;
       return (
         <View style={styles.continueSection}>
           <SectionHeader icon="video-vintage" title="Continue watching" />
@@ -232,14 +379,17 @@ const HomeVersion = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
           >
-            {continueData.map(c => (
+            {continueItems.map((c) => (
               <TouchableOpacity
                 key={c.id}
                 style={styles.continueCard}
-                onPress={() => handleVideoPress(c.id)}
+                onPress={() => handleContinuePress(c)}
                 activeOpacity={0.9}
               >
-                <Image source={{ uri: c.thumbnail }} style={styles.continueImage} />
+                <Image
+                  source={{ uri: c.thumbnail || c.image }}
+                  style={styles.continueImage}
+                />
                 <View style={styles.playButtonSmall}>
                   <Icon name="play" size={16} color="#fff" />
                 </View>
@@ -288,20 +438,21 @@ const HomeVersion = () => {
     return <SearchScreen onBack={() => setShowSearch(false)} />;
   }
 
+  useEffect(() => {
+    if (activeTab === 'Trending') {
+      navigation.navigate('TrendingScreen');
+      setActiveTab('All');
+    } else if (activeTab === 'Live') {
+      navigation.navigate('LiveShortsScreen');
+      setActiveTab('All');
+    } else if (activeTab === 'For You') {
+      navigation.navigate('ForYouScreen');
+      setActiveTab('All');
+    }
+  }, [activeTab, navigation]);
+
   if (showNotifications) {
     return <NotificationScreen onBack={() => setShowNotifications(false)} />;
-  }
-
-  if (activeTab === 'Trending') {
-    return (
-      <View style={styles.container}>
-        <TrendingView
-          onBack={() => setActiveTab('All')}
-          videoData={mainFeed.filter(i => i.type === 'VIDEO')}
-          renderVideoItem={renderItem}
-        />
-      </View>
-    );
   }
 
   if (loading) {
@@ -353,7 +504,11 @@ const HomeVersion = () => {
 
       <FlatList
         data={mainFeed}
-        keyExtractor={item => item.id}
+        keyExtractor={(item, index) => {
+          if (item.id) return item.id;
+          if (item.type === 'VIDEO') return `video-${item.id || index}`;
+          return `${item.type}-${index}`;
+        }}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -371,19 +526,22 @@ const HomeVersion = () => {
               showsHorizontalScrollIndicator={false}
               style={styles.chipScroll}
             >
-              {CATEGORIES.map((cat, i) => (
-                <TouchableOpacity
-                  key={cat}
-                  onPress={() => setActiveTab(cat)}
-                  style={[styles.chip, i === 0 && styles.chipActive]}
-                >
-                  <Text
-                    style={[styles.chipText, i === 0 && styles.chipTextActive]}
+              {CATEGORIES.map((cat) => {
+                const isActive = activeTab === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    onPress={() => setActiveTab(cat)}
+                    style={[styles.chip, isActive && styles.chipActive]}
                   >
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[styles.chipText, isActive && styles.chipTextActive]}
+                    >
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             <ScrollView
@@ -391,8 +549,8 @@ const HomeVersion = () => {
               showsHorizontalScrollIndicator={false}
               style={styles.storyScroll}
             >
-              {STORIES.map(name => (
-                <StoryCircle key={name} label={name} />
+              {channelsData.map((ch) => (
+                <StoryCircle key={ch.id} channel={ch} />
               ))}
             </ScrollView>
           </>
