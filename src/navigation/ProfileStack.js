@@ -3,6 +3,9 @@ import { createStackNavigator } from '@react-navigation/stack';
 import ProfileScreen from '../screens/ProfileScreen';
 import AccountScreen from '../screens/AccountScreen';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import GeneralSettingsScreen from '../screens/GeneralSettingsScreen';
+import DataSavingScreen from '../screens/DataSavingScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
 import ShortsVideoScreen from '../screens/ShortsVideoScreen';
@@ -24,6 +27,22 @@ const ProfileNavigation = () => {
         name="SubscriptionScreen"
         component={SubscriptionScreen}
       />
+
+      <ProfileStack.Screen
+        name="SettingsScreen"
+        component={SettingsScreen}
+      />
+
+      <ProfileStack.Screen
+        name="GeneralSettingsScreen"
+        component={GeneralSettingsScreen}
+      />
+
+      <ProfileStack.Screen
+        name="DataSavingScreen"
+        component={DataSavingScreen}
+      />
+
       <ProfileStack.Screen
         name="VideoDetailsScreen"
         component={VideoDetailsScreen}
