@@ -15,9 +15,15 @@ const SettingsScreen = () => {
   const navigation = useNavigation();
   const [isAutoplayEnabled, setIsAutoplayEnabled] = useState(false);
 
-  const SettingItem = ({ icon, label, onPress, rightElement, showBorder = true }) => (
-    <TouchableOpacity 
-      style={[styles.itemRow, !showBorder && { borderBottomWidth: 0 }]} 
+  const SettingItem = ({
+    icon,
+    label,
+    onPress,
+    rightElement,
+    showBorder = true,
+  }) => (
+    <TouchableOpacity
+      style={[styles.itemRow, !showBorder && { borderBottomWidth: 0 }]}
       onPress={onPress}
       activeOpacity={0.7}
     >
@@ -37,7 +43,10 @@ const SettingsScreen = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
           <Icon name="arrow-left" size={26} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
@@ -45,42 +54,62 @@ const SettingsScreen = () => {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <SettingItem
-            icon="check-circle-outline"
-            label="General"
-            onPress={() => navigation.navigate('GeneralSettingsScreen')}
+          icon="check-circle-outline"
+          label="General"
+          onPress={() => navigation.navigate('GeneralSettingsScreen')}
         />
 
         <SettingItem
-            icon="chart-timeline-variant"
-            label="Data Saving"
-            onPress={() => navigation.navigate('DataSavingScreen')}
+          icon="chart-timeline-variant"
+          label="Data Saving"
+          onPress={() => navigation.navigate('DataSavingScreen')}
         />
-        
-        <SettingItem 
-          icon="play-circle-outline" 
-          label="Autoplay Next Video" 
+
+        <SettingItem
+          icon="play-circle-outline"
+          label="Autoplay Next Video"
           rightElement={
             <Switch
-              trackColor={{ false: "#eee", true: "#FF7A00" }}
-              thumbColor={isAutoplayEnabled ? "#fff" : "#f4f3f4"}
-              onValueChange={() => setIsAutoplayEnabled(previousState => !previousState)}
+              trackColor={{ false: '#eee', true: '#FF7A00' }}
+              thumbColor={isAutoplayEnabled ? '#fff' : '#f4f3f4'}
+              onValueChange={() =>
+                setIsAutoplayEnabled(previousState => !previousState)
+              }
               value={isAutoplayEnabled}
             />
           }
         />
 
-        <SettingItem icon="video-outline" label="Video Quality Preferences" />
-        <SettingItem icon="download-outline" label="Background & Downloads" />
+        <SettingItem
+          icon="video-outline"
+          label="Video Quality Preferences"
+          onPress={() => navigation.navigate('VideoQualityPreferencesScreen')}
+        />
+        <SettingItem
+          icon="download-outline"
+          label="Background & Downloads"
+          onPress={() => navigation.navigate('BackgroundDownloadsScreen')}
+        />
         <SettingItem icon="television" label="Watch on TV" />
         <SettingItem icon="clock-outline" label="History" />
         <SettingItem icon="information-outline" label="Privacy Policy" />
         <SettingItem icon="wallet-outline" label="Billing & Payments" />
         <SettingItem icon="bell-outline" label="Notifications" />
-        <SettingItem icon="account-group-outline" label="Community Guidelines" />
+        <SettingItem
+          icon="account-group-outline"
+          label="Community Guidelines"
+        />
         <SettingItem icon="message-text-outline" label="Live Chat" />
         <SettingItem icon="closed-caption-outline" label="Captions" />
-        <SettingItem icon="chevron-right-circle-outline" label="Accessibility" />
-        <SettingItem icon="dots-horizontal-circle-outline" label="About" showBorder={false} />
+        <SettingItem
+          icon="chevron-right-circle-outline"
+          label="Accessibility"
+        />
+        <SettingItem
+          icon="dots-horizontal-circle-outline"
+          label="About"
+          showBorder={false}
+        />
       </ScrollView>
     </SafeAreaView>
   );

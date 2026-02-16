@@ -6,6 +6,8 @@ import SubscriptionScreen from '../screens/SubscriptionScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import GeneralSettingsScreen from '../screens/GeneralSettingsScreen';
 import DataSavingScreen from '../screens/DataSavingScreen';
+import VideoQualityPreferencesScreen from '../screens/VideoQualityPreferencesScreen';
+import BackgroundDownloadsScreen from '../screens/BackgroundDownloadsScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
 import ShortsVideoScreen from '../screens/ShortsVideoScreen';
@@ -28,10 +30,7 @@ const ProfileNavigation = () => {
         component={SubscriptionScreen}
       />
 
-      <ProfileStack.Screen
-        name="SettingsScreen"
-        component={SettingsScreen}
-      />
+      <ProfileStack.Screen name="SettingsScreen" component={SettingsScreen} />
 
       <ProfileStack.Screen
         name="GeneralSettingsScreen"
@@ -41,6 +40,16 @@ const ProfileNavigation = () => {
       <ProfileStack.Screen
         name="DataSavingScreen"
         component={DataSavingScreen}
+      />
+
+      <ProfileStack.Screen
+        name="VideoQualityPreferencesScreen"
+        component={VideoQualityPreferencesScreen}
+      />
+
+      <ProfileStack.Screen
+        name="BackgroundDownloadsScreen"
+        component={BackgroundDownloadsScreen}
       />
 
       <ProfileStack.Screen

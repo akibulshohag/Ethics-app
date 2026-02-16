@@ -70,7 +70,6 @@ const ProfileScreen = () => {
     }, 100);
   };
 
-  // Reusable Menu Item Component
   const MenuItem = ({
     iconName,
     title,
@@ -176,10 +175,10 @@ const ProfileScreen = () => {
           />
           <MenuItem
             iconName="cog-outline"
-            title="Settings" 
+            title="Settings"
             onPress={() => navigation.navigate('SettingsScreen')}
           />
-          
+
           <MenuItem iconName="help-circle-outline" title="Help Center" />
 
           <View style={{ marginTop: SPACING.lg }}>

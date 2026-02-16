@@ -11,15 +11,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 
-const GeneralSettingsScreen = () => {
+const BackgroundDownloadsScreen = () => {
   const navigation = useNavigation();
 
-  const [remindBreak, setRemindBreak] = useState(true);
-  const [remindBedtime, setRemindBedtime] = useState(false);
-  const [zoomFill, setZoomFill] = useState(false);
-  const [pip, setPip] = useState(true);
-  const [restrictedMode, setRestrictedMode] = useState(false);
-  const [statsNerds, setStatsNerds] = useState(false);
+  const [smartDownloads, setSmartDownloads] = useState(true);
+  const [wifiOnly, setWifiOnly] = useState(false);
+  const [recommended, setRecommended] = useState(true);
 
   const NavRow = ({ label, value, onPress }) => (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
@@ -45,6 +42,7 @@ const GeneralSettingsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -52,51 +50,31 @@ const GeneralSettingsScreen = () => {
         >
           <Icon name="arrow-left" size={26} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>General</Text>
+        <Text style={styles.headerTitle}>Background & Downloads</Text>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      >
-        <ToggleRow
-          label="Remind Me to Take a Break"
-          value={remindBreak}
-          onValueChange={setRemindBreak}
-        />
-        <ToggleRow
-          label="Remind Me When it's Bedtime"
-          value={remindBedtime}
-          onValueChange={setRemindBedtime}
-        />
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionHeader}>Background Play</Text>
+        <NavRow label="Playback" value="Off" />
 
-        <NavRow label="Playback in Feeds" value="Off" />
-        <NavRow label="Double-tap to Seek" value="10s" />
-
+        <Text style={styles.sectionHeader}>Downloads</Text>
         <ToggleRow
-          label="Zoom to Fill Screen"
-          value={zoomFill}
-          onValueChange={setZoomFill}
+          label="Smart Downloads"
+          value={smartDownloads}
+          onValueChange={setSmartDownloads}
+        />
+        <NavRow label="Download Quality" />
+        <ToggleRow
+          label="Download Over Wi-Fi Only"
+          value={wifiOnly}
+          onValueChange={setWifiOnly}
         />
         <ToggleRow
-          label="Picture-in-Picture"
-          value={pip}
-          onValueChange={setPip}
+          label="Recommended Downloads"
+          value={recommended}
+          onValueChange={setRecommended}
         />
-
-        <NavRow label="Uploads" value="On any network" />
-        <NavRow label="Language" value="English (US)" />
-
-        <ToggleRow
-          label="Restricted Mode"
-          value={restrictedMode}
-          onValueChange={setRestrictedMode}
-        />
-        <ToggleRow
-          label="Enable Stats for Nerds"
-          value={statsNerds}
-          onValueChange={setStatsNerds}
-        />
+        <NavRow label="Delete All Downloads" />
       </ScrollView>
     </SafeAreaView>
   );
@@ -117,12 +95,17 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#333',
+    color: '#1A1A1A',
   },
-  listContent: {
-    paddingTop: 10,
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    paddingHorizontal: 20,
+    marginTop: 25,
+    marginBottom: 5,
   },
   row: {
     flexDirection: 'row',
@@ -148,4 +131,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default GeneralSettingsScreen;
+export default BackgroundDownloadsScreen;

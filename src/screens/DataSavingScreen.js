@@ -14,15 +14,12 @@ import { useNavigation } from '@react-navigation/native';
 const DataSavingScreen = () => {
   const navigation = useNavigation();
 
-  // States for the switches
   const [dataSavingMode, setDataSavingMode] = useState(true);
   const [reduceVideoQuality, setReduceVideoQuality] = useState(false);
   const [reduceDownloadQuality, setReduceDownloadQuality] = useState(true);
   const [restrictedMode, setRestrictedMode] = useState(false);
   const [wifiOnly, setWifiOnly] = useState(false);
 
-
-  // Reusable row for navigation items (with chevron)
   const NavRow = ({ label, value, onPress }) => (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
       <Text style={styles.label}>{label}</Text>
@@ -33,12 +30,11 @@ const DataSavingScreen = () => {
     </TouchableOpacity>
   );
 
-  // Reusable row for toggle items
   const ToggleRow = ({ label, value, onValueChange }) => (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
       <Switch
-        trackColor={{ false: "#eee", true: "#FF7A00" }}
+        trackColor={{ false: '#eee', true: '#FF7A00' }}
         thumbColor="#fff"
         onValueChange={onValueChange}
         value={value}
@@ -48,41 +44,45 @@ const DataSavingScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
           <Icon name="arrow-left" size={26} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>General</Text>
+        <Text style={styles.headerTitle}>Data Saving</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.listContent}>
-        <ToggleRow 
-          label="Data Saving Mode" 
-          value={dataSavingMode} 
-          onValueChange={setDataSavingMode} 
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+      >
+        <ToggleRow
+          label="Data Saving Mode"
+          value={dataSavingMode}
+          onValueChange={setDataSavingMode}
         />
-        <ToggleRow 
-          label="Reduce Video Quality" 
-          value={reduceVideoQuality} 
-          onValueChange={setReduceVideoQuality} 
+        <ToggleRow
+          label="Reduce Video Quality"
+          value={reduceVideoQuality}
+          onValueChange={setReduceVideoQuality}
         />
-        <ToggleRow 
-          label="Reduce Download Quality" 
-          value={reduceDownloadQuality} 
-          onValueChange={setReduceDownloadQuality} 
+        <ToggleRow
+          label="Reduce Download Quality"
+          value={reduceDownloadQuality}
+          onValueChange={setReduceDownloadQuality}
         />
-        <ToggleRow 
-          label="Restricted Mode" 
-          value={restrictedMode}    
-          onValueChange={setRestrictedMode} 
+        <ToggleRow
+          label="Restricted Mode"
+          value={restrictedMode}
+          onValueChange={setRestrictedMode}
         />
-        <ToggleRow 
-          label="Wi-Fi Only" 
-          value={wifiOnly} 
-          onValueChange={setWifiOnly} 
+        <ToggleRow
+          label="Wi-Fi Only"
+          value={wifiOnly}
+          onValueChange={setWifiOnly}
         />
-
       </ScrollView>
     </SafeAreaView>
   );
