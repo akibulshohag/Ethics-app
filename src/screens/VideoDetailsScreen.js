@@ -774,6 +774,8 @@ const VideoDetailsScreen = () => {
       <SaveModal
         visible={saveModalVisible}
         onClose={() => setSaveModalVisible(false)}
+        contentType="video"
+        contentId={videoId}
       />
       <CommentsModal
         visible={commentsModalVisible}

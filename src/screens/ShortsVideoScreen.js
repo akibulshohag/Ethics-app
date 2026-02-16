@@ -21,6 +21,7 @@ import { useSelector } from 'react-redux';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
 import CreateVideoModal from '../components/CreateVideoModal';
+import SaveModal from '../components/SaveModal';
 import { shortsService } from '../services/shortsService';
 
 const { width, height: windowHeight } = Dimensions.get('window');
@@ -256,6 +257,7 @@ const ShortsVideoScreen = ({ navigation }) => {
     const [commentsVisible, setCommentsVisible] = useState(false);
     const [settingsVisible, setSettingsVisible] = useState(false);
     const [createVisible, setCreateVisible] = useState(false);
+    const [saveModalVisible, setSaveModalVisible] = useState(false);
     
     const tabHeight = Platform.OS === 'ios' ? 82 : 68;
     const screenHeight = windowHeight - tabHeight;
@@ -360,6 +362,13 @@ const ShortsVideoScreen = ({ navigation }) => {
             <SettingsModal
                 visible={settingsVisible}
                 onClose={() => setSettingsVisible(false)}
+                onSaveToPlaylist={() => setSaveModalVisible(true)}
+            />
+            <SaveModal
+                visible={saveModalVisible}
+                onClose={() => setSaveModalVisible(false)}
+                contentType="short"
+                contentId={displayVideos[activeVideoIndex]?.id}
             />
             <CreateVideoModal 
                 visible={createVisible}

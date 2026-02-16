@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,28 +8,87 @@ import {
   TouchableWithoutFeedback,
   Dimensions,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useSelector } from 'react-redux';
+import { getPlaylistStatus, setPlaylist } from '../services/playlistService';
 
 const { height } = Dimensions.get('window');
 
 const PLAYLISTS = [
-  { id: '1', name: 'Watch Later', isPrivate: true },
-  { id: '2', name: 'My Favorite Animal Videos', isPrivate: true },
-  { id: '3', name: 'My Favorite Nature Videos', isPrivate: true },
-  { id: '4', name: 'My Best Song', isPrivate: true },
-  { id: '5', name: 'Most Popular Video Clips', isPrivate: true },
-  { id: '6', name: 'Animal Life', isPrivate: true },
+  { id: 'watch_later', name: 'Watch Later', isPrivate: true },
+  { id: 'favorites', name: 'Favorites', isPrivate: true },
 ];
 
-const SaveModal = ({ visible, onClose }) => {
-  const [selectedPlaylists, setSelectedPlaylists] = useState(['2']); // Pre-selecting 'My Favorite Animal Videos' as per image
+const SaveModal = ({ visible, onClose, contentType = 'video', contentId }) => {
+  const { user: currentUser } = useSelector(state => state.app) || {};
+  const [selectedPlaylists, setSelectedPlaylists] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const togglePlaylist = (id) => {
+  const loadStatus = useCallback(async () => {
+    if (!currentUser?.id || !contentId) {
+      setSelectedPlaylists([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const status = await getPlaylistStatus(currentUser.id, contentType, contentId);
+      const selected = [];
+      if (status.inWatchLater) selected.push('watch_later');
+      if (status.inFavorites) selected.push('favorites');
+      setSelectedPlaylists(selected);
+    } catch (e) {
+      setSelectedPlaylists([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser?.id, contentType, contentId]);
+
+  useEffect(() => {
+    if (visible && contentId) {
+      loadStatus();
+    }
+  }, [visible, contentId, loadStatus]);
+
+  const togglePlaylist = id => {
     if (selectedPlaylists.includes(id)) {
-      setSelectedPlaylists(selectedPlaylists.filter((pid) => pid !== id));
+      setSelectedPlaylists(selectedPlaylists.filter(pid => pid !== id));
     } else {
       setSelectedPlaylists([...selectedPlaylists, id]);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!currentUser?.id || !contentId) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      const watchLaterSelected = selectedPlaylists.includes('watch_later');
+      const favoritesSelected = selectedPlaylists.includes('favorites');
+
+      const prev = await getPlaylistStatus(currentUser.id, contentType, contentId);
+      const tasks = [];
+
+      if (watchLaterSelected !== prev.inWatchLater) {
+        tasks.push(
+          setPlaylist(currentUser.id, 'watch_later', contentType, contentId, watchLaterSelected),
+        );
+      }
+      if (favoritesSelected !== prev.inFavorites) {
+        tasks.push(
+          setPlaylist(currentUser.id, 'favorites', contentType, contentId, favoritesSelected),
+        );
+      }
+      await Promise.all(tasks);
+      onClose();
+    } catch (e) {
+      console.error('Save to playlist failed:', e);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -48,7 +107,12 @@ const SaveModal = ({ visible, onClose }) => {
         </View>
         <Text style={styles.playlistName}>{item.name}</Text>
         {item.isPrivate && (
-          <MaterialCommunityIcons name="lock-outline" size={20} color="#424242" style={styles.lockIcon} />
+          <MaterialCommunityIcons
+            name="lock-outline"
+            size={20}
+            color="#424242"
+            style={styles.lockIcon}
+          />
         )}
       </TouchableOpacity>
     );
@@ -66,36 +130,53 @@ const SaveModal = ({ visible, onClose }) => {
           <TouchableWithoutFeedback>
             <View style={styles.container}>
               <View style={styles.dragHandle} />
-              
+
               <View style={styles.header}>
-                <Text style={styles.title}>Save Video to ...</Text>
-                <TouchableOpacity style={styles.newPlaylistButton}>
-                  <MaterialCommunityIcons name="plus" size={16} color="#F97507" />
-                  <Text style={styles.newPlaylistText}>New Playlist</Text>
-                </TouchableOpacity>
+                <Text style={styles.title}>Save to...</Text>
               </View>
 
               <View style={styles.divider} />
 
-              <FlatList
-                data={PLAYLISTS}
-                keyExtractor={(item) => item.id}
-                renderItem={renderItem}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-              />
+              {loading ? (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator size="small" color="#F97507" />
+                </View>
+              ) : !currentUser?.id ? (
+                <View style={styles.loginHint}>
+                  <Text style={styles.loginHintText}>Log in to save videos</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={PLAYLISTS}
+                  keyExtractor={item => item.id}
+                  renderItem={renderItem}
+                  contentContainerStyle={styles.listContent}
+                  showsVerticalScrollIndicator={false}
+                />
+              )}
 
               <View style={styles.divider} />
 
               <View style={styles.footer}>
-                <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={onClose}
+                  disabled={saving}
+                >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.saveButton} onPress={onClose}>
-                  <Text style={styles.saveButtonText}>Save</Text>
+                <TouchableOpacity
+                  style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  )}
                 </TouchableOpacity>
               </View>
-
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -115,7 +196,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 12,
-    paddingBottom: 30, // Safe area padding
+    paddingBottom: 30,
     maxHeight: height * 0.7,
   },
   dragHandle: {
@@ -138,24 +219,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#212121',
   },
-  newPlaylistButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F97507',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  newPlaylistText: {
-    color: '#F97507',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
   divider: {
     height: 1,
     backgroundColor: '#f2f2f2',
+  },
+  loadingRow: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  loginHint: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  loginHintText: {
+    fontSize: 16,
+    color: '#666',
   },
   listContent: {
     paddingVertical: 10,
@@ -196,7 +274,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#FFF2E5', // Light orange
+    backgroundColor: '#FFF2E5',
     paddingVertical: 14,
     borderRadius: 25,
     marginRight: 12,
@@ -214,6 +292,11 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     marginLeft: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     color: '#fff',

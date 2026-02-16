@@ -452,38 +452,6 @@ const LibraryScreen = ({ navigation }) => {
     );
   };
 
-  const renderPlaylistDetailView = data => (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      {renderHeader()}
-      <FlatList
-        data={data}
-        keyExtractor={item => item.id}
-        ListHeaderComponent={() => (
-          <View style={styles.playlistHeader}>
-            <View style={styles.playlistActionRow}>
-              <TouchableOpacity style={styles.playAllButton}>
-                <MaterialCommunityIcons name="play" size={24} color="#fff" />
-                <Text style={styles.playAllText}>Play all</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.shuffleButton}>
-                <MaterialCommunityIcons name="shuffle" size={24} color="#333" />
-                <Text style={styles.shuffleText}>Shuffle</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        renderItem={({ item }) => (
-          <CompactVideoCard video={item} onPress={() => {}} />
-        )}
-      />
-    </SafeAreaView>
-  );
-
-  if (currentView === 'watchLater' || currentView === 'favorites') {
-    return renderPlaylistDetailView(HISTORY_DATA);
-  }
-
   if (currentView === 'history') {
     const historyList =
       historyFilter === 'Videos'
@@ -718,7 +686,7 @@ const LibraryScreen = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.playlistItem}
-          onPress={() => setCurrentView('watchLater')}
+          onPress={() => navigation?.navigate('WatchLaterScreen')}
         >
           <View style={styles.menuIconContainer}>
             <MaterialCommunityIcons
@@ -729,23 +697,26 @@ const LibraryScreen = ({ navigation }) => {
           </View>
           <View>
             <Text style={styles.menuText}>Watch Later</Text>
-            <Text style={styles.subText}>24 unwatched videos</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.playlistItem}>
-          <View style={styles.menuIconContainer}>
-            <MaterialCommunityIcons name="thumb-up" size={24} color="#F97507" />
-          </View>
-          <View>
-            <Text style={styles.menuText}>Liked Videos</Text>
-            <Text style={styles.subText}>260 videos</Text>
+            <Text style={styles.subText}>Videos and shorts saved to watch later</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.playlistItem}
-          onPress={() => setCurrentView('favorites')}
+          onPress={() => navigation?.navigate('LikedScreen')}
+        >
+          <View style={styles.menuIconContainer}>
+            <MaterialCommunityIcons name="thumb-up" size={24} color="#F97507" />
+          </View>
+          <View>
+            <Text style={styles.menuText}>Liked Videos</Text>
+            <Text style={styles.subText}>Videos and shorts you liked</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.playlistItem}
+          onPress={() => navigation?.navigate('FavoritesScreen')}
         >
           <View style={styles.menuIconContainer}>
             <MaterialCommunityIcons
@@ -755,8 +726,8 @@ const LibraryScreen = ({ navigation }) => {
             />
           </View>
           <View>
-            <Text style={styles.menuText}>My Favorite Songs</Text>
-            <Text style={styles.subText}>125 videos</Text>
+            <Text style={styles.menuText}>Favorites</Text>
+            <Text style={styles.subText}>Videos and shorts you saved</Text>
           </View>
         </TouchableOpacity>
       </ScrollView>

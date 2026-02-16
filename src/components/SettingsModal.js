@@ -15,6 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 const { height } = Dimensions.get('window');
 
 const OPTIONS = [
+  { id: '0', label: 'Save to Playlist', icon: 'playlist-plus', type: 'material', iconName: 'playlist-plus', lib: 'MaterialCommunityIcons', isSaveOption: true },
   { id: '1', label: 'Description', icon: 'text-document', type: 'entypo', iconName: 'file-text-outline', lib: 'MaterialCommunityIcons' },
   { id: '2', label: 'Captions', icon: 'closed-caption', type: 'material', iconName: 'closed-caption-outline', lib: 'MaterialCommunityIcons' },
   { id: '3', label: 'Not Interested', icon: 'eye-off', type: 'material', iconName: 'eye-off-outline', lib: 'MaterialCommunityIcons' },
@@ -22,7 +23,16 @@ const OPTIONS = [
   { id: '5', label: 'Report', icon: 'flag', type: 'material', iconName: 'flag-outline', lib: 'Ionicons' },
 ];
 
-const SettingsModal = ({ visible, onClose }) => {
+const SettingsModal = ({ visible, onClose, onSaveToPlaylist }) => {
+  const handleOptionPress = (item) => {
+    if (item.isSaveOption && onSaveToPlaylist) {
+      onClose();
+      onSaveToPlaylist();
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <Modal
       animationType="slide"
@@ -42,7 +52,7 @@ const SettingsModal = ({ visible, onClose }) => {
 
               <View style={styles.optionsContainer}>
                 {OPTIONS.map((item) => (
-                    <TouchableOpacity key={item.id} style={styles.optionItem} onPress={onClose}>
+                    <TouchableOpacity key={item.id} style={styles.optionItem} onPress={() => handleOptionPress(item)}>
                         <View style={styles.iconContainer}>
                             {item.lib === 'Ionicons' ? (
                                 <Ionicons name={item.iconName} size={26} color="#212121" />

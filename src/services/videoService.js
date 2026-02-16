@@ -315,6 +315,21 @@ export const getUserVideos = async (userId, page = 1, limit = 20) => {
 };
 
 /**
+ * Get user's liked videos
+ */
+export const getLikedVideos = async (userId, page = 1, limit = 50) => {
+  try {
+    const response = await axios.get(`${API_URL}/liked`, {
+      params: { userId, page, limit },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching liked videos:', error);
+    throw error;
+  }
+};
+
+/**
  * Get user's video watch history
  */
 export const getVideoWatchHistory = async (userId, page = 1, limit = 50) => {

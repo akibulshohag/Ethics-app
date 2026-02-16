@@ -10,6 +10,9 @@ import ShortsVideoScreen from '../screens/ShortsVideoScreen';
 import ChannelProfileScreen from '../screens/ChannelProfileScreen';
 import CreateShortsScreen from '../screens/CreateShortsScreen';
 import UploadVideoScreen from '../screens/UploadVideoScreen';
+import LikedScreen from '../screens/LikedScreen';
+import WatchLaterScreen from '../screens/WatchLaterScreen';
+import FavoritesScreen from '../screens/FavoritesScreen';
 
 const LibraryStack = createStackNavigator();
 
@@ -50,6 +53,9 @@ const LibraryNavigation = () => {
         name="UploadVideoScreen"
         component={UploadVideoScreen}
       />
+      <LibraryStack.Screen name="LikedScreen" component={LikedScreen} />
+      <LibraryStack.Screen name="WatchLaterScreen" component={WatchLaterScreen} />
+      <LibraryStack.Screen name="FavoritesScreen" component={FavoritesScreen} />
     </LibraryStack.Navigator>
   );
 };
