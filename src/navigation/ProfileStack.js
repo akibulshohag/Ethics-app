@@ -8,6 +8,7 @@ import GeneralSettingsScreen from '../screens/GeneralSettingsScreen';
 import DataSavingScreen from '../screens/DataSavingScreen';
 import VideoQualityPreferencesScreen from '../screens/VideoQualityPreferencesScreen';
 import BackgroundDownloadsScreen from '../screens/BackgroundDownloadsScreen';
+import HelpCenterScreen from '../screens/HelpCenterScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import ChannelDetailsScreen from '../screens/ChanneDetailsScreen';
 import ShortsVideoScreen from '../screens/ShortsVideoScreen';
@@ -50,6 +51,11 @@ const ProfileNavigation = () => {
       <ProfileStack.Screen
         name="BackgroundDownloadsScreen"
         component={BackgroundDownloadsScreen}
+      />
+
+      <ProfileStack.Screen
+        name="HelpCenterScreen"
+        component={HelpCenterScreen}
       />
 
       <ProfileStack.Screen

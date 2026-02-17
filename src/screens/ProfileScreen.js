@@ -179,7 +179,11 @@ const ProfileScreen = () => {
             onPress={() => navigation.navigate('SettingsScreen')}
           />
 
-          <MenuItem iconName="help-circle-outline" title="Help Center" />
+          <MenuItem
+            iconName="help-circle-outline"
+            title="Help Center"
+            onPress={() => navigation.navigate('HelpCenterScreen')}
+          />
 
           <View style={{ marginTop: SPACING.lg }}>
             <MenuItem
