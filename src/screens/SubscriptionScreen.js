@@ -13,31 +13,20 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import {
-  getPackages,
-  getUserSubscription,
-  purchasePackage,
-} from '../services/subscriptionService';
-import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { getPackages, purchasePackage } from '../services/subscriptionService';
 
 const SubscriptionScreen = () => {
   const navigation = useNavigation();
   const { user } = useSelector(state => state.app);
   const [packages, setPackages] = useState([]);
-  const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [purchasing, setPurchasing] = useState(null);
 
   const load = async () => {
-    if (!user?.id) return;
     try {
-      const [pkgs, sub] = await Promise.all([
-        getPackages(),
-        getUserSubscription(user.id),
-      ]);
+      const pkgs = await getPackages();
       setPackages(Array.isArray(pkgs) ? pkgs : []);
-      setSubscription(sub);
     } catch (e) {
       console.error('Subscription load error:', e);
     } finally {
@@ -46,116 +35,83 @@ const SubscriptionScreen = () => {
     }
   };
 
-  useEffect(() => {
-    load();
-  }, [user?.id]);
+  useEffect(() => { load(); }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     load();
   };
 
-  const handlePurchase = async pkg => {
-    if (!user?.id || purchasing) return;
-    if (pkg.id === subscription?.id) return;
+  const handlePurchase = async (pkg) => {
+    if (purchasing) return;
     setPurchasing(pkg.id);
     try {
       await purchasePackage(user.id, pkg.id);
-      await load();
       Alert.alert('Success', `${pkg.displayName} plan activated!`);
     } catch (e) {
-      Alert.alert(
-        'Error',
-        e?.response?.data?.message || e?.message || 'Failed to purchase',
-      );
+      Alert.alert('Error', 'Failed to purchase');
     } finally {
       setPurchasing(null);
     }
   };
 
-  const isCurrent = pkg => subscription?.id === pkg.id;
+  const FeatureItem = ({ text }) => (
+    <View style={styles.featureRow}>
+      <Icon name="check" size={20} color="#FF8C00" />
+      <Text style={styles.featureText}>{text}</Text>
+    </View>
+  );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Subscription</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={COLORS.primaryOrange} />
-        </View>
-      </SafeAreaView>
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#FF8C00" />
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
+          <Icon name="arrow-left" size={28} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Subscription</Text>
-        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
+      <ScrollView 
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[COLORS.primaryOrange]}
-          />
-        }
       >
-        {subscription && (
-          <View style={styles.currentCard}>
-            <Text style={styles.currentLabel}>Current plan</Text>
-            <Text style={styles.currentPlan}>{subscription.displayName}</Text>
-            <Text style={styles.usage}>
-              {subscription.currentVideoCount}/{subscription.videoLimit} videos •{' '}
-              {subscription.currentShortCount}/{subscription.shortLimit} shorts
-            </Text>
-          </View>
-        )}
+        <Text style={styles.title}>Subscribe to Premium</Text>
+        <Text style={styles.subtitle}>
+          Enjoy watching Full-HD videos, without restrictions and without ads
+        </Text>
 
-        <Text style={styles.sectionTitle}>Available plans</Text>
-        {packages.map(pkg => (
+        {packages.map((pkg) => (
           <TouchableOpacity
             key={pkg.id}
-            style={[
-              styles.packageCard,
-              isCurrent(pkg) && styles.packageCardActive,
-            ]}
+            style={styles.card}
             onPress={() => handlePurchase(pkg)}
-            disabled={purchasing !== null || isCurrent(pkg)}
-            activeOpacity={0.8}
+            disabled={purchasing !== null}
+            activeOpacity={0.9}
           >
-            <View style={styles.packageHeader}>
-              <Text style={styles.packageName}>{pkg.displayName}</Text>
-              <Text style={styles.packagePrice}>
-                {pkg.price === 0 ? 'Free' : `$${pkg.price}`}
-              </Text>
+            <Icon name="crown" size={40} color="#FF8C00" style={styles.crownIcon} />
+            
+            <View style={styles.priceContainer}>
+              <Text style={styles.currency}>$</Text>
+              <Text style={styles.price}>{pkg.price}</Text>
+              <Text style={styles.duration}>/{pkg.duration || 'month'}</Text>
             </View>
-            <Text style={styles.packageLimits}>
-              {pkg.videoLimit} videos • {pkg.shortLimit} shorts
-            </Text>
-            {isCurrent(pkg) ? (
-              <View style={styles.currentBadge}>
-                <Icon name="check-circle" size={16} color={COLORS.success} />
-                <Text style={styles.currentBadgeText}>Current</Text>
-              </View>
-            ) : purchasing === pkg.id ? (
-              <ActivityIndicator size="small" color={COLORS.primaryOrange} />
-            ) : (
-              <Text style={styles.upgradeText}>
-                {pkg.price === 0 ? 'Select' : 'Upgrade'}
-              </Text>
+
+            <View style={styles.divider} />
+
+            <FeatureItem text="Boost engagement with a custom" />
+            <FeatureItem text="Watch all you want. Ad-free." />
+            <FeatureItem text="Allows streaming of 4K." />
+            <FeatureItem text="Video & Audio Quality is Better." />
+
+            {purchasing === pkg.id && (
+              <ActivityIndicator size="small" color="#FF8C00" style={{marginTop: 10}} />
             )}
           </TouchableOpacity>
         ))}
@@ -165,100 +121,30 @@ const SubscriptionScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.white },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray200,
-  },
-  headerTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: FONTS.bold,
-    color: COLORS.textPrimary,
-  },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { flex: 1 },
-  scrollContent: { padding: SPACING.xl, paddingBottom: 40 },
-  currentCard: {
-    backgroundColor: COLORS.primaryOrange,
-    borderRadius: BORDER_RADIUS.xl,
-    padding: SPACING.xl,
-    marginBottom: SPACING.xxl,
-  },
-  currentLabel: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: FONTS.sm,
-    marginBottom: 4,
-  },
-  currentPlan: {
-    color: COLORS.white,
-    fontSize: FONTS.xxl,
-    fontWeight: FONTS.bold,
-  },
-  usage: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: FONTS.sm,
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: FONTS.bold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.lg,
-  },
-  packageCard: {
-    backgroundColor: COLORS.gray100,
-    borderRadius: BORDER_RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.lg,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  packageCardActive: {
-    borderColor: COLORS.primaryOrange,
-    backgroundColor: 'rgba(255,127,11,0.08)',
-  },
-  packageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { padding: 16 },
+  scrollContent: { paddingHorizontal: 20, alignItems: 'center', paddingBottom: 40 },
+  title: { fontSize: 28, fontWeight: '800', color: '#FF7A00', marginBottom: 10 },
+  subtitle: { fontSize: 14, color: '#666', textAlign: 'center', paddingHorizontal: 20, marginBottom: 30, lineHeight: 20 },
+  card: {
+    width: '100%',
+    backgroundColor: '#F9F9F9',
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1.5,
+    borderColor: '#FFBA70',
+    marginBottom: 20,
     alignItems: 'center',
   },
-  packageName: {
-    fontSize: FONTS.xl,
-    fontWeight: FONTS.bold,
-    color: COLORS.textPrimary,
-  },
-  packagePrice: {
-    fontSize: FONTS.lg,
-    fontWeight: FONTS.bold,
-    color: COLORS.primaryOrange,
-  },
-  packageLimits: {
-    fontSize: FONTS.sm,
-    color: COLORS.textSecondary,
-    marginTop: 8,
-  },
-  currentBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  currentBadgeText: {
-    fontSize: FONTS.sm,
-    color: COLORS.success,
-    marginLeft: 6,
-    fontWeight: FONTS.medium,
-  },
-  upgradeText: {
-    fontSize: FONTS.sm,
-    color: COLORS.primaryOrange,
-    fontWeight: FONTS.bold,
-    marginTop: 12,
-  },
+  crownIcon: { marginBottom: 10 },
+  priceContainer: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 20 },
+  currency: { fontSize: 24, fontWeight: '700', color: '#333', marginBottom: 8 },
+  price: { fontSize: 42, fontWeight: '800', color: '#333' },
+  duration: { fontSize: 16, color: '#888', marginBottom: 10, marginLeft: 4 },
+  divider: { width: '100%', height: 1, backgroundColor: '#EEE', marginBottom: 20 },
+  featureRow: { flexDirection: 'row', alignSelf: 'flex-start', alignItems: 'center', marginBottom: 12 },
+  featureText: { fontSize: 14, color: '#444', marginLeft: 10, fontWeight: '500' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });
 
 export default SubscriptionScreen;

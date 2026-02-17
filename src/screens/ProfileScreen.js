@@ -70,7 +70,6 @@ const ProfileScreen = () => {
     }, 100);
   };
 
-  // Reusable Menu Item Component
   const MenuItem = ({
     iconName,
     title,
@@ -137,7 +136,6 @@ const ProfileScreen = () => {
           <Icon name="chevron-right" size={24} color={COLORS.white} />
         </TouchableOpacity>
 
-        {/* Menu List */}
         <View style={styles.menuList}>
           <MenuItem
             iconName="package-variant"
@@ -175,8 +173,17 @@ const ProfileScreen = () => {
             title="Security"
             onPress={() => navigation.navigate('SecurityScreen')}
           />
-          <MenuItem iconName="cog-outline" title="Settings" />
-          <MenuItem iconName="help-circle-outline" title="Help Center" />
+          <MenuItem
+            iconName="cog-outline"
+            title="Settings"
+            onPress={() => navigation.navigate('SettingsScreen')}
+          />
+
+          <MenuItem
+            iconName="help-circle-outline"
+            title="Help Center"
+            onPress={() => navigation.navigate('HelpCenterScreen')}
+          />
 
           <View style={{ marginTop: SPACING.lg }}>
             <MenuItem
