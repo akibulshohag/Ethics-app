@@ -12,6 +12,8 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -20,8 +22,13 @@ import { useSelector } from 'react-redux';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
-import { getVideos, getVideoWatchHistory } from '../services/videoService';
+import { getVideos, getVideoWatchHistory, recordShare } from '../services/videoService';
 import { getChannelsList } from '../services/channelService';
+import { setPlaylist } from '../services/playlistService';
+import { downloadVideo } from '../services/downloadService';
+import { submitReport } from '../services/reportService';
+import SaveModal from '../components/SaveModal';
+import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
 
@@ -76,6 +83,7 @@ const mapShortToCard = (s) => {
     views: `${formatCount(s.viewCount ?? s._count?.views ?? 0)} views`,
     image: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
     thumbnail: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+    videoUrl: s.videoUrl,
   };
 };
 
@@ -92,6 +100,7 @@ const mapVideoToCard = (v) => {
     time: formatTimeAgo(pubAt),
     duration: formatDuration(v.duration),
     thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+    videoUrl: v.videoUrl,
   };
 };
 
@@ -110,8 +119,10 @@ const HomeVersion = () => {
   const [activeTab, setActiveTab] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
+  const [selectedItem, setSelectedItem] = useState(null); // { id, type: 'video'|'short', title, videoUrl?, ... }
   const [shortsData, setShortsData] = useState([]);
   const [videosData, setVideosData] = useState([]);
   const [continueData, setContinueData] = useState([]);
@@ -298,11 +309,86 @@ const HomeVersion = () => {
     </View>
   );
 
+  const openOptions = (item) => {
+    setSelectedItem(item);
+    setOptionsVisible(true);
+  };
+
+  const closeOptions = () => {
+    setOptionsVisible(false);
+    setSelectedItem(null);
+  };
+
+  const openSaveModal = () => {
+    if (!selectedItem?.id) return;
+    setOptionsVisible(false);
+    setTimeout(() => setSaveModalVisible(true), 100);
+  };
+
   const openReportModal = () => {
     setOptionsVisible(false);
-    setTimeout(() => {
-      setReportVisible(true);
-    }, 100);
+    setTimeout(() => setReportVisible(true), 100);
+  };
+
+  const handleSaveToWatchLater = async () => {
+    if (!currentUser?.id || !selectedItem?.id) {
+      Toast.show({ type: 'error', text1: 'Please log in to save' });
+      closeOptions();
+      return;
+    }
+    const contentType = selectedItem.type === 'short' ? 'short' : 'video';
+    try {
+      await setPlaylist(currentUser.id, 'watch_later', contentType, selectedItem.id, true);
+      Toast.show({ type: 'success', text1: 'Saved to Watch Later' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Failed to save' });
+    }
+    closeOptions();
+  };
+
+  const handleDownload = async () => {
+    if (!selectedItem) return;
+    const isVideo = selectedItem.type === 'video' || selectedItem.type === 'VIDEO';
+    if (!isVideo || !selectedItem.videoUrl) {
+      Toast.show({ type: 'info', text1: 'Download is only available for videos' });
+      closeOptions();
+      return;
+    }
+    const video = {
+      id: selectedItem.id,
+      title: selectedItem.title,
+      videoUrl: selectedItem.videoUrl,
+      thumbnail: selectedItem.thumbnail,
+      channelName: selectedItem.author,
+      duration: selectedItem.duration,
+    };
+    try {
+      await downloadVideo(video, (pct) => {});
+      Toast.show({ type: 'success', text1: 'Video downloaded' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Download failed' });
+    }
+    closeOptions();
+  };
+
+  const handleShare = async () => {
+    if (!selectedItem) return;
+    const shareUrl =
+      selectedItem.type === 'short'
+        ? `eatix://shorts/${selectedItem.id}`
+        : `eatix://video/${selectedItem.id}`;
+    const message = `${selectedItem.title || 'Video'}\n${shareUrl}`;
+    try {
+      await Share.share({ message, title: selectedItem.title || 'Share' });
+      if (selectedItem.type === 'video') {
+        recordShare(selectedItem.id).catch(() => {});
+      }
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        Toast.show({ type: 'error', text1: 'Share failed' });
+      }
+    }
+    closeOptions();
   };
 
   const handleShortPress = (shortId) => {
@@ -331,7 +417,7 @@ const HomeVersion = () => {
           <FlatList
             horizontal
             data={shorts}
-            keyExtractor={s => s.id}
+            keyExtractor={(s, idx) => `${s.id}-${idx}`}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{
               paddingHorizontal: SPACING.lg,
@@ -355,7 +441,7 @@ const HomeVersion = () => {
                 </View>
                 <TouchableOpacity
                   style={styles.moreIconShort}
-                  onPress={() => setOptionsVisible(true)}
+                  onPress={() => openOptions(short)}
                 >
                   <Icon name="dots-vertical" size={18} color="#fff" />
                 </TouchableOpacity>
@@ -377,9 +463,9 @@ const HomeVersion = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
           >
-            {continueItems.map((c) => (
+            {continueItems.map((c, idx) => (
               <TouchableOpacity
-                key={c.id}
+                key={`${c.id}-${c.type || 'v'}-${idx}`}
                 style={styles.continueCard}
                 onPress={() => handleContinuePress(c)}
                 activeOpacity={0.9}
@@ -423,7 +509,7 @@ const HomeVersion = () => {
                 {item.author} • {item.views} • {item.time}
               </Text>
             </View>
-            <TouchableOpacity onPress={() => setOptionsVisible(true)}>
+            <TouchableOpacity onPress={() => openOptions(item)}>
               <Icon name="dots-vertical" size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -499,9 +585,10 @@ const HomeVersion = () => {
       <FlatList
         data={mainFeed}
         keyExtractor={(item, index) => {
-          if (item.id) return item.id;
-          if (item.type === 'VIDEO') return `video-${item.id || index}`;
-          return `${item.type}-${index}`;
+          if (item.type === 'VIDEO') return `video-${item.id || index}-${index}`;
+          if (item.type === 'SHORTS') return `${item.id || `s-${index}`}-${index}`;
+          if (item.type === 'CONTINUE') return `${item.id || 'cont'}-${index}`;
+          return `${item.type || 'item'}-${index}`;
         }}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
@@ -555,36 +642,30 @@ const HomeVersion = () => {
         animationType="slide"
         transparent
         visible={optionsVisible}
-        onRequestClose={() => setOptionsVisible(false)}
+        onRequestClose={closeOptions}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setOptionsVisible(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={closeOptions}>
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>More Option</Text>
             <View style={styles.divider} />
-            <TouchableOpacity style={styles.optionRow}>
+            <TouchableOpacity style={styles.optionRow} onPress={openSaveModal}>
               <Icon name="playlist-plus" size={24} color="#333" />
               <Text style={styles.optionText}>Save to Playlist</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow}>
+            <TouchableOpacity style={styles.optionRow} onPress={handleSaveToWatchLater}>
               <Icon name="clock-outline" size={24} color="#333" />
               <Text style={styles.optionText}>Save to Watch Later</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow}>
+            <TouchableOpacity style={styles.optionRow} onPress={handleDownload}>
               <Icon name="download-outline" size={24} color="#333" />
               <Text style={styles.optionText}>Download Video</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow}>
+            <TouchableOpacity style={styles.optionRow} onPress={handleShare}>
               <Icon name="share-variant-outline" size={24} color="#333" />
               <Text style={styles.optionText}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.optionRow}
-              onPress={openReportModal}
-            >
+            <TouchableOpacity style={styles.optionRow} onPress={openReportModal}>
               <Icon
                 name="alert-circle-outline"
                 size={24}
@@ -642,7 +723,25 @@ const HomeVersion = () => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.submitButton}
-                onPress={() => setReportVisible(false)}
+                onPress={async () => {
+                  if (!selectedItem?.id) {
+                    setReportVisible(false);
+                    return;
+                  }
+                  try {
+                    await submitReport({
+                      contentType: selectedItem.type === 'short' ? 'short' : 'video',
+                      contentId: selectedItem.id,
+                      reporterId: currentUser?.id,
+                      reason: selectedReason,
+                    });
+                    Toast.show({ type: 'success', text1: 'Report submitted' });
+                  } catch (e) {
+                    Toast.show({ type: 'error', text1: 'Failed to submit report' });
+                  }
+                  setReportVisible(false);
+                  setSelectedItem(null);
+                }}
               >
                 <Text style={styles.submitButtonText}>Report</Text>
               </TouchableOpacity>
@@ -650,6 +749,16 @@ const HomeVersion = () => {
           </View>
         </Pressable>
       </Modal>
+
+      <SaveModal
+        visible={saveModalVisible}
+        onClose={() => {
+          setSaveModalVisible(false);
+          setSelectedItem(null);
+        }}
+        contentType={selectedItem?.type === 'short' ? 'short' : 'video'}
+        contentId={selectedItem?.id}
+      />
     </View>
   );
 };

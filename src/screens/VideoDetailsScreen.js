@@ -40,6 +40,11 @@ import {
   subscribeToChannel,
   unsubscribeFromChannel,
 } from '../services/channelService';
+import {
+  downloadVideo,
+  isVideoDownloaded,
+  getLocalPath,
+} from '../services/downloadService';
 
 const { width } = Dimensions.get('window');
 
@@ -135,8 +140,12 @@ const mapVideoApiToDisplay = v => {
   };
 };
 
-const ActionButton = ({ icon, label, onPress }) => (
-  <TouchableOpacity style={styles.actionButton} onPress={onPress}>
+const ActionButton = ({ icon, label, onPress, disabled }) => (
+  <TouchableOpacity
+    style={[styles.actionButton, disabled && { opacity: 0.5 }]}
+    onPress={onPress}
+    disabled={disabled}
+  >
     <MaterialCommunityIcons name={icon} size={24} color="#212121" />
     <Text style={styles.actionText}>{label}</Text>
   </TouchableOpacity>
@@ -147,6 +156,7 @@ const VideoDetailsScreen = () => {
   const route = useRoute();
   const user = useSelector(state => state?.app?.user);
   const videoId = route.params?.videoId;
+  const offlineVideo = route.params?.offlineVideo;
 
   const [currentVideo, setCurrentVideo] = useState(null);
   const [relatedVideos, setRelatedVideos] = useState([]);
@@ -180,8 +190,12 @@ const VideoDetailsScreen = () => {
   const [isSliding, setIsSliding] = useState(false);
   const [slidingValue, setSlidingValue] = useState(0);
 
+  const [downloadProgress, setDownloadProgress] = useState(null);
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [videoPlaybackUri, setVideoPlaybackUri] = useState(null);
+
   const loadVideo = useCallback(async () => {
-    if (!videoId) {
+    if (!videoId && !offlineVideo) {
       setError('No video selected');
       setLoading(false);
       return;
@@ -189,26 +203,67 @@ const VideoDetailsScreen = () => {
     try {
       setLoading(true);
       setError(null);
-      const [videoRes, videosRes] = await Promise.all([
-        getVideoById(videoId, user?.id),
-        getVideos({ page: 1, limit: 10 }),
-      ]);
-      const video = mapVideoApiToDisplay(videoRes);
-      setCurrentVideo(video);
-      if (video?.userId) {
-        getChannelProfile(video.userId, user?.id)
-          .then(profile => {
-            setChannelSubscription({
-              isSubscribed: profile.isSubscribed ?? false,
-              subscriberCount: profile.subscriberCount ?? 0,
-            });
-          })
-          .catch(() => {});
+
+      if (offlineVideo) {
+        const video = {
+          id: offlineVideo.id,
+          title: offlineVideo.title || 'Untitled',
+          channelName: offlineVideo.channelName || 'Unknown',
+          channelAvatar: null,
+          views: 'Offline',
+          viewCount: 0,
+          likeCount: 0,
+          dislikeCount: 0,
+          commentCount: 0,
+          topLevelCommentCount: 0,
+          shareCount: 0,
+          publishedAt: 'Downloaded',
+          publishedDate: '',
+          thumbnail: offlineVideo.thumbnail,
+          videoUrl: null,
+          duration: offlineVideo.duration || '0:00',
+          durationSeconds: 0,
+          description: '',
+          tags: [],
+          userId: null,
+          isLiked: false,
+          isDisliked: false,
+        };
+        setCurrentVideo(video);
+        setVideoPlaybackUri(offlineVideo.localPath);
+        setIsDownloaded(true);
+        setRelatedVideos([]);
+      } else {
+        const [videoRes, videosRes] = await Promise.all([
+          getVideoById(videoId, user?.id),
+          getVideos({ page: 1, limit: 10 }),
+        ]);
+        const video = mapVideoApiToDisplay(videoRes);
+        setCurrentVideo(video);
+        setVideoPlaybackUri(null);
+        const downloaded = await isVideoDownloaded(videoId);
+        setIsDownloaded(downloaded);
+        if (downloaded) {
+          const localPath = await getLocalPath(videoId);
+          setVideoPlaybackUri(localPath || video.videoUrl);
+        } else {
+          setVideoPlaybackUri(video.videoUrl);
+        }
+        const others = (videosRes?.videos || [])
+          .filter(v => v.id !== videoId)
+          .map(mapVideoApiToDisplay);
+        setRelatedVideos(others);
+        if (video?.userId) {
+          getChannelProfile(video.userId, user?.id)
+            .then(profile => {
+              setChannelSubscription({
+                isSubscribed: profile.isSubscribed ?? false,
+                subscriberCount: profile.subscriberCount ?? 0,
+              });
+            })
+            .catch(() => {});
+        }
       }
-      const others = (videosRes?.videos || [])
-        .filter(v => v.id !== videoId)
-        .map(mapVideoApiToDisplay);
-      setRelatedVideos(others);
       // Reset video player states
       setVideoPaused(true);
       setVideoProgress({ currentTime: 0, duration: 0 });
@@ -221,11 +276,13 @@ const VideoDetailsScreen = () => {
       progressUpdateRef.current = 0;
       isSeekingRef.current = false;
       setIsSliding(false);
-      recordView(videoId, user?.id).then(() => {
-        setCurrentVideo(prev =>
-          prev ? { ...prev, viewCount: prev.viewCount + 1 } : null,
-        );
-      });
+      if (!offlineVideo && videoId) {
+        recordView(videoId, user?.id).then(() => {
+          setCurrentVideo(prev =>
+            prev ? { ...prev, viewCount: prev.viewCount + 1 } : null,
+          );
+        });
+      }
     } catch (e) {
       setError(
         e?.response?.data?.message || e?.message || 'Failed to load video',
@@ -236,7 +293,7 @@ const VideoDetailsScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [videoId, user?.id]);
+  }, [videoId, offlineVideo, user?.id]);
 
   useEffect(() => {
     loadVideo();
@@ -310,6 +367,36 @@ const VideoDetailsScreen = () => {
     } catch {}
   };
 
+  const handleDownload = async () => {
+    if (!currentVideo) return;
+    if (isDownloaded) {
+      Alert.alert('Already downloaded', 'This video is available for offline playback.');
+      return;
+    }
+    setDownloadProgress(0);
+    try {
+      await downloadVideo(
+        {
+          id: currentVideo.id,
+          title: currentVideo.title,
+          videoUrl: currentVideo.videoUrl,
+          thumbnail: currentVideo.thumbnail,
+          channelName: currentVideo.channelName,
+          duration: currentVideo.duration,
+        },
+        pct => setDownloadProgress(pct),
+      );
+      setDownloadProgress(null);
+      setIsDownloaded(true);
+      const localPath = await getLocalPath(currentVideo.id);
+      setVideoPlaybackUri(localPath);
+      Alert.alert('Downloaded', 'Video is now available for offline playback.');
+    } catch (e) {
+      setDownloadProgress(null);
+      Alert.alert('Download failed', e?.message || 'Could not download video.');
+    }
+  };
+
   const onShare = async () => {
     if (!currentVideo) return;
     try {
@@ -339,6 +426,7 @@ const VideoDetailsScreen = () => {
     setVideoReady(true);
     setIsBuffering(false);
     setVideoProgress(p => ({ ...p, duration: data.duration || 0 }));
+    setVideoPaused(false); // Autoplay when video is loaded
   }, []);
 
   const handleVideoProgress = useCallback(data => {
@@ -373,6 +461,7 @@ const VideoDetailsScreen = () => {
   const handleVideoReady = useCallback(() => {
     setVideoReady(true);
     setVideoLoading(false);
+    setVideoPaused(false); // Autoplay when first frame is ready
   }, []);
 
   const handleRetryVideo = () => {
@@ -454,12 +543,12 @@ const VideoDetailsScreen = () => {
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.videoPlayer}>
-        {currentVideo.videoUrl ? (
+        {(currentVideo.videoUrl || videoPlaybackUri) ? (
           <>
             <Video
               ref={videoRef}
               key={`video-${videoId}-${retryCount}`}
-              source={{ uri: currentVideo.videoUrl }}
+              source={{ uri: videoPlaybackUri || currentVideo.videoUrl }}
               poster={currentVideo.thumbnail}
               posterResizeMode="cover"
               style={styles.videoPlayerContent}
@@ -635,7 +724,18 @@ const VideoDetailsScreen = () => {
             onPress={() => setCommentsModalVisible(true)}
           />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
-          <ActionButton icon="download-outline" label="Download" />
+          <ActionButton
+            icon={isDownloaded ? 'check-circle' : 'download-outline'}
+            label={
+              downloadProgress !== null
+                ? `${downloadProgress}%`
+                : isDownloaded
+                  ? 'Downloaded'
+                  : 'Download'
+            }
+            onPress={handleDownload}
+            disabled={downloadProgress !== null}
+          />
           <ActionButton
             icon="plus-box-outline"
             label="Save"

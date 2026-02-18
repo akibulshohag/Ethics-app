@@ -20,6 +20,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import CompactVideoCard from '../components/CompactVideoCard';
 import { getUserVideos, getVideoWatchHistory } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import { getDownloadedVideos } from '../services/downloadService';
 
 const formatCount = n => {
   if (!n || n < 0) return '0';
@@ -143,6 +144,8 @@ const LibraryScreen = ({ navigation }) => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyRefreshing, setHistoryRefreshing] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('All'); // All | Videos | Shorts
+  const [downloadedVideos, setDownloadedVideos] = useState([]);
+  const [downloadsLoading, setDownloadsLoading] = useState(false);
 
   const loadYourVideos = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -176,12 +179,31 @@ const LibraryScreen = ({ navigation }) => {
     setYourVideosRefreshing(false);
   }, [currentUser?.id, loadYourVideos]);
 
+  const loadDownloads = useCallback(async () => {
+    try {
+      const list = await getDownloadedVideos();
+      setDownloadedVideos(list);
+    } catch {
+      setDownloadedVideos([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (currentView === 'downloads') {
+      setDownloadsLoading(true);
+      loadDownloads().finally(() => setDownloadsLoading(false));
+    }
+  }, [currentView, loadDownloads]);
+
   const handleVideoPress = useCallback(
     item => {
       if (item.type === 'short') {
         navigation?.navigate('ShortsVideoScreen', { shortId: item.id });
       } else {
-        navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
+        navigation?.navigate('VideoDetailsScreen', {
+          videoId: item.id,
+          offlineVideo: item.localPath ? item : undefined,
+        });
       }
     },
     [navigation],
@@ -358,6 +380,8 @@ const LibraryScreen = ({ navigation }) => {
       refreshing = false,
       onRefresh,
       onPress,
+      emptyTitle,
+      emptySubtitle,
     } = options;
 
     const listData = isYourVideos
@@ -407,7 +431,9 @@ const LibraryScreen = ({ navigation }) => {
         ) : (
           <FlatList
             data={listData}
-            keyExtractor={(item, index) => item.id || index.toString()}
+            keyExtractor={(item, index) =>
+              `${item.id || 'item'}-${item.type || 'v'}-${index}`
+            }
             renderItem={({ item }) => (
               <CompactVideoCard
                 video={item}
@@ -419,20 +445,24 @@ const LibraryScreen = ({ navigation }) => {
               listData.length === 0 && styles.emptyListContent,
             ]}
             ListEmptyComponent={
-              isYourVideos && listData.length === 0 ? (
+              listData.length === 0 ? (
                 <View style={styles.emptyState}>
                   <MaterialCommunityIcons
-                    name="video-outline"
+                    name={
+                      emptyTitle ? 'download-outline' : 'video-outline'
+                    }
                     size={64}
                     color="#ccc"
                   />
                   <Text style={styles.emptyStateText}>
-                    No {filter.toLowerCase()} yet
+                    {emptyTitle ||
+                      `No ${filter.toLowerCase()} yet`}
                   </Text>
                   <Text style={styles.emptyStateSubtext}>
-                    {filter === 'Videos'
-                      ? 'Upload your first video to get started'
-                      : 'Create your first short to get started'}
+                    {emptySubtitle ||
+                      (filter === 'Videos'
+                        ? 'Upload your first video to get started'
+                        : 'Create your first short to get started')}
                   </Text>
                 </View>
               ) : null
@@ -523,7 +553,9 @@ const LibraryScreen = ({ navigation }) => {
         ) : (
           <FlatList
             data={historyList}
-            keyExtractor={(item, index) => item.id || index.toString()}
+            keyExtractor={(item, index) =>
+              `${item.id || 'item'}-${item.type || 'v'}-${index}`
+            }
             renderItem={({ item }) => (
               <CompactVideoCard
                 video={item}
@@ -575,8 +607,15 @@ const LibraryScreen = ({ navigation }) => {
       onPress: handleVideoPress,
     });
   }
-  if (currentView === 'downloads')
-    return renderListView([...HISTORY_DATA, ...HISTORY_DATA]);
+  if (currentView === 'downloads') {
+    return renderListView(downloadedVideos, {
+      loading: downloadsLoading,
+      onPress: handleVideoPress,
+      emptyTitle: 'No downloads yet',
+      emptySubtitle:
+        'Download videos from the video details screen to watch offline',
+    });
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -596,9 +635,10 @@ const LibraryScreen = ({ navigation }) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.historyScroll}
         >
-          {(watchHistory.length > 0 ? watchHistory.slice(0, 8) : []).map(item => (
+          {(watchHistory.length > 0 ? watchHistory.slice(0, 8) : []).map(
+            (item, index) => (
             <TouchableOpacity
-              key={item.id}
+              key={`${item.id}-${item.type || 'v'}-${index}`}
               style={styles.historyCard}
               onPress={() => handleVideoPress(item)}
               activeOpacity={1}
