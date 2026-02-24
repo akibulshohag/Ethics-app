@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { useDispatch } from 'react-redux';
+import { setOnboardingDone } from '../redux/actions/appSlice';
 import {
   COLORS,
   FONTS,
@@ -68,12 +70,13 @@ const SLIDES = [
 
 const OnboardingScreen = () => {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
   const scrollRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const handleNext = () => {
     if (currentIndex >= SLIDES.length - 1) {
-      navigation.replace('SignUp');
+      dispatch(setOnboardingDone(true));
       return;
     }
     scrollRef.current?.scrollTo({

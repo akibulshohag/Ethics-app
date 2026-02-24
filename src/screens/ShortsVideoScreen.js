@@ -21,6 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
+import { useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
@@ -372,10 +373,13 @@ const mapShortToItem = s => {
 };
 
 const ShortsVideoScreen = ({ navigation }) => {
+  const route = useRoute();
+  const initialShortId = route.params?.initialShortId ?? route.params?.shortId;
   const user = useSelector(state => state?.app?.user);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+  const hasAppliedInitialShort = useRef(false);
   const [commentsVisible, setCommentsVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
@@ -391,6 +395,32 @@ const ShortsVideoScreen = ({ navigation }) => {
   useEffect(() => {
     loadShorts();
   }, []);
+
+  // When opened from Home with a specific short, put that short first
+  useEffect(() => {
+    if (!initialShortId) return;
+    hasAppliedInitialShort.current = false;
+  }, [initialShortId]);
+
+  useEffect(() => {
+    if (
+      !loading &&
+      videos.length > 0 &&
+      initialShortId &&
+      !hasAppliedInitialShort.current
+    ) {
+      const idx = videos.findIndex(v => String(v.id) === String(initialShortId));
+      if (idx > 0) {
+        const clicked = videos[idx];
+        const rest = videos.filter((_, i) => i !== idx);
+        setVideos([clicked, ...rest]);
+        setActiveVideoIndex(0);
+      } else if (idx === 0) {
+        setActiveVideoIndex(0);
+      }
+      hasAppliedInitialShort.current = true;
+    }
+  }, [loading, videos, initialShortId]);
 
   const loadShorts = async () => {
     try {
@@ -412,7 +442,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   };
 
   const handleLike = async item => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
     try {
       await shortsService.toggleLike(item.id, user.id);
       setVideos(prev =>
@@ -433,7 +466,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   };
 
   const handleDislike = async item => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
     try {
       await shortsService.toggleDislike(item.id, user.id);
       setVideos(prev =>
@@ -457,7 +493,7 @@ const ShortsVideoScreen = ({ navigation }) => {
     const channelUserId = item.user?.id;
     if (!channelUserId) return;
     if (!user?.id) {
-      Alert.alert('Sign in required', 'Please sign in to subscribe to channels.');
+      navigation.navigate('Login');
       return;
     }
     if (user.id === channelUserId) return; // can't subscribe to self
@@ -478,6 +514,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   const activeItem = displayVideos[activeVideoIndex];
 
   const handleShare = async item => {
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
     const short = item || activeItem;
     if (!short?.id) return;
     const shareUrl = `eatix://shorts/${short.id}`;
@@ -493,7 +533,9 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   const handleSaveToWatchLater = async () => {
     if (!user?.id || !activeItem?.id) {
-      Toast.show({ type: 'error', text1: 'Please log in to save' });
+      Toast.show({ type: 'info', text1: 'Please log in to save' });
+      setSettingsVisible(false);
+      navigation.navigate('Login');
       return;
     }
     try {
@@ -506,6 +548,10 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   const openReportModal = () => {
     setSettingsVisible(false);
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
     setTimeout(() => setReportVisible(true), 100);
   };
 
@@ -573,7 +619,13 @@ const ShortsVideoScreen = ({ navigation }) => {
               isActive={activeVideoIndex === index}
               index={index}
               screenHeight={screenHeight}
-              onOpenComments={() => setCommentsVisible(true)}
+              onOpenComments={() => {
+                if (!user?.id) {
+                  navigation.navigate('Login');
+                  return;
+                }
+                setCommentsVisible(true);
+              }}
               onOpenSettings={() => setSettingsVisible(true)}
               onOpenCreate={() => setCreateVisible(true)}
               onLike={handleLike}
@@ -621,7 +673,14 @@ const ShortsVideoScreen = ({ navigation }) => {
       <SettingsModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
-        onSaveToPlaylist={() => setSaveModalVisible(true)}
+        onSaveToPlaylist={() => {
+          if (!user?.id) {
+            setSettingsVisible(false);
+            navigation.navigate('Login');
+            return;
+          }
+          setSaveModalVisible(true);
+        }}
         onSaveToWatchLater={handleSaveToWatchLater}
         onReport={openReportModal}
         onShare={() => handleShare(activeItem)}

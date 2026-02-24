@@ -4,6 +4,7 @@ const appSlice = createSlice({
   name: 'app',
   initialState: {
     user: null,
+    onboardingDone: false,
   },
   reducers: {
     appSetUser: (state, action) => {
@@ -13,9 +14,12 @@ const appSlice = createSlice({
         state.user = { ...state.user, ...action.payload };
       }
     },
+    setOnboardingDone: (state, action) => {
+      state.onboardingDone = action.payload !== false;
+    },
   },
 });
 
-export const { appSetUser } = appSlice.actions;
+export const { appSetUser, setOnboardingDone } = appSlice.actions;
 
 export default appSlice.reducer;

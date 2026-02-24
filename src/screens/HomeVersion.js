@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
+import { navigationRef } from '../utils/helper';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
@@ -321,19 +322,32 @@ const HomeVersion = () => {
 
   const openSaveModal = () => {
     if (!selectedItem?.id) return;
+    if (!currentUser) {
+      closeOptions();
+      Toast.show({ type: 'info', text1: 'Please log in to save to playlist' });
+      navigationRef.current?.navigate('Login');
+      return;
+    }
     setOptionsVisible(false);
     setTimeout(() => setSaveModalVisible(true), 100);
   };
 
   const openReportModal = () => {
     setOptionsVisible(false);
+    if (!currentUser) {
+      closeOptions();
+      Toast.show({ type: 'info', text1: 'Please log in to report' });
+      navigationRef.current?.navigate('Login');
+      return;
+    }
     setTimeout(() => setReportVisible(true), 100);
   };
 
   const handleSaveToWatchLater = async () => {
     if (!currentUser?.id || !selectedItem?.id) {
-      Toast.show({ type: 'error', text1: 'Please log in to save' });
+      Toast.show({ type: 'info', text1: 'Please log in to save' });
       closeOptions();
+      navigationRef.current?.navigate('Login');
       return;
     }
     const contentType = selectedItem.type === 'short' ? 'short' : 'video';
@@ -373,6 +387,12 @@ const HomeVersion = () => {
 
   const handleShare = async () => {
     if (!selectedItem) return;
+    if (!currentUser) {
+      closeOptions();
+      Toast.show({ type: 'info', text1: 'Please log in to share' });
+      navigationRef.current?.navigate('Login');
+      return;
+    }
     const shareUrl =
       selectedItem.type === 'short'
         ? `eatix://shorts/${selectedItem.id}`
@@ -392,7 +412,10 @@ const HomeVersion = () => {
   };
 
   const handleShortPress = (shortId) => {
-    navigation.getParent()?.navigate('Shorts');
+    navigation.getParent()?.navigate('Shorts', {
+      screen: 'ShortsVideoScreen',
+      params: { initialShortId: shortId },
+    });
   };
 
   const handleVideoPress = (videoId) => {
@@ -573,9 +596,13 @@ const HomeVersion = () => {
 
             <TouchableOpacity
               style={styles.profileMini}
-              onPress={() =>
-                navigation.navigate('Library', { screen: 'ProfileScreen' })
-              }
+              onPress={() => {
+                if (!currentUser) {
+                  navigationRef.current?.navigate('Login');
+                  return;
+                }
+                navigation.navigate('Library', { screen: 'ProfileScreen' });
+              }}
               activeOpacity={0.7}
             />
           </View>

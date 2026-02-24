@@ -17,7 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { navigationRef } from './utils/helper';
 
 const AppContent = () => {
-  const { user } = useSelector(state => state.app);
+  const { user, onboardingDone } = useSelector(state => state.app);
   const backAction = () => {
     if (!navigationRef.current || !navigationRef.current.isReady()) {
       return false;
@@ -62,7 +62,11 @@ const AppContent = () => {
 
   return (
     <NavigationContainer ref={navigationRef}>
-      {_.isEmpty(user) ? <AuthStack /> : <RootStack />}
+      {_.isEmpty(user) && !onboardingDone ? (
+        <AuthStack />
+      ) : (
+        <RootStack />
+      )}
     </NavigationContainer>
   );
 };

@@ -6,6 +6,8 @@ import SetFingerprint from '../screens/SetFingerprint';
 import ChooseInterests from '../screens/ChooseInterests';
 import SecurityScreen from '../screens/SecurityScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
+import Login from '../screens/LoginScreen';
+import SignUp from '../screens/SignUpScreen';
 
 const Root = createStackNavigator();
 
@@ -13,6 +15,8 @@ const RootStack = () => {
   return (
     <Root.Navigator screenOptions={{ headerShown: false }}>
       <Root.Screen name="Root" component={BottomNaivgation} />
+      <Root.Screen name="Login" component={Login} />
+      <Root.Screen name="SignUp" component={SignUp} />
       <Root.Screen name="Account" component={AccountScreen} />
       <Root.Screen name="SecurityScreen" component={SecurityScreen} />
       <Root.Screen

@@ -300,7 +300,11 @@ const VideoDetailsScreen = () => {
   }, [loadVideo]);
 
   const handleSubscribe = async () => {
-    if (!user?.id || !currentVideo?.userId) return;
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
+    if (!currentVideo?.userId) return;
     if (currentVideo.userId === user.id) return; // own channel
     setSubscribeLoading(true);
     try {
@@ -328,7 +332,11 @@ const VideoDetailsScreen = () => {
   };
 
   const handleLike = async () => {
-    if (!user?.id || !currentVideo) return;
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
+    if (!currentVideo) return;
     try {
       await toggleLike(currentVideo.id, user.id);
       setCurrentVideo(prev => {
@@ -349,7 +357,11 @@ const VideoDetailsScreen = () => {
   };
 
   const handleDislike = async () => {
-    if (!user?.id || !currentVideo) return;
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
+    if (!currentVideo) return;
     try {
       await toggleDislike(currentVideo.id, user.id);
       setCurrentVideo(prev => {
@@ -398,6 +410,10 @@ const VideoDetailsScreen = () => {
   };
 
   const onShare = async () => {
+    if (!user?.id) {
+      navigation.navigate('Login');
+      return;
+    }
     if (!currentVideo) return;
     try {
       recordShare(currentVideo.id);
@@ -721,7 +737,13 @@ const VideoDetailsScreen = () => {
             label={formatCount(
               currentVideo.topLevelCommentCount ?? currentVideo.commentCount,
             )}
-            onPress={() => setCommentsModalVisible(true)}
+            onPress={() => {
+              if (!user?.id) {
+                navigation.navigate('Login');
+                return;
+              }
+              setCommentsModalVisible(true);
+            }}
           />
           <ActionButton icon="share-outline" label="Share" onPress={onShare} />
           <ActionButton
@@ -739,7 +761,13 @@ const VideoDetailsScreen = () => {
           <ActionButton
             icon="plus-box-outline"
             label="Save"
-            onPress={() => setSaveModalVisible(true)}
+            onPress={() => {
+              if (!user?.id) {
+                navigation.navigate('Login');
+                return;
+              }
+              setSaveModalVisible(true);
+            }}
           />
         </View>
 
@@ -806,7 +834,13 @@ const VideoDetailsScreen = () => {
         {/* Comments Preview */}
         <TouchableOpacity
           style={styles.commentsPreview}
-          onPress={() => setCommentsModalVisible(true)}
+          onPress={() => {
+            if (!user?.id) {
+              navigation.navigate('Login');
+              return;
+            }
+            setCommentsModalVisible(true);
+          }}
           activeOpacity={0.8}
         >
           <View style={styles.commentsHeader}>

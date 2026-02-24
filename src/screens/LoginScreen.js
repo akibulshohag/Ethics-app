@@ -82,13 +82,12 @@ const LoginScreen = () => {
       dispatch(appSetUser(userData));
 
       // Navigate based on profile completion status
-      // If user has PIN, go directly to Home (RootStack will handle this)
-      // If no PIN, go to AccountScreen to complete profile
       if (data.user.pin) {
-        // User has completed setup, let App.js switch to RootStack
-        // The navigation will happen automatically via App.js conditional rendering
+        // When already in RootStack (e.g. opened Login from profile icon), go back to main tabs
+        try {
+          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+        } catch (_) {}
       } else {
-        // User needs to complete profile setup
         navigation.navigate('Account');
       }
     } catch (error) {

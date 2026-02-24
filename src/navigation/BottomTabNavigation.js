@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
+import { getFocusedRouteNameFromRoute, useNavigation } from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
 import LibraryNavigation from './LibraryStack';
 import ShortsNavigation from './ShortsStack';
@@ -28,8 +28,15 @@ const getTabBarStyle = route => {
 const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
   const user = useSelector(state => state.app?.user);
-  console.log('user', user);
+  const navigation = useNavigation();
   const showCreateTab = user?.role === 'owner' || user?.role === 'admin';
+
+  const requireLogin = (e, tabName) => {
+    if (!user) {
+      e.preventDefault();
+      navigation.navigate('Login');
+    }
+  };
 
   const Tab = createBottomTabNavigator();
 
@@ -113,6 +120,9 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Subscriptions"
             component={SubscriptionsScreen}
+            listeners={{
+              tabPress: e => requireLogin(e, 'Subscriptions'),
+            }}
             options={{
               tabBarIcon: ({ focused, color }) => (
                 <Icon
@@ -141,6 +151,9 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Library"
             component={LibraryNavigation}
+            listeners={{
+              tabPress: e => requireLogin(e, 'Library'),
+            }}
             options={({ route }) => ({
               tabBarStyle: {
                 backgroundColor: COLORS.white,
