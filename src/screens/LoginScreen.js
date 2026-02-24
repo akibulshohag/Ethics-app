@@ -72,6 +72,8 @@ const LoginScreen = () => {
         phone: data.user.phone,
         nickname: data.user.nickname,
         gender: data.user.gender,
+        role: data.user.role,
+        roleId: data.user.roleId,
         pin: data.user.pin, // Boolean indicating if user has PIN
         rememberMe: rememberMe,
         token: data.token,

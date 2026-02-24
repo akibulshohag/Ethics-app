@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -24,9 +24,10 @@ import {
   DIMENSIONS,
   COMMON_STYLES,
 } from '../constants/theme';
-
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Dropdown } from 'react-native-element-dropdown';
+import { getRolesList } from '../services/roleService';
 
 const SignUpScreen = () => {
   const navigation = useNavigation();
@@ -34,9 +35,25 @@ const SignUpScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [roleId, setRoleId] = useState(null);
+  const [roles, setRoles] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getRolesList()
+      .then(res => {
+        setRoles(res?.roles || []);
+        if (res?.roles?.length > 0 && !roleId) {
+          const defaultRole = res.roles.find(r => r.name === 'user') || res.roles[0];
+          setRoleId(defaultRole.id);
+        }
+      })
+      .catch(() => setRoles([]))
+      .finally(() => setRolesLoading(false));
+  }, []);
 
   const handleSignUp = async () => {
     if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
@@ -64,6 +81,7 @@ const SignUpScreen = () => {
         body: JSON.stringify({
           email: email.trim(),
           password: password.trim(),
+          ...(roleId ? { roleId } : {}),
         }),
       });
 
@@ -81,6 +99,8 @@ const SignUpScreen = () => {
         phone: data.user.phone || '',
         nickname: data.user.nickname || '',
         gender: data.user.gender || 'others',
+        role: data.user.role,
+        roleId: data.user.roleId,
         token: data.token,
       };
 
@@ -164,6 +184,24 @@ const SignUpScreen = () => {
                 color="black"
               />
             </TouchableOpacity>
+          </View>
+
+          {/* Role Input */}
+          <Text style={styles.inputLabel}>Role</Text>
+          <View style={styles.inputWrapper}>
+            <Icon name="account-badge" size={20} color="black" />
+            <Dropdown
+              data={roles.map(r => ({ label: r.name, value: r.id }))}
+              value={roleId}
+              labelField="label"
+              valueField="value"
+              placeholder={rolesLoading ? 'Loading roles...' : 'Select role'}
+              onChange={item => setRoleId(item.value)}
+              style={styles.dropdown}
+              placeholderStyle={styles.dropdownPlaceholder}
+              selectedTextStyle={styles.dropdownSelectedText}
+              containerStyle={styles.dropdownContainer}
+            />
           </View>
 
           {/* Confirm Password Input */}
@@ -366,6 +404,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  dropdown: {
+    flex: 1,
+    marginLeft: 8,
+    minHeight: 56,
+  },
+  dropdownPlaceholder: { color: '#999', fontSize: 16 },
+  dropdownSelectedText: { color: '#333', fontSize: 16 },
+  dropdownContainer: { borderRadius: 12, borderWidth: 1, borderColor: '#eee' },
 });
 
 export default SignUpScreen;

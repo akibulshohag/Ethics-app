@@ -16,6 +16,8 @@ const { height } = Dimensions.get('window');
 
 const OPTIONS = [
   { id: '0', label: 'Save to Playlist', icon: 'playlist-plus', type: 'material', iconName: 'playlist-plus', lib: 'MaterialCommunityIcons', isSaveOption: true },
+  { id: 'watch_later', label: 'Save to Watch Later', icon: 'clock-outline', type: 'material', iconName: 'clock-outline', lib: 'MaterialCommunityIcons' },
+  { id: 'share', label: 'Share', icon: 'share-variant-outline', type: 'material', iconName: 'share-variant-outline', lib: 'MaterialCommunityIcons' },
   { id: '1', label: 'Description', icon: 'text-document', type: 'entypo', iconName: 'file-text-outline', lib: 'MaterialCommunityIcons' },
   { id: '2', label: 'Captions', icon: 'closed-caption', type: 'material', iconName: 'closed-caption-outline', lib: 'MaterialCommunityIcons' },
   { id: '3', label: 'Not Interested', icon: 'eye-off', type: 'material', iconName: 'eye-off-outline', lib: 'MaterialCommunityIcons' },
@@ -23,13 +25,24 @@ const OPTIONS = [
   { id: '5', label: 'Report', icon: 'flag', type: 'material', iconName: 'flag-outline', lib: 'Ionicons' },
 ];
 
-const SettingsModal = ({ visible, onClose, onSaveToPlaylist }) => {
+const SettingsModal = ({
+  visible,
+  onClose,
+  onSaveToPlaylist,
+  onSaveToWatchLater,
+  onReport,
+  onShare,
+}) => {
   const handleOptionPress = (item) => {
+    onClose();
     if (item.isSaveOption && onSaveToPlaylist) {
-      onClose();
       onSaveToPlaylist();
-    } else {
-      onClose();
+    } else if (item.id === '5' && onReport) {
+      onReport();
+    } else if (item.id === 'watch_later' && onSaveToWatchLater) {
+      onSaveToWatchLater();
+    } else if (item.id === 'share' && onShare) {
+      onShare();
     }
   };
 

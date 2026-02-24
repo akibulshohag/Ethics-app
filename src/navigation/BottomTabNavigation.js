@@ -13,6 +13,7 @@ import LibraryNavigation from './LibraryStack';
 import ShortsNavigation from './ShortsStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
+import AdminScreen from '../screens/AdminScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,6 +27,9 @@ const getTabBarStyle = route => {
 
 const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
+  const user = useSelector(state => state.app?.user);
+  console.log('user', user);
+  const showCreateTab = user?.role === 'owner' || user?.role === 'admin';
 
   const Tab = createBottomTabNavigator();
 
@@ -92,17 +96,19 @@ const BottomNaivgation = () => {
             }}
           />
 
-          <Tab.Screen
-            name="Create"
-            component={CreateVideoModalScreen}
-            options={{
-              tabBarIcon: ({ focused }) => (
-                <View style={styles.fabContainer}>
-                  <Icon name="plus" size={30} color={COLORS.white} />
-                </View>
-              ),
-            }}
-          />
+          {showCreateTab && (
+            <Tab.Screen
+              name="Create"
+              component={CreateVideoModalScreen}
+              options={{
+                tabBarIcon: ({ focused }) => (
+                  <View style={styles.fabContainer}>
+                    <Icon name="plus" size={30} color={COLORS.white} />
+                  </View>
+                ),
+              }}
+            />
+          )}
 
           <Tab.Screen
             name="Subscriptions"
@@ -111,6 +117,20 @@ const BottomNaivgation = () => {
               tabBarIcon: ({ focused, color }) => (
                 <Icon
                   name="youtube-subscription"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Admin"
+            component={AdminScreen}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="cog"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />

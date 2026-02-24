@@ -28,6 +28,10 @@ export const getChannelProfile = async (channelUserId, currentUserId) => {
     );
     return response.data;
   } catch (error) {
+    // 404 is expected for mock users or users without channel-profile
+    if (error?.response?.status === 404) {
+      return { isSubscribed: false, subscriberCount: 0 };
+    }
     console.error('Error fetching channel profile:', error);
     throw error;
   }

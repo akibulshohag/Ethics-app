@@ -12,6 +12,9 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
+  Share,
 } from 'react-native';
 import Video from 'react-native-video';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -23,12 +26,16 @@ import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
 import CreateVideoModal from '../components/CreateVideoModal';
 import SaveModal from '../components/SaveModal';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { shortsService } from '../services/shortsService';
 import {
   getChannelProfile,
   subscribeToChannel,
   unsubscribeFromChannel,
 } from '../services/channelService';
+import { setPlaylist } from '../services/playlistService';
+import { submitReport } from '../services/reportService';
+import Toast from 'react-native-toast-message';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -38,6 +45,16 @@ const formatCount = n => {
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(n);
 };
+
+const REPORT_REASONS = [
+  'Sexual Content',
+  'Violent or Repulsive Content',
+  'Hateful or Abusive Content',
+  'Harmful or Dangerous Acts',
+  'Spam or Misleading',
+  'Child Abuse',
+  'Others',
+];
 
 // Fallback mock data when API has no shorts
 const MOCK_VIDEOS = [
@@ -118,6 +135,7 @@ const VideoItem = ({
   onLike,
   onDislike,
   onSubscribe,
+  onShare,
   isSubscribed,
   navigation,
 }) => {
@@ -242,7 +260,7 @@ const VideoItem = ({
           <Text style={styles.actionText}>{item.commentsDisplay}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem}>
+        <TouchableOpacity style={styles.actionItem} onPress={() => onShare?.(item)}>
           <FontAwesome
             name="share"
             size={28}
@@ -362,10 +380,13 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [selectedReason, setSelectedReason] = useState('Sexual Content');
   const [subscriptionMap, setSubscriptionMap] = useState({});
 
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
   const screenHeight = windowHeight - tabHeight;
+  const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
 
   useEffect(() => {
     loadShorts();
@@ -454,16 +475,69 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
+  const activeItem = displayVideos[activeVideoIndex];
+
+  const handleShare = async item => {
+    const short = item || activeItem;
+    if (!short?.id) return;
+    const shareUrl = `eatix://shorts/${short.id}`;
+    const message = `${short.description || short.user?.username || 'Short'}\n${shareUrl}`;
+    try {
+      await Share.share({ message, title: short.description || 'Share Short' });
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        Toast.show({ type: 'error', text1: 'Share failed' });
+      }
+    }
+  };
+
+  const handleSaveToWatchLater = async () => {
+    if (!user?.id || !activeItem?.id) {
+      Toast.show({ type: 'error', text1: 'Please log in to save' });
+      return;
+    }
+    try {
+      await setPlaylist(user.id, 'watch_later', 'short', activeItem.id, true);
+      Toast.show({ type: 'success', text1: 'Saved to Watch Later' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Failed to save' });
+    }
+  };
+
+  const openReportModal = () => {
+    setSettingsVisible(false);
+    setTimeout(() => setReportVisible(true), 100);
+  };
+
+  const handleReportSubmit = async () => {
+    if (!activeItem?.id) {
+      setReportVisible(false);
+      return;
+    }
+    try {
+      await submitReport({
+        contentType: 'short',
+        contentId: activeItem.id,
+        reporterId: user?.id,
+        reason: selectedReason,
+      });
+      Toast.show({ type: 'success', text1: 'Report submitted' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Failed to submit report' });
+    }
+    setReportVisible(false);
+  };
+
   useEffect(() => {
-    const activeItem = (videos.length > 0 ? videos : MOCK_VIDEOS)[activeVideoIndex];
-    const channelUserId = activeItem?.user?.id;
+    const active = displayVideos[activeVideoIndex];
+    const channelUserId = active?.user?.id;
     if (!channelUserId || !user?.id || subscriptionMap[channelUserId] !== undefined) return;
     getChannelProfile(channelUserId, user.id)
       .then(data => {
         setSubscriptionMap(prev => ({ ...prev, [channelUserId]: data?.isSubscribed ?? false }));
       })
       .catch(() => {});
-  }, [activeVideoIndex, videos, user?.id]);
+  }, [activeVideoIndex, displayVideos, user?.id]);
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems && viewableItems.length > 0) {
@@ -478,8 +552,6 @@ const ShortsVideoScreen = ({ navigation }) => {
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 80,
   }).current;
-
-  const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
 
   return (
     <View style={[styles.container, { height: screenHeight }]}>
@@ -507,6 +579,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               onLike={handleLike}
               onDislike={handleDislike}
               onSubscribe={handleSubscribe}
+              onShare={handleShare}
               isSubscribed={subscriptionMap[item.user?.id] ?? item.user?.isSubscribed ?? false}
               navigation={navigation}
             />
@@ -549,6 +622,9 @@ const ShortsVideoScreen = ({ navigation }) => {
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
         onSaveToPlaylist={() => setSaveModalVisible(true)}
+        onSaveToWatchLater={handleSaveToWatchLater}
+        onReport={openReportModal}
+        onShare={() => handleShare(activeItem)}
       />
       <SaveModal
         visible={saveModalVisible}
@@ -560,6 +636,57 @@ const ShortsVideoScreen = ({ navigation }) => {
         visible={createVisible}
         onClose={() => setCreateVisible(false)}
       />
+
+      <Modal
+        animationType="slide"
+        transparent
+        visible={reportVisible}
+        onRequestClose={() => setReportVisible(false)}
+      >
+        <Pressable
+          style={styles.reportOverlay}
+          onPress={() => setReportVisible(false)}
+        >
+          <View style={styles.reportModalContent}>
+            <View style={styles.reportHandle} />
+            <Text style={styles.reportTitle}>Report</Text>
+            <View style={styles.reportDivider} />
+            {REPORT_REASONS.map(reason => (
+              <TouchableOpacity
+                key={reason}
+                activeOpacity={0.8}
+                style={styles.reportOptionRow}
+                onPress={() => setSelectedReason(reason)}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    selectedReason === reason
+                      ? 'radiobox-marked'
+                      : 'radiobox-blank'
+                  }
+                  size={24}
+                  color="#FF8C00"
+                />
+                <Text style={styles.reportOptionText}>{reason}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.reportActionRow}>
+              <TouchableOpacity
+                style={styles.reportCancelButton}
+                onPress={() => setReportVisible(false)}
+              >
+                <Text style={styles.reportCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reportSubmitButton}
+                onPress={handleReportSubmit}
+              >
+                <Text style={styles.reportSubmitText}>Report</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
@@ -717,6 +844,80 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+  reportOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  reportModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    paddingTop: 10,
+  },
+  reportHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#ddd',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 15,
+  },
+  reportTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  reportDivider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginBottom: 15,
+  },
+  reportOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  reportOptionText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 12,
+  },
+  reportActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 25,
+  },
+  reportCancelButton: {
+    flex: 1,
+    backgroundColor: '#FFF5F0',
+    paddingVertical: 15,
+    borderRadius: 30,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  reportCancelText: {
+    color: '#FF8C00',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  reportSubmitButton: {
+    flex: 1,
+    backgroundColor: '#FF8C00',
+    paddingVertical: 15,
+    borderRadius: 30,
+    marginLeft: 10,
+    alignItems: 'center',
+  },
+  reportSubmitText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

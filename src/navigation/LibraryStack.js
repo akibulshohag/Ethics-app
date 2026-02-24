@@ -13,6 +13,14 @@ import UploadVideoScreen from '../screens/UploadVideoScreen';
 import LikedScreen from '../screens/LikedScreen';
 import WatchLaterScreen from '../screens/WatchLaterScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import GeneralSettingsScreen from '../screens/GeneralSettingsScreen';
+import DataSavingScreen from '../screens/DataSavingScreen';
+import VideoQualityPreferencesScreen from '../screens/VideoQualityPreferencesScreen';
+import BackgroundDownloadsScreen from '../screens/BackgroundDownloadsScreen';
+import HelpCenterScreen from '../screens/HelpCenterScreen';
+import IncognitoScreen from '../screens/IncognitoScreen';
+import TimeWatchedScreen from '../screens/TimeWatchedScreen';
 
 const LibraryStack = createStackNavigator();
 
@@ -56,6 +64,32 @@ const LibraryNavigation = () => {
       <LibraryStack.Screen name="LikedScreen" component={LikedScreen} />
       <LibraryStack.Screen name="WatchLaterScreen" component={WatchLaterScreen} />
       <LibraryStack.Screen name="FavoritesScreen" component={FavoritesScreen} />
+      <LibraryStack.Screen name="SettingsScreen" component={SettingsScreen} />
+      <LibraryStack.Screen
+        name="GeneralSettingsScreen"
+        component={GeneralSettingsScreen}
+      />
+      <LibraryStack.Screen
+        name="DataSavingScreen"
+        component={DataSavingScreen}
+      />
+      <LibraryStack.Screen
+        name="VideoQualityPreferencesScreen"
+        component={VideoQualityPreferencesScreen}
+      />
+      <LibraryStack.Screen
+        name="BackgroundDownloadsScreen"
+        component={BackgroundDownloadsScreen}
+      />
+      <LibraryStack.Screen
+        name="HelpCenterScreen"
+        component={HelpCenterScreen}
+      />
+      <LibraryStack.Screen name="IncognitoScreen" component={IncognitoScreen} />
+      <LibraryStack.Screen
+        name="TimeWatchedScreen"
+        component={TimeWatchedScreen}
+      />
     </LibraryStack.Navigator>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -23,11 +23,28 @@ import {
   COMMON_STYLES,
 } from '../constants/theme';
 
+const DARK_MODE_KEY = '@ethics_dark_mode';
+
 const ProfileScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user } = useSelector(state => state.app);
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(DARK_MODE_KEY).then(val => {
+      setIsDarkMode(val === 'true');
+    });
+  }, []);
+
+  const setDarkMode = value => {
+    setIsDarkMode(value);
+    AsyncStorage.setItem(DARK_MODE_KEY, String(value)).catch(() => {});
+  };
+
+  const navigateToSecurity = () => {
+    navigation.getParent()?.getParent()?.navigate('SecurityScreen');
+  };
 
   const handleLogout = () => {
     setTimeout(() => {
@@ -98,7 +115,9 @@ const ProfileScreen = () => {
           <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('SettingsScreen')}
+        >
           <Icon name="dots-vertical" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -108,14 +127,24 @@ const ProfileScreen = () => {
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: 'https://via.placeholder.com/150' }}
+              source={{
+                uri:
+                  user?.photos?.[0] ||
+                  (Array.isArray(user?.photos) && user?.photos[0]) ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    user?.name || user?.email || 'U',
+                  )}&background=FF8C00&color=fff`,
+              }}
               style={styles.avatar}
             />
-            <TouchableOpacity style={styles.editBadge}>
+            <TouchableOpacity
+              style={styles.editBadge}
+              onPress={() => navigation.navigate('AccountScreen')}
+            >
               <Icon name="pencil" size={14} color={COLORS.white} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{user?.name || 'Guest User'}</Text>
+          <Text style={styles.userName}>{user?.name || user?.nickname || 'Guest User'}</Text>
           <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
         </View>
 
@@ -142,8 +171,20 @@ const ProfileScreen = () => {
             title="Subscription & Plans"
             onPress={() => navigation.navigate('SubscriptionScreen')}
           />
-          <MenuItem iconName="play-circle-outline" title="Your Channel" />
-          <MenuItem iconName="shield-check-outline" title="Turn on Incognito" />
+          <MenuItem
+            iconName="play-circle-outline"
+            title="Your Channel"
+            onPress={() =>
+              user?.id
+                ? navigation.navigate('ChannelDetailsScreen', { userId: user.id })
+                : navigation.navigate('AccountScreen')
+            }
+          />
+          <MenuItem
+            iconName="shield-check-outline"
+            title="Turn on Incognito"
+            onPress={() => navigation.navigate('IncognitoScreen')}
+          />
           <MenuItem
             iconName="account-outline"
             title="Your Account"
@@ -152,14 +193,18 @@ const ProfileScreen = () => {
 
           <View style={styles.separator} />
 
-          <MenuItem iconName="clock-outline" title="Time Watched" />
+          <MenuItem
+            iconName="clock-outline"
+            title="Time Watched"
+            onPress={() => navigation.navigate('TimeWatchedScreen')}
+          />
           <MenuItem
             iconName="theme-light-dark"
             title="Dark Mode"
             rightElement={
               <Switch
                 value={isDarkMode}
-                onValueChange={setIsDarkMode}
+                onValueChange={setDarkMode}
                 trackColor={{
                   false: COLORS.gray200,
                   true: COLORS.primaryOrange,
@@ -171,7 +216,7 @@ const ProfileScreen = () => {
           <MenuItem
             iconName="shield-lock-outline"
             title="Security"
-            onPress={() => navigation.navigate('SecurityScreen')}
+            onPress={navigateToSecurity}
           />
           <MenuItem
             iconName="cog-outline"
