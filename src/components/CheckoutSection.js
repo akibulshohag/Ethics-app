@@ -10,9 +10,11 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import DeliveryAddressModal from './DeliveryAddressModal';
 
 const CheckoutSection = () => {
   const [selectedOption, setSelectedOption] = useState('standard');
+  const [addressModalVisible, setAddressModalVisible] = useState(false);
 
   const DeliveryOption = ({ id, title, time, price, selected }) => (
     <TouchableOpacity
@@ -39,10 +41,11 @@ const CheckoutSection = () => {
             <Icon name="map-marker-outline" size={20} color={COLORS.black} />
             <Text style={styles.cardTitle}>Delivery address</Text>
           </View>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => setAddressModalVisible(true)}>
             <Icon name="pencil-outline" size={20} color={COLORS.black} />
           </TouchableOpacity>
         </View>
+
         <Image
           source={{ uri: 'https://img.freepik.com/free-vector/city-map-with-pin-pointers_23-2147614050.jpg' }}
           style={styles.mapImage}
@@ -128,9 +131,15 @@ const CheckoutSection = () => {
         By completing this order , I agree to all{' '}
         <Text style={styles.termsLink}>terms & condition .</Text>
       </Text>
+
+      <DeliveryAddressModal 
+        visible={addressModalVisible} 
+        onClose={() => setAddressModalVisible(false)} 
+      />
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
