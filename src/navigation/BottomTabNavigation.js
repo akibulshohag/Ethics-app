@@ -11,6 +11,7 @@ import { getFocusedRouteNameFromRoute, useNavigation } from '@react-navigation/n
 import HomeNavigation from './HomeNavigation';
 import LibraryNavigation from './LibraryStack';
 import ShortsNavigation from './ShortsStack';
+import UProfileNavigation from './UProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
@@ -96,6 +97,20 @@ const BottomNaivgation = () => {
               tabBarIcon: ({ focused, color }) => (
                 <Icon
                   name="play-box-multiple-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="UProfile"
+            component={UProfileNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
