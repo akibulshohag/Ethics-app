@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,35 +14,142 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../constants/theme';
 import { useNavigation } from '@react-navigation/native';
+import CheckoutSection from '../components/CheckoutSection';
 
 const { width } = Dimensions.get('window');
 
 const CartDetailsScreen = () => {
   const navigation = useNavigation();
+  const [activeTab, setActiveTab] = useState('Cart'); // 'Cart' or 'Checkout'
 
   const Stepper = () => (
     <View style={styles.stepperContainer}>
-      <View style={styles.stepItem}>
+      <TouchableOpacity style={styles.stepItem} onPress={() => setActiveTab('Cart')}>
         <View style={[styles.stepCircle, styles.stepActive]}>
           <Text style={styles.stepNumber}>1</Text>
         </View>
         <Text style={styles.stepLabel}>Menu</Text>
-      </View>
+      </TouchableOpacity>
       <View style={styles.stepLine} />
-      <View style={styles.stepItem}>
+      <TouchableOpacity style={styles.stepItem} onPress={() => setActiveTab('Cart')}>
         <View style={[styles.stepCircle, styles.stepActive]}>
           <Text style={styles.stepNumber}>2</Text>
         </View>
         <Text style={styles.stepLabel}>Cart</Text>
-      </View>
-      <View style={[styles.stepLine, styles.stepLineInactive]} />
-      <View style={styles.stepItem}>
-        <View style={[styles.stepCircle, styles.stepInactive]}>
-          <Text style={[styles.stepNumber, styles.stepNumberInactive]}>3</Text>
+      </TouchableOpacity>
+      <View style={[styles.stepLine, activeTab === 'Checkout' ? {} : styles.stepLineInactive]} />
+      <TouchableOpacity style={styles.stepItem} onPress={() => setActiveTab('Checkout')}>
+        <View style={[styles.stepCircle, activeTab === 'Checkout' ? styles.stepActive : styles.stepInactive]}>
+          <Text style={[styles.stepNumber, activeTab === 'Checkout' ? {} : styles.stepNumberInactive]}>3</Text>
         </View>
         <Text style={styles.stepLabel}>Checkout</Text>
-      </View>
+      </TouchableOpacity>
     </View>
+  );
+
+  const CartSection = () => (
+    <>
+      {/* Promo Code */}
+      <View style={styles.card}>
+        <Text style={styles.cardLabel}>Apply Your Promo Code</Text>
+        <View style={styles.promoInputRow}>
+          <TextInput
+            style={styles.promoInput}
+            placeholder="MULEN300FF"
+            placeholderTextColor={COLORS.gray400}
+          />
+          <TouchableOpacity style={styles.applyBtn}>
+            <Text style={styles.applyBtnText}>Apply</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Delivery Estimate */}
+      <View style={[styles.card, styles.deliveryCard]}>
+        <View style={styles.deliveryInfo}>
+          <Icon name="truck-delivery" size={32} color={COLORS.black} />
+          <View style={styles.deliveryTextContainer}>
+            <Text style={styles.deliveryLabel}>Estimate delivery</Text>
+            <Text style={styles.deliveryValue}>Standard (35-50 mins)</Text>
+            <TouchableOpacity>
+              <Text style={styles.changeLink}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {/* Cart Item */}
+      <View style={styles.cartItem}>
+        <Image
+          source={{ uri: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' }}
+          style={styles.itemImage}
+        />
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemTitle}>Quick and Easy Recipe</Text>
+          <View style={styles.quantityWrapper}>
+            <TouchableOpacity style={styles.quantityBtn}>
+              <Icon name="minus" size={16} color={COLORS.gray600} />
+            </TouchableOpacity>
+            <Text style={styles.quantityText}>1</Text>
+            <TouchableOpacity style={styles.quantityBtn}>
+              <Icon name="plus" size={16} color={COLORS.black} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.itemPriceColumn}>
+          <Text style={styles.itemPrice}>+$ 110</Text>
+          <Text style={styles.itemOldPrice}>$ 15</Text>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.addMoreRow}>
+        <Icon name="plus" size={20} color={COLORS.black} />
+        <Text style={styles.addMoreText}>Add more items</Text>
+      </TouchableOpacity>
+
+      <View style={styles.divider} />
+
+      {/* Popular with order */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Popular with order</Text>
+        <Text style={styles.sectionSubtitle}>
+          A cozy restaurant serving fresh, delicious food made with quality ingredients.
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+          {[1, 2].map((i) => (
+            <View key={i} style={styles.popularCard}>
+              <Image
+                source={{ uri: i === 1 ? 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' : 'https://img.freepik.com/free-photo/tasty-steak-surrounded-by-herbs-and-sauce_23-2148416666.jpg' }}
+                style={styles.popularImage}
+              />
+              <View style={styles.playIconContainer}>
+                <Icon name="play" size={14} color={COLORS.primaryOrange} />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Summary */}
+      <View style={styles.summaryContainer}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Subtotal</Text>
+          <Text style={styles.summaryValue}>+$ 160</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Delivery Charge</Text>
+          <Text style={styles.summaryValue}>+$ 50</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>VAT</Text>
+          <Text style={styles.summaryValue}>$1.5</Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Promo Code</Text>
+          <Text style={[styles.summaryValue, { color: COLORS.error }]}>-$50</Text>
+        </View>
+      </View>
+    </>
   );
 
   return (
@@ -59,128 +166,45 @@ const CartDetailsScreen = () => {
         {/* Stepper */}
         <Stepper />
 
-        {/* Promo Code */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Apply Your Promo Code</Text>
-          <View style={styles.promoInputRow}>
-            <TextInput
-              style={styles.promoInput}
-              placeholder="MULEN300FF"
-              placeholderTextColor={COLORS.gray400}
-            />
-            <TouchableOpacity style={styles.applyBtn}>
-              <Text style={styles.applyBtnText}>Apply</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Delivery Estimate */}
-        <View style={[styles.card, styles.deliveryCard]}>
-          <View style={styles.deliveryInfo}>
-            <Icon name="truck-delivery" size={32} color={COLORS.black} />
-            <View style={styles.deliveryTextContainer}>
-              <Text style={styles.deliveryLabel}>Estimate delivery</Text>
-              <Text style={styles.deliveryValue}>Standard (35-50 mins)</Text>
-              <TouchableOpacity>
-                <Text style={styles.changeLink}>Change</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {/* Cart Item */}
-        <View style={styles.cartItem}>
-          <Image
-            source={{ uri: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' }}
-            style={styles.itemImage}
-          />
-          <View style={styles.itemInfo}>
-            <Text style={styles.itemTitle}>Quick and Easy Recipe</Text>
-            <View style={styles.quantityWrapper}>
-              <TouchableOpacity style={styles.quantityBtn}>
-                <Icon name="minus" size={16} color={COLORS.gray600} />
-              </TouchableOpacity>
-              <Text style={styles.quantityText}>1</Text>
-              <TouchableOpacity style={styles.quantityBtn}>
-                <Icon name="plus" size={16} color={COLORS.black} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.itemPriceColumn}>
-            <Text style={styles.itemPrice}>+$ 110</Text>
-            <Text style={styles.itemOldPrice}>$ 15</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.addMoreRow}>
-          <Icon name="plus" size={20} color={COLORS.black} />
-          <Text style={styles.addMoreText}>Add more items</Text>
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        {/* Popular with order */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Popular with order</Text>
-          <Text style={styles.sectionSubtitle}>
-            A cozy restaurant serving fresh, delicious food made with quality ingredients.
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-            {[1, 2].map((i) => (
-              <View key={i} style={styles.popularCard}>
-                <Image
-                  source={{ uri: i === 1 ? 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' : 'https://img.freepik.com/free-photo/tasty-steak-surrounded-by-herbs-and-sauce_23-2148416666.jpg' }}
-                  style={styles.popularImage}
-                />
-                <View style={styles.playIconContainer}>
-                  <Icon name="play" size={14} color={COLORS.primaryOrange} />
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Summary */}
-        <View style={styles.summaryContainer}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>+$ 160</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Delivery Charge</Text>
-            <Text style={styles.summaryValue}>+$ 50</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>VAT</Text>
-            <Text style={styles.summaryValue}>$1.5</Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Promo Code</Text>
-            <Text style={[styles.summaryValue, { color: COLORS.error }]}>-$50</Text>
-          </View>
-        </View>
+        {activeTab === 'Cart' ? <CartSection /> : <CheckoutSection />}
 
         {/* Total Footer Placeholder */}
-        <View style={{ height: 120 }} />
+        <View style={{ height: 140 }} />
       </ScrollView>
 
       {/* Footer */}
       <View style={styles.footer}>
         <View style={styles.footerHandle} />
-        <View style={styles.footerRow}>
-          <View>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.feesText}>(incl.fees and tax)</Text>
+        {activeTab === 'Cart' ? (
+          <View style={styles.footerRow}>
+            <View>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.feesText}>(incl.fees and tax)</Text>
+            </View>
+            <View style={styles.totalPriceContainer}>
+              <Text style={styles.totalPrice}>+$ 161.5</Text>
+              <Text style={styles.totalOldPrice}>$ 195</Text>
+            </View>
           </View>
-          <View style={styles.totalPriceContainer}>
-            <Text style={styles.totalPrice}>+$ 161.5</Text>
-            <Text style={styles.totalOldPrice}>$ 195</Text>
+        ) : (
+          <View style={styles.checkoutFooter}>
+            <View style={styles.checkoutLabelRow}>
+                <View>
+                    <Text style={styles.totalLabel}>Total</Text>
+                    <TouchableOpacity><Text style={styles.seeSummary}>See summary</Text></TouchableOpacity>
+                </View>
+                <Text style={styles.totalPrice}>+$ 161.5</Text>
+            </View>
+            <TouchableOpacity style={styles.confirmBtn}>
+                <Text style={styles.confirmBtnText}>Confirm Address</Text>
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
       </View>
     </SafeAreaView>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -485,6 +509,34 @@ const styles = StyleSheet.create({
     color: COLORS.gray400,
     textDecorationLine: 'line-through',
   },
+  checkoutFooter: {
+    width: '100%',
+  },
+  checkoutLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  seeSummary: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    textDecorationLine: 'underline',
+  },
+  confirmBtn: {
+    backgroundColor: COLORS.primaryOrange,
+    height: 45,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  confirmBtnText: {
+    color: COLORS.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });
+
 
 export default CartDetailsScreen;
