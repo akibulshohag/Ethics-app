@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../constants/theme';
+import { useNavigation } from '@react-navigation/native';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const ProductDetailModal = ({ visible, onClose }) => {
+  const navigation = useNavigation();
   const [quantity, setQuantity] = useState(1);
   const [checkedItems, setCheckedItems] = useState({
     1: false,
@@ -136,9 +138,16 @@ const ProductDetailModal = ({ visible, onClose }) => {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.addToCartBtn}>
+            <TouchableOpacity 
+              style={styles.addToCartBtn}
+              onPress={() => {
+                onClose();
+                navigation.navigate('CartDetailsScreen');
+              }}
+            >
               <Text style={styles.addToCartText}>Add to cart</Text>
             </TouchableOpacity>
+
           </View>
         </Pressable>
       </Pressable>
