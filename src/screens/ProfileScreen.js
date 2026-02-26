@@ -8,6 +8,8 @@ import {
   ScrollView,
   Switch,
   Alert,
+  Dimensions,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +24,8 @@ import {
   BORDER_RADIUS,
   COMMON_STYLES,
 } from '../constants/theme';
+import { config } from '../../config';
+import { getSocialIcon } from '../constants/socialLinks';
 
 const DARK_MODE_KEY = '@ethics_dark_mode';
 
@@ -146,7 +150,46 @@ const ProfileScreen = () => {
           </View>
           <Text style={styles.userName}>{user?.name || user?.nickname || 'Guest User'}</Text>
           <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
+          {Array.isArray(user?.socialLinks) && user.socialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
+            <View style={styles.socialLinksRow}>
+              {user.socialLinks
+                .filter(l => (l?.url || '').trim())
+                .map((link, index) => (
+                  <TouchableOpacity
+                    key={`${link.type}-${index}`}
+                    style={styles.socialLinkIconBtn}
+                    onPress={() => {
+                      const url = (link.url || '').trim();
+                      if (url) Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                    }}
+                  >
+                    <Icon
+                      name={getSocialIcon(link.type)}
+                      size={26}
+                      color={COLORS.primaryOrange}
+                    />
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
         </View>
+
+        {/* Profile location map */}
+        {user?.latitude != null && user?.longitude != null && (
+          <View style={styles.locationSection}>
+            <Text style={styles.locationSectionTitle}>Your location</Text>
+            {user?.address ? (
+              <Text style={styles.locationAddress}>{user.address}</Text>
+            ) : null}
+            <Image
+              source={{
+                uri: `https://maps.googleapis.com/maps/api/staticmap?center=${user.latitude},${user.longitude}&zoom=14&size=${Dimensions.get('window').width - 32}x120&markers=${user.latitude},${user.longitude}&key=${config.googleMapsApiKey}`,
+              }}
+              style={styles.locationMapImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
 
         {/* Premium Banner */}
         <TouchableOpacity
@@ -297,6 +340,46 @@ const styles = StyleSheet.create({
     fontSize: FONTS.sm,
     color: COLORS.textSecondary,
     marginTop: SPACING.xs,
+  },
+  socialLinksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: SPACING.lg,
+    marginTop: SPACING.md,
+  },
+  socialLinkIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF4EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationSection: {
+    marginHorizontal: SPACING.xl,
+    marginBottom: SPACING.lg,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.gray100,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  locationSectionTitle: {
+    fontSize: FONTS.base,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  locationAddress: {
+    fontSize: FONTS.sm,
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  locationMapImage: {
+    width: Dimensions.get('window').width - 32 - SPACING.xl * 2,
+    height: 120,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.gray200,
   },
   premiumBanner: {
     backgroundColor: COLORS.primaryOrange,

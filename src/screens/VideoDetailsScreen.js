@@ -13,6 +13,7 @@ import {
   Share,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,6 +46,8 @@ import {
   isVideoDownloaded,
   getLocalPath,
 } from '../services/downloadService';
+import { config } from '../../config';
+import { getSocialIcon } from '../constants/socialLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -137,6 +140,10 @@ const mapVideoApiToDisplay = v => {
     userId: v.userId,
     isLiked: v.isLiked ?? false,
     isDisliked: v.isDisliked ?? false,
+    creatorAddress: user.address ?? undefined,
+    creatorLatitude: user.latitude ?? undefined,
+    creatorLongitude: user.longitude ?? undefined,
+    creatorSocialLinks: Array.isArray(user.socialLinks) ? user.socialLinks : [],
   };
 };
 
@@ -831,6 +838,49 @@ const VideoDetailsScreen = () => {
           ) : null}
         </View>
 
+        {/* Creator social links */}
+        {currentVideo.creatorSocialLinks?.length > 0 &&
+          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
+            <View style={styles.creatorSocialRow}>
+              {currentVideo.creatorSocialLinks
+                .filter(l => (l?.url || '').trim())
+                .map((link, index) => (
+                  <TouchableOpacity
+                    key={`creator-${link.type}-${index}`}
+                    style={styles.creatorSocialIconBtn}
+                    onPress={() => {
+                      const url = (link.url || '').trim();
+                      if (url) Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={getSocialIcon(link.type)}
+                      size={24}
+                      color="#F97507"
+                    />
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
+
+        {/* Creator location map */}
+        {currentVideo.creatorLatitude != null &&
+          currentVideo.creatorLongitude != null && (
+            <View style={styles.creatorLocationSection}>
+              <Text style={styles.creatorLocationTitle}>Creator location</Text>
+              {currentVideo.creatorAddress ? (
+                <Text style={styles.creatorAddress}>{currentVideo.creatorAddress}</Text>
+              ) : null}
+              <Image
+                source={{
+                  uri: `https://maps.googleapis.com/maps/api/staticmap?center=${currentVideo.creatorLatitude},${currentVideo.creatorLongitude}&zoom=14&size=${width - 32}x120&markers=${currentVideo.creatorLatitude},${currentVideo.creatorLongitude}&key=${config.googleMapsApiKey}`,
+                }}
+                style={styles.creatorMapImage}
+                resizeMode="cover"
+              />
+            </View>
+          )}
+
         {/* Comments Preview */}
         <TouchableOpacity
           style={styles.commentsPreview}
@@ -1174,6 +1224,47 @@ const styles = StyleSheet.create({
   },
   subscribedText: {
     color: '#606060',
+  },
+  creatorSocialRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderColor: '#e5e5e5',
+  },
+  creatorSocialIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF4EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  creatorLocationSection: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderColor: '#e5e5e5',
+  },
+  creatorLocationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#212121',
+    marginBottom: 4,
+  },
+  creatorAddress: {
+    fontSize: 12,
+    color: '#606060',
+    marginBottom: 8,
+  },
+  creatorMapImage: {
+    width: width - 32,
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#f2f2f2',
   },
   commentsPreview: {
     marginTop: 16,

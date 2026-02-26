@@ -327,6 +327,19 @@ const ChannelDetailsScreen = () => {
       return <CompactVideoCard video={item} onPress={() => handleVideoPress(item)} />;
     }
     if (activeTab === 'About' && profile) {
+      // For own channel, use currentUser location as fallback so map shows after "Use my location" on Home
+      const lat = profile.latitude ?? (isOwnChannel ? currentUser?.latitude : undefined);
+      const lng = profile.longitude ?? (isOwnChannel ? currentUser?.longitude : undefined);
+      const addr = profile.address ?? (isOwnChannel ? currentUser?.address : undefined);
+      console.log('[ChanneDetailsScreen] About tab – passing to ChannelAbout:', {
+        'profile.lat': profile.latitude,
+        'profile.lng': profile.longitude,
+        'currentUser.lat': currentUser?.latitude,
+        'currentUser.lng': currentUser?.longitude,
+        isOwnChannel,
+        passedLat: lat,
+        passedLng: lng,
+      });
       return (
         <ChannelAbout
           channelAbout={profile.channelAbout}
@@ -335,6 +348,10 @@ const ChannelDetailsScreen = () => {
           totalViews={profile.totalViews}
           canEdit={isOwnChannel}
           onSave={handleSaveChannel}
+          socialLinks={profile.socialLinks}
+          address={addr}
+          latitude={lat}
+          longitude={lng}
         />
       );
     }

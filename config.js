@@ -39,4 +39,7 @@ const checkConfig = server => {
 
 export const selectServer = 'production';
 
-export const config = checkConfig(selectServer);
+export const config = {
+  ...checkConfig(selectServer),
+  googleMapsApiKey: 'AIzaSyCfj7v8t-uZ7J60AcQxkrqzWDAEhZCGbLU',
+};

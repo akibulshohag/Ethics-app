@@ -15,10 +15,13 @@ import {
   Share,
   Alert,
 } from 'react-native';
+import { getCurrentPositionSafe } from '../utils/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { config } from '../../config';
 import { navigationRef } from '../utils/helper';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
@@ -61,8 +64,8 @@ const formatTimeAgo = (dateStr) => {
   return 'Recently';
 };
 
-// --- Categories: Live=shorts, Trending=most views, All=random, For You=subscribed ---
-const CATEGORIES = ['All', 'Trending', 'Live', 'For You'];
+// --- Categories: Live=shorts, Trending=most views, All=random, For You=subscribed, Nearby=by location ---
+const CATEGORIES = ['All', 'Trending', 'Live', 'For You', 'Nearby'];
 
 const REPORT_REASONS = [
   'Sexual Content',
@@ -116,6 +119,7 @@ const shuffle = (arr) => {
 
 const HomeVersion = () => {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
   const { user: currentUser } = useSelector((state) => state.app) || {};
   const [activeTab, setActiveTab] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -130,6 +134,8 @@ const HomeVersion = () => {
   const [channelsData, setChannelsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState(null); // { lat, lng } for Nearby
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const loadChannels = useCallback(async () => {
     try {
@@ -164,25 +170,34 @@ const HomeVersion = () => {
     }
   }, [currentUser?.id]);
 
-  // Load ALL users' videos and shorts (no userId filter) - for "All" tab
+  // Load feed; when activeTab is 'Nearby' and selectedLocation is set, pass nearby params
   const loadFeed = useCallback(async () => {
+    const isNearby = activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null;
+    const baseParams = { page: 1, limit: 100, sort: 'latest' };
+    const videoParams = isNearby
+      ? { ...baseParams, nearbyLat: selectedLocation.lat, nearbyLng: selectedLocation.lng, radiusKm: 50 }
+      : baseParams;
+    const shortParams = isNearby
+      ? { ...baseParams, nearbyLat: selectedLocation.lat, nearbyLng: selectedLocation.lng, radiusKm: 50 }
+      : baseParams;
     try {
-      // IMPORTANT: No userId passed - fetches ALL public videos/shorts from ALL users
       const [shortsRes, videosRes] = await Promise.all([
-        shortsService.getShorts({ page: 1, limit: 100, sort: 'latest' }),
-        getVideos({ page: 1, limit: 100, sort: 'latest' }),
+        shortsService.getShorts(shortParams),
+        getVideos(videoParams),
       ]);
       const shorts = (shortsRes?.shorts || []).filter(
         (s) => s.videoUrl && String(s.videoUrl).trim(),
       );
       const videos = videosRes?.videos || [];
-      console.log('Loaded shorts:', shorts.length, 'videos:', videos.length);
-      // Shuffle to show random content from all users
-      const shuffledShorts = shuffle(shorts).map(mapShortToCard);
-      const shuffledVideos = shuffle(videos).map(mapVideoToCard);
-      console.log('Shuffled shorts:', shuffledShorts.length, 'videos:', shuffledVideos.length);
-      setShortsData(shuffledShorts);
-      setVideosData(shuffledVideos);
+      if (!isNearby) {
+        const shuffledShorts = shuffle(shorts).map(mapShortToCard);
+        const shuffledVideos = shuffle(videos).map(mapVideoToCard);
+        setShortsData(shuffledShorts);
+        setVideosData(shuffledVideos);
+      } else {
+        setShortsData(shorts.map(mapShortToCard));
+        setVideosData(videos.map(mapVideoToCard));
+      }
     } catch (e) {
       console.error('Error loading feed:', e);
       setShortsData([]);
@@ -191,11 +206,61 @@ const HomeVersion = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [activeTab, selectedLocation]);
 
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  // When switching to Nearby, use profile location if available and none set
+  useEffect(() => {
+    if (activeTab === 'Nearby' && !selectedLocation && currentUser?.latitude != null && currentUser?.longitude != null) {
+      setSelectedLocation({ lat: currentUser.latitude, lng: currentUser.longitude });
+    }
+  }, [activeTab, currentUser?.latitude, currentUser?.longitude]);
+
+  const handleUseMyLocationForNearby = () => {
+    setLocationLoading(true);
+    getCurrentPositionSafe(
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setSelectedLocation({ lat, lng });
+        setLocationLoading(false);
+        // Save to user profile so Channel About and Profile show this location
+        if (currentUser?.id && currentUser?.token) {
+          try {
+            const response = await fetch(`${config.apiBaseUrl}/users/${currentUser.id}`, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${currentUser.token}`,
+              },
+              body: JSON.stringify({
+                latitude: lat,
+                longitude: lng,
+              }),
+            });
+            if (response.ok) {
+              const data = await response.json();
+              const updated = data.userUpdate || {};
+              dispatch(appSetUser({
+                ...currentUser,
+                latitude: updated.latitude ?? lat,
+                longitude: updated.longitude ?? lng,
+              }));
+            }
+          } catch (e) {
+            // Location still used for Nearby; profile update is best-effort
+          }
+        }
+      },
+      err => {
+        setLocationLoading(false);
+        Toast.show({ type: 'error', text1: err || 'Could not get location' });
+      },
+    );
+  };
 
   useEffect(() => {
     loadChannels();
@@ -652,6 +717,30 @@ const HomeVersion = () => {
               })}
             </ScrollView>
 
+            {activeTab === 'Nearby' && (
+              <View style={styles.nearbyLocationBar}>
+                <Text style={styles.nearbyLocationLabel}>
+                  {selectedLocation
+                    ? 'Showing content near your location'
+                    : 'Set location to see nearby videos & shorts'}
+                </Text>
+                <TouchableOpacity
+                  style={styles.nearbyLocationButton}
+                  onPress={handleUseMyLocationForNearby}
+                  disabled={locationLoading}
+                >
+                  {locationLoading ? (
+                    <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+                  ) : (
+                    <Icon name="map-marker" size={18} color={COLORS.primaryOrange} />
+                  )}
+                  <Text style={styles.nearbyLocationButtonText}>
+                    {locationLoading ? 'Getting location...' : 'Use my location'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -836,6 +925,30 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: COLORS.primaryOrange },
   chipText: { color: COLORS.primaryOrange, fontWeight: '600' },
   chipTextActive: { color: COLORS.white },
+  nearbyLocationBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.sm,
+    backgroundColor: '#FFF8F2',
+    marginHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  nearbyLocationLabel: { fontSize: 12, color: COLORS.gray700, flex: 1 },
+  nearbyLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.primaryOrange,
+  },
+  nearbyLocationButtonText: { fontSize: 12, fontWeight: '600', color: COLORS.primaryOrange },
   storyScroll: { paddingLeft: SPACING.lg, marginBottom: SPACING.lg },
   storyContainer: { alignItems: 'center', marginRight: SPACING.md },
   storyBorder: {

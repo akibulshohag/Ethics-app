@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 
+// Enable LayoutAnimation on Android (no-op in New Architecture; avoid calling to prevent warning)
 if (
   Platform.OS === 'android' &&
+  typeof global.__turboModuleProxy === 'undefined' &&
   UIManager.setLayoutAnimationEnabledExperimental
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

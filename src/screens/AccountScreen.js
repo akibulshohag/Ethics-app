@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { getCurrentPositionSafe } from '../utils/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -18,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { config } from '../../config';
+import { SOCIAL_LINK_TYPES } from '../constants/socialLinks';
 import {
   COLORS,
   FONTS,
@@ -38,7 +40,36 @@ const AccountScreen = () => {
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [address, setAddress] = useState(user?.address || '');
+  const [latitude, setLatitude] = useState(
+    user?.latitude != null ? String(user.latitude) : '',
+  );
+  const [longitude, setLongitude] = useState(
+    user?.longitude != null ? String(user.longitude) : '',
+  );
+  const [socialLinks, setSocialLinks] = useState(() => {
+    const links = user?.socialLinks;
+    if (Array.isArray(links) && links.length > 0)
+      return links.map(l => ({ type: l.type || 'others', url: l.url || '' }));
+    return [{ type: 'facebook', url: '' }];
+  });
   const [loading, setLoading] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+
+  const handleUseMyLocation = () => {
+    setLocationLoading(true);
+    getCurrentPositionSafe(
+      pos => {
+        setLatitude(String(pos.coords.latitude));
+        setLongitude(String(pos.coords.longitude));
+        setLocationLoading(false);
+      },
+      err => {
+        setLocationLoading(false);
+        Alert.alert('Location', err || 'Could not get location. Enable location permission.');
+      },
+    );
+  };
 
   const handleSkip = () => {
     // Navigate to CreatePin if user doesn't have PIN
@@ -74,6 +105,12 @@ const AccountScreen = () => {
           nickname,
           phone,
           gender,
+          address: address || undefined,
+          latitude: latitude ? parseFloat(latitude) : undefined,
+          longitude: longitude ? parseFloat(longitude) : undefined,
+          socialLinks: socialLinks
+            .filter(l => (l.url || '').trim())
+            .map(l => ({ type: l.type, url: (l.url || '').trim() })),
         }),
       });
 
@@ -91,6 +128,18 @@ const AccountScreen = () => {
         nickname: data.userUpdate?.nickname || nickname,
         phone: data.userUpdate?.phone || phone,
         gender: data.userUpdate?.gender || gender,
+        address: data.userUpdate?.address ?? address,
+        latitude:
+          data.userUpdate?.latitude ??
+          (latitude ? parseFloat(latitude) : undefined),
+        longitude:
+          data.userUpdate?.longitude ??
+          (longitude ? parseFloat(longitude) : undefined),
+        socialLinks:
+          data.userUpdate?.socialLinks ??
+          socialLinks
+            .filter(l => (l.url || '').trim())
+            .map(l => ({ type: l.type, url: (l.url || '').trim() })),
       };
 
       dispatch(appSetUser(updatedUser));
@@ -247,6 +296,95 @@ const AccountScreen = () => {
               />
             </View>
           </View>
+
+          <InputField
+            label="Address / Location"
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Enter your address (e.g. city, area)"
+            id="address"
+          />
+          <TouchableOpacity
+            style={styles.useLocationButton}
+            onPress={handleUseMyLocation}
+            disabled={locationLoading}
+          >
+            {locationLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+            ) : (
+              <Icon name="map-marker" size={22} color={COLORS.primaryOrange} />
+            )}
+            <Text style={styles.useLocationText}>
+              {locationLoading ? 'Getting location...' : 'Use my location'}
+            </Text>
+          </TouchableOpacity>
+          {latitude !== '' && longitude !== '' && (
+            <View style={styles.mapPreview}>
+              <Image
+                source={{
+                  uri: `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=14&size=400x160&markers=${latitude},${longitude}&key=${config.googleMapsApiKey}`,
+                }}
+                style={styles.staticMap}
+                resizeMode="cover"
+              />
+            </View>
+          )}
+
+          <Text style={styles.sectionLabel}>Social links</Text>
+          {socialLinks.map((link, index) => (
+            <View key={index} style={styles.socialLinkRow}>
+              <Dropdown
+                style={[styles.socialLinkDropdown, { flex: 1.2 }]}
+                data={SOCIAL_LINK_TYPES}
+                labelField="label"
+                valueField="value"
+                value={link.type}
+                onChange={item =>
+                  setSocialLinks(prev =>
+                    prev.map((l, i) =>
+                      i === index ? { ...l, type: item.value } : l,
+                    ),
+                  )
+                }
+                placeholder="Type"
+              />
+              <TextInput
+                style={[styles.input, styles.socialLinkInput]}
+                placeholder="URL"
+                value={link.url}
+                onChangeText={text =>
+                  setSocialLinks(prev =>
+                    prev.map((l, i) => (i === index ? { ...l, url: text } : l)),
+                  )
+                }
+                keyboardType="url"
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() =>
+                  setSocialLinks(prev =>
+                    prev.length > 1 ? prev.filter((_, i) => i !== index) : prev,
+                  )
+                }
+                style={styles.removeLinkButton}
+              >
+                <Icon
+                  name="close-circle"
+                  size={24}
+                  color={COLORS.primaryOrange}
+                />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity
+            style={styles.addLinkButton}
+            onPress={() =>
+              setSocialLinks(prev => [...prev, { type: 'others', url: '' }])
+            }
+          >
+            <Icon name="plus" size={20} color={COLORS.primaryOrange} />
+            <Text style={styles.addLinkText}>Add link</Text>
+          </TouchableOpacity>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Gender</Text>
@@ -459,6 +597,78 @@ const styles = StyleSheet.create({
     fontSize: FONTS.base,
     color: COLORS.textPrimary,
     padding: SPACING.sm,
+  },
+  sectionLabel: {
+    fontSize: FONTS.sm,
+    fontWeight: FONTS.semiBold,
+    color: COLORS.gray700,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  socialLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  socialLinkDropdown: {
+    height: DIMENSIONS.inputHeight,
+    backgroundColor: COLORS.backgroundLight,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.sm,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+  },
+  socialLinkInput: {
+    flex: 2,
+    height: DIMENSIONS.inputHeight,
+    backgroundColor: COLORS.backgroundLight,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray200,
+  },
+  removeLinkButton: { padding: SPACING.xs },
+  addLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  addLinkText: {
+    fontSize: FONTS.base,
+    fontWeight: '600',
+    color: COLORS.primaryOrange,
+  },
+  useLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: '#FFF8F2',
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.primaryOrange,
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  useLocationText: {
+    fontSize: FONTS.base,
+    fontWeight: FONTS.semiBold,
+    color: COLORS.primaryOrange,
+  },
+  mapPreview: {
+    marginBottom: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    height: 160,
+    backgroundColor: COLORS.gray100,
+  },
+  staticMap: {
+    width: '100%',
+    height: 160,
   },
   buttonContainer: {
     flexDirection: 'row',
