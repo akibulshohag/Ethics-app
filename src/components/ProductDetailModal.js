@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F2F2',
     borderRadius: 30,
     paddingHorizontal: 12,
-    height: 60,
+    height: 45,
     marginRight: 15,
   },
   quantityBtn: {
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   addToCartBtn: {
     flex: 1,
     backgroundColor: COLORS.primaryOrange,
-    height: 60,
+    height: 45,
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
