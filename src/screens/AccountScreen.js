@@ -11,7 +11,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { getCurrentPositionSafe } from '../utils/geolocation';
+import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -59,9 +59,13 @@ const AccountScreen = () => {
   const handleUseMyLocation = () => {
     setLocationLoading(true);
     getCurrentPositionSafe(
-      pos => {
-        setLatitude(String(pos.coords.latitude));
-        setLongitude(String(pos.coords.longitude));
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLatitude(String(lat));
+        setLongitude(String(lng));
+        const addr = await reverseGeocode(lat, lng);
+        if (addr) setAddress(addr);
         setLocationLoading(false);
       },
       err => {

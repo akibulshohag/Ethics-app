@@ -15,7 +15,7 @@ import {
   Share,
   Alert,
 } from 'react-native';
-import { getCurrentPositionSafe } from '../utils/geolocation';
+import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -28,6 +28,8 @@ import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
 import { getVideos, getVideoWatchHistory, recordShare } from '../services/videoService';
 import { getChannelsList } from '../services/channelService';
+import { getSponsoredByLocation } from '../services/sponsoredService';
+import { getFeaturedByLocation } from '../services/featuredService';
 import { setPlaylist } from '../services/playlistService';
 import { downloadVideo } from '../services/downloadService';
 import { submitReport } from '../services/reportService';
@@ -136,6 +138,8 @@ const HomeVersion = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null); // { lat, lng } for Nearby
   const [locationLoading, setLocationLoading] = useState(false);
+  const [sponsoredVideo, setSponsoredVideo] = useState(null); // { video, areaName, ... } when user has location
+  const [featuredVideo, setFeaturedVideo] = useState(null); // { video, areaName, ... } when user has location
 
   const loadChannels = useCallback(async () => {
     try {
@@ -170,12 +174,23 @@ const HomeVersion = () => {
     }
   }, [currentUser?.id]);
 
-  // Load feed; when activeTab is 'Nearby' and selectedLocation is set, pass nearby params
+  // Nearby feed uses TWO API calls: (1) GET /sponsored/by-location + GET /featured/by-location (see useEffect below)
+  // for sponsored/featured at top; (2) GET /videos?nearbyLat&nearbyLng&excludeSponsored&excludeFeatured for
+  // regular nearby videos. Sponsored/featured are shown in header and first feed items; regular videos in baseFeed.
   const loadFeed = useCallback(async () => {
     const isNearby = activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null;
     const baseParams = { page: 1, limit: 100, sort: 'latest' };
     const videoParams = isNearby
-      ? { ...baseParams, nearbyLat: selectedLocation.lat, nearbyLng: selectedLocation.lng, radiusKm: 50 }
+      ? {
+          ...baseParams,
+          nearbyLat: selectedLocation.lat,
+          nearbyLng: selectedLocation.lng,
+          radiusKm: 50,
+          // Exclude sponsored and featured from the videos list in Nearby (so they don't appear twice).
+          // IMPORTANT: do NOT send this param to shorts API (it can 400).
+          excludeSponsored: true,
+          excludeFeatured: true,
+        }
       : baseParams;
     const shortParams = isNearby
       ? { ...baseParams, nearbyLat: selectedLocation.lat, nearbyLng: selectedLocation.lng, radiusKm: 50 }
@@ -219,6 +234,30 @@ const HomeVersion = () => {
     }
   }, [activeTab, currentUser?.latitude, currentUser?.longitude]);
 
+  // Fetch sponsored and featured videos for current location (area-wise)
+  useEffect(() => {
+    if (activeTab !== 'Nearby' || !selectedLocation?.lat || !selectedLocation?.lng) {
+      setSponsoredVideo(null);
+      setFeaturedVideo(null);
+      return;
+    }
+    const lat = selectedLocation.lat;
+    const lng = selectedLocation.lng;
+    if (__DEV__) console.log('[HomeVersion] Fetching sponsored/featured for', lat, lng);
+    getSponsoredByLocation(lat, lng)
+      .then(({ sponsored }) => {
+        if (__DEV__) console.log('[HomeVersion] Sponsored result', { hasSponsored: !!sponsored, hasVideo: !!sponsored?.video });
+        setSponsoredVideo(sponsored || null);
+      })
+      .catch((err) => {
+        console.warn('[HomeVersion] Sponsored fetch error', err?.message || err);
+        setSponsoredVideo(null);
+      });
+    getFeaturedByLocation(lat, lng)
+      .then(({ featured }) => setFeaturedVideo(featured || null))
+      .catch(() => setFeaturedVideo(null));
+  }, [activeTab, selectedLocation?.lat, selectedLocation?.lng]);
+
   const handleUseMyLocationForNearby = () => {
     setLocationLoading(true);
     getCurrentPositionSafe(
@@ -226,10 +265,20 @@ const HomeVersion = () => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setSelectedLocation({ lat, lng });
-        setLocationLoading(false);
-        // Save to user profile so Channel About and Profile show this location
+        // Fetch sponsored and featured for this location so they show at top right away
+        Promise.all([
+          getSponsoredByLocation(lat, lng).then(({ sponsored }) => sponsored || null).catch(() => null),
+          getFeaturedByLocation(lat, lng).then(({ featured }) => featured || null).catch(() => null),
+        ]).then(([sponsored, featured]) => {
+          setSponsoredVideo(sponsored);
+          setFeaturedVideo(featured);
+        }).finally(() => {
+          setLocationLoading(false);
+        });
+        // Save to user profile (with address from reverse geocode so address is not null)
         if (currentUser?.id && currentUser?.token) {
           try {
+            const address = await reverseGeocode(lat, lng);
             const response = await fetch(`${config.apiBaseUrl}/users/${currentUser.id}`, {
               method: 'PATCH',
               headers: {
@@ -239,6 +288,7 @@ const HomeVersion = () => {
               body: JSON.stringify({
                 latitude: lat,
                 longitude: lng,
+                ...(address ? { address } : {}),
               }),
             });
             if (response.ok) {
@@ -248,6 +298,7 @@ const HomeVersion = () => {
                 ...currentUser,
                 latitude: updated.latitude ?? lat,
                 longitude: updated.longitude ?? lng,
+                ...(updated.address != null ? { address: updated.address } : address ? { address } : {}),
               }));
             }
           } catch (e) {
@@ -275,6 +326,14 @@ const HomeVersion = () => {
     loadFeed();
     loadChannels();
     loadContinueWatching();
+    if (activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null) {
+      getSponsoredByLocation(selectedLocation.lat, selectedLocation.lng)
+        .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
+        .catch(() => setSponsoredVideo(null));
+      getFeaturedByLocation(selectedLocation.lat, selectedLocation.lng)
+        .then(({ featured }) => setFeaturedVideo(featured || null))
+        .catch(() => setFeaturedVideo(null));
+    }
   };
 
   const buildMainFeed = () => {
@@ -345,7 +404,58 @@ const HomeVersion = () => {
     return feed;
   };
 
-  const mainFeed = buildMainFeed();
+  const baseFeed = buildMainFeed();
+  if (__DEV__ && activeTab === 'Nearby' && selectedLocation) {
+    console.log('[HomeVersion] Sponsored card', { hasSponsored: !!sponsoredVideo?.video, sponsoredVideo: sponsoredVideo ? 'set' : 'null' });
+  }
+  const sponsoredCard =
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    sponsoredVideo?.video
+      ? (() => {
+          const v = sponsoredVideo.video;
+          const owner = sponsoredVideo.user || v.user || {};
+          const viewCount = v.viewCount ?? v._count?.views ?? 0;
+          const pubAt = v.publishedAt || v.createdAt;
+          return {
+            id: v.id,
+            type: 'video',
+            title: v.title || 'Untitled',
+            author: owner.nickname || owner.name || 'Unknown',
+            views: `${formatCount(viewCount)} views`,
+            time: formatTimeAgo(pubAt),
+            duration: formatDuration(v.duration),
+            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            videoUrl: v.videoUrl,
+            isSponsored: true,
+          };
+        })()
+      : null;
+  const featuredCard =
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    featuredVideo?.video
+      ? (() => {
+          const v = featuredVideo.video;
+          const owner = featuredVideo.user || v.user || {};
+          const viewCount = v.viewCount ?? v._count?.views ?? 0;
+          const pubAt = v.publishedAt || v.createdAt;
+          return {
+            id: v.id,
+            type: 'video',
+            title: v.title || 'Untitled',
+            author: owner.nickname || owner.name || 'Unknown',
+            views: `${formatCount(viewCount)} views`,
+            time: formatTimeAgo(pubAt),
+            duration: formatDuration(v.duration),
+            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            videoUrl: v.videoUrl,
+            isFeatured: true,
+          };
+        })()
+      : null;
+  const mainFeed =
+    featuredCard != null ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed] : baseFeed;
 
   const StoryCircle = ({ channel }) => (
     <TouchableOpacity
@@ -585,6 +695,16 @@ const HomeVersion = () => {
               source={{ uri: item.thumbnail }}
               style={styles.videoThumbnail}
             />
+            {item.isSponsored && (
+              <View style={styles.sponsoredBadge}>
+                <Text style={styles.sponsoredBadgeText}>Sponsored</Text>
+              </View>
+            )}
+            {item.isFeatured && (
+              <View style={[styles.sponsoredBadge, styles.featuredBadge]}>
+                <Text style={styles.sponsoredBadgeText}>Featured</Text>
+              </View>
+            )}
             <View style={styles.durationBadge}>
               <Text style={styles.durationText}>{item.duration || '0:00'}</Text>
             </View>
@@ -693,7 +813,7 @@ const HomeVersion = () => {
           />
         }
         ListHeaderComponent={
-          <>
+          <React.Fragment key={`header-${activeTab}-${selectedLocation?.lat ?? ''}-${sponsoredVideo?.video?.id ?? 'n'}-${featuredVideo?.video?.id ?? 'n'}`}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -741,6 +861,13 @@ const HomeVersion = () => {
               </View>
             )}
 
+            {activeTab === 'Nearby' && sponsoredCard && (
+              <View style={styles.whiteSection}>
+                <SectionHeader icon="star-circle-outline" title="Sponsored near you" />
+                {renderItem({ item: { ...sponsoredCard, type: 'VIDEO' } })}
+              </View>
+            )}
+
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -750,7 +877,7 @@ const HomeVersion = () => {
                 <StoryCircle key={ch.id} channel={ch} />
               ))}
             </ScrollView>
-          </>
+          </React.Fragment>
         }
       />
 
@@ -1018,6 +1145,17 @@ const styles = StyleSheet.create({
   videoCard: { marginBottom: 15 },
   thumbnailWrapper: { width: '100%', height: 220 },
   videoThumbnail: { width: '100%', height: '100%' },
+  sponsoredBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: COLORS.primaryOrange,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  sponsoredBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  featuredBadge: { backgroundColor: '#c9a227' },
   durationBadge: {
     position: 'absolute',
     bottom: 10,

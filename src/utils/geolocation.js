@@ -2,7 +2,32 @@
  * Safe access to @react-native-community/geolocation.
  * Requests location permission before getting position (Android).
  */
-import { Platform, PermissionsAndroid, Linking } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
+
+/**
+ * Reverse geocode: get address string from lat/lng using Google Geocoding API.
+ * Use when user sets location via map or "Use my location" so address is not null.
+ * @param {number} lat - Latitude
+ * @param {number} lng - Longitude
+ * @returns {Promise<string|null>} formatted_address or null
+ */
+export async function reverseGeocode(lat, lng) {
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  try {
+    const { config } = require('../../config');
+    const key = config?.googleMapsApiKey;
+    if (!key || !key.trim()) return null;
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data?.status === 'OK' && data?.results?.[0]?.formatted_address) {
+      return data.results[0].formatted_address;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
 
 let _geolocation = null;
 let _checked = false;

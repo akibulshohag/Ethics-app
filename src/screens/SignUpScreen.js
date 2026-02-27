@@ -101,6 +101,9 @@ const SignUpScreen = () => {
         gender: data.user.gender || 'others',
         role: data.user.role,
         roleId: data.user.roleId,
+        address: data.user.address,
+        latitude: data.user.latitude,
+        longitude: data.user.longitude,
         token: data.token,
       };
 

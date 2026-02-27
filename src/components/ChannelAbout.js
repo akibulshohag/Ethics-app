@@ -18,7 +18,7 @@ import {
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
-import { getCurrentPositionSafe } from '../utils/geolocation';
+import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
 import { config } from '../../config';
 import { getSocialIcon, SOCIAL_LINK_TYPES } from '../constants/socialLinks';
 
@@ -121,9 +121,13 @@ const ChannelAbout = ({
   const handleUseMyLocation = () => {
     setLocationLoading(true);
     getCurrentPositionSafe(
-      pos => {
-        setLatitude(String(pos.coords.latitude));
-        setLongitude(String(pos.coords.longitude));
+      async pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLatitude(String(lat));
+        setLongitude(String(lng));
+        const addr = await reverseGeocode(lat, lng);
+        if (addr) setAddress(addr);
         setLocationLoading(false);
       },
       err => {

@@ -22,6 +22,13 @@ export const getUsers = async (params = {}) => {
   return response.data;
 };
 
+export const getUser = async (id) => {
+  const response = await axios.get(`${API_URL}/${id}`, {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
 export const updateUser = async (id, data) => {
   const response = await axios.patch(`${API_URL}/${id}`, data, {
     headers: getAuthHeaders(),
