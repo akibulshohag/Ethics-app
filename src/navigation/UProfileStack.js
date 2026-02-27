@@ -10,7 +10,10 @@ const UProfileNavigation = () => {
       screenOptions={{ headerShown: false }}
       initialRouteName="UserProfileScreen"
     >
-      <UProfileStack.Screen name="UserProfileScreen" component={UserProfileScreen} />
+      <UProfileStack.Screen
+        name="UserProfileScreen"
+        component={UserProfileScreen}
+      />
     </UProfileStack.Navigator>
   );
 };
