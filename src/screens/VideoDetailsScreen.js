@@ -23,6 +23,7 @@ import DescriptionModal from '../components/DescriptionModal';
 import SaveModal from '../components/SaveModal';
 import CommentsModal from '../components/CommentsModal';
 import LiveChatModal from '../components/LiveChatModal';
+import ProductDetailModal from '../components/ProductDetailModal';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -144,6 +145,7 @@ const mapVideoApiToDisplay = v => {
     creatorLatitude: user.latitude ?? undefined,
     creatorLongitude: user.longitude ?? undefined,
     creatorSocialLinks: Array.isArray(user.socialLinks) ? user.socialLinks : [],
+    creatorRole: user.role ?? undefined,
   };
 };
 
@@ -178,6 +180,8 @@ const VideoDetailsScreen = () => {
   });
   const [subscribeLoading, setSubscribeLoading] = useState(false);
   const [liveChatModalVisible, setLiveChatModalVisible] = useState(false);
+  const [productDetailModalVisible, setProductDetailModalVisible] =
+    useState(false);
 
   // Video player states
   const [videoPaused, setVideoPaused] = useState(true);
@@ -200,6 +204,7 @@ const VideoDetailsScreen = () => {
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [videoPlaybackUri, setVideoPlaybackUri] = useState(null);
+
 
   const loadVideo = useCallback(async () => {
     if (!videoId && !offlineVideo) {
@@ -389,7 +394,10 @@ const VideoDetailsScreen = () => {
   const handleDownload = async () => {
     if (!currentVideo) return;
     if (isDownloaded) {
-      Alert.alert('Already downloaded', 'This video is available for offline playback.');
+      Alert.alert(
+        'Already downloaded',
+        'This video is available for offline playback.',
+      );
       return;
     }
     setDownloadProgress(0);
@@ -566,7 +574,7 @@ const VideoDetailsScreen = () => {
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.videoPlayer}>
-        {(currentVideo.videoUrl || videoPlaybackUri) ? (
+        {currentVideo.videoUrl || videoPlaybackUri ? (
           <>
             <Video
               ref={videoRef}
@@ -759,8 +767,8 @@ const VideoDetailsScreen = () => {
               downloadProgress !== null
                 ? `${downloadProgress}%`
                 : isDownloaded
-                  ? 'Downloaded'
-                  : 'Download'
+                ? 'Downloaded'
+                : 'Download'
             }
             onPress={handleDownload}
             disabled={downloadProgress !== null}
@@ -777,6 +785,58 @@ const VideoDetailsScreen = () => {
             }}
           />
         </View>
+
+        {/* Order Now / Visit Website / Message Now – only for videos whose creator is owner (restaurant) */}
+        {(currentVideo?.user?.role === 'owner' ||
+          currentVideo?.creatorRole === 'owner') && (
+          <View style={styles.ctaButtonsRow}>
+            <TouchableOpacity
+              style={styles.ctaButton}
+              onPress={() => setProductDetailModalVisible(true)}
+            >
+              <Text style={styles.ctaButtonText}>Order Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.ctaButton}
+              onPress={() => {
+                // Visit Website - open creator website if available, else channel
+                const website = currentVideo.creatorSocialLinks
+                  ?.find(
+                    l =>
+                      (l?.type || '').toLowerCase() === 'website' &&
+                      (l?.url || '').trim(),
+                  )
+                  ?.url?.trim();
+                if (website) {
+                  Linking.openURL(
+                    website.startsWith('http') ? website : `https://${website}`,
+                  );
+                } else if (currentVideo.userId) {
+                  navigation.navigate('Library', {
+                    screen: 'ChannelDetailsScreen',
+                    params: { userId: currentVideo.userId },
+                  });
+                }
+              }}
+            >
+              <Text style={styles.ctaButtonText}>Visit Website</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.ctaButton}
+              onPress={() => {
+                // Message Now - navigate to channel or future message flow
+                if (currentVideo.userId) {
+                  navigation.navigate('Library', {
+                    screen: 'ChannelDetailsScreen',
+                    params: { userId: currentVideo.userId },
+                  });
+                }
+              }}
+            >
+              <Text style={styles.ctaButtonText}>Message Now</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Channel Info */}
         <View style={styles.channelRow}>
@@ -808,7 +868,9 @@ const VideoDetailsScreen = () => {
               </View>
               <Text style={styles.subscriberCount}>
                 {channelSubscription.subscriberCount > 0
-                  ? `${formatCount(channelSubscription.subscriberCount)} subscribers`
+                  ? `${formatCount(
+                      channelSubscription.subscriberCount,
+                    )} subscribers`
                   : `${formatCount(currentVideo.viewCount)} views`}
               </Text>
             </View>
@@ -831,7 +893,9 @@ const VideoDetailsScreen = () => {
                     channelSubscription.isSubscribed && styles.subscribedText,
                   ]}
                 >
-                  {channelSubscription.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                  {channelSubscription.isSubscribed
+                    ? 'Subscribed'
+                    : 'Subscribe'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -840,7 +904,8 @@ const VideoDetailsScreen = () => {
 
         {/* Creator social links */}
         {currentVideo.creatorSocialLinks?.length > 0 &&
-          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
+          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim())
+            .length > 0 && (
             <View style={styles.creatorSocialRow}>
               {currentVideo.creatorSocialLinks
                 .filter(l => (l?.url || '').trim())
@@ -850,7 +915,10 @@ const VideoDetailsScreen = () => {
                     style={styles.creatorSocialIconBtn}
                     onPress={() => {
                       const url = (link.url || '').trim();
-                      if (url) Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                      if (url)
+                        Linking.openURL(
+                          url.startsWith('http') ? url : `https://${url}`,
+                        );
                     }}
                   >
                     <MaterialCommunityIcons
@@ -869,11 +937,19 @@ const VideoDetailsScreen = () => {
             <View style={styles.creatorLocationSection}>
               <Text style={styles.creatorLocationTitle}>Creator location</Text>
               {currentVideo.creatorAddress ? (
-                <Text style={styles.creatorAddress}>{currentVideo.creatorAddress}</Text>
+                <Text style={styles.creatorAddress}>
+                  {currentVideo.creatorAddress}
+                </Text>
               ) : null}
               <Image
                 source={{
-                  uri: `https://maps.googleapis.com/maps/api/staticmap?center=${currentVideo.creatorLatitude},${currentVideo.creatorLongitude}&zoom=14&size=${width - 32}x120&markers=${currentVideo.creatorLatitude},${currentVideo.creatorLongitude}&key=${config.googleMapsApiKey}`,
+                  uri: `https://maps.googleapis.com/maps/api/staticmap?center=${
+                    currentVideo.creatorLatitude
+                  },${currentVideo.creatorLongitude}&zoom=14&size=${
+                    width - 32
+                  }x120&markers=${currentVideo.creatorLatitude},${
+                    currentVideo.creatorLongitude
+                  }&key=${config.googleMapsApiKey}`,
                 }}
                 style={styles.creatorMapImage}
                 resizeMode="cover"
@@ -994,6 +1070,11 @@ const VideoDetailsScreen = () => {
             return next;
           });
         }}
+      />
+      <ProductDetailModal
+        visible={productDetailModalVisible}
+        onClose={() => setProductDetailModalVisible(false)}
+        ownerUserId={currentVideo?.userId}
       />
       <LiveChatModal
         visible={liveChatModalVisible}
@@ -1178,6 +1259,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
     color: '#212121',
+  },
+  ctaButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  ctaButton: {
+    flex: 1,
+    backgroundColor: '#F97507',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13,
   },
   channelRow: {
     flexDirection: 'row',

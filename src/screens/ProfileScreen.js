@@ -233,6 +233,14 @@ const ProfileScreen = () => {
             title="Your Account"
             onPress={() => navigation.navigate('AccountScreen')}
           />
+          {String(user?.role || '').toLowerCase() === 'owner' && (
+            <MenuItem
+              iconName="silverware-fork-knife"
+              title="Manage menu"
+              color={COLORS.primaryOrange}
+              onPress={() => navigation.navigate('MenuManageScreen')}
+            />
+          )}
 
           <View style={styles.separator} />
 

@@ -8,6 +8,7 @@ import TrendingScreen from '../screens/TrendingScreen';
 import ForYouScreen from '../screens/ForYouScreen';
 import LiveShortsScreen from '../screens/LiveShortsScreen';
 import SearchScreen from '../screens/SearchScreen';
+import CartUiScreen from '../screens/CartUiScreen';
 
 const HomeStack = createStackNavigator();
 
@@ -32,6 +33,7 @@ const HomeNavigation = () => {
       <HomeStack.Screen name="TrendingScreen" component={TrendingScreen} />
       <HomeStack.Screen name="ForYouScreen" component={ForYouScreen} />
       <HomeStack.Screen name="LiveShortsScreen" component={LiveShortsScreen} />
+      <HomeStack.Screen name="CartUiScreen" component={CartUiScreen} />
     </HomeStack.Navigator>
   );
 };

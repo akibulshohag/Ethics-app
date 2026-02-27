@@ -21,6 +21,7 @@ import BackgroundDownloadsScreen from '../screens/BackgroundDownloadsScreen';
 import HelpCenterScreen from '../screens/HelpCenterScreen';
 import IncognitoScreen from '../screens/IncognitoScreen';
 import TimeWatchedScreen from '../screens/TimeWatchedScreen';
+import MenuManageScreen from '../screens/MenuManageScreen';
 
 const LibraryStack = createStackNavigator();
 
@@ -90,6 +91,7 @@ const LibraryNavigation = () => {
         name="TimeWatchedScreen"
         component={TimeWatchedScreen}
       />
+      <LibraryStack.Screen name="MenuManageScreen" component={MenuManageScreen} />
     </LibraryStack.Navigator>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,21 +10,39 @@ import {
   Dimensions,
   Platform,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../constants/theme';
 import { useNavigation } from '@react-navigation/native';
+import { getMenuByUserId } from '../services/menuService';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const ProductDetailModal = ({ visible, onClose }) => {
+const DEFAULT_IMAGE = 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
+
+const ProductDetailModal = ({ visible, onClose, ownerUserId }) => {
   const navigation = useNavigation();
   const [quantity, setQuantity] = useState(1);
-  const [checkedItems, setCheckedItems] = useState({
-    1: false,
-    2: false,
-    3: false,
-  });
+  const [menuItems, setMenuItems] = useState([]);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [checkedItems, setCheckedItems] = useState({});
+
+  useEffect(() => {
+    if (!visible) return;
+    if (!ownerUserId) {
+      setMenuItems([]);
+      return;
+    }
+    setMenuLoading(true);
+    getMenuByUserId(ownerUserId)
+      .then(({ menu }) => {
+        setMenuItems(menu || []);
+        setCheckedItems({});
+      })
+      .catch(() => setMenuItems([]))
+      .finally(() => setMenuLoading(false));
+  }, [visible, ownerUserId]);
 
   const toggleCheckbox = (id) => {
     setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
@@ -33,29 +51,9 @@ const ProductDetailModal = ({ visible, onClose }) => {
   const increment = () => setQuantity(q => q + 1);
   const decrement = () => setQuantity(q => (q > 1 ? q - 1 : 1));
 
-  const frequentlyBought = [
-    {
-      id: 1,
-      title: 'Quick and Easy Recipe',
-      price: 10,
-      originalPrice: 15,
-      image: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg',
-    },
-    {
-      id: 2,
-      title: 'Quick and Easy Recipe',
-      price: 10,
-      originalPrice: 15,
-      image: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg',
-    },
-    {
-      id: 3,
-      title: 'Quick and Easy Recipe',
-      price: 10,
-      originalPrice: 15,
-      image: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg',
-    },
-  ];
+  const firstItem = menuItems[0];
+  const restItems = menuItems.slice(1);
+  const hasDynamicMenu = menuItems.length > 0;
 
   return (
     <Modal
@@ -70,60 +68,77 @@ const ProductDetailModal = ({ visible, onClose }) => {
           <View style={styles.handle} />
           
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* Product Image */}
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
               <Icon name="close" size={24} color={COLORS.black} />
-            </TouchableOpacity> 
-            <Image
-              source={{ uri: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' }}
-              style={styles.productImage}
-            />
+            </TouchableOpacity>
 
-            {/* Product Info */}
-            <View style={styles.infoContainer}>
-              <Text style={styles.title}>Bang Bang Chicken Skewers</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.currentPrice}>USD 12</Text>
-                <Text style={styles.originalPrice}>USD 12</Text>
-                <Text style={styles.discount}>15% off</Text>
+            {menuLoading ? (
+              <View style={styles.menuLoading}>
+                <ActivityIndicator size="large" color={COLORS.primaryOrange} />
+                <Text style={styles.menuLoadingText}>Loading menu...</Text>
               </View>
-              <Text style={styles.description}>
-                A cozy restaurant serving fresh, delicious food made with quality ingredients.
-              </Text>
-            </View>
-
-            {/* Frequently Bought Together */}
-            <View style={styles.frequentlyContainer}>
-              <Text style={styles.sectionTitle}>Frequently bought together</Text>
-              <Text style={styles.sectionSubtitle}>
-                A cozy restaurant serving fresh, delicious food made with quality ingredients.
-              </Text>
-
-              {frequentlyBought.map((item) => (
-                <View key={item.id} style={styles.boughtItem}>
-                  <Image source={{ uri: item.image }} style={styles.itemThumbnail} />
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemTitle}>{item.title}</Text>
-                    <View style={styles.itemPriceRow}>
-                        <Text style={styles.itemPrice}>+${item.price}</Text>
-                        <Text style={styles.itemOldPrice}>${item.originalPrice}</Text>
-                    </View>
+            ) : hasDynamicMenu ? (
+              <>
+                <Image
+                  source={{ uri: firstItem.imageUrl || DEFAULT_IMAGE }}
+                  style={styles.productImage}
+                />
+                <View style={styles.infoContainer}>
+                  <Text style={styles.title}>{firstItem.itemName}</Text>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.currentPrice}>USD {Number(firstItem.price).toFixed(2)}</Text>
                   </View>
-                  <TouchableOpacity onPress={() => toggleCheckbox(item.id)}>
-                    <Icon
-                      name={checkedItems[item.id] ? "checkbox-marked" : "checkbox-blank-outline"}
-                      size={28}
-                      color={checkedItems[item.id] ? COLORS.primaryOrange : COLORS.gray500}
-                    />
-                  </TouchableOpacity>
                 </View>
-              ))}
-
-              <TouchableOpacity style={styles.viewMoreRow}>
-                <Icon name="chevron-down" size={24} color={COLORS.textPrimary} />
-                <Text style={styles.viewMoreText}>View 6 More</Text>
-              </TouchableOpacity>
-            </View>
+                <View style={styles.frequentlyContainer}>
+                  <Text style={styles.sectionTitle}>Menu</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Add items from this restaurant to your order.
+                  </Text>
+                  {menuItems.map((item) => (
+                    <View key={item.id} style={styles.boughtItem}>
+                      <Image
+                        source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+                        style={styles.itemThumbnail}
+                      />
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemTitle}>{item.itemName}</Text>
+                        <View style={styles.itemPriceRow}>
+                          <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
+                        </View>
+                      </View>
+                      <TouchableOpacity onPress={() => toggleCheckbox(item.id)}>
+                        <Icon
+                          name={checkedItems[item.id] ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                          size={28}
+                          color={checkedItems[item.id] ? COLORS.primaryOrange : COLORS.gray500}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Image source={{ uri: DEFAULT_IMAGE }} style={styles.productImage} />
+                <View style={styles.infoContainer}>
+                  <Text style={styles.title}>Bang Bang Chicken Skewers</Text>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.currentPrice}>USD 12</Text>
+                    <Text style={styles.originalPrice}>USD 12</Text>
+                    <Text style={styles.discount}>15% off</Text>
+                  </View>
+                  <Text style={styles.description}>
+                    A cozy restaurant serving fresh, delicious food made with quality ingredients.
+                  </Text>
+                </View>
+                <View style={styles.frequentlyContainer}>
+                  <Text style={styles.sectionTitle}>Frequently bought together</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    No menu items yet. Restaurant owner can add menu in profile.
+                  </Text>
+                </View>
+              </>
+            )}
           </ScrollView>
 
           {/* Action Bar */}
@@ -163,7 +178,16 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     alignSelf: 'flex-end',
-    marginBottom: 10,   
+    marginBottom: 10,
+  },
+  menuLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  menuLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: COLORS.gray600,
   },
   content: {
     backgroundColor: COLORS.white,

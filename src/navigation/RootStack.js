@@ -8,6 +8,7 @@ import SecurityScreen from '../screens/SecurityScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import Login from '../screens/LoginScreen';
 import SignUp from '../screens/SignUpScreen';
+import MenuManageScreen from '../screens/MenuManageScreen';
 
 const Root = createStackNavigator();
 
@@ -26,6 +27,7 @@ const RootStack = () => {
       <Root.Screen name="CreatePin" component={CreatePinScreen} />
       <Root.Screen name="SetFingerprint" component={SetFingerprint} />
       <Root.Screen name="ChooseInterests" component={ChooseInterests} />
+      <Root.Screen name="MenuManageScreen" component={MenuManageScreen} />
     </Root.Navigator>
   );
 };

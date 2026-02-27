@@ -433,6 +433,17 @@ const AccountScreen = () => {
               )}
             />
           </View>
+
+          {String(user?.role || '').toLowerCase() === 'owner' && (
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => navigation.navigate('MenuManageScreen')}
+            >
+              <Icon name="silverware-fork-knife" size={22} color={COLORS.primaryOrange} />
+              <Text style={styles.menuButtonText}>Manage menu</Text>
+              <Icon name="chevron-right" size={22} color={COLORS.gray500} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.buttonContainer}>
@@ -644,6 +655,24 @@ const styles = StyleSheet.create({
     fontSize: FONTS.base,
     fontWeight: '600',
     color: COLORS.primaryOrange,
+  },
+  menuButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    backgroundColor: '#FFF8F2',
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    marginBottom: SPACING.lg,
+  },
+  menuButtonText: {
+    flex: 1,
+    fontSize: FONTS.base,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
   },
   useLocationButton: {
     flexDirection: 'row',
