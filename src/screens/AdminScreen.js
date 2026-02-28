@@ -38,6 +38,17 @@ import {
   createFeatured,
   deleteFeatured,
 } from '../services/featuredService';
+import {
+  getVendorFeaturedList,
+  createVendorFeatured,
+  deleteVendorFeatured,
+} from '../services/vendorFeaturedService';
+import {
+  getVendorSponsoredList,
+  createVendorSponsored,
+  deleteVendorSponsored,
+} from '../services/vendorSponsoredService';
+import { getRestaurantOrders } from '../services/orderService';
 import { uploadVideo } from '../services/videoService';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -108,12 +119,57 @@ const AdminScreen = () => {
   const [featuredVideoFile, setFeaturedVideoFile] = useState(null);
   const [featuredThumbnailFile, setFeaturedThumbnailFile] = useState(null);
   const [featuredOwnerSearchQuery, setFeaturedOwnerSearchQuery] = useState('');
-  const [featuredOwnerSearchResults, setFeaturedOwnerSearchResults] = useState([]);
-  const [featuredOwnerSearchLoading, setFeaturedOwnerSearchLoading] = useState(false);
+  const [featuredOwnerSearchResults, setFeaturedOwnerSearchResults] = useState(
+    [],
+  );
+  const [featuredOwnerSearchLoading, setFeaturedOwnerSearchLoading] =
+    useState(false);
   const [selectedFeaturedOwner, setSelectedFeaturedOwner] = useState(null);
   const featuredOwnerSearchTimeoutRef = useRef(null);
   const [myFeaturedProfile, setMyFeaturedProfile] = useState(null);
-  const [myFeaturedProfileLoading, setMyFeaturedProfileLoading] = useState(false);
+  const [myFeaturedProfileLoading, setMyFeaturedProfileLoading] =
+    useState(false);
+  const [ordersList, setOrdersList] = useState([]);
+  const [vendorFeaturedList, setVendorFeaturedList] = useState([]);
+  const [vendorSponsoredList, setVendorSponsoredList] = useState([]);
+  const [vendorFeaturedForm, setVendorFeaturedForm] = useState({
+    userId: '',
+    title: '',
+    areaName: '',
+    latitude: '',
+    longitude: '',
+    radiusKm: '2',
+    startDate: '',
+    endDate: '',
+    amountPaid: '0',
+    currency: 'BDT',
+  });
+  const [vendorSponsoredForm, setVendorSponsoredForm] = useState({
+    userId: '',
+    title: '',
+    areaName: '',
+    latitude: '',
+    longitude: '',
+    radiusKm: '2',
+    startDate: '',
+    endDate: '',
+    amountPaid: '0',
+    currency: 'BDT',
+  });
+  const [selectedVendorFeaturedUser, setSelectedVendorFeaturedUser] = useState(null);
+  const [vendorFeaturedSearchQuery, setVendorFeaturedSearchQuery] = useState('');
+  const [vendorFeaturedSearchResults, setVendorFeaturedSearchResults] = useState([]);
+  const [vendorFeaturedSearchLoading, setVendorFeaturedSearchLoading] = useState(false);
+  const [vendorFeaturedVideoFile, setVendorFeaturedVideoFile] = useState(null);
+  const [vendorFeaturedThumbnailFile, setVendorFeaturedThumbnailFile] = useState(null);
+  const [selectedVendorSponsoredUser, setSelectedVendorSponsoredUser] = useState(null);
+  const [vendorSponsoredSearchQuery, setVendorSponsoredSearchQuery] = useState('');
+  const [vendorSponsoredSearchResults, setVendorSponsoredSearchResults] = useState([]);
+  const [vendorSponsoredSearchLoading, setVendorSponsoredSearchLoading] = useState(false);
+  const [vendorSponsoredVideoFile, setVendorSponsoredVideoFile] = useState(null);
+  const [vendorSponsoredThumbnailFile, setVendorSponsoredThumbnailFile] = useState(null);
+  const vendorFeaturedSearchTimeoutRef = useRef(null);
+  const vendorSponsoredSearchTimeoutRef = useRef(null);
 
   const loadRoles = useCallback(async () => {
     try {
@@ -162,14 +218,100 @@ const AdminScreen = () => {
     }
   }, [user?.token]);
 
+  const loadOrders = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await getRestaurantOrders(user.token, { limit: 200 });
+      setOrdersList(res?.orders || []);
+    } catch (e) {
+      setOrdersList([]);
+    }
+  }, [user?.token]);
+
+  const searchVendorUsersForFeatured = useCallback(async (query) => {
+    setVendorFeaturedSearchLoading(true);
+    try {
+      const res = await getUsers({
+        role: 'owner',
+        search: query && query.trim() ? query.trim() : undefined,
+        getAll: true,
+      });
+      const list = res?.data || [];
+      // Only show users with role owner
+      setVendorFeaturedSearchResults(
+        list.filter(
+          (u) => (u?.role || '').toLowerCase() === 'owner',
+        ),
+      );
+    } catch (e) {
+      setVendorFeaturedSearchResults([]);
+    } finally {
+      setVendorFeaturedSearchLoading(false);
+    }
+  }, []);
+
+  const searchVendorUsersForSponsored = useCallback(async (query) => {
+    setVendorSponsoredSearchLoading(true);
+    try {
+      const res = await getUsers({
+        role: 'owner',
+        search: query && query.trim() ? query.trim() : undefined,
+        getAll: true,
+      });
+      const list = res?.data || [];
+      // Only show users with role owner
+      setVendorSponsoredSearchResults(
+        list.filter(
+          (u) => (u?.role || '').toLowerCase() === 'owner',
+        ),
+      );
+    } catch (e) {
+      setVendorSponsoredSearchResults([]);
+    } finally {
+      setVendorSponsoredSearchLoading(false);
+    }
+  }, []);
+
+  const loadVendorFeatured = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await getVendorFeaturedList(user.token);
+      setVendorFeaturedList(res?.featured || []);
+    } catch (e) {
+      setVendorFeaturedList([]);
+    }
+  }, [user?.token]);
+
+  const loadVendorSponsored = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await getVendorSponsoredList(user.token);
+      setVendorSponsoredList(res?.sponsored || []);
+    } catch (e) {
+      setVendorSponsoredList([]);
+    }
+  }, [user?.token]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (menu === 'roles') await loadRoles();
     else if (menu === 'users') await loadUsers();
     else if (menu === 'sponsored') await loadSponsored();
     else if (menu === 'featured') await loadFeatured();
+    else if (menu === 'orders') await loadOrders();
+    else if (menu === 'vendorFeatured') await loadVendorFeatured();
+    else if (menu === 'vendorSponsored') await loadVendorSponsored();
     setRefreshing(false);
-  }, [menu, loadRoles, loadUsers, loadSponsored, loadFeatured]);
+  }, [
+    menu,
+    loadRoles,
+    loadUsers,
+    loadSponsored,
+    loadFeatured,
+    loadOrders,
+    loadVendorFeatured,
+    loadVendorSponsored,
+  ]);
 
   const searchOwners = useCallback(async query => {
     setOwnerSearchLoading(true);
@@ -262,6 +404,36 @@ const AdminScreen = () => {
     };
   }, [modalOpen, featuredOwnerSearchQuery, isAdminUser, searchFeaturedOwners]);
 
+  // Vendor Featured: show vendor search list when modal opens and when query changes – same as owner search in Featured
+  useEffect(() => {
+    if (modalOpen !== 'vendorFeatured') return;
+    const isInitial = vendorFeaturedSearchQuery === '';
+    if (isInitial) {
+      searchVendorUsersForFeatured('');
+    } else {
+      const t = setTimeout(
+        () => searchVendorUsersForFeatured(vendorFeaturedSearchQuery),
+        400,
+      );
+      return () => clearTimeout(t);
+    }
+  }, [modalOpen, vendorFeaturedSearchQuery, searchVendorUsersForFeatured]);
+
+  // Vendor Sponsored: show vendor search list when modal opens and when query changes – same as owner search in Sponsored
+  useEffect(() => {
+    if (modalOpen !== 'vendorSponsored') return;
+    const isInitial = vendorSponsoredSearchQuery === '';
+    if (isInitial) {
+      searchVendorUsersForSponsored('');
+    } else {
+      const t = setTimeout(
+        () => searchVendorUsersForSponsored(vendorSponsoredSearchQuery),
+        400,
+      );
+      return () => clearTimeout(t);
+    }
+  }, [modalOpen, vendorSponsoredSearchQuery, searchVendorUsersForSponsored]);
+
   useEffect(() => {
     if (modalOpen !== 'featured' || !isOwnerUser || !user?.id) return;
     let cancelled = false;
@@ -273,9 +445,15 @@ const AdminScreen = () => {
         setMyFeaturedProfile(profile || null);
         setFeaturedForm(p => ({
           ...p,
-          areaName: profile?.address ? String(profile.address).trim() : p.areaName,
-          latitude: profile?.latitude != null ? String(profile.latitude) : p.latitude,
-          longitude: profile?.longitude != null ? String(profile.longitude) : p.longitude,
+          areaName: profile?.address
+            ? String(profile.address).trim()
+            : p.areaName,
+          latitude:
+            profile?.latitude != null ? String(profile.latitude) : p.latitude,
+          longitude:
+            profile?.longitude != null
+              ? String(profile.longitude)
+              : p.longitude,
         }));
       })
       .catch(() => {
@@ -320,7 +498,8 @@ const AdminScreen = () => {
       title: '',
       areaName: isOwner && user?.address ? String(user.address).trim() : '',
       latitude: isOwner && user?.latitude != null ? String(user.latitude) : '',
-      longitude: isOwner && user?.longitude != null ? String(user.longitude) : '',
+      longitude:
+        isOwner && user?.longitude != null ? String(user.longitude) : '',
       radiusKm: '2',
       startDate: '',
       endDate: '',
@@ -334,6 +513,48 @@ const AdminScreen = () => {
     setSelectedFeaturedOwner(null);
     setMyFeaturedProfile(null);
     setModalOpen('featured');
+  };
+
+  const openAddVendorFeatured = () => {
+    setVendorFeaturedForm({
+      userId: '',
+      title: '',
+      areaName: '',
+      latitude: '',
+      longitude: '',
+      radiusKm: '2',
+      startDate: '',
+      endDate: '',
+      amountPaid: '0',
+      currency: 'BDT',
+    });
+    setSelectedVendorFeaturedUser(null);
+    setVendorFeaturedSearchQuery('');
+    setVendorFeaturedSearchResults([]);
+    setVendorFeaturedVideoFile(null);
+    setVendorFeaturedThumbnailFile(null);
+    setModalOpen('vendorFeatured');
+  };
+
+  const openAddVendorSponsored = () => {
+    setVendorSponsoredForm({
+      userId: '',
+      title: '',
+      areaName: '',
+      latitude: '',
+      longitude: '',
+      radiusKm: '2',
+      startDate: '',
+      endDate: '',
+      amountPaid: '0',
+      currency: 'BDT',
+    });
+    setSelectedVendorSponsoredUser(null);
+    setVendorSponsoredSearchQuery('');
+    setVendorSponsoredSearchResults([]);
+    setVendorSponsoredVideoFile(null);
+    setVendorSponsoredThumbnailFile(null);
+    setModalOpen('vendorSponsored');
   };
 
   const pickSponsoredVideo = () => {
@@ -490,6 +711,50 @@ const AdminScreen = () => {
     });
   };
 
+  const pickVendorFeaturedVideo = () => {
+    launchImageLibrary({ mediaType: 'video', videoQuality: 'high' }, res => {
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+        return;
+      }
+      if (res.assets?.[0]) setVendorFeaturedVideoFile(res.assets[0]);
+    });
+  };
+
+  const pickVendorFeaturedThumbnail = () => {
+    launchImageLibrary({ mediaType: 'photo' }, res => {
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('Error', res.errorMessage || 'Failed to pick image');
+        return;
+      }
+      if (res.assets?.[0]) setVendorFeaturedThumbnailFile(res.assets[0]);
+    });
+  };
+
+  const pickVendorSponsoredVideo = () => {
+    launchImageLibrary({ mediaType: 'video', videoQuality: 'high' }, res => {
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+        return;
+      }
+      if (res.assets?.[0]) setVendorSponsoredVideoFile(res.assets[0]);
+    });
+  };
+
+  const pickVendorSponsoredThumbnail = () => {
+    launchImageLibrary({ mediaType: 'photo' }, res => {
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('Error', res.errorMessage || 'Failed to pick image');
+        return;
+      }
+      if (res.assets?.[0]) setVendorSponsoredThumbnailFile(res.assets[0]);
+    });
+  };
+
   const handleCreateFeatured = async () => {
     const {
       ownerId,
@@ -516,15 +781,24 @@ const AdminScreen = () => {
         Alert.alert('Error', 'Please select the owner this featured is for');
         return;
       }
-      if (selectedFeaturedOwner.latitude == null || selectedFeaturedOwner.longitude == null) {
-        Alert.alert('Error', 'Selected owner has no saved location. Update owner profile first.');
+      if (
+        selectedFeaturedOwner.latitude == null ||
+        selectedFeaturedOwner.longitude == null
+      ) {
+        Alert.alert(
+          'Error',
+          'Selected owner has no saved location. Update owner profile first.',
+        );
         return;
       }
     } else if (isOwnerUser) {
       const lat = myFeaturedProfile?.latitude ?? user?.latitude;
       const lng = myFeaturedProfile?.longitude ?? user?.longitude;
       if (lat == null || lng == null) {
-        Alert.alert('Error', 'You have no saved location. Update your profile first.');
+        Alert.alert(
+          'Error',
+          'You have no saved location. Update your profile first.',
+        );
         return;
       }
     }
@@ -555,7 +829,8 @@ const AdminScreen = () => {
           'thumb.jpg',
       });
       const finalVideoId = uploadRes?.video?.id || uploadRes?.id;
-      if (!finalVideoId) throw new Error('Upload succeeded but no video ID returned');
+      if (!finalVideoId)
+        throw new Error('Upload succeeded but no video ID returned');
 
       const body = {
         videoId: finalVideoId,
@@ -594,12 +869,236 @@ const AdminScreen = () => {
     ]);
   };
 
+  const handleCreateVendorFeatured = async () => {
+    const {
+      userId,
+      title,
+      areaName,
+      latitude,
+      longitude,
+      radiusKm,
+      startDate,
+      endDate,
+      amountPaid,
+      currency,
+    } = vendorFeaturedForm;
+    if (!selectedVendorFeaturedUser || !vendorFeaturedForm.userId) {
+      Alert.alert('Error', 'Please select an owner');
+      return;
+    }
+    if (!vendorFeaturedVideoFile || !vendorFeaturedThumbnailFile) {
+      Alert.alert('Error', 'Please select a video and a thumbnail');
+      return;
+    }
+    if (
+      selectedVendorFeaturedUser.latitude == null ||
+      selectedVendorFeaturedUser.longitude == null
+    ) {
+      Alert.alert(
+        'Error',
+        'Selected owner has no saved location. Update owner profile first.',
+      );
+      return;
+    }
+    if (!startDate || !endDate || amountPaid === '' || amountPaid == null) {
+      Alert.alert('Error', 'Please fill Dates and Amount paid');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      const videoTitle =
+        title || areaName
+          ? `Vendor Featured - ${title || areaName}`
+          : 'Vendor Featured video';
+      const uploadRes = await uploadVideo({
+        userId: user.id,
+        title: videoTitle,
+        videoUri: vendorFeaturedVideoFile.uri,
+        videoType: vendorFeaturedVideoFile.type || 'video/mp4',
+        videoName:
+          vendorFeaturedVideoFile.fileName ||
+          vendorFeaturedVideoFile.uri?.split('/').pop() ||
+          'video.mp4',
+        thumbnailUri: vendorFeaturedThumbnailFile.uri,
+        thumbnailType: vendorFeaturedThumbnailFile.type || 'image/jpeg',
+        thumbnailName:
+          vendorFeaturedThumbnailFile.fileName ||
+          vendorFeaturedThumbnailFile.uri?.split('/').pop() ||
+          'thumb.jpg',
+      });
+      const finalVideoId = uploadRes?.video?.id || uploadRes?.id;
+      if (!finalVideoId)
+        throw new Error('Upload succeeded but no video ID returned');
+
+      await createVendorFeatured(user.token, {
+        userId: vendorFeaturedForm.userId,
+        videoId: finalVideoId,
+        areaName: (areaName || '').trim() || (selectedVendorFeaturedUser.address || '').trim(),
+        latitude:
+          latitude !== '' && latitude != null
+            ? parseFloat(latitude)
+            : parseFloat(selectedVendorFeaturedUser.latitude),
+        longitude:
+          longitude !== '' && longitude != null
+            ? parseFloat(longitude)
+            : parseFloat(selectedVendorFeaturedUser.longitude),
+        radiusKm: parseFloat(radiusKm) || 2,
+        startDate: new Date(startDate).toISOString(),
+        endDate: new Date(endDate).toISOString(),
+        amountPaid: parseFloat(amountPaid) || 0,
+        currency: currency || 'BDT',
+      });
+      setModalOpen(false);
+      loadVendorFeatured();
+      Alert.alert('Success', 'Vendor Featured campaign created.');
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to create');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleCreateVendorSponsored = async () => {
+    const {
+      userId,
+      title,
+      areaName,
+      latitude,
+      longitude,
+      radiusKm,
+      startDate,
+      endDate,
+      amountPaid,
+      currency,
+    } = vendorSponsoredForm;
+    if (!selectedVendorSponsoredUser || !vendorSponsoredForm.userId) {
+      Alert.alert('Error', 'Please select an owner');
+      return;
+    }
+    if (!vendorSponsoredVideoFile || !vendorSponsoredThumbnailFile) {
+      Alert.alert('Error', 'Please select a video and a thumbnail');
+      return;
+    }
+    if (
+      selectedVendorSponsoredUser.latitude == null ||
+      selectedVendorSponsoredUser.longitude == null
+    ) {
+      Alert.alert(
+        'Error',
+        'Selected owner has no saved location. Update owner profile first.',
+      );
+      return;
+    }
+    if (!startDate || !endDate || amountPaid === '' || amountPaid == null) {
+      Alert.alert('Error', 'Please fill Dates and Amount paid');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      const videoTitle =
+        title || areaName
+          ? `Vendor Sponsored - ${title || areaName}`
+          : 'Vendor Sponsored video';
+      const uploadRes = await uploadVideo({
+        userId: user.id,
+        title: videoTitle,
+        videoUri: vendorSponsoredVideoFile.uri,
+        videoType: vendorSponsoredVideoFile.type || 'video/mp4',
+        videoName:
+          vendorSponsoredVideoFile.fileName ||
+          vendorSponsoredVideoFile.uri?.split('/').pop() ||
+          'video.mp4',
+        thumbnailUri: vendorSponsoredThumbnailFile.uri,
+        thumbnailType: vendorSponsoredThumbnailFile.type || 'image/jpeg',
+        thumbnailName:
+          vendorSponsoredThumbnailFile.fileName ||
+          vendorSponsoredThumbnailFile.uri?.split('/').pop() ||
+          'thumb.jpg',
+      });
+      const finalVideoId = uploadRes?.video?.id || uploadRes?.id;
+      if (!finalVideoId)
+        throw new Error('Upload succeeded but no video ID returned');
+
+      await createVendorSponsored(user.token, {
+        userId: vendorSponsoredForm.userId,
+        videoId: finalVideoId,
+        areaName: (areaName || '').trim() || (selectedVendorSponsoredUser.address || '').trim(),
+        latitude:
+          latitude !== '' && latitude != null
+            ? parseFloat(latitude)
+            : parseFloat(selectedVendorSponsoredUser.latitude),
+        longitude:
+          longitude !== '' && longitude != null
+            ? parseFloat(longitude)
+            : parseFloat(selectedVendorSponsoredUser.longitude),
+        radiusKm: parseFloat(radiusKm) || 2,
+        startDate: new Date(startDate).toISOString(),
+        endDate: new Date(endDate).toISOString(),
+        amountPaid: parseFloat(amountPaid) || 0,
+        currency: currency || 'BDT',
+      });
+      setModalOpen(false);
+      loadVendorSponsored();
+      Alert.alert('Success', 'Vendor Sponsored campaign created.');
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to create');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteVendorFeatured = f => {
+    Alert.alert('Cancel', `Cancel vendor featured "${f.areaName}"?`, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          try {
+            await deleteVendorFeatured(user.token, f.id);
+            loadVendorFeatured();
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Failed to cancel');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDeleteVendorSponsored = s => {
+    Alert.alert('Cancel', `Cancel vendor sponsored "${s.areaName}"?`, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          try {
+            await deleteVendorSponsored(user.token, s.id);
+            loadVendorSponsored();
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Failed to cancel');
+          }
+        },
+      },
+    ]);
+  };
+
   useEffect(() => {
     if (menu === 'roles') loadRoles();
     else if (menu === 'users') loadUsers();
     else if (menu === 'sponsored') loadSponsored();
     else if (menu === 'featured') loadFeatured();
-  }, [menu, loadRoles, loadUsers, loadSponsored, loadFeatured]);
+    else if (menu === 'orders') loadOrders();
+    else if (menu === 'vendorFeatured') loadVendorFeatured();
+    else if (menu === 'vendorSponsored') loadVendorSponsored();
+  }, [
+    menu,
+    loadRoles,
+    loadUsers,
+    loadSponsored,
+    loadFeatured,
+    loadOrders,
+    loadVendorFeatured,
+    loadVendorSponsored,
+  ]);
 
   useEffect(() => {
     if (modalOpen) loadRoleOptions();
@@ -841,6 +1340,79 @@ const AdminScreen = () => {
               Featured
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.sideItem,
+              menu === 'orders' && styles.sideItemActive,
+            ]}
+            onPress={() => setMenu('orders')}
+          >
+            <Icon
+              name="cart-check"
+              size={24}
+              color={
+                menu === 'orders' ? COLORS.primaryOrange : COLORS.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.sideText,
+                menu === 'orders' && styles.sideTextActive,
+              ]}
+            >
+              Orders
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.sideItem,
+              menu === 'vendorFeatured' && styles.sideItemActive,
+            ]}
+            onPress={() => setMenu('vendorFeatured')}
+          >
+            <Icon
+              name="star-outline"
+              size={24}
+              color={
+                menu === 'vendorFeatured'
+                  ? COLORS.primaryOrange
+                  : COLORS.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.sideText,
+                menu === 'vendorFeatured' && styles.sideTextActive,
+              ]}
+            >
+              Vendor Featured
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.sideItem,
+              menu === 'vendorSponsored' && styles.sideItemActive,
+            ]}
+            onPress={() => setMenu('vendorSponsored')}
+          >
+            <Icon
+              name="star-circle-outline"
+              size={24}
+              color={
+                menu === 'vendorSponsored'
+                  ? COLORS.primaryOrange
+                  : COLORS.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.sideText,
+                menu === 'vendorSponsored' && styles.sideTextActive,
+              ]}
+            >
+              Vendor Sponsored
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.main}>
@@ -852,23 +1424,35 @@ const AdminScreen = () => {
                 ? 'Users'
                 : menu === 'sponsored'
                 ? 'Sponsored'
+                : menu === 'orders'
+                ? 'Orders'
+                : menu === 'vendorFeatured'
+                ? 'Vendor Featured'
+                : menu === 'vendorSponsored'
+                ? 'Vendor Sponsored'
                 : 'Featured'}
             </Text>
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={
-                menu === 'roles'
-                  ? openAddRole
-                  : menu === 'users'
-                  ? openAddUser
-                  : menu === 'sponsored'
-                  ? openAddSponsored
-                  : openAddFeatured
-              }
-            >
-              <Icon name="plus" size={22} color={COLORS.white} />
-              <Text style={styles.addBtnText}>Add new</Text>
-            </TouchableOpacity>
+            {menu !== 'orders' && (
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={
+                  menu === 'roles'
+                    ? openAddRole
+                    : menu === 'users'
+                    ? openAddUser
+                    : menu === 'sponsored'
+                    ? openAddSponsored
+                    : menu === 'vendorFeatured'
+                    ? openAddVendorFeatured
+                    : menu === 'vendorSponsored'
+                    ? openAddVendorSponsored
+                    : openAddFeatured
+                }
+              >
+                <Icon name="plus" size={22} color={COLORS.white} />
+                <Text style={styles.addBtnText}>Add new</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ScrollView
@@ -908,6 +1492,86 @@ const AdminScreen = () => {
                   </View>
                   <TouchableOpacity
                     onPress={() => handleDeleteSponsored(s)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="delete-outline"
+                      size={22}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : menu === 'orders' ? (
+              ordersList.map(o => (
+                <View key={o.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>
+                      #{o.id.slice(0, 8)} · {o.status}
+                    </Text>
+                    <Text style={styles.rowSub}>
+                      {o.user?.name || o.user?.email || 'Customer'} →{' '}
+                      {o.owner?.name || o.owner?.email || 'Restaurant'} ·{' '}
+                      {o.currency} {Number(o.totalAmount).toFixed(2)} ·{' '}
+                      {o.createdAt
+                        ? new Date(o.createdAt).toLocaleString()
+                        : '—'}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            ) : menu === 'vendorFeatured' ? (
+              vendorFeaturedList.map(f => (
+                <View key={f.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>{f.areaName}</Text>
+                    <Text style={styles.rowSub}>
+                      {f.user
+                        ? `Vendor: ${
+                            f.user.nickname || f.user.name || f.user.email
+                          }`
+                        : ''}
+                      {f.user ? ' • ' : ''}
+                      {f.video?.title || f.videoId} • {f.amountPaid}{' '}
+                      {f.currency} • {f.status} • until{' '}
+                      {f.endDate
+                        ? new Date(f.endDate).toLocaleDateString()
+                        : '—'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteVendorFeatured(f)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="delete-outline"
+                      size={22}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : menu === 'vendorSponsored' ? (
+              vendorSponsoredList.map(s => (
+                <View key={s.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>{s.areaName}</Text>
+                    <Text style={styles.rowSub}>
+                      {s.user
+                        ? `Vendor: ${
+                            s.user.nickname || s.user.name || s.user.email
+                          }`
+                        : ''}
+                      {s.user ? ' • ' : ''}
+                      {s.video?.title || s.videoId} • {s.amountPaid}{' '}
+                      {s.currency} • {s.status} • until{' '}
+                      {s.endDate
+                        ? new Date(s.endDate).toLocaleDateString()
+                        : '—'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteVendorSponsored(s)}
                     style={styles.iconBtn}
                   >
                     <Icon
@@ -1026,11 +1690,527 @@ const AdminScreen = () => {
                 ? 'New Sponsored Campaign'
                 : modalOpen === 'featured'
                 ? 'New Featured Campaign'
+                : modalOpen === 'vendorFeatured'
+                ? 'New Vendor Featured Campaign'
+                : modalOpen === 'vendorSponsored'
+                ? 'New Vendor Sponsored Campaign'
                 : editingUser
                 ? 'Edit User'
                 : 'New User'}
             </Text>
-            {modalOpen === 'featured' ? (
+            {modalOpen === 'vendorFeatured' ? (
+              <ScrollView
+                style={{ maxHeight: 520 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.label}>
+                  1. Select owner (list shows only role: owner)
+                </Text>
+                {selectedVendorFeaturedUser ? (
+                  <View style={styles.selectedOwnerBox}>
+                    <Text
+                      style={styles.selectedOwnerName}
+                      numberOfLines={1}
+                    >
+                      {selectedVendorFeaturedUser.nickname ||
+                        selectedVendorFeaturedUser.name ||
+                        selectedVendorFeaturedUser.email}
+                    </Text>
+                    {selectedVendorFeaturedUser.address ? (
+                      <Text
+                        style={styles.selectedOwnerAddress}
+                        numberOfLines={2}
+                      >
+                        {selectedVendorFeaturedUser.address}
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedVendorFeaturedUser(null);
+                        setVendorFeaturedForm(p => ({
+                          ...p,
+                          userId: '',
+                          areaName: '',
+                          latitude: '',
+                          longitude: '',
+                        }));
+                      }}
+                      style={styles.changeOwnerBtn}
+                    >
+                      <Text style={styles.changeOwnerBtnText}>
+                        Change owner
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      value={vendorFeaturedSearchQuery}
+                      onChangeText={setVendorFeaturedSearchQuery}
+                      placeholder="Search by name or email (email is unique)"
+                      placeholderTextColor="#999"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="email-address"
+                    />
+                    <Text style={[styles.hintText, { marginTop: 4 }]}>
+                      Only owners listed. Type name or full email → select one,
+                      address & location auto-fill.
+                    </Text>
+                    {vendorFeaturedSearchLoading ? (
+                      <ActivityIndicator
+                        size="small"
+                        style={{ marginVertical: 8 }}
+                        color={COLORS?.primary || '#333'}
+                      />
+                    ) : vendorFeaturedSearchResults.length > 0 ? (
+                      <ScrollView
+                        style={styles.ownerSearchList}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {vendorFeaturedSearchResults.map(o => (
+                          <TouchableOpacity
+                            key={o.id}
+                            style={styles.ownerSearchItem}
+                            onPress={() => {
+                              setVendorFeaturedSearchLoading(true);
+                              getUser(o.id)
+                                .then(res => {
+                                  const profile = res?.user || res || o;
+                                  setSelectedVendorFeaturedUser(profile);
+                                  setVendorFeaturedForm(p => ({
+                                    ...p,
+                                    userId: profile?.id || o.id,
+                                    areaName: profile?.address
+                                      ? String(profile.address).trim()
+                                      : '',
+                                    latitude:
+                                      profile?.latitude != null
+                                        ? String(profile.latitude)
+                                        : '',
+                                    longitude:
+                                      profile?.longitude != null
+                                        ? String(profile.longitude)
+                                        : '',
+                                  }));
+                                  setVendorFeaturedSearchQuery('');
+                                  setVendorFeaturedSearchResults([]);
+                                })
+                                .catch(() => {
+                                  setSelectedVendorFeaturedUser(o);
+                                  setVendorFeaturedForm(p => ({
+                                    ...p,
+                                    userId: o.id,
+                                    areaName: o.address
+                                      ? String(o.address).trim()
+                                      : '',
+                                    latitude:
+                                      o.latitude != null
+                                        ? String(o.latitude)
+                                        : '',
+                                    longitude:
+                                      o.longitude != null
+                                        ? String(o.longitude)
+                                        : '',
+                                  }));
+                                  setVendorFeaturedSearchQuery('');
+                                  setVendorFeaturedSearchResults([]);
+                                })
+                                .finally(() =>
+                                  setVendorFeaturedSearchLoading(false),
+                                );
+                            }}
+                          >
+                            <Text
+                              style={styles.ownerSearchItemName}
+                              numberOfLines={1}
+                            >
+                              {o.nickname || o.name || o.email}
+                            </Text>
+                            {o.address ? (
+                              <Text
+                                style={styles.ownerSearchItemAddress}
+                                numberOfLines={1}
+                              >
+                                {o.address}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    ) : vendorFeaturedSearchQuery.trim() ? (
+                      <Text style={styles.hintText}>
+                        No owners found. Try another search.
+                      </Text>
+                    ) : (
+                      <Text style={styles.hintText}>
+                        Type to search owners (name or email).
+                      </Text>
+                    )}
+                  </>
+                )}
+                <Text style={styles.label}>Title (optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorFeaturedForm.title}
+                  onChangeText={t =>
+                    setVendorFeaturedForm(p => ({ ...p, title: t }))
+                  }
+                  placeholder="e.g. Vendor featured promo"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.label}>Video (required)</Text>
+                <TouchableOpacity
+                  style={[styles.addBtn, { marginVertical: 4 }]}
+                  onPress={pickVendorFeaturedVideo}
+                >
+                  <Text style={styles.addBtnText}>
+                    {vendorFeaturedVideoFile
+                      ? vendorFeaturedVideoFile.fileName || 'Video selected'
+                      : 'Pick video'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.label}>Thumbnail (required)</Text>
+                <TouchableOpacity
+                  style={[styles.addBtn, { marginVertical: 4 }]}
+                  onPress={pickVendorFeaturedThumbnail}
+                >
+                  <Text style={styles.addBtnText}>
+                    {vendorFeaturedThumbnailFile
+                      ? vendorFeaturedThumbnailFile.fileName || 'Image selected'
+                      : 'Pick thumbnail'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.label}>Location</Text>
+                <View style={styles.selectedOwnerBox}>
+                  {!selectedVendorFeaturedUser ? (
+                    <Text style={styles.hintText}>
+                      Select an owner first. Location will be taken from that
+                      owner's profile.
+                    </Text>
+                  ) : selectedVendorFeaturedUser?.address ? (
+                    <Text style={styles.selectedOwnerAddress}>
+                      {selectedVendorFeaturedUser.address}
+                    </Text>
+                  ) : (
+                    <Text style={styles.hintText}>
+                      Selected owner has no address/location saved. Update
+                      owner profile first.
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.label}>Radius (km)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorFeaturedForm.radiusKm}
+                  onChangeText={t =>
+                    setVendorFeaturedForm(p => ({ ...p, radiusKm: t }))
+                  }
+                  placeholder="2"
+                  placeholderTextColor="#999"
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorFeaturedForm.startDate}
+                  onChangeText={t =>
+                    setVendorFeaturedForm(p => ({ ...p, startDate: t }))
+                  }
+                  placeholder="2026-02-18"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorFeaturedForm.endDate}
+                  onChangeText={t =>
+                    setVendorFeaturedForm(p => ({ ...p, endDate: t }))
+                  }
+                  placeholder="2026-03-18"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.label}>Amount paid</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorFeaturedForm.amountPaid}
+                  onChangeText={t =>
+                    setVendorFeaturedForm(p => ({ ...p, amountPaid: t }))
+                  }
+                  placeholder="0"
+                  placeholderTextColor="#999"
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.label}>Currency</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorFeaturedForm.currency}
+                  onChangeText={t =>
+                    setVendorFeaturedForm(p => ({ ...p, currency: t }))
+                  }
+                  placeholder="BDT"
+                  placeholderTextColor="#999"
+                />
+              </ScrollView>
+            ) : modalOpen === 'vendorSponsored' ? (
+              <ScrollView
+                style={{ maxHeight: 520 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.label}>
+                  1. Select owner (list shows only role: owner)
+                </Text>
+                {selectedVendorSponsoredUser ? (
+                  <View style={styles.selectedOwnerBox}>
+                    <Text
+                      style={styles.selectedOwnerName}
+                      numberOfLines={1}
+                    >
+                      {selectedVendorSponsoredUser.nickname ||
+                        selectedVendorSponsoredUser.name ||
+                        selectedVendorSponsoredUser.email}
+                    </Text>
+                    {selectedVendorSponsoredUser.address ? (
+                      <Text
+                        style={styles.selectedOwnerAddress}
+                        numberOfLines={2}
+                      >
+                        {selectedVendorSponsoredUser.address}
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedVendorSponsoredUser(null);
+                        setVendorSponsoredForm(p => ({
+                          ...p,
+                          userId: '',
+                          areaName: '',
+                          latitude: '',
+                          longitude: '',
+                        }));
+                      }}
+                      style={styles.changeOwnerBtn}
+                    >
+                      <Text style={styles.changeOwnerBtnText}>
+                        Change owner
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <TextInput
+                      style={styles.input}
+                      value={vendorSponsoredSearchQuery}
+                      onChangeText={setVendorSponsoredSearchQuery}
+                      placeholder="Search by name or email (email is unique)"
+                      placeholderTextColor="#999"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="email-address"
+                    />
+                    <Text style={[styles.hintText, { marginTop: 4 }]}>
+                      Only owners listed. Type name or full email → select one,
+                      address & location auto-fill.
+                    </Text>
+                    {vendorSponsoredSearchLoading ? (
+                      <ActivityIndicator
+                        size="small"
+                        style={{ marginVertical: 8 }}
+                        color={COLORS?.primary || '#333'}
+                      />
+                    ) : vendorSponsoredSearchResults.length > 0 ? (
+                      <ScrollView
+                        style={styles.ownerSearchList}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {vendorSponsoredSearchResults.map(o => (
+                          <TouchableOpacity
+                            key={o.id}
+                            style={styles.ownerSearchItem}
+                            onPress={() => {
+                              setVendorSponsoredSearchLoading(true);
+                              getUser(o.id)
+                                .then(res => {
+                                  const profile = res?.user || res || o;
+                                  setSelectedVendorSponsoredUser(profile);
+                                  setVendorSponsoredForm(p => ({
+                                    ...p,
+                                    userId: profile?.id || o.id,
+                                    areaName: profile?.address
+                                      ? String(profile.address).trim()
+                                      : '',
+                                    latitude:
+                                      profile?.latitude != null
+                                        ? String(profile.latitude)
+                                        : '',
+                                    longitude:
+                                      profile?.longitude != null
+                                        ? String(profile.longitude)
+                                        : '',
+                                  }));
+                                  setVendorSponsoredSearchQuery('');
+                                  setVendorSponsoredSearchResults([]);
+                                })
+                                .catch(() => {
+                                  setSelectedVendorSponsoredUser(o);
+                                  setVendorSponsoredForm(p => ({
+                                    ...p,
+                                    userId: o.id,
+                                    areaName: o.address
+                                      ? String(o.address).trim()
+                                      : '',
+                                    latitude:
+                                      o.latitude != null
+                                        ? String(o.latitude)
+                                        : '',
+                                    longitude:
+                                      o.longitude != null
+                                        ? String(o.longitude)
+                                        : '',
+                                  }));
+                                  setVendorSponsoredSearchQuery('');
+                                  setVendorSponsoredSearchResults([]);
+                                })
+                                .finally(() =>
+                                  setVendorSponsoredSearchLoading(false),
+                                );
+                            }}
+                          >
+                            <Text
+                              style={styles.ownerSearchItemName}
+                              numberOfLines={1}
+                            >
+                              {o.nickname || o.name || o.email}
+                            </Text>
+                            {o.address ? (
+                              <Text
+                                style={styles.ownerSearchItemAddress}
+                                numberOfLines={1}
+                              >
+                                {o.address}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    ) : vendorSponsoredSearchQuery.trim() ? (
+                      <Text style={styles.hintText}>
+                        No owners found. Try another search.
+                      </Text>
+                    ) : (
+                      <Text style={styles.hintText}>
+                        Type to search owners (name or email).
+                      </Text>
+                    )}
+                  </>
+                )}
+                <Text style={styles.label}>Title (optional)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorSponsoredForm.title}
+                  onChangeText={t =>
+                    setVendorSponsoredForm(p => ({ ...p, title: t }))
+                  }
+                  placeholder="e.g. Vendor sponsored promo"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.label}>Video (required)</Text>
+                <TouchableOpacity
+                  style={[styles.addBtn, { marginVertical: 4 }]}
+                  onPress={pickVendorSponsoredVideo}
+                >
+                  <Text style={styles.addBtnText}>
+                    {vendorSponsoredVideoFile
+                      ? vendorSponsoredVideoFile.fileName || 'Video selected'
+                      : 'Pick video'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.label}>Thumbnail (required)</Text>
+                <TouchableOpacity
+                  style={[styles.addBtn, { marginVertical: 4 }]}
+                  onPress={pickVendorSponsoredThumbnail}
+                >
+                  <Text style={styles.addBtnText}>
+                    {vendorSponsoredThumbnailFile
+                      ? vendorSponsoredThumbnailFile.fileName || 'Image selected'
+                      : 'Pick thumbnail'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.label}>Location</Text>
+                <View style={styles.selectedOwnerBox}>
+                  {!selectedVendorSponsoredUser ? (
+                    <Text style={styles.hintText}>
+                      Select an owner first. Location will be taken from that
+                      owner's profile.
+                    </Text>
+                  ) : selectedVendorSponsoredUser?.address ? (
+                    <Text style={styles.selectedOwnerAddress}>
+                      {selectedVendorSponsoredUser.address}
+                    </Text>
+                  ) : (
+                    <Text style={styles.hintText}>
+                      Selected owner has no address/location saved. Update
+                      owner profile first.
+                    </Text>
+                  )}
+                </View>
+                <Text style={styles.label}>Radius (km)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorSponsoredForm.radiusKm}
+                  onChangeText={t =>
+                    setVendorSponsoredForm(p => ({ ...p, radiusKm: t }))
+                  }
+                  placeholder="2"
+                  placeholderTextColor="#999"
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorSponsoredForm.startDate}
+                  onChangeText={t =>
+                    setVendorSponsoredForm(p => ({ ...p, startDate: t }))
+                  }
+                  placeholder="2026-02-18"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorSponsoredForm.endDate}
+                  onChangeText={t =>
+                    setVendorSponsoredForm(p => ({ ...p, endDate: t }))
+                  }
+                  placeholder="2026-03-18"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.label}>Amount paid</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorSponsoredForm.amountPaid}
+                  onChangeText={t =>
+                    setVendorSponsoredForm(p => ({ ...p, amountPaid: t }))
+                  }
+                  placeholder="0"
+                  placeholderTextColor="#999"
+                  keyboardType="decimal-pad"
+                />
+                <Text style={styles.label}>Currency</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vendorSponsoredForm.currency}
+                  onChangeText={t =>
+                    setVendorSponsoredForm(p => ({ ...p, currency: t }))
+                  }
+                  placeholder="BDT"
+                  placeholderTextColor="#999"
+                />
+              </ScrollView>
+            ) : modalOpen === 'featured' ? (
               <ScrollView
                 style={{ maxHeight: 520 }}
                 showsVerticalScrollIndicator={false}
@@ -1089,7 +2269,9 @@ const AdminScreen = () => {
                           keyboardType="email-address"
                         />
                         <Text style={[styles.hintText, { marginTop: 4 }]}>
-                          {'Only owners listed. Type name or full email → select one, address & location auto-fill.'}
+                          {
+                            'Only owners listed. Type name or full email → select one, address & location auto-fill.'
+                          }
                         </Text>
                         {featuredOwnerSearchLoading ? (
                           <ActivityIndicator
@@ -1190,9 +2372,7 @@ const AdminScreen = () => {
                 <TextInput
                   style={styles.input}
                   value={featuredForm.title}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, title: t }))
-                  }
+                  onChangeText={t => setFeaturedForm(p => ({ ...p, title: t }))}
                   placeholder="e.g. My featured promo"
                   placeholderTextColor="#999"
                 />
@@ -1363,7 +2543,9 @@ const AdminScreen = () => {
                           keyboardType="email-address"
                         />
                         <Text style={[styles.hintText, { marginTop: 4 }]}>
-                          {'Only owners listed. Type name or full email → select one, address & location auto-fill.'}
+                          {
+                            'Only owners listed. Type name or full email → select one, address & location auto-fill.'
+                          }
                         </Text>
                         {ownerSearchLoading ? (
                           <ActivityIndicator
@@ -1674,6 +2856,10 @@ const AdminScreen = () => {
                     ? handleCreateSponsored
                     : modalOpen === 'featured'
                     ? handleCreateFeatured
+                    : modalOpen === 'vendorFeatured'
+                    ? handleCreateVendorFeatured
+                    : modalOpen === 'vendorSponsored'
+                    ? handleCreateVendorSponsored
                     : handleSaveUser
                 }
                 disabled={submitLoading}
@@ -1833,6 +3019,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray200,
+  },
+  ownerSearchItemActive: {
+    backgroundColor: COLORS.gray100 || '#f0f0f0',
+  },
+  pickerWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    maxHeight: 120,
   },
   ownerSearchItemName: {
     fontSize: FONTS.base,

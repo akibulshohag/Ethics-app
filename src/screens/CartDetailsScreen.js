@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,151 +6,32 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  TextInput,
   Dimensions,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../constants/theme';
-import { useNavigation } from '@react-navigation/native';
-import CheckoutSection from '../components/CheckoutSection';
+import { COLORS, SPACING, SHADOWS } from '../constants/theme';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
-const { width } = Dimensions.get('window');
+const DEFAULT_IMAGE = 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
 
 const CartDetailsScreen = () => {
   const navigation = useNavigation();
-  const [activeTab, setActiveTab] = useState('Cart'); // 'Cart' or 'Checkout'
+  const route = useRoute();
+  const { ownerId, items: paramItems = [] } = route.params || {};
+  const items = Array.isArray(paramItems) ? paramItems : [];
 
-  const Stepper = () => (
-    <View style={styles.stepperContainer}>
-      <TouchableOpacity style={styles.stepItem} onPress={() => setActiveTab('Cart')}>
-        <View style={[styles.stepCircle, styles.stepActive]}>
-          <Text style={styles.stepNumber}>1</Text>
-        </View>
-        <Text style={styles.stepLabel}>Menu</Text>
-      </TouchableOpacity>
-      <View style={styles.stepLine} />
-      <TouchableOpacity style={styles.stepItem} onPress={() => setActiveTab('Cart')}>
-        <View style={[styles.stepCircle, styles.stepActive]}>
-          <Text style={styles.stepNumber}>2</Text>
-        </View>
-        <Text style={styles.stepLabel}>Cart</Text>
-      </TouchableOpacity>
-      <View style={[styles.stepLine, activeTab === 'Checkout' ? {} : styles.stepLineInactive]} />
-      <TouchableOpacity style={styles.stepItem} onPress={() => setActiveTab('Checkout')}>
-        <View style={[styles.stepCircle, activeTab === 'Checkout' ? styles.stepActive : styles.stepInactive]}>
-          <Text style={[styles.stepNumber, activeTab === 'Checkout' ? {} : styles.stepNumberInactive]}>3</Text>
-        </View>
-        <Text style={styles.stepLabel}>Checkout</Text>
-      </TouchableOpacity>
-    </View>
+  const total = items.reduce(
+    (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
+    0,
   );
+  const currency = items[0]?.currency || 'BDT';
 
-  const CartSection = () => (
-    <>
-      {/* Promo Code */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Apply Your Promo Code</Text>
-        <View style={styles.promoInputRow}>
-          <TextInput
-            style={styles.promoInput}
-            placeholder="MULEN300FF"
-            placeholderTextColor={COLORS.gray400}
-          />
-          <TouchableOpacity style={styles.applyBtn}>
-            <Text style={styles.applyBtnText}>Apply</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Delivery Estimate */}
-      <View style={[styles.card, styles.deliveryCard]}>
-        <View style={styles.deliveryInfo}>
-          <Icon name="truck-delivery" size={32} color={COLORS.black} />
-          <View style={styles.deliveryTextContainer}>
-            <Text style={styles.deliveryLabel}>Estimate delivery</Text>
-            <Text style={styles.deliveryValue}>Standard (35-50 mins)</Text>
-            <TouchableOpacity>
-              <Text style={styles.changeLink}>Change</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      {/* Cart Item */}
-      <View style={styles.cartItem}>
-        <Image
-          source={{ uri: 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' }}
-          style={styles.itemImage}
-        />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemTitle}>Quick and Easy Recipe</Text>
-          <View style={styles.quantityWrapper}>
-            <TouchableOpacity style={styles.quantityBtn}>
-              <Icon name="minus" size={16} color={COLORS.gray600} />
-            </TouchableOpacity>
-            <Text style={styles.quantityText}>1</Text>
-            <TouchableOpacity style={styles.quantityBtn}>
-              <Icon name="plus" size={16} color={COLORS.black} />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={styles.itemPriceColumn}>
-          <Text style={styles.itemPrice}>+$ 110</Text>
-          <Text style={styles.itemOldPrice}>$ 15</Text>
-        </View>
-      </View>
-
-      <TouchableOpacity style={styles.addMoreRow}>
-        <Icon name="plus" size={20} color={COLORS.black} />
-        <Text style={styles.addMoreText}>Add more items</Text>
-      </TouchableOpacity>
-
-      <View style={styles.divider} />
-
-      {/* Popular with order */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Popular with order</Text>
-        <Text style={styles.sectionSubtitle}>
-          A cozy restaurant serving fresh, delicious food made with quality ingredients.
-        </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-          {[1, 2].map((i) => (
-            <View key={i} style={styles.popularCard}>
-              <Image
-                source={{ uri: i === 1 ? 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg' : 'https://img.freepik.com/free-photo/tasty-steak-surrounded-by-herbs-and-sauce_23-2148416666.jpg' }}
-                style={styles.popularImage}
-              />
-              <View style={styles.playIconContainer}>
-                <Icon name="play" size={14} color={COLORS.primaryOrange} />
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Summary */}
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Subtotal</Text>
-          <Text style={styles.summaryValue}>+$ 160</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Delivery Charge</Text>
-          <Text style={styles.summaryValue}>+$ 50</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>VAT</Text>
-          <Text style={styles.summaryValue}>$1.5</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Promo Code</Text>
-          <Text style={[styles.summaryValue, { color: COLORS.error }]}>-$50</Text>
-        </View>
-      </View>
-    </>
-  );
+  const onCheckout = () => {
+    if (!items.length || !ownerId) return;
+    navigation.navigate('CheckoutScreen', { ownerId, items });
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -163,44 +44,71 @@ const CartDetailsScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Stepper */}
-        <Stepper />
-
-        {activeTab === 'Cart' ? <CartSection /> : <CheckoutSection />}
-
-        {/* Total Footer Placeholder */}
-        <View style={{ height: 140 }} />
-      </ScrollView>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <View style={styles.footerHandle} />
-        {activeTab === 'Cart' ? (
-          <View style={styles.footerRow}>
-            <View>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.feesText}>(incl.fees and tax)</Text>
-            </View>
-            <View style={styles.totalPriceContainer}>
-              <Text style={styles.totalPrice}>+$ 161.5</Text>
-              <Text style={styles.totalOldPrice}>$ 195</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.checkoutFooter}>
-            <View style={styles.checkoutLabelRow}>
-                <View>
-                    <Text style={styles.totalLabel}>Total</Text>
-                    <TouchableOpacity><Text style={styles.seeSummary}>See summary</Text></TouchableOpacity>
-                </View>
-                <Text style={styles.totalPrice}>+$ 161.5</Text>
-            </View>
-            <TouchableOpacity style={styles.confirmBtn}>
-                <Text style={styles.confirmBtnText}>Confirm Address</Text>
+        {items.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Icon name="cart-outline" size={64} color={COLORS.gray400} />
+            <Text style={styles.emptyText}>Your cart is empty</Text>
+            <Text style={styles.emptySubtext}>Add items from a restaurant to see them here.</Text>
+            <TouchableOpacity style={styles.backToShopBtn} onPress={() => navigation.goBack()}>
+              <Text style={styles.backToShopText}>Go back</Text>
             </TouchableOpacity>
           </View>
+        ) : (
+          <>
+            <View style={styles.card}>
+              <Text style={styles.cardLabel}>Order items</Text>
+              {items.map((item, index) => {
+                const qty = item.quantity || 1;
+                const price = Number(item.price) || 0;
+                const lineTotal = price * qty;
+                return (
+                  <View key={item.menuItemId || index} style={styles.cartItem}>
+                    <Image
+                      source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+                      style={styles.itemImage}
+                    />
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemTitle}>{item.itemName}</Text>
+                      <Text style={styles.itemMeta}>
+                        {item.currency || 'BDT'} {price.toFixed(2)} × {qty}
+                      </Text>
+                    </View>
+                    <View style={styles.itemPriceColumn}>
+                      <Text style={styles.itemPrice}>
+                        {item.currency || 'BDT'} {lineTotal.toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Subtotal</Text>
+                <Text style={styles.summaryValue}>
+                  {currency} {total.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+            <View style={{ height: 140 }} />
+          </>
         )}
-      </View>
+      </ScrollView>
+
+      {items.length > 0 && (
+        <View style={styles.footer}>
+          <View style={styles.footerHandle} />
+          <View style={styles.footerRow}>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalPrice}>{currency} {total.toFixed(2)}</Text>
+            </View>
+            <TouchableOpacity style={styles.checkoutBtn} onPress={onCheckout}>
+              <Text style={styles.checkoutBtnText}>Checkout</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -228,6 +136,36 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 10,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.gray700,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: COLORS.gray500,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  backToShopBtn: {
+    marginTop: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: COLORS.primaryOrange,
+    borderRadius: 24,
+  },
+  backToShopText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
   },
   stepperContainer: {
     flexDirection: 'row',
@@ -357,7 +295,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: COLORS.gray800,
-    marginBottom: 8,
+    marginBottom: 4,
+  },
+  itemMeta: {
+    fontSize: 13,
+    color: COLORS.gray500,
   },
   quantityWrapper: {
     flexDirection: 'row',
@@ -483,6 +425,23 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   footerRow: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+  checkoutBtn: {
+    backgroundColor: COLORS.primaryOrange,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  checkoutBtnText: {
+    color: COLORS.white,
+    fontSize: 17,
+    fontWeight: 'bold',
+  },
+  totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -495,6 +454,11 @@ const styles = StyleSheet.create({
   feesText: {
     fontSize: 12,
     color: COLORS.gray600,
+  },
+  totalPrice: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.primaryOrange,
   },
   totalPriceContainer: {
     alignItems: 'flex-end',

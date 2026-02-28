@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS, SHADOWS } from '../constants/theme';
@@ -21,12 +22,12 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const DEFAULT_IMAGE = 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
 
-const ProductDetailModal = ({ visible, onClose, ownerUserId }) => {
+const ProductDetailModal = ({ visible, onClose, ownerUserId, token, onOrderPlaced }) => {
   const navigation = useNavigation();
-  const [quantity, setQuantity] = useState(1);
   const [menuItems, setMenuItems] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
-  const [checkedItems, setCheckedItems] = useState({});
+  // Per-item quantity: { [menuItemId]: number } (0 = not selected)
+  const [selectedItems, setSelectedItems] = useState({});
 
   useEffect(() => {
     if (!visible) return;
@@ -35,21 +36,22 @@ const ProductDetailModal = ({ visible, onClose, ownerUserId }) => {
       return;
     }
     setMenuLoading(true);
+    setSelectedItems({});
     getMenuByUserId(ownerUserId)
-      .then(({ menu }) => {
-        setMenuItems(menu || []);
-        setCheckedItems({});
-      })
+      .then(({ menu }) => setMenuItems(menu || []))
       .catch(() => setMenuItems([]))
       .finally(() => setMenuLoading(false));
   }, [visible, ownerUserId]);
 
-  const toggleCheckbox = (id) => {
-    setCheckedItems(prev => ({ ...prev, [id]: !prev[id] }));
+  const setItemQty = (id, qty) => {
+    const n = Math.max(0, typeof qty === 'function' ? qty(selectedItems[id] || 0) : qty);
+    setSelectedItems(prev => (n === 0 ? { ...prev, [id]: undefined } : { ...prev, [id]: n }));
   };
 
-  const increment = () => setQuantity(q => q + 1);
-  const decrement = () => setQuantity(q => (q > 1 ? q - 1 : 1));
+  const toggleItem = (id) => {
+    const cur = selectedItems[id] || 0;
+    setItemQty(id, cur > 0 ? 0 : 1);
+  };
 
   const firstItem = menuItems[0];
   const restItems = menuItems.slice(1);
@@ -94,27 +96,46 @@ const ProductDetailModal = ({ visible, onClose, ownerUserId }) => {
                   <Text style={styles.sectionSubtitle}>
                     Add items from this restaurant to your order.
                   </Text>
-                  {menuItems.map((item) => (
-                    <View key={item.id} style={styles.boughtItem}>
-                      <Image
-                        source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
-                        style={styles.itemThumbnail}
-                      />
-                      <View style={styles.itemInfo}>
-                        <Text style={styles.itemTitle}>{item.itemName}</Text>
-                        <View style={styles.itemPriceRow}>
-                          <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity onPress={() => toggleCheckbox(item.id)}>
-                        <Icon
-                          name={checkedItems[item.id] ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                          size={28}
-                          color={checkedItems[item.id] ? COLORS.primaryOrange : COLORS.gray500}
+                  {menuItems.map((item) => {
+                    const qty = selectedItems[item.id] || 0;
+                    return (
+                      <View key={item.id} style={styles.boughtItem}>
+                        <Image
+                          source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+                          style={styles.itemThumbnail}
                         />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                        <View style={styles.itemInfo}>
+                          <Text style={styles.itemTitle}>{item.itemName}</Text>
+                          <View style={styles.itemPriceRow}>
+                            <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.itemQuantityRow}>
+                          <TouchableOpacity
+                            onPress={() => setItemQty(item.id, (n) => n - 1)}
+                            style={styles.qtyBtn}
+                            disabled={qty === 0}
+                          >
+                            <Icon name="minus" size={20} color={qty === 0 ? COLORS.gray400 : COLORS.gray700} />
+                          </TouchableOpacity>
+                          <Text style={styles.qtyText}>{qty}</Text>
+                          <TouchableOpacity
+                            onPress={() => setItemQty(item.id, (n) => n + 1)}
+                            style={styles.qtyBtn}
+                          >
+                            <Icon name="plus" size={20} color={COLORS.primaryOrange} />
+                          </TouchableOpacity>
+                        </View>
+                        <TouchableOpacity onPress={() => toggleItem(item.id)}>
+                          <Icon
+                            name={qty > 0 ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                            size={28}
+                            color={qty > 0 ? COLORS.primaryOrange : COLORS.gray500}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </View>
               </>
             ) : (
@@ -141,29 +162,46 @@ const ProductDetailModal = ({ visible, onClose, ownerUserId }) => {
             )}
           </ScrollView>
 
-          {/* Action Bar */}
-          <View style={styles.actionBar}>
-            <View style={styles.quantityContainer}>
-              <TouchableOpacity onPress={decrement} style={styles.quantityBtn}>
-                <Icon name="minus-circle-outline" size={24} color={COLORS.gray600} />
-              </TouchableOpacity>
-              <Text style={styles.quantityText}>{quantity}</Text>
-              <TouchableOpacity onPress={increment} style={styles.quantityBtn}>
-                <Icon name="plus-circle-outline" size={24} color={COLORS.black} />
+          {/* Action Bar: Place order when dynamic menu */}
+          {hasDynamicMenu && (
+            <View style={styles.actionBar}>
+              <TouchableOpacity
+                style={styles.addToCartBtn}
+                onPress={() => {
+                  if (!token) {
+                    Alert.alert('Sign in required', 'Please sign in to add items to cart.', [
+                      { text: 'OK' },
+                      { text: 'Sign in', onPress: () => { onClose(); navigation.navigate('Login'); } },
+                    ]);
+                    return;
+                  }
+                  const menuMap = new Map(menuItems.map((m) => [m.id, m]));
+                  const items = Object.entries(selectedItems)
+                    .filter(([, q]) => q > 0)
+                    .map(([menuItemId, quantity]) => {
+                      const menuItem = menuMap.get(menuItemId);
+                      return {
+                        menuItemId,
+                        itemName: menuItem?.itemName || 'Item',
+                        price: menuItem?.price ?? 0,
+                        quantity,
+                        currency: 'BDT',
+                        imageUrl: menuItem?.imageUrl,
+                      };
+                    });
+                  if (items.length === 0) {
+                    Alert.alert('Add items', 'Select at least one item and quantity to add to cart.');
+                    return;
+                  }
+                  if (!ownerUserId) return;
+                  onClose();
+                  navigation.navigate('CartDetailsScreen', { ownerId: ownerUserId, items });
+                }}
+              >
+                <Text style={styles.addToCartText}>Add to Cart</Text>
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity 
-              style={styles.addToCartBtn}
-              onPress={() => {
-                onClose();
-                navigation.navigate('CartDetailsScreen');
-              }}
-            >
-              <Text style={styles.addToCartText}>Add to cart</Text>
-            </TouchableOpacity>
-
-          </View>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -294,8 +332,23 @@ const styles = StyleSheet.create({
   itemPrice: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#E48B47', // Light orange to match image
+    color: '#E48B47',
     marginRight: 8,
+  },
+  itemQuantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  qtyBtn: {
+    padding: 6,
+  },
+  qtyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    minWidth: 24,
+    textAlign: 'center',
+    color: COLORS.gray700,
   },
   itemOldPrice: {
     fontSize: 14,
@@ -347,6 +400,9 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  addToCartBtnDisabled: {
+    opacity: 0.7,
   },
   addToCartText: {
     fontSize: 18,

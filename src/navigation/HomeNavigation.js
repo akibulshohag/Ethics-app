@@ -9,6 +9,8 @@ import ForYouScreen from '../screens/ForYouScreen';
 import LiveShortsScreen from '../screens/LiveShortsScreen';
 import SearchScreen from '../screens/SearchScreen';
 import CartUiScreen from '../screens/CartUiScreen';
+import CartDetailsScreen from '../screens/CartDetailsScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
 
 const HomeStack = createStackNavigator();
 
@@ -34,6 +36,8 @@ const HomeNavigation = () => {
       <HomeStack.Screen name="ForYouScreen" component={ForYouScreen} />
       <HomeStack.Screen name="LiveShortsScreen" component={LiveShortsScreen} />
       <HomeStack.Screen name="CartUiScreen" component={CartUiScreen} />
+      <HomeStack.Screen name="CartDetailsScreen" component={CartDetailsScreen} />
+      <HomeStack.Screen name="CheckoutScreen" component={CheckoutScreen} />
     </HomeStack.Navigator>
   );
 };

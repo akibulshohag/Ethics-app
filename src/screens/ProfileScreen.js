@@ -241,6 +241,11 @@ const ProfileScreen = () => {
               onPress={() => navigation.navigate('MenuManageScreen')}
             />
           )}
+          <MenuItem
+            iconName="cart-check"
+            title={String(user?.role || '').toLowerCase() === 'owner' ? 'Restaurant orders' : 'My orders'}
+            onPress={() => navigation.navigate('OrderListScreen')}
+          />
 
           <View style={styles.separator} />
 

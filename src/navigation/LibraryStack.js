@@ -22,6 +22,7 @@ import HelpCenterScreen from '../screens/HelpCenterScreen';
 import IncognitoScreen from '../screens/IncognitoScreen';
 import TimeWatchedScreen from '../screens/TimeWatchedScreen';
 import MenuManageScreen from '../screens/MenuManageScreen';
+import OrderListScreen from '../screens/OrderListScreen';
 
 const LibraryStack = createStackNavigator();
 
@@ -92,6 +93,7 @@ const LibraryNavigation = () => {
         component={TimeWatchedScreen}
       />
       <LibraryStack.Screen name="MenuManageScreen" component={MenuManageScreen} />
+      <LibraryStack.Screen name="OrderListScreen" component={OrderListScreen} />
     </LibraryStack.Navigator>
   );
 };

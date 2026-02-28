@@ -1075,6 +1075,7 @@ const VideoDetailsScreen = () => {
         visible={productDetailModalVisible}
         onClose={() => setProductDetailModalVisible(false)}
         ownerUserId={currentVideo?.userId}
+        token={user?.token}
       />
       <LiveChatModal
         visible={liveChatModalVisible}

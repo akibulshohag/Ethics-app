@@ -30,6 +30,8 @@ import { getVideos, getVideoWatchHistory, recordShare } from '../services/videoS
 import { getChannelsList } from '../services/channelService';
 import { getSponsoredByLocation } from '../services/sponsoredService';
 import { getFeaturedByLocation } from '../services/featuredService';
+import { getVendorFeaturedByLocation } from '../services/vendorFeaturedService';
+import { getVendorSponsoredByLocation } from '../services/vendorSponsoredService';
 import { setPlaylist } from '../services/playlistService';
 import { downloadVideo } from '../services/downloadService';
 import { submitReport } from '../services/reportService';
@@ -140,6 +142,8 @@ const HomeVersion = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [sponsoredVideo, setSponsoredVideo] = useState(null); // { video, areaName, ... } when user has location
   const [featuredVideo, setFeaturedVideo] = useState(null); // { video, areaName, ... } when user has location
+  const [vendorFeaturedVideo, setVendorFeaturedVideo] = useState(null);
+  const [vendorSponsoredVideo, setVendorSponsoredVideo] = useState(null);
 
   const loadChannels = useCallback(async () => {
     try {
@@ -234,28 +238,30 @@ const HomeVersion = () => {
     }
   }, [activeTab, currentUser?.latitude, currentUser?.longitude]);
 
-  // Fetch sponsored and featured videos for current location (area-wise)
+  // Fetch sponsored, featured, vendor featured, vendor sponsored for current location (area-wise)
   useEffect(() => {
     if (activeTab !== 'Nearby' || !selectedLocation?.lat || !selectedLocation?.lng) {
       setSponsoredVideo(null);
       setFeaturedVideo(null);
+      setVendorFeaturedVideo(null);
+      setVendorSponsoredVideo(null);
       return;
     }
     const lat = selectedLocation.lat;
     const lng = selectedLocation.lng;
-    if (__DEV__) console.log('[HomeVersion] Fetching sponsored/featured for', lat, lng);
+    if (__DEV__) console.log('[HomeVersion] Fetching sponsored/featured/vendor for', lat, lng);
     getSponsoredByLocation(lat, lng)
-      .then(({ sponsored }) => {
-        if (__DEV__) console.log('[HomeVersion] Sponsored result', { hasSponsored: !!sponsored, hasVideo: !!sponsored?.video });
-        setSponsoredVideo(sponsored || null);
-      })
-      .catch((err) => {
-        console.warn('[HomeVersion] Sponsored fetch error', err?.message || err);
-        setSponsoredVideo(null);
-      });
+      .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
+      .catch(() => setSponsoredVideo(null));
     getFeaturedByLocation(lat, lng)
       .then(({ featured }) => setFeaturedVideo(featured || null))
       .catch(() => setFeaturedVideo(null));
+    getVendorFeaturedByLocation(lat, lng)
+      .then(({ featured }) => setVendorFeaturedVideo(featured || null))
+      .catch(() => setVendorFeaturedVideo(null));
+    getVendorSponsoredByLocation(lat, lng)
+      .then(({ sponsored }) => setVendorSponsoredVideo(sponsored || null))
+      .catch(() => setVendorSponsoredVideo(null));
   }, [activeTab, selectedLocation?.lat, selectedLocation?.lng]);
 
   const handleUseMyLocationForNearby = () => {
@@ -454,8 +460,59 @@ const HomeVersion = () => {
           };
         })()
       : null;
+  const vendorFeaturedCard =
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    vendorFeaturedVideo?.video
+      ? (() => {
+          const v = vendorFeaturedVideo.video;
+          const user = vendorFeaturedVideo.user || {};
+          const viewCount = v.viewCount ?? v._count?.views ?? 0;
+          const pubAt = v.publishedAt || v.createdAt;
+          return {
+            id: v.id,
+            type: 'video',
+            title: v.title || 'Untitled',
+            author: user.nickname || user.name || 'Vendor',
+            views: `${formatCount(viewCount)} views`,
+            time: formatTimeAgo(pubAt),
+            duration: formatDuration(v.duration),
+            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            videoUrl: v.videoUrl,
+            isVendorFeatured: true,
+          };
+        })()
+      : null;
+  const vendorSponsoredCard =
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    vendorSponsoredVideo?.video
+      ? (() => {
+          const v = vendorSponsoredVideo.video;
+          const user = vendorSponsoredVideo.user || {};
+          const viewCount = v.viewCount ?? v._count?.views ?? 0;
+          const pubAt = v.publishedAt || v.createdAt;
+          return {
+            id: v.id,
+            type: 'video',
+            title: v.title || 'Untitled',
+            author: user.nickname || user.name || 'Vendor',
+            views: `${formatCount(viewCount)} views`,
+            time: formatTimeAgo(pubAt),
+            duration: formatDuration(v.duration),
+            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            videoUrl: v.videoUrl,
+            isVendorSponsored: true,
+          };
+        })()
+      : null;
+  // Nearby tab: show Featured in header first, so don't prepend to list (avoid duplicate)
   const mainFeed =
-    featuredCard != null ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed] : baseFeed;
+    activeTab === 'Nearby' && featuredCard != null
+      ? baseFeed
+      : featuredCard != null
+        ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed]
+        : baseFeed;
 
   const StoryCircle = ({ channel }) => (
     <TouchableOpacity
@@ -705,6 +762,16 @@ const HomeVersion = () => {
                 <Text style={styles.sponsoredBadgeText}>Featured</Text>
               </View>
             )}
+            {item.isVendorFeatured && (
+              <View style={[styles.sponsoredBadge, styles.featuredBadge]}>
+                <Text style={styles.sponsoredBadgeText}>Vendor Featured</Text>
+              </View>
+            )}
+            {item.isVendorSponsored && (
+              <View style={styles.sponsoredBadge}>
+                <Text style={styles.sponsoredBadgeText}>Vendor Sponsored</Text>
+              </View>
+            )}
             <View style={styles.durationBadge}>
               <Text style={styles.durationText}>{item.duration || '0:00'}</Text>
             </View>
@@ -861,10 +928,17 @@ const HomeVersion = () => {
               </View>
             )}
 
-            {activeTab === 'Nearby' && sponsoredCard && (
+            {activeTab === 'Nearby' && featuredCard && (
               <View style={styles.whiteSection}>
-                <SectionHeader icon="star-circle-outline" title="Sponsored near you" />
-                {renderItem({ item: { ...sponsoredCard, type: 'VIDEO' } })}
+                <SectionHeader icon="star-outline" title="Featured" />
+                {renderItem({ item: { ...featuredCard, type: 'VIDEO' } })}
+              </View>
+            )}
+
+            {activeTab === 'Nearby' && vendorFeaturedCard && (
+              <View style={styles.whiteSection}>
+                <SectionHeader icon="star-outline" title="Vendor Featured" />
+                {renderItem({ item: { ...vendorFeaturedCard, type: 'VIDEO' } })}
               </View>
             )}
 
@@ -877,6 +951,20 @@ const HomeVersion = () => {
                 <StoryCircle key={ch.id} channel={ch} />
               ))}
             </ScrollView>
+
+            {activeTab === 'Nearby' && sponsoredCard && (
+              <View style={styles.whiteSection}>
+                <SectionHeader icon="star-circle-outline" title="Sponsored near you" />
+                {renderItem({ item: { ...sponsoredCard, type: 'VIDEO' } })}
+              </View>
+            )}
+
+            {activeTab === 'Nearby' && vendorSponsoredCard && (
+              <View style={styles.whiteSection}>
+                <SectionHeader icon="star-circle-outline" title="Vendor Sponsored near you" />
+                {renderItem({ item: { ...vendorSponsoredCard, type: 'VIDEO' } })}
+              </View>
+            )}
           </React.Fragment>
         }
       />
