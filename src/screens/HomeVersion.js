@@ -26,7 +26,11 @@ import { navigationRef } from '../utils/helper';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
-import { getVideos, getVideoWatchHistory, recordShare } from '../services/videoService';
+import {
+  getVideos,
+  getVideoWatchHistory,
+  recordShare,
+} from '../services/videoService';
 import { getChannelsList } from '../services/channelService';
 import { getSponsoredByLocation } from '../services/sponsoredService';
 import { getFeaturedByLocation } from '../services/featuredService';
@@ -40,21 +44,21 @@ import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
 
-const formatCount = (n) => {
+const formatCount = n => {
   if (!n || n < 0) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(n);
 };
 
-const formatDuration = (seconds) => {
+const formatDuration = seconds => {
   if (!seconds || seconds < 0) return '0:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const formatTimeAgo = (dateStr) => {
+const formatTimeAgo = dateStr => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   const now = new Date();
@@ -63,13 +67,15 @@ const formatTimeAgo = (dateStr) => {
   const diffMonths = Math.floor(diffDays / 30);
   const diffYears = Math.floor(diffDays / 365);
   if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
-  if (diffMonths > 0) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+  if (diffMonths > 0)
+    return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
   if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   return 'Recently';
 };
 
 // --- Categories: Live=shorts, Trending=most views, All=random, For You=subscribed, Nearby=by location ---
-const CATEGORIES = ['All', 'Trending', 'Live', 'For You', 'Nearby'];
+// const CATEGORIES = ['All', 'Trending', 'Live', 'For You', 'Nearby'];
+const CATEGORIES = ['Nearby'];
 
 const REPORT_REASONS = [
   'Sexual Content',
@@ -81,7 +87,7 @@ const REPORT_REASONS = [
   'Others',
 ];
 
-const mapShortToCard = (s) => {
+const mapShortToCard = s => {
   const raw = s.title || s.description || 'Untitled';
   const title = raw.length > 50 ? raw.substring(0, 47) + '...' : raw;
   return {
@@ -90,12 +96,13 @@ const mapShortToCard = (s) => {
     title,
     views: `${formatCount(s.viewCount ?? s._count?.views ?? 0)} views`,
     image: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
-    thumbnail: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+    thumbnail:
+      s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
     videoUrl: s.videoUrl,
   };
 };
 
-const mapVideoToCard = (v) => {
+const mapVideoToCard = v => {
   const user = v.user || {};
   const viewCount = v.viewCount ?? v._count?.views ?? 0;
   const pubAt = v.publishedAt || v.createdAt;
@@ -107,12 +114,13 @@ const mapVideoToCard = (v) => {
     views: `${formatCount(viewCount)} views`,
     time: formatTimeAgo(pubAt),
     duration: formatDuration(v.duration),
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+    thumbnail:
+      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
     videoUrl: v.videoUrl,
   };
 };
 
-const shuffle = (arr) => {
+const shuffle = arr => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -124,7 +132,7 @@ const shuffle = (arr) => {
 const HomeVersion = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
-  const { user: currentUser } = useSelector((state) => state.app) || {};
+  const { user: currentUser } = useSelector(state => state.app) || {};
   const [activeTab, setActiveTab] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
@@ -182,7 +190,10 @@ const HomeVersion = () => {
   // for sponsored/featured at top; (2) GET /videos?nearbyLat&nearbyLng&excludeSponsored&excludeFeatured for
   // regular nearby videos. Sponsored/featured are shown in header and first feed items; regular videos in baseFeed.
   const loadFeed = useCallback(async () => {
-    const isNearby = activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null;
+    const isNearby =
+      activeTab === 'Nearby' &&
+      selectedLocation?.lat != null &&
+      selectedLocation?.lng != null;
     const baseParams = { page: 1, limit: 100, sort: 'latest' };
     const videoParams = isNearby
       ? {
@@ -197,7 +208,12 @@ const HomeVersion = () => {
         }
       : baseParams;
     const shortParams = isNearby
-      ? { ...baseParams, nearbyLat: selectedLocation.lat, nearbyLng: selectedLocation.lng, radiusKm: 50 }
+      ? {
+          ...baseParams,
+          nearbyLat: selectedLocation.lat,
+          nearbyLng: selectedLocation.lng,
+          radiusKm: 50,
+        }
       : baseParams;
     try {
       const [shortsRes, videosRes] = await Promise.all([
@@ -205,7 +221,7 @@ const HomeVersion = () => {
         getVideos(videoParams),
       ]);
       const shorts = (shortsRes?.shorts || []).filter(
-        (s) => s.videoUrl && String(s.videoUrl).trim(),
+        s => s.videoUrl && String(s.videoUrl).trim(),
       );
       const videos = videosRes?.videos || [];
       if (!isNearby) {
@@ -233,14 +249,26 @@ const HomeVersion = () => {
 
   // When switching to Nearby, use profile location if available and none set
   useEffect(() => {
-    if (activeTab === 'Nearby' && !selectedLocation && currentUser?.latitude != null && currentUser?.longitude != null) {
-      setSelectedLocation({ lat: currentUser.latitude, lng: currentUser.longitude });
+    if (
+      activeTab === 'Nearby' &&
+      !selectedLocation &&
+      currentUser?.latitude != null &&
+      currentUser?.longitude != null
+    ) {
+      setSelectedLocation({
+        lat: currentUser.latitude,
+        lng: currentUser.longitude,
+      });
     }
   }, [activeTab, currentUser?.latitude, currentUser?.longitude]);
 
   // Fetch sponsored, featured, vendor featured, vendor sponsored for current location (area-wise)
   useEffect(() => {
-    if (activeTab !== 'Nearby' || !selectedLocation?.lat || !selectedLocation?.lng) {
+    if (
+      activeTab !== 'Nearby' ||
+      !selectedLocation?.lat ||
+      !selectedLocation?.lng
+    ) {
       setSponsoredVideo(null);
       setFeaturedVideo(null);
       setVendorFeaturedVideo(null);
@@ -249,7 +277,12 @@ const HomeVersion = () => {
     }
     const lat = selectedLocation.lat;
     const lng = selectedLocation.lng;
-    if (__DEV__) console.log('[HomeVersion] Fetching sponsored/featured/vendor for', lat, lng);
+    if (__DEV__)
+      console.log(
+        '[HomeVersion] Fetching sponsored/featured/vendor for',
+        lat,
+        lng,
+      );
     getSponsoredByLocation(lat, lng)
       .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
       .catch(() => setSponsoredVideo(null));
@@ -273,39 +306,54 @@ const HomeVersion = () => {
         setSelectedLocation({ lat, lng });
         // Fetch sponsored and featured for this location so they show at top right away
         Promise.all([
-          getSponsoredByLocation(lat, lng).then(({ sponsored }) => sponsored || null).catch(() => null),
-          getFeaturedByLocation(lat, lng).then(({ featured }) => featured || null).catch(() => null),
-        ]).then(([sponsored, featured]) => {
-          setSponsoredVideo(sponsored);
-          setFeaturedVideo(featured);
-        }).finally(() => {
-          setLocationLoading(false);
-        });
+          getSponsoredByLocation(lat, lng)
+            .then(({ sponsored }) => sponsored || null)
+            .catch(() => null),
+          getFeaturedByLocation(lat, lng)
+            .then(({ featured }) => featured || null)
+            .catch(() => null),
+        ])
+          .then(([sponsored, featured]) => {
+            setSponsoredVideo(sponsored);
+            setFeaturedVideo(featured);
+          })
+          .finally(() => {
+            setLocationLoading(false);
+          });
         // Save to user profile (with address from reverse geocode so address is not null)
         if (currentUser?.id && currentUser?.token) {
           try {
             const address = await reverseGeocode(lat, lng);
-            const response = await fetch(`${config.apiBaseUrl}/users/${currentUser.id}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${currentUser.token}`,
+            const response = await fetch(
+              `${config.apiBaseUrl}/users/${currentUser.id}`,
+              {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${currentUser.token}`,
+                },
+                body: JSON.stringify({
+                  latitude: lat,
+                  longitude: lng,
+                  ...(address ? { address } : {}),
+                }),
               },
-              body: JSON.stringify({
-                latitude: lat,
-                longitude: lng,
-                ...(address ? { address } : {}),
-              }),
-            });
+            );
             if (response.ok) {
               const data = await response.json();
               const updated = data.userUpdate || {};
-              dispatch(appSetUser({
-                ...currentUser,
-                latitude: updated.latitude ?? lat,
-                longitude: updated.longitude ?? lng,
-                ...(updated.address != null ? { address: updated.address } : address ? { address } : {}),
-              }));
+              dispatch(
+                appSetUser({
+                  ...currentUser,
+                  latitude: updated.latitude ?? lat,
+                  longitude: updated.longitude ?? lng,
+                  ...(updated.address != null
+                    ? { address: updated.address }
+                    : address
+                    ? { address }
+                    : {}),
+                }),
+              );
             }
           } catch (e) {
             // Location still used for Nearby; profile update is best-effort
@@ -332,7 +380,11 @@ const HomeVersion = () => {
     loadFeed();
     loadChannels();
     loadContinueWatching();
-    if (activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null) {
+    if (
+      activeTab === 'Nearby' &&
+      selectedLocation?.lat != null &&
+      selectedLocation?.lng != null
+    ) {
       getSponsoredByLocation(selectedLocation.lat, selectedLocation.lng)
         .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
         .catch(() => setSponsoredVideo(null));
@@ -349,7 +401,12 @@ const HomeVersion = () => {
     let sIdx = 0;
     let vIdx = 0;
 
-    console.log('Building feed - shorts:', shorts.length, 'videos:', videos.length);
+    console.log(
+      'Building feed - shorts:',
+      shorts.length,
+      'videos:',
+      videos.length,
+    );
 
     // 1) First block: 2 shorts
     const firstShorts = shorts.slice(sIdx, sIdx + 2);
@@ -398,7 +455,9 @@ const HomeVersion = () => {
         blockVideos.forEach(v => {
           feed.push({ ...v, type: 'VIDEO' }); // Ensure type is VIDEO (uppercase) after spread
         });
-        console.log(`Added ${blockVideos.length} videos (block size ${blockSize})`);
+        console.log(
+          `Added ${blockVideos.length} videos (block size ${blockSize})`,
+        );
       }
 
       blockSize += 2;
@@ -406,18 +465,26 @@ const HomeVersion = () => {
 
     const videoCount = feed.filter(f => f.type === 'VIDEO').length;
     const shortsCount = feed.filter(f => f.type === 'SHORTS').length;
-    console.log('Final feed - videos:', videoCount, 'shorts blocks:', shortsCount, 'total items:', feed.length);
+    console.log(
+      'Final feed - videos:',
+      videoCount,
+      'shorts blocks:',
+      shortsCount,
+      'total items:',
+      feed.length,
+    );
     return feed;
   };
 
   const baseFeed = buildMainFeed();
   if (__DEV__ && activeTab === 'Nearby' && selectedLocation) {
-    console.log('[HomeVersion] Sponsored card', { hasSponsored: !!sponsoredVideo?.video, sponsoredVideo: sponsoredVideo ? 'set' : 'null' });
+    console.log('[HomeVersion] Sponsored card', {
+      hasSponsored: !!sponsoredVideo?.video,
+      sponsoredVideo: sponsoredVideo ? 'set' : 'null',
+    });
   }
   const sponsoredCard =
-    activeTab === 'Nearby' &&
-    selectedLocation &&
-    sponsoredVideo?.video
+    activeTab === 'Nearby' && selectedLocation && sponsoredVideo?.video
       ? (() => {
           const v = sponsoredVideo.video;
           const owner = sponsoredVideo.user || v.user || {};
@@ -431,16 +498,15 @@ const HomeVersion = () => {
             views: `${formatCount(viewCount)} views`,
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
-            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            thumbnail:
+              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
             videoUrl: v.videoUrl,
             isSponsored: true,
           };
         })()
       : null;
   const featuredCard =
-    activeTab === 'Nearby' &&
-    selectedLocation &&
-    featuredVideo?.video
+    activeTab === 'Nearby' && selectedLocation && featuredVideo?.video
       ? (() => {
           const v = featuredVideo.video;
           const owner = featuredVideo.user || v.user || {};
@@ -454,16 +520,15 @@ const HomeVersion = () => {
             views: `${formatCount(viewCount)} views`,
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
-            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            thumbnail:
+              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
             videoUrl: v.videoUrl,
             isFeatured: true,
           };
         })()
       : null;
   const vendorFeaturedCard =
-    activeTab === 'Nearby' &&
-    selectedLocation &&
-    vendorFeaturedVideo?.video
+    activeTab === 'Nearby' && selectedLocation && vendorFeaturedVideo?.video
       ? (() => {
           const v = vendorFeaturedVideo.video;
           const user = vendorFeaturedVideo.user || {};
@@ -477,16 +542,15 @@ const HomeVersion = () => {
             views: `${formatCount(viewCount)} views`,
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
-            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            thumbnail:
+              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
             videoUrl: v.videoUrl,
             isVendorFeatured: true,
           };
         })()
       : null;
   const vendorSponsoredCard =
-    activeTab === 'Nearby' &&
-    selectedLocation &&
-    vendorSponsoredVideo?.video
+    activeTab === 'Nearby' && selectedLocation && vendorSponsoredVideo?.video
       ? (() => {
           const v = vendorSponsoredVideo.video;
           const user = vendorSponsoredVideo.user || {};
@@ -500,7 +564,8 @@ const HomeVersion = () => {
             views: `${formatCount(viewCount)} views`,
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
-            thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+            thumbnail:
+              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
             videoUrl: v.videoUrl,
             isVendorSponsored: true,
           };
@@ -511,8 +576,8 @@ const HomeVersion = () => {
     activeTab === 'Nearby' && featuredCard != null
       ? baseFeed
       : featuredCard != null
-        ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed]
-        : baseFeed;
+      ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed]
+      : baseFeed;
 
   const StoryCircle = ({ channel }) => (
     <TouchableOpacity
@@ -542,7 +607,7 @@ const HomeVersion = () => {
     </View>
   );
 
-  const openOptions = (item) => {
+  const openOptions = item => {
     setSelectedItem(item);
     setOptionsVisible(true);
   };
@@ -584,7 +649,13 @@ const HomeVersion = () => {
     }
     const contentType = selectedItem.type === 'short' ? 'short' : 'video';
     try {
-      await setPlaylist(currentUser.id, 'watch_later', contentType, selectedItem.id, true);
+      await setPlaylist(
+        currentUser.id,
+        'watch_later',
+        contentType,
+        selectedItem.id,
+        true,
+      );
       Toast.show({ type: 'success', text1: 'Saved to Watch Later' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Failed to save' });
@@ -594,9 +665,13 @@ const HomeVersion = () => {
 
   const handleDownload = async () => {
     if (!selectedItem) return;
-    const isVideo = selectedItem.type === 'video' || selectedItem.type === 'VIDEO';
+    const isVideo =
+      selectedItem.type === 'video' || selectedItem.type === 'VIDEO';
     if (!isVideo || !selectedItem.videoUrl) {
-      Toast.show({ type: 'info', text1: 'Download is only available for videos' });
+      Toast.show({
+        type: 'info',
+        text1: 'Download is only available for videos',
+      });
       closeOptions();
       return;
     }
@@ -609,7 +684,7 @@ const HomeVersion = () => {
       duration: selectedItem.duration,
     };
     try {
-      await downloadVideo(video, (pct) => {});
+      await downloadVideo(video, pct => {});
       Toast.show({ type: 'success', text1: 'Video downloaded' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Download failed' });
@@ -643,18 +718,18 @@ const HomeVersion = () => {
     closeOptions();
   };
 
-  const handleShortPress = (shortId) => {
+  const handleShortPress = shortId => {
     navigation.getParent()?.navigate('Shorts', {
       screen: 'ShortsVideoScreen',
       params: { initialShortId: shortId },
     });
   };
 
-  const handleVideoPress = (videoId) => {
+  const handleVideoPress = videoId => {
     navigation.navigate('VideoDetailsScreen', { videoId });
   };
 
-  const handleContinuePress = (item) => {
+  const handleContinuePress = item => {
     if (item?.type === 'short') {
       navigation.navigate('ShortsVideoScreen', { shortId: item.id });
     } else {
@@ -828,7 +903,9 @@ const HomeVersion = () => {
             eat<Text style={{ color: COLORS.primaryOrange }}>ix</Text>
           </Text>
           <View style={styles.navIcons}>
-            <TouchableOpacity onPress={() => navigation.navigate('SearchScreen')}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('SearchScreen')}
+            >
               <Icon
                 name="magnify"
                 size={26}
@@ -864,8 +941,10 @@ const HomeVersion = () => {
       <FlatList
         data={mainFeed}
         keyExtractor={(item, index) => {
-          if (item.type === 'VIDEO') return `video-${item.id || index}-${index}`;
-          if (item.type === 'SHORTS') return `${item.id || `s-${index}`}-${index}`;
+          if (item.type === 'VIDEO')
+            return `video-${item.id || index}-${index}`;
+          if (item.type === 'SHORTS')
+            return `${item.id || `s-${index}`}-${index}`;
           if (item.type === 'CONTINUE') return `${item.id || 'cont'}-${index}`;
           return `${item.type || 'item'}-${index}`;
         }}
@@ -880,53 +959,45 @@ const HomeVersion = () => {
           />
         }
         ListHeaderComponent={
-          <React.Fragment key={`header-${activeTab}-${selectedLocation?.lat ?? ''}-${sponsoredVideo?.video?.id ?? 'n'}-${featuredVideo?.video?.id ?? 'n'}`}>
+          <React.Fragment
+            key={`header-${activeTab}-${selectedLocation?.lat ?? ''}-${
+              sponsoredVideo?.video?.id ?? 'n'
+            }-${featuredVideo?.video?.id ?? 'n'}`}
+          >
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.chipScroll}
-            >
-              {CATEGORIES.map((cat) => {
-                const isActive = activeTab === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    onPress={() => setActiveTab(cat)}
-                    style={[styles.chip, isActive && styles.chipActive]}
-                  >
-                    <Text
-                      style={[styles.chipText, isActive && styles.chipTextActive]}
-                    >
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            ></ScrollView>
 
-            {activeTab === 'Nearby' && (
-              <View style={styles.nearbyLocationBar}>
-                <Text style={styles.nearbyLocationLabel}>
-                  {selectedLocation
-                    ? 'Showing content near your location'
-                    : 'Set location to see nearby videos & shorts'}
+            <View style={styles.nearbyLocationBar}>
+              <Text style={styles.nearbyLocationLabel}>
+                {selectedLocation
+                  ? 'Showing content near your location'
+                  : 'Set location to see nearby videos & shorts'}
+              </Text>
+              <TouchableOpacity
+                style={styles.nearbyLocationButton}
+                onPress={handleUseMyLocationForNearby}
+                disabled={locationLoading}
+              >
+                {locationLoading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.primaryOrange}
+                  />
+                ) : (
+                  <Icon
+                    name="map-marker"
+                    size={18}
+                    color={COLORS.primaryOrange}
+                  />
+                )}
+                <Text style={styles.nearbyLocationButtonText}>
+                  {locationLoading ? 'Getting location...' : 'Use my location'}
                 </Text>
-                <TouchableOpacity
-                  style={styles.nearbyLocationButton}
-                  onPress={handleUseMyLocationForNearby}
-                  disabled={locationLoading}
-                >
-                  {locationLoading ? (
-                    <ActivityIndicator size="small" color={COLORS.primaryOrange} />
-                  ) : (
-                    <Icon name="map-marker" size={18} color={COLORS.primaryOrange} />
-                  )}
-                  <Text style={styles.nearbyLocationButtonText}>
-                    {locationLoading ? 'Getting location...' : 'Use my location'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+              </TouchableOpacity>
+            </View>
 
             {activeTab === 'Nearby' && featuredCard && (
               <View style={styles.whiteSection}>
@@ -942,27 +1013,86 @@ const HomeVersion = () => {
               </View>
             )}
 
+            <TouchableOpacity
+              style={styles.searchBarContainer}
+              onPress={() => navigation.navigate('SearchScreen')}
+            >
+              <Icon name="magnify" size={24} color="#666" />
+              <Text style={styles.searchPlaceholder}>Search</Text>
+              <Icon
+                name="tune-vertical"
+                size={22}
+                color={COLORS.primaryOrange}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.bannerWrapper}
+              onPress={() => {
+                /* Handle Banner Click */
+              }}
+            >
+              <Image
+                source={require('../assets/img/banner.png')}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
+              <View style={styles.featuredTag}>
+                <Text style={styles.featuredTagText}>Featured</Text>
+                <Icon name="chevron-right" size={16} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.storyScroll}
             >
-              {channelsData.map((ch) => (
+              {channelsData.map(ch => (
                 <StoryCircle key={ch.id} channel={ch} />
               ))}
             </ScrollView>
 
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.bannerWrapper}
+              onPress={() => {
+                /* Handle Banner Click */
+              }}
+            >
+              <Image
+                source={{
+                  uri: 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?q=80&w=400',
+                }}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
+              <View style={styles.featuredTag}>
+                <Text style={styles.featuredTagText}>Sponsored</Text>
+                <Icon name="chevron-right" size={16} color="#fff" />
+              </View>
+            </TouchableOpacity>
+
             {activeTab === 'Nearby' && sponsoredCard && (
               <View style={styles.whiteSection}>
-                <SectionHeader icon="star-circle-outline" title="Sponsored near you" />
+                <SectionHeader
+                  icon="star-circle-outline"
+                  title="Sponsored near you"
+                />
                 {renderItem({ item: { ...sponsoredCard, type: 'VIDEO' } })}
               </View>
             )}
 
             {activeTab === 'Nearby' && vendorSponsoredCard && (
               <View style={styles.whiteSection}>
-                <SectionHeader icon="star-circle-outline" title="Vendor Sponsored near you" />
-                {renderItem({ item: { ...vendorSponsoredCard, type: 'VIDEO' } })}
+                <SectionHeader
+                  icon="star-circle-outline"
+                  title="Vendor Sponsored near you"
+                />
+                {renderItem({
+                  item: { ...vendorSponsoredCard, type: 'VIDEO' },
+                })}
               </View>
             )}
           </React.Fragment>
@@ -984,7 +1114,10 @@ const HomeVersion = () => {
               <Icon name="playlist-plus" size={24} color="#333" />
               <Text style={styles.optionText}>Save to Playlist</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow} onPress={handleSaveToWatchLater}>
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={handleSaveToWatchLater}
+            >
               <Icon name="clock-outline" size={24} color="#333" />
               <Text style={styles.optionText}>Save to Watch Later</Text>
             </TouchableOpacity>
@@ -996,7 +1129,10 @@ const HomeVersion = () => {
               <Icon name="share-variant-outline" size={24} color="#333" />
               <Text style={styles.optionText}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.optionRow} onPress={openReportModal}>
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={openReportModal}
+            >
               <Icon
                 name="alert-circle-outline"
                 size={24}
@@ -1061,14 +1197,18 @@ const HomeVersion = () => {
                   }
                   try {
                     await submitReport({
-                      contentType: selectedItem.type === 'short' ? 'short' : 'video',
+                      contentType:
+                        selectedItem.type === 'short' ? 'short' : 'video',
                       contentId: selectedItem.id,
                       reporterId: currentUser?.id,
                       reason: selectedReason,
                     });
                     Toast.show({ type: 'success', text1: 'Report submitted' });
                   } catch (e) {
-                    Toast.show({ type: 'error', text1: 'Failed to submit report' });
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Failed to submit report',
+                    });
                   }
                   setReportVisible(false);
                   setSelectedItem(null);
@@ -1163,7 +1303,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primaryOrange,
   },
-  nearbyLocationButtonText: { fontSize: 12, fontWeight: '600', color: COLORS.primaryOrange },
+  nearbyLocationButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primaryOrange,
+  },
   storyScroll: { paddingLeft: SPACING.lg, marginBottom: SPACING.lg },
   storyContainer: { alignItems: 'center', marginRight: SPACING.md },
   storyBorder: {
@@ -1231,8 +1375,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryOrange,
   },
   videoCard: { marginBottom: 15 },
-  thumbnailWrapper: { width: '100%', height: 220 },
-  videoThumbnail: { width: '100%', height: '100%' },
+  thumbnailWrapper: { width: '100%', height: 220, padding: 10 },
+  videoThumbnail: { width: '100%', height: '100%', borderRadius: 10 },
   sponsoredBadge: {
     position: 'absolute',
     top: 8,
@@ -1341,6 +1485,80 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
+  headerContent: {
+    backgroundColor: '#fff',
+    paddingBottom: 10,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    marginHorizontal: SPACING.lg,
+    marginVertical: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: '#EEE',
+  },
+  searchPlaceholder: {
+    flex: 1,
+    marginLeft: 10,
+    color: '#999',
+    fontSize: 16,
+  },
+  bannerWrapper: {
+    marginHorizontal: SPACING.lg,
+    height: 180,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginTop: 10,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    marginBottom: 20,
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredTag: {
+    position: 'absolute',
+    bottom: 20,
+    left: 15,
+    backgroundColor: COLORS.primaryOrange,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+  },
+  featuredTagText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginRight: 4,
+  },
+  locationSection: {
+    paddingHorizontal: SPACING.lg,
+    marginTop: 15,
+  },
+  locationBtn: {
+    backgroundColor: COLORS.primaryOrange,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  locationBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
 });
 
 export default HomeVersion;
