@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { COLORS, SPACING } from '../constants/theme';
 import { shortsService } from '../services/shortsService';
 import { getVideos } from '../services/videoService';
@@ -79,6 +80,7 @@ const mapVideoToCard = (v) => {
 
 const SearchScreen = ({ onBack }) => {
   const navigation = useNavigation();
+  const user = useSelector((state) => state?.app?.user);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('Videos');
   const [videosData, setVideosData] = useState([]);
@@ -97,7 +99,7 @@ const SearchScreen = ({ onBack }) => {
     setLoading(true);
     setHasSearched(true);
     try {
-      const params = { page: 1, limit: 50, search: q };
+      const params = { page: 1, limit: 50, search: q, viewerRole: user?.role || 'user' };
       const [videosRes, shortsRes] = await Promise.all([
         getVideos(params),
         shortsService.getShorts(params),
@@ -115,7 +117,7 @@ const SearchScreen = ({ onBack }) => {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, user?.role]);
 
   const handleSearch = () => {
     Keyboard.dismiss();

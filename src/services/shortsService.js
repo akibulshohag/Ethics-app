@@ -65,10 +65,11 @@ export const shortsService = {
 
   /**
    * Get short by ID
+   * viewerRole: when "user", vendor-uploaded shorts return 404
    */
-  async getShortById(shortId, userId) {
+  async getShortById(shortId, userId, viewerRole) {
     const response = await axios.get(`${API_URL}/${shortId}`, {
-      params: {userId},
+      params: { userId, viewerRole },
       headers: getAuthHeaders(),
     });
     return response.data;

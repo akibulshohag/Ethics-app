@@ -125,6 +125,7 @@ const HomeVersion = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user: currentUser } = useSelector((state) => state.app) || {};
+  const isVendorUser = (currentUser?.role || '').toLowerCase() === 'vendor';
   const [activeTab, setActiveTab] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
@@ -179,19 +180,18 @@ const HomeVersion = () => {
   }, [currentUser?.id]);
 
   // Nearby feed uses TWO API calls: (1) GET /sponsored/by-location + GET /featured/by-location (see useEffect below)
-  // for sponsored/featured at top; (2) GET /videos?nearbyLat&nearbyLng&excludeSponsored&excludeFeatured for
-  // regular nearby videos. Sponsored/featured are shown in header and first feed items; regular videos in baseFeed.
+  // for sponsored/featured at top; (2) GET /videos?nearbyLat&nearbyLng for regular nearby videos.
+  // Vendor users: see full feed but only Vendor Featured/Sponsored on Nearby (no owner Featured/Sponsored).
   const loadFeed = useCallback(async () => {
     const isNearby = activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null;
-    const baseParams = { page: 1, limit: 100, sort: 'latest' };
+    const viewerRole = currentUser?.role || 'user';
+    const baseParams = { page: 1, limit: 100, sort: 'latest', viewerRole };
     const videoParams = isNearby
       ? {
           ...baseParams,
           nearbyLat: selectedLocation.lat,
           nearbyLng: selectedLocation.lng,
           radiusKm: 50,
-          // Exclude sponsored and featured from the videos list in Nearby (so they don't appear twice).
-          // IMPORTANT: do NOT send this param to shorts API (it can 400).
           excludeSponsored: true,
           excludeFeatured: true,
         }
@@ -225,7 +225,7 @@ const HomeVersion = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, selectedLocation]);
+  }, [activeTab, selectedLocation, currentUser?.role]);
 
   useEffect(() => {
     loadFeed();
@@ -238,7 +238,7 @@ const HomeVersion = () => {
     }
   }, [activeTab, currentUser?.latitude, currentUser?.longitude]);
 
-  // Fetch sponsored, featured, vendor featured, vendor sponsored for current location (area-wise)
+  // Fetch by role when on Nearby: vendor = vendor featured & vendor sponsored; other users = featured & sponsored (owner)
   useEffect(() => {
     if (activeTab !== 'Nearby' || !selectedLocation?.lat || !selectedLocation?.lng) {
       setSponsoredVideo(null);
@@ -249,20 +249,23 @@ const HomeVersion = () => {
     }
     const lat = selectedLocation.lat;
     const lng = selectedLocation.lng;
-    if (__DEV__) console.log('[HomeVersion] Fetching sponsored/featured/vendor for', lat, lng);
-    getSponsoredByLocation(lat, lng)
-      .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
-      .catch(() => setSponsoredVideo(null));
-    getFeaturedByLocation(lat, lng)
-      .then(({ featured }) => setFeaturedVideo(featured || null))
-      .catch(() => setFeaturedVideo(null));
-    getVendorFeaturedByLocation(lat, lng)
-      .then(({ featured }) => setVendorFeaturedVideo(featured || null))
-      .catch(() => setVendorFeaturedVideo(null));
-    getVendorSponsoredByLocation(lat, lng)
-      .then(({ sponsored }) => setVendorSponsoredVideo(sponsored || null))
-      .catch(() => setVendorSponsoredVideo(null));
-  }, [activeTab, selectedLocation?.lat, selectedLocation?.lng]);
+    if (__DEV__) console.log('[HomeVersion] Fetching for', isVendorUser ? 'vendor' : 'owner', lat, lng);
+    if (isVendorUser) {
+      getVendorFeaturedByLocation(lat, lng)
+        .then(({ featured }) => setVendorFeaturedVideo(featured || null))
+        .catch(() => setVendorFeaturedVideo(null));
+      getVendorSponsoredByLocation(lat, lng)
+        .then(({ sponsored }) => setVendorSponsoredVideo(sponsored || null))
+        .catch(() => setVendorSponsoredVideo(null));
+    } else {
+      getSponsoredByLocation(lat, lng)
+        .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
+        .catch(() => setSponsoredVideo(null));
+      getFeaturedByLocation(lat, lng)
+        .then(({ featured }) => setFeaturedVideo(featured || null))
+        .catch(() => setFeaturedVideo(null));
+    }
+  }, [activeTab, selectedLocation?.lat, selectedLocation?.lng, isVendorUser]);
 
   const handleUseMyLocationForNearby = () => {
     setLocationLoading(true);
@@ -271,16 +274,24 @@ const HomeVersion = () => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setSelectedLocation({ lat, lng });
-        // Fetch sponsored and featured for this location so they show at top right away
-        Promise.all([
-          getSponsoredByLocation(lat, lng).then(({ sponsored }) => sponsored || null).catch(() => null),
-          getFeaturedByLocation(lat, lng).then(({ featured }) => featured || null).catch(() => null),
-        ]).then(([sponsored, featured]) => {
-          setSponsoredVideo(sponsored);
-          setFeaturedVideo(featured);
-        }).finally(() => {
-          setLocationLoading(false);
-        });
+        // Fetch by role: vendor = only vendor featured/sponsored; other = only featured/sponsored
+        if (isVendorUser) {
+          Promise.all([
+            getVendorFeaturedByLocation(lat, lng).then(({ featured }) => featured || null).catch(() => null),
+            getVendorSponsoredByLocation(lat, lng).then(({ sponsored }) => sponsored || null).catch(() => null),
+          ]).then(([vendorFeatured, vendorSponsored]) => {
+            setVendorFeaturedVideo(vendorFeatured);
+            setVendorSponsoredVideo(vendorSponsored);
+          }).finally(() => setLocationLoading(false));
+        } else {
+          Promise.all([
+            getSponsoredByLocation(lat, lng).then(({ sponsored }) => sponsored || null).catch(() => null),
+            getFeaturedByLocation(lat, lng).then(({ featured }) => featured || null).catch(() => null),
+          ]).then(([sponsored, featured]) => {
+            setSponsoredVideo(sponsored);
+            setFeaturedVideo(featured);
+          }).finally(() => setLocationLoading(false));
+        }
         // Save to user profile (with address from reverse geocode so address is not null)
         if (currentUser?.id && currentUser?.token) {
           try {
@@ -333,12 +344,28 @@ const HomeVersion = () => {
     loadChannels();
     loadContinueWatching();
     if (activeTab === 'Nearby' && selectedLocation?.lat != null && selectedLocation?.lng != null) {
-      getSponsoredByLocation(selectedLocation.lat, selectedLocation.lng)
-        .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
-        .catch(() => setSponsoredVideo(null));
-      getFeaturedByLocation(selectedLocation.lat, selectedLocation.lng)
-        .then(({ featured }) => setFeaturedVideo(featured || null))
-        .catch(() => setFeaturedVideo(null));
+      if (isVendorUser) {
+        Promise.all([
+          getVendorFeaturedByLocation(selectedLocation.lat, selectedLocation.lng),
+          getVendorSponsoredByLocation(selectedLocation.lat, selectedLocation.lng),
+        ])
+          .then(([fRes, sRes]) => {
+            setVendorFeaturedVideo(fRes?.featured || null);
+            setVendorSponsoredVideo(sRes?.sponsored || null);
+          })
+          .catch(() => {
+            setVendorFeaturedVideo(null);
+            setVendorSponsoredVideo(null);
+          })
+          .finally(() => setRefreshing(false));
+      } else {
+        getSponsoredByLocation(selectedLocation.lat, selectedLocation.lng)
+          .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
+          .catch(() => setSponsoredVideo(null));
+        getFeaturedByLocation(selectedLocation.lat, selectedLocation.lng)
+          .then(({ featured }) => setFeaturedVideo(featured || null))
+          .catch(() => setFeaturedVideo(null));
+      }
     }
   };
 
@@ -507,10 +534,11 @@ const HomeVersion = () => {
         })()
       : null;
   // Nearby tab: show Featured in header first, so don't prepend to list (avoid duplicate)
+  // Vendor: no owner featured in list; other users: may prepend featured
   const mainFeed =
-    activeTab === 'Nearby' && featuredCard != null
+    activeTab === 'Nearby' && featuredCard != null && !isVendorUser
       ? baseFeed
-      : featuredCard != null
+      : featuredCard != null && !isVendorUser
         ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed]
         : baseFeed;
 
@@ -880,7 +908,7 @@ const HomeVersion = () => {
           />
         }
         ListHeaderComponent={
-          <React.Fragment key={`header-${activeTab}-${selectedLocation?.lat ?? ''}-${sponsoredVideo?.video?.id ?? 'n'}-${featuredVideo?.video?.id ?? 'n'}`}>
+          <React.Fragment key={`header-${activeTab}-${selectedLocation?.lat ?? ''}-${sponsoredVideo?.video?.id ?? 'n'}-${featuredVideo?.video?.id ?? 'n'}-${isVendorUser}`}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -928,14 +956,14 @@ const HomeVersion = () => {
               </View>
             )}
 
-            {activeTab === 'Nearby' && featuredCard && (
+            {!isVendorUser && activeTab === 'Nearby' && featuredCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader icon="star-outline" title="Featured" />
                 {renderItem({ item: { ...featuredCard, type: 'VIDEO' } })}
               </View>
             )}
 
-            {activeTab === 'Nearby' && vendorFeaturedCard && (
+            {isVendorUser && activeTab === 'Nearby' && vendorFeaturedCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader icon="star-outline" title="Vendor Featured" />
                 {renderItem({ item: { ...vendorFeaturedCard, type: 'VIDEO' } })}
@@ -952,17 +980,23 @@ const HomeVersion = () => {
               ))}
             </ScrollView>
 
-            {activeTab === 'Nearby' && sponsoredCard && (
+            {!isVendorUser && activeTab === 'Nearby' && sponsoredCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader icon="star-circle-outline" title="Sponsored near you" />
                 {renderItem({ item: { ...sponsoredCard, type: 'VIDEO' } })}
               </View>
             )}
 
-            {activeTab === 'Nearby' && vendorSponsoredCard && (
+            {isVendorUser && activeTab === 'Nearby' && vendorSponsoredCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader icon="star-circle-outline" title="Vendor Sponsored near you" />
                 {renderItem({ item: { ...vendorSponsoredCard, type: 'VIDEO' } })}
+              </View>
+            )}
+
+            {isVendorUser && activeTab === 'Nearby' && selectedLocation && !vendorFeaturedCard && !vendorSponsoredCard && (
+              <View style={styles.whiteSection}>
+                <Text style={styles.loadingText}>No vendor featured or sponsored videos for your area yet.</Text>
               </View>
             )}
           </React.Fragment>

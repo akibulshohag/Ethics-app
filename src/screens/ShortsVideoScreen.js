@@ -425,7 +425,11 @@ const ShortsVideoScreen = ({ navigation }) => {
   const loadShorts = async () => {
     try {
       setLoading(true);
-      const res = await shortsService.getShorts({ page: 1, limit: 50 });
+      const res = await shortsService.getShorts({
+        page: 1,
+        limit: 50,
+        viewerRole: user?.role || 'user',
+      });
       if (res?.shorts?.length > 0) {
         const filtered = res.shorts.filter(
           s => s.videoUrl && String(s.videoUrl).trim(),

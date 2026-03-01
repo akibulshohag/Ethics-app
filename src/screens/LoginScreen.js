@@ -84,15 +84,10 @@ const LoginScreen = () => {
 
       dispatch(appSetUser(userData));
 
-      // Navigate based on profile completion status
-      if (data.user.pin) {
-        // When already in RootStack (e.g. opened Login from profile icon), go back to main tabs
-        try {
-          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
-        } catch (_) {}
-      } else {
-        navigation.navigate('Account');
-      }
+      // Go directly to main app (Home = HomeVersion)
+      try {
+        navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+      } catch (_) {}
     } catch (error) {
       console.error('Login error:', error);
       setTimeout(() => {

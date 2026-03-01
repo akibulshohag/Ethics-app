@@ -106,11 +106,12 @@ export const getVideos = async (params = {}) => {
 
 /**
  * Get video by ID
+ * viewerRole: when "user", vendor-uploaded videos return 404
  */
-export const getVideoById = async (videoId, userId) => {
+export const getVideoById = async (videoId, userId, viewerRole) => {
   try {
     const response = await axios.get(`${API_URL}/${videoId}`, {
-      params: { userId },
+      params: { userId, viewerRole },
     });
     return response.data;
   } catch (error) {

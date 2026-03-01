@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { COLORS, SPACING } from '../constants/theme';
 import { shortsService } from '../services/shortsService';
 import { getVideos } from '../services/videoService';
@@ -77,20 +78,20 @@ const mapVideoToCard = (v) => {
 
 const TrendingScreen = () => {
   const navigation = useNavigation();
+  const user = useSelector((state) => state?.app?.user);
   const [activeTab, setActiveTab] = useState('Videos');
   const [shortsData, setShortsData] = useState([]);
   const [videosData, setVideosData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load trending videos/shorts from ALL users (no userId filter)
   const loadData = useCallback(async () => {
     try {
       const params = {
         page: 1,
         limit: 100,
         sort: 'trending',
-        // IMPORTANT: No userId - fetches trending content from ALL users
+        viewerRole: user?.role || 'user',
       };
 
       if (activeTab === 'Videos') {
@@ -113,7 +114,7 @@ const TrendingScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab]);
+  }, [activeTab, user?.role]);
 
   useEffect(() => {
     setLoading(true);

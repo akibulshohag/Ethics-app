@@ -109,8 +109,10 @@ const SignUpScreen = () => {
 
       dispatch(appSetUser(userData));
 
-      // Navigate to AccountScreen to complete profile setup
-      navigation.navigate('Account');
+      // Go directly to main app (Home = HomeVersion)
+      try {
+        navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+      } catch (_) {}
     } catch (error) {
       console.error('Sign up error:', error);
       setTimeout(() => {

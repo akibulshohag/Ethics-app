@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { getFocusedRouteNameFromRoute, useNavigation } from '@react-navigation/native';
+import {
+  getFocusedRouteNameFromRoute,
+  useNavigation,
+} from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
 import LibraryNavigation from './LibraryStack';
 import ShortsNavigation from './ShortsStack';
@@ -32,6 +35,7 @@ const BottomNaivgation = () => {
   const user = useSelector(state => state.app?.user);
   const navigation = useNavigation();
   const showCreateTab = user?.role === 'owner' || user?.role === 'admin';
+  const showVProfileTab = (user?.role || '').toLowerCase() === 'vendor';
 
   const requireLogin = (e, tabName) => {
     if (!user) {
@@ -119,33 +123,33 @@ const BottomNaivgation = () => {
             }}
           />
 
-          <Tab.Screen
-            name="VProfile"
-            component={VProfileNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="account-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          {showCreateTab && (
+          {showVProfileTab && (
             <Tab.Screen
-              name="Create"
-              component={CreateVideoModalScreen}
+              name="VProfile"
+              component={VProfileNavigation}
               options={{
-                tabBarIcon: ({ focused }) => (
-                  <View style={styles.fabContainer}>
-                    <Icon name="plus" size={30} color={COLORS.white} />
-                  </View>
+                tabBarIcon: ({ focused, color }) => (
+                  <Icon
+                    name="account-outline"
+                    size={28}
+                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                  />
                 ),
               }}
             />
           )}
+
+          <Tab.Screen
+            name="Create"
+            component={CreateVideoModalScreen}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <View style={styles.fabContainer}>
+                  <Icon name="plus" size={30} color={COLORS.white} />
+                </View>
+              ),
+            }}
+          />
 
           <Tab.Screen
             name="Subscriptions"

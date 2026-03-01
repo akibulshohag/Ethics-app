@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { COLORS, SPACING } from '../constants/theme';
 import { shortsService } from '../services/shortsService';
 
@@ -35,18 +36,18 @@ const mapShortToCard = (s) => {
 
 const LiveShortsScreen = () => {
   const navigation = useNavigation();
+  const user = useSelector((state) => state?.app?.user);
   const [shortsData, setShortsData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Load ALL users' shorts (no userId filter) - for Live tab
   const loadShorts = useCallback(async () => {
     try {
       const params = {
         page: 1,
         limit: 100,
         sort: 'latest',
-        // IMPORTANT: No userId - fetches shorts from ALL users
+        viewerRole: user?.role || 'user',
       };
       const res = await shortsService.getShorts(params);
       const shorts = (res?.shorts || []).filter(
@@ -60,7 +61,7 @@ const LiveShortsScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [user?.role]);
 
   useEffect(() => {
     setLoading(true);

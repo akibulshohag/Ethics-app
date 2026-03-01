@@ -247,8 +247,8 @@ const VideoDetailsScreen = () => {
         setRelatedVideos([]);
       } else {
         const [videoRes, videosRes] = await Promise.all([
-          getVideoById(videoId, user?.id),
-          getVideos({ page: 1, limit: 10 }),
+          getVideoById(videoId, user?.id, user?.role),
+          getVideos({ page: 1, limit: 10, viewerRole: user?.role || 'user' }),
         ]);
         const video = mapVideoApiToDisplay(videoRes);
         setCurrentVideo(video);
@@ -786,9 +786,9 @@ const VideoDetailsScreen = () => {
           />
         </View>
 
-        {/* Order Now / Visit Website / Message Now – only for videos whose creator is owner (restaurant) */}
-        {(currentVideo?.user?.role === 'owner' ||
-          currentVideo?.creatorRole === 'owner') && (
+        {/* Order Now / Visit Website / Message Now – owner (restaurant) or vendor (owner/admin can order from vendor) */}
+        {((currentVideo?.user?.role === 'owner' || currentVideo?.creatorRole === 'owner') ||
+          (currentVideo?.user?.role === 'vendor' || currentVideo?.creatorRole === 'vendor')) && (
           <View style={styles.ctaButtonsRow}>
             <TouchableOpacity
               style={styles.ctaButton}
