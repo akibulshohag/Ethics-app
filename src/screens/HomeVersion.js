@@ -132,7 +132,8 @@ const HomeVersion = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const { user: currentUser } = useSelector(state => state.app) || {};
-  const [activeTab, setActiveTab] = useState('All');
+  const isVendorUser = (currentUser?.role || '').toLowerCase() === 'vendor';
+  const [activeTab, setActiveTab] = useState('Nearby'); // Default Nearby so location/feed logic runs; CATEGORIES chip bar is hidden below
   const [showNotifications, setShowNotifications] = useState(false);
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
@@ -193,15 +194,15 @@ const HomeVersion = () => {
       activeTab === 'Nearby' &&
       selectedLocation?.lat != null &&
       selectedLocation?.lng != null;
-    const baseParams = { page: 1, limit: 100, sort: 'latest' };
+    // viewerRole: backend uses this for list filtering. 'user' = only owner videos; 'vendor' = owner + vendor videos. So both user and vendor see owner videos nearby; vendor also sees vendor videos.
+    const viewerRole = currentUser?.role || 'user';
+    const baseParams = { page: 1, limit: 100, sort: 'latest', viewerRole };
     const videoParams = isNearby
       ? {
           ...baseParams,
           nearbyLat: selectedLocation.lat,
           nearbyLng: selectedLocation.lng,
           radiusKm: 50,
-          // Exclude sponsored and featured from the videos list in Nearby (so they don't appear twice).
-          // IMPORTANT: do NOT send this param to shorts API (it can 400).
           excludeSponsored: true,
           excludeFeatured: true,
         }
@@ -240,7 +241,7 @@ const HomeVersion = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, selectedLocation]);
+  }, [activeTab, selectedLocation, currentUser?.role]);
 
   useEffect(() => {
     loadFeed();
@@ -261,7 +262,7 @@ const HomeVersion = () => {
     }
   }, [activeTab, currentUser?.latitude, currentUser?.longitude]);
 
-  // Fetch sponsored, featured, vendor featured, vendor sponsored for current location (area-wise)
+  // Fetch by role when logged in: vendor = only vendor featured/sponsored; user/admin/owner = only owner featured/sponsored. Guest = none.
   useEffect(() => {
     if (
       activeTab !== 'Nearby' ||
@@ -274,27 +275,48 @@ const HomeVersion = () => {
       setVendorSponsoredVideo(null);
       return;
     }
+    if (!currentUser) {
+      setSponsoredVideo(null);
+      setFeaturedVideo(null);
+      setVendorFeaturedVideo(null);
+      setVendorSponsoredVideo(null);
+      return;
+    }
     const lat = selectedLocation.lat;
     const lng = selectedLocation.lng;
     if (__DEV__)
       console.log(
-        '[HomeVersion] Fetching sponsored/featured/vendor for',
+        '[HomeVersion] Fetching for',
+        isVendorUser ? 'vendor' : 'owner',
         lat,
         lng,
       );
-    getSponsoredByLocation(lat, lng)
-      .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
-      .catch(() => setSponsoredVideo(null));
-    getFeaturedByLocation(lat, lng)
-      .then(({ featured }) => setFeaturedVideo(featured || null))
-      .catch(() => setFeaturedVideo(null));
-    getVendorFeaturedByLocation(lat, lng)
-      .then(({ featured }) => setVendorFeaturedVideo(featured || null))
-      .catch(() => setVendorFeaturedVideo(null));
-    getVendorSponsoredByLocation(lat, lng)
-      .then(({ sponsored }) => setVendorSponsoredVideo(sponsored || null))
-      .catch(() => setVendorSponsoredVideo(null));
-  }, [activeTab, selectedLocation?.lat, selectedLocation?.lng]);
+    if (isVendorUser) {
+      setSponsoredVideo(null);
+      setFeaturedVideo(null);
+      getVendorFeaturedByLocation(lat, lng)
+        .then(({ featured }) => setVendorFeaturedVideo(featured || null))
+        .catch(() => setVendorFeaturedVideo(null));
+      getVendorSponsoredByLocation(lat, lng)
+        .then(({ sponsored }) => setVendorSponsoredVideo(sponsored || null))
+        .catch(() => setVendorSponsoredVideo(null));
+    } else {
+      setVendorFeaturedVideo(null);
+      setVendorSponsoredVideo(null);
+      getSponsoredByLocation(lat, lng)
+        .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
+        .catch(() => setSponsoredVideo(null));
+      getFeaturedByLocation(lat, lng)
+        .then(({ featured }) => setFeaturedVideo(featured || null))
+        .catch(() => setFeaturedVideo(null));
+    }
+  }, [
+    activeTab,
+    selectedLocation?.lat,
+    selectedLocation?.lng,
+    isVendorUser,
+    currentUser,
+  ]);
 
   const handleUseMyLocationForNearby = () => {
     setLocationLoading(true);
@@ -303,22 +325,44 @@ const HomeVersion = () => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         setSelectedLocation({ lat, lng });
-        // Fetch sponsored and featured for this location so they show at top right away
-        Promise.all([
-          getSponsoredByLocation(lat, lng)
-            .then(({ sponsored }) => sponsored || null)
-            .catch(() => null),
-          getFeaturedByLocation(lat, lng)
-            .then(({ featured }) => featured || null)
-            .catch(() => null),
-        ])
-          .then(([sponsored, featured]) => {
-            setSponsoredVideo(sponsored);
-            setFeaturedVideo(featured);
-          })
-          .finally(() => {
-            setLocationLoading(false);
-          });
+        // Fetch by role only when logged in: vendor = vendor featured/sponsored; other = owner featured/sponsored
+        if (currentUser) {
+          if (isVendorUser) {
+            setSponsoredVideo(null);
+            setFeaturedVideo(null);
+            Promise.all([
+              getVendorFeaturedByLocation(lat, lng)
+                .then(({ featured }) => featured || null)
+                .catch(() => null),
+              getVendorSponsoredByLocation(lat, lng)
+                .then(({ sponsored }) => sponsored || null)
+                .catch(() => null),
+            ])
+              .then(([vendorFeatured, vendorSponsored]) => {
+                setVendorFeaturedVideo(vendorFeatured);
+                setVendorSponsoredVideo(vendorSponsored);
+              })
+              .finally(() => setLocationLoading(false));
+          } else {
+            setVendorFeaturedVideo(null);
+            setVendorSponsoredVideo(null);
+            Promise.all([
+              getSponsoredByLocation(lat, lng)
+                .then(({ sponsored }) => sponsored || null)
+                .catch(() => null),
+              getFeaturedByLocation(lat, lng)
+                .then(({ featured }) => featured || null)
+                .catch(() => null),
+            ])
+              .then(([sponsored, featured]) => {
+                setSponsoredVideo(sponsored);
+                setFeaturedVideo(featured);
+              })
+              .finally(() => setLocationLoading(false));
+          }
+        } else {
+          setLocationLoading(false);
+        }
         // Save to user profile (with address from reverse geocode so address is not null)
         if (currentUser?.id && currentUser?.token) {
           try {
@@ -380,16 +424,42 @@ const HomeVersion = () => {
     loadChannels();
     loadContinueWatching();
     if (
+      currentUser &&
       activeTab === 'Nearby' &&
       selectedLocation?.lat != null &&
       selectedLocation?.lng != null
     ) {
-      getSponsoredByLocation(selectedLocation.lat, selectedLocation.lng)
-        .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
-        .catch(() => setSponsoredVideo(null));
-      getFeaturedByLocation(selectedLocation.lat, selectedLocation.lng)
-        .then(({ featured }) => setFeaturedVideo(featured || null))
-        .catch(() => setFeaturedVideo(null));
+      if (isVendorUser) {
+        setSponsoredVideo(null);
+        setFeaturedVideo(null);
+        Promise.all([
+          getVendorFeaturedByLocation(
+            selectedLocation.lat,
+            selectedLocation.lng,
+          ),
+          getVendorSponsoredByLocation(
+            selectedLocation.lat,
+            selectedLocation.lng,
+          ),
+        ])
+          .then(([fRes, sRes]) => {
+            setVendorFeaturedVideo(fRes?.featured || null);
+            setVendorSponsoredVideo(sRes?.sponsored || null);
+          })
+          .catch(() => {
+            setVendorFeaturedVideo(null);
+            setVendorSponsoredVideo(null);
+          });
+      } else {
+        setVendorFeaturedVideo(null);
+        setVendorSponsoredVideo(null);
+        getSponsoredByLocation(selectedLocation.lat, selectedLocation.lng)
+          .then(({ sponsored }) => setSponsoredVideo(sponsored || null))
+          .catch(() => setSponsoredVideo(null));
+        getFeaturedByLocation(selectedLocation.lat, selectedLocation.lng)
+          .then(({ featured }) => setFeaturedVideo(featured || null))
+          .catch(() => setFeaturedVideo(null));
+      }
     }
   };
 
@@ -483,7 +553,11 @@ const HomeVersion = () => {
     });
   }
   const sponsoredCard =
-    activeTab === 'Nearby' && selectedLocation && sponsoredVideo?.video
+    currentUser &&
+    !isVendorUser &&
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    sponsoredVideo?.video
       ? (() => {
           const v = sponsoredVideo.video;
           const owner = sponsoredVideo.user || v.user || {};
@@ -505,7 +579,11 @@ const HomeVersion = () => {
         })()
       : null;
   const featuredCard =
-    activeTab === 'Nearby' && selectedLocation && featuredVideo?.video
+    currentUser &&
+    !isVendorUser &&
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    featuredVideo?.video
       ? (() => {
           const v = featuredVideo.video;
           const owner = featuredVideo.user || v.user || {};
@@ -527,7 +605,11 @@ const HomeVersion = () => {
         })()
       : null;
   const vendorFeaturedCard =
-    activeTab === 'Nearby' && selectedLocation && vendorFeaturedVideo?.video
+    currentUser &&
+    isVendorUser &&
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    vendorFeaturedVideo?.video
       ? (() => {
           const v = vendorFeaturedVideo.video;
           const user = vendorFeaturedVideo.user || {};
@@ -549,7 +631,11 @@ const HomeVersion = () => {
         })()
       : null;
   const vendorSponsoredCard =
-    activeTab === 'Nearby' && selectedLocation && vendorSponsoredVideo?.video
+    currentUser &&
+    isVendorUser &&
+    activeTab === 'Nearby' &&
+    selectedLocation &&
+    vendorSponsoredVideo?.video
       ? (() => {
           const v = vendorSponsoredVideo.video;
           const user = vendorSponsoredVideo.user || {};
@@ -570,11 +656,11 @@ const HomeVersion = () => {
           };
         })()
       : null;
-  // Nearby tab: show Featured in header first, so don't prepend to list (avoid duplicate)
+  // Nearby: featured in header for non-vendor; vendor has vendor featured in header. Don't prepend to list.
   const mainFeed =
-    activeTab === 'Nearby' && featuredCard != null
+    activeTab === 'Nearby' && featuredCard != null && !isVendorUser
       ? baseFeed
-      : featuredCard != null
+      : featuredCard != null && !isVendorUser
       ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed]
       : baseFeed;
 
@@ -965,6 +1051,7 @@ const HomeVersion = () => {
               sponsoredVideo?.video?.id ?? 'n'
             }-${featuredVideo?.video?.id ?? 'n'}`}
           >
+            {/* CATEGORIES chip bar hidden – code kept for reference
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -990,41 +1077,39 @@ const HomeVersion = () => {
                 );
               })}
             </ScrollView>
+            */}
 
-            {activeTab === 'Nearby' && (
-              <View style={styles.nearbyLocationBar}>
-                <Text style={styles.nearbyLocationLabel}>
-                  {selectedLocation
-                    ? 'Showing content near your location'
-                    : 'Set location to see nearby videos & shorts'}
+            {/* Use my location always visible; no need to click Nearby. When clicked, current logic runs (set location, feed, featured/sponsored if logged in). */}
+            <View style={styles.nearbyLocationBar}>
+              <Text style={styles.nearbyLocationLabel}>
+                {selectedLocation
+                  ? 'Showing content near your location'
+                  : 'Set location to see nearby videos & shorts'}
+              </Text>
+              <TouchableOpacity
+                style={styles.nearbyLocationButton}
+                onPress={handleUseMyLocationForNearby}
+                disabled={locationLoading}
+              >
+                {locationLoading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.primaryOrange}
+                  />
+                ) : (
+                  <Icon
+                    name="map-marker"
+                    size={18}
+                    color={COLORS.primaryOrange}
+                  />
+                )}
+                <Text style={styles.nearbyLocationButtonText}>
+                  {locationLoading ? 'Getting location...' : 'Use my location'}
                 </Text>
-                <TouchableOpacity
-                  style={styles.nearbyLocationButton}
-                  onPress={handleUseMyLocationForNearby}
-                  disabled={locationLoading}
-                >
-                  {locationLoading ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={COLORS.primaryOrange}
-                    />
-                  ) : (
-                    <Icon
-                      name="map-marker"
-                      size={18}
-                      color={COLORS.primaryOrange}
-                    />
-                  )}
-                  <Text style={styles.nearbyLocationButtonText}>
-                    {locationLoading
-                      ? 'Getting location...'
-                      : 'Use my location'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+              </TouchableOpacity>
+            </View>
 
-            {activeTab === 'Nearby' && selectedLocation && (
+            {selectedLocation && (
               <TouchableOpacity
                 style={styles.searchBarContainer}
                 onPress={handleSearchPress}
@@ -1039,14 +1124,14 @@ const HomeVersion = () => {
               </TouchableOpacity>
             )}
 
-            {activeTab === 'Nearby' && featuredCard && (
+            {activeTab === 'Nearby' && !isVendorUser && featuredCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader icon="star-outline" title="Featured" />
                 {renderItem({ item: { ...featuredCard, type: 'VIDEO' } })}
               </View>
             )}
 
-            {activeTab === 'Nearby' && vendorFeaturedCard && (
+            {activeTab === 'Nearby' && isVendorUser && vendorFeaturedCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader icon="star-outline" title="Vendor Featured" />
                 {renderItem({ item: { ...vendorFeaturedCard, type: 'VIDEO' } })}
@@ -1063,7 +1148,7 @@ const HomeVersion = () => {
               ))}
             </ScrollView>
 
-            {activeTab === 'Nearby' && sponsoredCard && (
+            {activeTab === 'Nearby' && !isVendorUser && sponsoredCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader
                   icon="star-circle-outline"
@@ -1073,7 +1158,7 @@ const HomeVersion = () => {
               </View>
             )}
 
-            {activeTab === 'Nearby' && vendorSponsoredCard && (
+            {activeTab === 'Nearby' && isVendorUser && vendorSponsoredCard && (
               <View style={styles.whiteSection}>
                 <SectionHeader
                   icon="star-circle-outline"
@@ -1279,6 +1364,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8F2',
     marginHorizontal: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
+    marginTop: 30,
   },
   nearbyLocationLabel: { fontSize: 12, color: COLORS.gray700, flex: 1 },
   nearbyLocationButton: {
