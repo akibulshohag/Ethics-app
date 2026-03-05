@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import UserProfileCard from '../../components/UserProfileCard';
 import VideoCard from '../../components/VideoCard';
+import CompactVideoCard from '../../components/CompactVideoCard';
 
 const TABS = ['Home', 'Posts', 'Grid', 'Videos', 'Playlists'];
 
@@ -90,13 +91,27 @@ const UserViewsScreen = ({ navigation }) => {
     </View>
   );
 
+  const getListData = () => {
+    switch (activeTab) {
+      case 'Home': return MOCK_VIDEOS;
+      case 'Videos': return MOCK_VIDEOS; // Reuse same mock data for now, just render differently
+      default: return [];
+    }
+  };
+
+  const renderContentItem = ({ item }) => {
+    if (activeTab === 'Home') return <VideoCard video={item} />;
+    if (activeTab === 'Videos') return <CompactVideoCard video={item} />;
+    return null;
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <FlatList
-        data={activeTab === 'Home' ? MOCK_VIDEOS : []}
+        data={getListData()}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => <VideoCard video={item} />}
+        renderItem={renderContentItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
