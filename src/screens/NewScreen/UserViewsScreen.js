@@ -12,6 +12,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import UserProfileCard from '../../components/UserProfileCard';
 import VideoCard from '../../components/VideoCard';
 import CompactVideoCard from '../../components/CompactVideoCard';
+import BusinessVideoCard from '../../components/BusinessVideoCard';
 
 const TABS = ['Home', 'Posts', 'Grid', 'Videos', 'Playlists'];
 
@@ -94,6 +95,7 @@ const UserViewsScreen = ({ navigation }) => {
   const getListData = () => {
     switch (activeTab) {
       case 'Home': return MOCK_VIDEOS;
+      case 'Posts': return MOCK_VIDEOS;
       case 'Videos': return MOCK_VIDEOS; // Reuse same mock data for now, just render differently
       default: return [];
     }
@@ -101,6 +103,7 @@ const UserViewsScreen = ({ navigation }) => {
 
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Home') return <VideoCard video={item} />;
+    if (activeTab === 'Posts') return <BusinessVideoCard video={item} />;
     if (activeTab === 'Videos') return <CompactVideoCard video={item} />;
     return null;
   };
