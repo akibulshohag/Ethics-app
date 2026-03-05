@@ -15,6 +15,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import BusinessProfileCard from '../../components/BusinessProfileCard';
 import PromotionCard from '../../components/PromotionCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
+import BusinessVideoTabCard from '../../components/BusinessVideoTabCard';
 
 const { width } = Dimensions.get('window');
 
@@ -108,6 +109,25 @@ const MOCK_GRID_IMAGES = [
   { id: '9', image: 'https://images.pexels.com/photos/675951/pexels-photo-675951.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
 ];
 
+const MOCK_VIDEOS = [
+  {
+    id: '1',
+    title: 'Tandoori Planet',
+    thumbnail: 'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '100k',
+    location: 'Birmingham, UK',
+    distance: '12 Km',
+  },
+  {
+    id: '2',
+    title: 'Spicy Burger House',
+    thumbnail: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '85k',
+    location: 'London, UK',
+    distance: '5 Km',
+  },
+];
+
 const BusinessProfileViewScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('Posts');
 
@@ -148,7 +168,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       {/* Section Header */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
-          {activeTab === 'Grid' ? 'Gallery' : activeTab}
+          {activeTab === 'Grid' ? 'Gallery' : activeTab === 'Video' ? 'Videos' : activeTab}
         </Text>
         <TouchableOpacity>
           <MaterialCommunityIcons name="plus" size={24} color="#333" />
@@ -162,6 +182,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Posts': return MOCK_POSTS;
       case 'Promotions': return MOCK_PROMOTIONS;
       case 'Grid': return MOCK_GRID_IMAGES;
+      case 'Video': return MOCK_VIDEOS;
       default: return []; // Return empty array for unimplemented tabs
     }
   };
@@ -176,6 +197,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       );
     }
+    if (activeTab === 'Video') return <BusinessVideoTabCard item={item} />;
     return null;
   };
 
@@ -183,7 +205,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <FlatList
-        key={activeTab === 'Grid' ? 'grid-3-col' : 'list-1-col'}
+        key={activeTab === 'Grid' ? 'grid-3-col' : `list-1-col-${activeTab}`}
         data={getListData()}
         keyExtractor={item => item.id}
         renderItem={renderContentItem}
