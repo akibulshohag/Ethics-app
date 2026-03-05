@@ -12,56 +12,18 @@ const VideoCard = ({ video, onPress }) => {
         </View>
       </View>
       <View style={styles.detailsContainer}>
-        <View style={styles.headerInfo}>
-          <Image source={{ uri: video.channelAvatar }} style={styles.avatar} />
-          <View style={styles.textContainer}>
-            <Text style={styles.channelName}>{video.channelName}</Text>
-            <Text style={styles.timeAgo}>{video.publishedAt}</Text>
-          </View>
-          <TouchableOpacity style={styles.menuButton}>
-            <MaterialCommunityIcons name="dots-vertical" size={20} color="#000" />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.title} numberOfLines={2}>
-          {video.title}
-        </Text>
-        
-        {video.website && (
-          <Text style={styles.website}>{video.website}</Text>
-        )}
-
-        {video.hashtags && (
-          <Text style={styles.hashtags}>
-            {video.hashtags.map(tag => `#${tag} `)}
+        <Image source={{ uri: video.channelAvatar }} style={styles.avatar} />
+        <View style={styles.textContainer}>
+          <Text style={styles.title} numberOfLines={2}>
+            {video.title}
           </Text>
-        )}
-
-        <View style={styles.thumbnailContainer}>
-          <Image source={{ uri: video.thumbnail }} style={styles.thumbnail} />
-          <View style={styles.durationBadge}>
-            <Text style={styles.durationText}>{video.duration}</Text>
-          </View>
+          <Text style={styles.subtitle}>
+            {video.channelName} • {video.views} • {video.publishedAt}
+          </Text>
         </View>
-
-        <View style={styles.interactionsContainer}>
-          <View style={styles.interactionItem}>
-            <MaterialCommunityIcons name="thumb-up-outline" size={20} color="#666" />
-            <Text style={styles.interactionText}>{video.likes || '0'}</Text>
-          </View>
-          <View style={styles.interactionItem}>
-            <MaterialCommunityIcons name="thumb-down-outline" size={20} color="#666" />
-            <Text style={styles.interactionText}>{video.dislikes || '0'}</Text>
-          </View>
-          <View style={styles.interactionItem}>
-            <MaterialCommunityIcons name="comment-outline" size={20} color="#666" />
-            <Text style={styles.interactionText}>{video.comments || '0'}</Text>
-          </View>
-          <View style={styles.interactionItem}>
-            <MaterialCommunityIcons name="share-variant-outline" size={20} color="#666" />
-            <Text style={styles.interactionText}>{video.shares || '0'}</Text>
-          </View>
-        </View>
+        <TouchableOpacity style={styles.menuButton}>
+          <MaterialCommunityIcons name="dots-vertical" size={20} color="#000" />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -69,22 +31,16 @@ const VideoCard = ({ video, onPress }) => {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 16,
     backgroundColor: '#fff',
-    paddingHorizontal: 16,
-  },
-  headerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    paddingHorizontal:16,
   },
   thumbnailContainer: {
     width: '100%',
     height: 250,
     backgroundColor: '#e1e1e1',
-    borderRadius: 20,
+    borderRadius: 28,
     overflow: 'hidden',
-    marginTop: 12,
   },
   thumbnail: {
     width: '100%',
@@ -93,75 +49,46 @@ const styles = StyleSheet.create({
   },
   durationBadge: {
     position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    bottom: 16,
+    right: 16,
+    backgroundColor: 'rgba(41, 39, 39, 0.8)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   durationText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
   },
   detailsContainer: {
-    paddingVertical: 8,
+    flexDirection: 'row',
+    paddingVertical: 16,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-    backgroundColor: '#eee',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 12,
+    backgroundColor: '#ccc',
   },
   textContainer: {
     flex: 1,
   },
-  channelName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  timeAgo: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-  },
   title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#212121',
     marginBottom: 4,
     lineHeight: 22,
   },
-  website: {
+  subtitle: {
     fontSize: 12,
-    color: '#666',
-    marginBottom: 2,
-  },
-  hashtags: {
-    fontSize: 12,
-    color: '#3ea6ff',
-    marginBottom: 4,
-  },
-  interactionsContainer: {
-    flexDirection: 'row',
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  interactionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 20,
-  },
-  interactionText: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 4,
+    color: '#424242',
   },
   menuButton: {
-    padding: 4,
+    paddingLeft: 8,
+    justifyContent: 'flex-start',
   },
 });
 

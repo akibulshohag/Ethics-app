@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import VideoCard from '../../components/VideoCard';
 import BusinessProfileCard from '../../components/BusinessProfileCard';
 import PromotionCard from '../../components/PromotionCard';
+import BusinessVideoCard from '../../components/BusinessVideoCard';
 
 const { width } = Dimensions.get('window');
 
@@ -167,7 +167,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   };
 
   const renderContentItem = ({ item }) => {
-    if (activeTab === 'Posts') return <VideoCard video={item} />;
+    if (activeTab === 'Posts') return <BusinessVideoCard video={item} />;
     if (activeTab === 'Promotions') return <PromotionCard item={item} />;
     if (activeTab === 'Grid') {
       return (
