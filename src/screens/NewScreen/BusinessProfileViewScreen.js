@@ -14,10 +14,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import VideoCard from '../../components/VideoCard';
 import BusinessProfileCard from '../../components/BusinessProfileCard';
+import PromotionCard from '../../components/PromotionCard';
 
 const { width } = Dimensions.get('window');
 
 const TABS = ['Posts', 'Promotions', 'Grid', 'Video', 'Notification'];
+// ... (I will handle the rest in the next edit chunk for the render function to avoid giant replaces)
 
 const MOCK_POSTS = [
   {
@@ -70,6 +72,30 @@ const MOCK_POSTS = [
   },
 ];
 
+const MOCK_PROMOTIONS = [
+  {
+    id: '1',
+    title: '10 Rice Bag',
+    price: '$100',
+    image: 'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '120',
+  },
+  {
+    id: '2',
+    title: '10 Rice Bag',
+    price: '$100',
+    image: 'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '120',
+  },
+  {
+    id: '3',
+    title: '10 Rice Bag',
+    price: '$100',
+    image: 'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '120',
+  },
+];
+
 const BusinessProfileViewScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('Posts');
 
@@ -109,7 +135,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
       {/* Section Header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Posts</Text>
+        <Text style={styles.sectionTitle}>{activeTab}</Text>
         <TouchableOpacity>
           <MaterialCommunityIcons name="plus" size={24} color="#333" />
         </TouchableOpacity>
@@ -117,13 +143,27 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     </View>
   );
 
+  const getListData = () => {
+    switch (activeTab) {
+      case 'Posts': return MOCK_POSTS;
+      case 'Promotions': return MOCK_PROMOTIONS;
+      default: return []; // Return empty array for unimplemented tabs
+    }
+  };
+
+  const renderContentItem = ({ item }) => {
+    if (activeTab === 'Posts') return <VideoCard video={item} />;
+    if (activeTab === 'Promotions') return <PromotionCard item={item} />;
+    return null;
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <FlatList
-        data={activeTab === 'Posts' ? MOCK_POSTS : []}
+        data={getListData()}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => <VideoCard video={item} />}
+        renderItem={renderContentItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
