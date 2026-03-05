@@ -194,8 +194,9 @@ const HomeVersion = () => {
       activeTab === 'Nearby' &&
       selectedLocation?.lat != null &&
       selectedLocation?.lng != null;
-    // viewerRole: backend uses this for list filtering. 'user' = only owner videos; 'vendor' = owner + vendor videos. So both user and vendor see owner videos nearby; vendor also sees vendor videos.
-    const viewerRole = currentUser?.role || 'user';
+    // viewerRole: backend shows non-vendor (owner) uploads when 'user'; shows all when 'vendor'/'owner'/'admin'. So both user and vendor see owner videos; vendor also sees vendor videos.
+    const viewerRole =
+      (currentUser?.role && String(currentUser.role).toLowerCase()) || 'user';
     const baseParams = { page: 1, limit: 100, sort: 'latest', viewerRole };
     const videoParams = isNearby
       ? {

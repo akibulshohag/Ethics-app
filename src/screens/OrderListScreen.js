@@ -132,6 +132,27 @@ const OrderListScreen = ({ navigation }) => {
             ))}
           </View>
         )}
+        <TouchableOpacity
+          style={styles.chatBtn}
+          onPress={() => {
+            const partnerId = role === 'user' ? item.ownerId : item.userId;
+            const partnerName = role === 'user' ? ownerName : customerName;
+            const firstItem = (item.items || [])[0];
+            navigation.navigate('ChatScreen', {
+              partnerId,
+              partnerName,
+              partnerAvatar: item.owner?.photos?.[0] || item.user?.photos?.[0],
+              orderId: item.id,
+              orderDetails: {
+                itemName: firstItem?.itemName || `${itemCount} item(s)`,
+                itemImage: null,
+              },
+            });
+          }}
+        >
+          <Icon name="message-text-outline" size={20} color={COLORS.primaryOrange} />
+          <Text style={styles.chatBtnText}>Chat about this order</Text>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -269,6 +290,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  chatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.gray100,
+    gap: 6,
+  },
+  chatBtnText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.primaryOrange,
   },
   centered: {
     flex: 1,

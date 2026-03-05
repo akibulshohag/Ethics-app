@@ -11,6 +11,7 @@ import SearchScreen from '../screens/SearchScreen';
 import CartUiScreen from '../screens/CartUiScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
+import ChatScreen from '../screens/ChatScreen';
 
 const HomeStack = createStackNavigator();
 
@@ -38,6 +39,7 @@ const HomeNavigation = () => {
       <HomeStack.Screen name="CartUiScreen" component={CartUiScreen} />
       <HomeStack.Screen name="CartDetailsScreen" component={CartDetailsScreen} />
       <HomeStack.Screen name="CheckoutScreen" component={CheckoutScreen} />
+      <HomeStack.Screen name="ChatScreen" component={ChatScreen} />
     </HomeStack.Navigator>
   );
 };

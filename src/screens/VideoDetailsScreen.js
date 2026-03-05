@@ -824,11 +824,12 @@ const VideoDetailsScreen = () => {
             <TouchableOpacity
               style={styles.ctaButton}
               onPress={() => {
-                // Message Now - navigate to channel or future message flow
+                // Message Now - open chat with channel / restaurant owner
                 if (currentVideo.userId) {
-                  navigation.navigate('Library', {
-                    screen: 'ChannelDetailsScreen',
-                    params: { userId: currentVideo.userId },
+                  navigation.navigate('ChatScreen', {
+                    partnerId: currentVideo.userId,
+                    partnerName: currentVideo.channelName || 'Channel',
+                    partnerAvatar: currentVideo.channelAvatar,
                   });
                 }
               }}

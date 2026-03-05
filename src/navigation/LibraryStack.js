@@ -23,6 +23,7 @@ import IncognitoScreen from '../screens/IncognitoScreen';
 import TimeWatchedScreen from '../screens/TimeWatchedScreen';
 import MenuManageScreen from '../screens/MenuManageScreen';
 import OrderListScreen from '../screens/OrderListScreen';
+import ChatScreen from '../screens/ChatScreen';
 
 const LibraryStack = createStackNavigator();
 
@@ -94,6 +95,7 @@ const LibraryNavigation = () => {
       />
       <LibraryStack.Screen name="MenuManageScreen" component={MenuManageScreen} />
       <LibraryStack.Screen name="OrderListScreen" component={OrderListScreen} />
+      <LibraryStack.Screen name="ChatScreen" component={ChatScreen} />
     </LibraryStack.Navigator>
   );
 };

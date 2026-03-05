@@ -15,9 +15,22 @@ import { Alert, BackHandler, View, StyleSheet } from 'react-native';
 import RootStack from './navigation/RootStack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { navigationRef } from './utils/helper';
+import {
+  connectNotificationSocket,
+  disconnectNotificationSocket,
+} from './services/notificationSocket';
 
 const AppContent = () => {
   const { user, onboardingDone } = useSelector(state => state.app);
+
+  useEffect(() => {
+    if (user?.id) {
+      connectNotificationSocket(user.id);
+    } else {
+      disconnectNotificationSocket();
+    }
+    return () => disconnectNotificationSocket();
+  }, [user?.id]);
   const backAction = () => {
     if (!navigationRef.current || !navigationRef.current.isReady()) {
       return false;
