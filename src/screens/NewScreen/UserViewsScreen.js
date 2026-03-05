@@ -6,6 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   StatusBar,
+  Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -15,7 +17,21 @@ import CompactVideoCard from '../../components/CompactVideoCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
 import PromotionCard from '../../components/PromotionCard';
 
+const { width } = Dimensions.get('window');
+
 const TABS = ['Home', 'Posts', 'Grid', 'Videos', 'Playlists'];
+
+const MOCK_GRID_IMAGES = [
+  { id: '1', image: 'https://images.pexels.com/photos/2641886/pexels-photo-2641886.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '2', image: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '3', image: 'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '4', image: 'https://images.pexels.com/photos/376464/pexels-photo-376464.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '5', image: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '6', image: 'https://images.pexels.com/photos/1146760/pexels-photo-1146760.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '7', image: 'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '8', image: 'https://images.pexels.com/photos/718742/pexels-photo-718742.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+  { id: '9', image: 'https://images.pexels.com/photos/675951/pexels-photo-675951.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
+];
 
 const MOCK_VIDEOS = [
   {
@@ -121,6 +137,7 @@ const UserViewsScreen = ({ navigation }) => {
     switch (activeTab) {
       case 'Home': return MOCK_VIDEOS;
       case 'Posts': return MOCK_VIDEOS;
+      case 'Grid': return MOCK_GRID_IMAGES;
       case 'Videos': return MOCK_VIDEOS; // Reuse same mock data for now, just render differently
       case 'Playlists': return MOCK_PLAYLISTS;
       default: return [];
@@ -130,6 +147,13 @@ const UserViewsScreen = ({ navigation }) => {
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Home') return <VideoCard video={item} />;
     if (activeTab === 'Posts') return <BusinessVideoCard video={item} />;
+    if (activeTab === 'Grid') {
+      return (
+        <View style={styles.gridImageContainer}>
+          <Image source={{ uri: item.image }} style={styles.gridImage} />
+        </View>
+      );
+    }
     if (activeTab === 'Videos') return <CompactVideoCard video={item} />;
     if (activeTab === 'Playlists') return (
       <View style={{ position: 'relative' }}>
@@ -147,12 +171,15 @@ const UserViewsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       <FlatList
+        key={activeTab === 'Grid' ? 'grid-3-col' : `list-1-col-${activeTab}`}
         data={getListData()}
         keyExtractor={item => item.id}
         renderItem={renderContentItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        numColumns={activeTab === 'Grid' ? 3 : 1}
+        columnWrapperStyle={activeTab === 'Grid' ? styles.gridColumnWrapper : undefined}
       />
     </SafeAreaView>
   );
@@ -224,6 +251,22 @@ const styles = StyleSheet.create({
   activeTabText: {
     color: '#FFAD33',
     fontWeight: '600',
+  },
+  gridColumnWrapper: {
+    justifyContent: 'flex-start',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  gridImageContainer: {
+    width: (width - 32 - 16) / 3, // Full width minus horizontal padding (16*2) minus inner gaps (8*2)
+    aspectRatio: 0.8, // Slightly taller than square exactly as done before
+    marginBottom: 8,
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    resizeMode: 'cover',
   },
 });
 
