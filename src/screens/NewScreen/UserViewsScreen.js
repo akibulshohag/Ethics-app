@@ -13,6 +13,7 @@ import UserProfileCard from '../../components/UserProfileCard';
 import VideoCard from '../../components/VideoCard';
 import CompactVideoCard from '../../components/CompactVideoCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
+import PromotionCard from '../../components/PromotionCard';
 
 const TABS = ['Home', 'Posts', 'Grid', 'Videos', 'Playlists'];
 
@@ -36,6 +37,30 @@ const MOCK_VIDEOS = [
     thumbnail: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     duration: '10:15',
     views: '5.1M views',
+  },
+];
+
+const MOCK_PLAYLISTS = [
+  {
+    id: '1',
+    title: 'Dance Competition 2022',
+    price: 'World of Music\n\n120 videos', // Repurposing price field for multi-line subtitle as seen in image
+    image: 'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '120',
+  },
+  {
+    id: '2',
+    title: 'Top Music of All Time',
+    price: 'World of Music\n\n250 videos',
+    image: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '250',
+  },
+  {
+    id: '3',
+    title: 'Most Listened Song in Century',
+    price: 'World of Music\n\n300 videos',
+    image: 'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    views: '300',
   },
 ];
 
@@ -97,6 +122,7 @@ const UserViewsScreen = ({ navigation }) => {
       case 'Home': return MOCK_VIDEOS;
       case 'Posts': return MOCK_VIDEOS;
       case 'Videos': return MOCK_VIDEOS; // Reuse same mock data for now, just render differently
+      case 'Playlists': return MOCK_PLAYLISTS;
       default: return [];
     }
   };
@@ -105,6 +131,15 @@ const UserViewsScreen = ({ navigation }) => {
     if (activeTab === 'Home') return <VideoCard video={item} />;
     if (activeTab === 'Posts') return <BusinessVideoCard video={item} />;
     if (activeTab === 'Videos') return <CompactVideoCard video={item} />;
+    if (activeTab === 'Playlists') return (
+      <View style={{ position: 'relative' }}>
+          <PromotionCard item={item} />
+          {/* Inject dots menu over the promotion card right side since promotion card doesn't have it natively */}
+          <TouchableOpacity style={{ position: 'absolute', top: 12, right: 16, padding: 4 }}>
+              <MaterialCommunityIcons name="dots-vertical" size={20} color="#333" />
+          </TouchableOpacity>
+      </View>
+    );
     return null;
   };
 
