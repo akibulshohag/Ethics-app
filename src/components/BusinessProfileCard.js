@@ -44,17 +44,17 @@ const BusinessProfileCard = () => {
             <View style={styles.profileHeaderRow}>
               <View style={styles.avatarContainer}>
                 <View style={styles.avatarCircle}>
-                  <Icon name="account" size={40} color="#F39C12" />
+                  <Icon name="account" size={40} color="#F5A623" />
                 </View>
                 <View style={styles.editPencilBadge}>
-                  <Icon name="pencil-outline" size={10} color="#555" />
+                  <Icon name="pencil-outline" size={14} color="#aaa" />
                 </View>
               </View>
 
               <View style={styles.profileTextGroup}>
                 <Text style={styles.businessNameHeading}>Dalchini</Text>
                 <View style={styles.verifiedIndicatorRow}>
-                  <Icon name="check-circle-outline" size={14} color="#fff" />
+                  <Icon name="check-circle-outline" size={15} color="#fff" />
                   <Text style={styles.verifiedAccountLabel}>verified account</Text>
                   <View style={styles.faintDotSeparator} />
                 </View>
@@ -64,13 +64,13 @@ const BusinessProfileCard = () => {
             <View style={styles.actionButtonsRow}>
               <TouchableOpacity style={styles.editProfileRectBtn}>
                 <Text style={styles.editProfileLabel}>Edit Profile</Text>
-                <Icon name="pencil-box-outline" size={20} color="#333" />
+                <Icon name="square-edit-outline" size={20} color="#111" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.squareIconBtn}>
-                <Icon name="camera-outline" size={22} color="#333" />
+                <Icon name="camera-outline" size={24} color="#111" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.squareIconBtn}>
-                <Icon name="comment-text-outline" size={20} color="#333" />
+                <Icon name="message-text-outline" size={22} color="#111" />
               </TouchableOpacity>
             </View>
           </View>
@@ -170,24 +170,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   amberOverlayBox: {
-    backgroundColor: 'rgba(215, 137, 20, 0.75)',
-    borderRadius: 18,
-    padding: 18,
-    marginHorizontal: 12,
+    backgroundColor: 'rgba(215, 137, 20, 0.85)',
+    borderRadius: 8,
+    padding: 10,
+    marginHorizontal: 16,
     marginBottom: 40,
+    marginTop: 30,  
   },
   profileHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+    minHeight: 45,
   },
   avatarContainer: {
-    position: 'relative',
+    position: 'absolute',
+    top: -45,
+    left: 0,
+    zIndex: 10,
   },
   avatarCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 70,
+    height: 70,
+    borderRadius: 45,
     backgroundColor: '#222',
     justifyContent: 'center',
     alignItems: 'center',
@@ -196,68 +201,71 @@ const styles = StyleSheet.create({
   },
   editPencilBadge: {
     position: 'absolute',
-    top: 2,
-    right: -2,
+    top: 4,
+    right: 0,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     width: 20,
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#eee',
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
   },
   profileTextGroup: {
-    marginLeft: 15,
+    marginLeft: 90,
+    justifyContent: 'center',
   },
   businessNameHeading: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
   },
   verifiedIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    marginTop: 4,
   },
   verifiedAccountLabel: {
     color: '#fff',
-    fontSize: 14,
-    marginLeft: 5,
+    fontSize: 12,
+    marginLeft: 6,
     opacity: 0.95,
   },
   faintDotSeparator: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     marginLeft: 8,
   },
   actionButtonsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   editProfileRectBtn: {
     backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    height: 50,
-    borderRadius: 12,
+    justifyContent: 'center',
+    height: 42,
+    borderRadius: 8,
     flex: 1,
   },
   editProfileLabel: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: '#111',
+    marginRight: 6,
   },
   squareIconBtn: {
     backgroundColor: '#fff',
-    width: 50,
-    height: 50,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -267,9 +275,9 @@ const styles = StyleSheet.create({
   statsOpaqueBar: {
     flexDirection: 'row',
     backgroundColor: '#E6E6E6',
-    paddingVertical: 18,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    paddingVertical:  12,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
   },
   statColumn: {
     flex: 1,
