@@ -20,23 +20,23 @@ const BusinessProfileCard = () => {
         <View style={styles.contentOverlay}>
           {/* Top Right Badges */}
           <View style={styles.badgeContainer}>
-            <View style={styles.twoPartBadge}>
+            <TouchableOpacity style={styles.twoPartBadge}>
               <View style={styles.badgeIconPart}>
-                <Icon name="lock" size={14} color="#333" />
+                  <Icon name="lock" size={16} color="#222" />
               </View>
-              <TouchableOpacity style={styles.badgeTextPart}>
+              <View style={styles.badgeTextPart}>
                 <Text style={styles.badgeText}>Orders</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={[styles.twoPartBadge, { marginTop: 10 }]}>
-              <View style={styles.badgeIconPart}>
-                <Icon name="lock" size={14} color="#333" />
               </View>
-              <TouchableOpacity style={[styles.badgeTextPart, { backgroundColor: '#FF9800' }]}>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.twoPartBadge, { marginTop: 10 }]}>
+              <View style={styles.badgeIconPart}>
+                <Icon name="lock" size={16} color="#222" />
+              </View>
+              <View style={[styles.badgeTextPart, { backgroundColor: '#FFa31A' }]}>
                 <Text style={styles.badgeText}>Wallet</Text>
-              </TouchableOpacity>
-            </View>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {/* Amber Profile Box Overlay */}
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   },
   bgImage: {
     width: '100%',
-    height: '100%',
+    height: 410,
   },
   contentOverlay: {
     flex: 1,
@@ -138,38 +138,36 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   twoPartBadge: {
+    height: 28,
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  badgeIconPart: {
+    alignItems: 'stretch',
     backgroundColor: '#fff',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
     elevation: 4,
   },
-  badgeTextPart: {
-    backgroundColor: '#FFAD33',
-    paddingLeft: 22,
-    paddingRight: 16,
-    paddingVertical: 7,
-    borderRadius: 15,
-    marginLeft: -16,
-    minWidth: 85,
+  badgeIconPart: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 4,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  badgeTextPart: {
+    backgroundColor: '#F39C12',
+    paddingLeft: 5,
+    paddingRight: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width:65
   },
   badgeText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '500',
   },
   amberOverlayBox: {
     backgroundColor: 'rgba(215, 137, 20, 0.75)',
