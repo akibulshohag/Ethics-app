@@ -21,6 +21,8 @@ import HomeFourNavigation from './HomeFourStack';
 import HomeFiveNavigation from './HomeFiveStack';
 import HomeSixNavigation from './HomeSixStack';
 import HomeSevenNavigation from './HomeSevenStack';
+import PromotionNavigation from './PromotionStack';
+import PromotionOneNavigation from './PromotionOneStack';
 import UProfileNavigation from './UProfileStack';
 import VProfileNavigation from './VProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
@@ -212,6 +214,34 @@ const BottomNaivgation = () => {
               tabBarIcon: ({ focused, color }) => (
                 <Icon
                   name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home8"
+            component={PromotionNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home9"
+            component={PromotionOneNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
