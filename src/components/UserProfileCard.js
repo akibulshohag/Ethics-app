@@ -1,64 +1,77 @@
-import React from 'react';
-import { View, Text, StyleSheet, ImageBackground, Image, TouchableOpacity } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ImageBackground,
+  Image,
+  TouchableOpacity,
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
 const UserProfileCard = () => {
   return (
-    <View style={styles.mainCard}>
+    <View style={styles.cardContainer}>
       <ImageBackground
-        source={{ uri: 'https://images.pexels.com/photos/2079438/pexels-photo-2079438.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' }}
-        style={styles.coverArea}
-        imageStyle={{ resizeMode: 'cover' }}
+        source={{ uri: "https://images.unsplash.com/photo-1552566626-52f8b828add9" }}
+        style={styles.bgImage}
+        imageStyle={{ borderRadius: 12 }}
       >
-        {/* Semi-transparent amber overlay box for profile info */}
-        <View style={styles.profileOverlayBox}>
-          <View style={styles.avatarWrapper}>
-            <Image
-              source={{ uri: 'https://via.placeholder.com/100' }}
-              style={styles.profileAvatar}
-            />
-            {/* Dark generic person icon overlay if no image, or just keeping the placeholder */}
-            <View style={styles.avatarDarkOverlay}>
-                <MaterialCommunityIcons name="account" size={36} color="#FFAD33" />
-            </View>
-            <TouchableOpacity style={styles.avatarEditIcon}>
-              <MaterialCommunityIcons name="pencil" size={12} color="#444" />
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.profileNameGroup}>
-            <Text style={styles.userNameText}>@yourname</Text>
-            <View style={styles.verifiedRow}>
-              <MaterialCommunityIcons name="check-decagram-outline" size={14} color="#fff" />
-              <Text style={styles.verifiedText}>verified account</Text>
-            </View>
-          </View>
-        </View>
+        <View style={styles.contentOverlay}>
 
-        {/* Bottom portion - Opaque styling */}
-        <View style={styles.bottomOpaqueSection}>
-          <View style={styles.statsBar}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>625k</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>124k</Text>
-              <Text style={styles.statLabel}>Following</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>89</Text>
-              <Text style={styles.statLabel}>MSG</Text>
+          {/* Amber Profile Box Overlay */}
+          <View style={styles.amberOverlayBox}>
+            <View style={styles.profileHeaderRow}>
+              <View style={styles.avatarContainer}>
+                <View style={styles.avatarCircle}>
+                  <Icon name="account" size={40} color="#F5A623" />
+                </View>
+                <View style={styles.editPencilBadge}>
+                  <Icon name="pencil-outline" size={14} color="#aaa" />
+                </View>
+              </View>
+
+              <View style={styles.profileTextGroup}>
+                <Text style={styles.businessNameHeading}>Dalchini</Text>
+                <View style={styles.verifiedIndicatorRow}>
+                  <Icon name="check-circle-outline" size={15} color="#fff" />
+                  <Text style={styles.verifiedAccountLabel}>verified account</Text>
+                  <View style={styles.faintDotSeparator} />
+                </View>
+              </View>
             </View>
           </View>
 
-          <View style={styles.statusMsgContainer}>
-            <Text style={styles.statusMsg}>
-              Hi! You haven't added any medicines yet. Want me to help you set up the first one?
-            </Text>
-            <TouchableOpacity style={styles.subscribeButton}>
-              <Text style={styles.subscribeText}>Subscribe</Text>
-            </TouchableOpacity>
+          {/* Bottom Section - Stats and Status Message */}
+          <View style={styles.bottomBlock}>
+            {/* Opaque Stats Bar */}
+            <View style={styles.statsOpaqueBar}>
+              <View style={styles.statColumn}>
+                <Text style={styles.statValMain}>625k</Text>
+                <Text style={styles.statLabelMain}>Followers</Text>
+              </View>
+              <View style={styles.statColumn}>
+                <Text style={styles.statValMain}>124k</Text>
+                <Text style={styles.statLabelMain}>Following</Text>
+              </View>
+              <View style={styles.statColumn}>
+                <Text style={styles.statValMain}>89</Text>
+                <Text style={styles.statLabelMain}>MSG</Text>
+              </View>
+            </View>
+
+            {/* Opaque Status Box */}
+            <View style={styles.statusWhiteBox}>
+              <Text style={styles.statusBodyText}>
+                Hi! You haven't added any medicines yet. Want me to help you set up
+                the first one?
+              </Text>
+            </View>
+            <View style={styles.subscribeBtnContainer}>
+              <TouchableOpacity style={styles.subscribeBtn}>
+                <Text style={styles.subscribeBtnText}>Subscribe</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </ImageBackground>
@@ -66,143 +79,162 @@ const UserProfileCard = () => {
   );
 };
 
+export default UserProfileCard;
+
 const styles = StyleSheet.create({
-  mainCard: {
+  cardContainer: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 8,
+    borderRadius: 12,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
+    marginHorizontal: 16, // Assuming it takes full width minus some padding
+  },
+  subscribeBtnContainer: {
+    alignItems: 'center',
+  },
+  subscribeBtn: {
+    backgroundColor: '#F39C12',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 5,
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  coverArea: {
+  subscribeBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  bgImage: {
     width: '100%',
-    height: 480, // Taller to fit everything inside
-    justifyContent: 'flex-end',
+    height: 410,
   },
-  profileOverlayBox: {
+  contentOverlay: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  amberOverlayBox: {
+    backgroundColor: 'rgba(215, 137, 20, 0.85)',
+    borderRadius: 8,
+    padding: 10,
+    marginHorizontal: 16,
+    marginTop: 160,
+  },
+  profileHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(184, 115, 0, 0.65)', // Amber with transparency
-    padding: 15,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderRadius: 16,
+    minHeight: 40,
   },
-  avatarWrapper: {
-    position: 'relative',
-    marginRight: 15,
+  avatarContainer: {
+    position: 'absolute',
+    top: -35,
+    left: 0,
+    zIndex: 10,
   },
-  profileAvatar: {
+  avatarCircle: {
     width: 70,
     height: 70,
-    borderRadius: 35,
+    borderRadius: 45,
+    backgroundColor: '#222',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
-    backgroundColor: '#222',
   },
-  avatarDarkOverlay: {
-      position: 'absolute',
-      top: 0, left: 0, right: 0, bottom: 0,
-      borderRadius: 35,
-      backgroundColor: '#222',
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: '#fff',
-  },
-  avatarEditIcon: {
+  editPencilBadge: {
     position: 'absolute',
-    top: 0,
+    top: 4,
     right: 0,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     width: 20,
     height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#eee',
-    elevation: 2,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
   },
-  profileNameGroup: {
-    flex: 1,
+  profileTextGroup: {
+    marginLeft: 90,
+    justifyContent: 'center',
   },
-  userNameText: {
-    fontSize: 22,
+  businessNameHeading: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 2,
   },
-  verifiedRow: {
+  verifiedIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 4,
   },
-  verifiedText: {
-    fontSize: 13,
+  verifiedAccountLabel: {
     color: '#fff',
-    marginLeft: 4,
+    fontSize: 12,
+    marginLeft: 6,
+    opacity: 0.95,
   },
-  bottomOpaqueSection: {
-    backgroundColor: '#fff', // Bottom corner radiuses fit into the main rounded edges
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
+  faintDotSeparator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    marginLeft: 8,
   },
-  statsBar: {
+
+  bottomBlock: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  statsOpaqueBar: {
     flexDirection: 'row',
-    backgroundColor: '#e5e5e5', // Light gray background for stats
-    paddingVertical: 15,
-    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#E6E6E6',
+    paddingVertical: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
-  statItem: {
-    flex: 1,
+  statColumn: {
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1a1a1a',
+  statValMain: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#222',
   },
-  statLabel: {
-    fontSize: 13,
-    color: '#555',
-    fontWeight: '500',
+  statLabelMain: {
+    fontSize: 12,
+    color: '#444',
     marginTop: 2,
   },
-  statusMsgContainer: {
+  statusWhiteBox: {
     backgroundColor: '#fff',
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
   },
-  statusMsg: {
-    fontSize: 13,
-    color: '#777',
+  statusBodyText: {
     textAlign: 'center',
-    lineHeight: 18,
-    fontWeight: '500',
-    marginBottom: 16,
-  },
-  subscribeButton: {
-    backgroundColor: '#F59E0B', // Bright orange as per Figma
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    minWidth: 180,
-    alignItems: 'center',
-  },
-  subscribeText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 20,
+    fontWeight: '400',
   },
 });
-
-export default UserProfileCard;

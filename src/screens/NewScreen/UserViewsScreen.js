@@ -111,15 +111,15 @@ const UserViewsScreen = ({ navigation }) => {
               style={[
                 styles.tabItem,
                 isActive && styles.activeTabItem,
-                isGrid && styles.gridTabItem 
+                isGrid && styles.gridTabItem
               ]}
               onPress={() => setActiveTab(tab)}
             >
               {isGrid ? (
-                <MaterialCommunityIcons 
-                    name="view-grid" 
-                    size={22} 
-                    color={isActive ? "#FF7F0B" : "#444"} 
+                <MaterialCommunityIcons
+                  name="view-grid"
+                  size={22}
+                  color={isActive ? "#FF7F0B" : "#444"}
                 />
               ) : (
                 <Text style={[styles.tabText, isActive && styles.activeTabText]}>
@@ -157,11 +157,11 @@ const UserViewsScreen = ({ navigation }) => {
     if (activeTab === 'Videos') return <CompactVideoCard video={item} />;
     if (activeTab === 'Playlists') return (
       <View style={{ position: 'relative' }}>
-          <PromotionCard item={item} />
-          {/* Inject dots menu over the promotion card right side since promotion card doesn't have it natively */}
-          <TouchableOpacity style={{ position: 'absolute', top: 12, right: 16, padding: 4 }}>
-              <MaterialCommunityIcons name="dots-vertical" size={20} color="#333" />
-          </TouchableOpacity>
+        <PromotionCard item={item} />
+        {/* Inject dots menu over the promotion card right side since promotion card doesn't have it natively */}
+        <TouchableOpacity style={{ position: 'absolute', top: 12, right: 16, padding: 4 }}>
+          <MaterialCommunityIcons name="dots-vertical" size={20} color="#333" />
+        </TouchableOpacity>
       </View>
     );
     return null;
@@ -227,11 +227,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    marginVertical: 10,
+    marginVertical: 5,
     paddingHorizontal: 16,
+    marginBottom: 16,
   },
   tabItem: {
-    paddingVertical: 16,
+    paddingVertical: 8,
     paddingHorizontal: 4,
     minWidth: 50,
     alignItems: 'center',
@@ -241,7 +242,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#FFAD33', // Orange active border
   },
   gridTabItem: {
-      paddingBottom: 15, // slight adjustment for icon centering
+    paddingBottom: 8, // slight adjustment for icon centering
   },
   tabText: {
     fontSize: 15,
