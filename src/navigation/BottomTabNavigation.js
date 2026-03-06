@@ -19,6 +19,8 @@ import HomeTwoNavigation from './HomeTwoStack';
 import HomeThreeNavigation from './HomeThreeStack';
 import HomeFourNavigation from './HomeFourStack';
 import HomeFiveNavigation from './HomeFiveStack';
+import HomeSixNavigation from './HomeSixStack';
+import HomeSevenNavigation from './HomeSevenStack';
 import UProfileNavigation from './UProfileStack';
 import VProfileNavigation from './VProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
@@ -178,6 +180,34 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Home5"
             component={HomeFiveNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home6"
+            component={HomeSixNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home7"
+            component={HomeSevenNavigation}
             options={{
               tabBarIcon: ({ focused, color }) => (
                 <Icon
