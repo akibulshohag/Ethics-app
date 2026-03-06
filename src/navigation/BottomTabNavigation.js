@@ -27,6 +27,8 @@ import AdminScreen from '../screens/AdminScreen';
 import MessageListScreen from '../screens/MessageListScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import EarningsScreen from '../screens/EarningsScreen';
+import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
+import UserProfileCardScreen from '../screens/NewScreen/UserProfileCardScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -89,6 +91,34 @@ const BottomNaivgation = () => {
             tabBarShowLabel: false,
           }}
         >
+          <Tab.Screen
+            name="Profile"
+            component={BusinessProfileViewScreen}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <Icon
+                  name="menu"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="UserProfileCard"
+            component={UserProfileCardScreen}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <Icon
+                  name="account-circle-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
           <Tab.Screen
             name="Home1"
             component={HomeOneNavigation}
