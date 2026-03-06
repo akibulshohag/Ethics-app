@@ -22,7 +22,7 @@ const BusinessProfileCard = () => {
           <View style={styles.badgeContainer}>
             <TouchableOpacity style={styles.twoPartBadge}>
               <View style={styles.badgeIconPart}>
-                  <Icon name="lock" size={16} color="#222" />
+                <Icon name="lock" size={16} color="#222" />
               </View>
               <View style={styles.badgeTextPart}>
                 <Text style={styles.badgeText}>Orders</Text>
@@ -118,7 +118,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     marginHorizontal: 16, // Assuming it takes full width minus some padding
-    marginBottom: 10,
   },
   bgImage: {
     width: '100%',
@@ -158,7 +157,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    width:65
+    width: 65
   },
   badgeText: {
     color: '#fff',
@@ -171,7 +170,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginHorizontal: 16,
     marginBottom: 5,
-    marginTop: 50,  
+    marginTop: 50,
   },
   profileHeaderRow: {
     flexDirection: 'row',

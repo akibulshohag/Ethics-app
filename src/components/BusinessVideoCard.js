@@ -5,7 +5,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 const BusinessVideoCard = ({ video, onPress }) => {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.9}>
-      
+
       {/* 1. Header (Avatar, Name, Time, Menu) */}
       <View style={styles.headerContainer}>
         <View style={styles.headerLeft}>
@@ -25,7 +25,7 @@ const BusinessVideoCard = ({ video, onPress }) => {
         <Text style={styles.title} numberOfLines={2}>
           {video.title}
         </Text>
-        
+
         {video.website && (
           <Text style={styles.website}>{video.website}</Text>
         )}
@@ -51,17 +51,17 @@ const BusinessVideoCard = ({ video, onPress }) => {
           <MaterialCommunityIcons name="thumb-up-outline" size={22} color="#444" />
           <Text style={styles.interactionText}>{video.likes || '0'}</Text>
         </View>
-        
+
         <View style={styles.interactionItem}>
           <MaterialCommunityIcons name="thumb-down-outline" size={22} color="#444" />
           <Text style={styles.interactionText}>{video.dislikes || '0'}</Text>
         </View>
-        
+
         <View style={styles.interactionItem}>
           <MaterialCommunityIcons name="message-outline" size={22} color="#444" />
           <Text style={styles.interactionText}>{video.comments || '0'}</Text>
         </View>
-        
+
         <View style={styles.interactionItem}>
           <MaterialCommunityIcons name="share-outline" size={24} color="#444" />
           <Text style={styles.interactionText}>{video.shares || '0'}</Text>
@@ -74,12 +74,12 @@ const BusinessVideoCard = ({ video, onPress }) => {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 24,
+    marginBottom: 5,
     backgroundColor: '#fff',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
   },
-  
+
   // Header
   headerContainer: {
     flexDirection: 'row',
@@ -92,9 +92,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 50,
     marginRight: 12,
     backgroundColor: '#222', // Match dark avatar placeholder style
   },
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700', // Bold title
     color: '#1a1a1a',
     marginBottom: 8,

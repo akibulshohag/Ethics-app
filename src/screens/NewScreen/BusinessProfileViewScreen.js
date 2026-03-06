@@ -146,22 +146,35 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <BusinessProfileCard/>
+      <BusinessProfileCard />
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {TABS.map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {TABS.map(tab => {
+            const isGrid = tab === 'Grid';
+            const isActive = activeTab === tab;
+
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
+                onPress={() => setActiveTab(tab)}
+              >
+                {isGrid ? (
+                  <MaterialCommunityIcons
+                    name="view-grid"
+                    size={22}
+                    color={isActive ? "#FF7F0B" : "#444"}
+                  />
+                ) : (
+                  <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+                    {tab}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -228,7 +241,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   headerContainer: {
-    paddingBottom: 10,
+    paddingBottom: 0,
   },
   topNavigation: {
     flexDirection: 'row',
@@ -450,11 +463,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     marginVertical: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
   tabItem: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginRight: 5,
   },
   activeTabItem: {
@@ -474,7 +487,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 5,
   },
   sectionTitle: {
     fontSize: 18,
