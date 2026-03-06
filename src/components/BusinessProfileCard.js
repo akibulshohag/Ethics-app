@@ -15,7 +15,7 @@ const BusinessProfileCard = () => {
       <ImageBackground
         source={{ uri: "https://images.unsplash.com/photo-1552566626-52f8b828add9" }}
         style={styles.bgImage}
-        imageStyle={{ borderRadius: 24 }}
+        imageStyle={{ borderRadius: 12 }}
       >
         <View style={styles.contentOverlay}>
           {/* Top Right Badges */}
@@ -112,15 +112,11 @@ export default BusinessProfileCard;
 const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    elevation: 8,
+    borderRadius: 12,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    height: 600, // Fixed height to allow elements to stack properly over background
     marginHorizontal: 16, // Assuming it takes full width minus some padding
     marginBottom: 10,
   },
@@ -174,14 +170,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     marginHorizontal: 16,
-    marginBottom: 40,
-    marginTop: 30,  
+    marginBottom: 5,
+    marginTop: 50,  
   },
   profileHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-    minHeight: 45,
+    minHeight: 40,
   },
   avatarContainer: {
     position: 'absolute',
@@ -270,42 +266,49 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bottomBlock: {
-    width: '100%',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 5,
   },
   statsOpaqueBar: {
     flexDirection: 'row',
     backgroundColor: '#E6E6E6',
-    paddingVertical:  12,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    paddingVertical: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
   },
   statColumn: {
     flex: 1,
     alignItems: 'center',
   },
   statValMain: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#222',
   },
   statLabelMain: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 12,
+    color: '#444',
     marginTop: 2,
   },
   statusWhiteBox: {
     backgroundColor: '#fff',
-    paddingVertical: 22,
-    paddingHorizontal: 25,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
-    marginTop: -5,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
   },
   statusBodyText: {
     textAlign: 'center',
-    color: '#777',
-    fontSize: 14,
+    color: '#888',
+    fontSize: 12,
     lineHeight: 20,
-    fontWeight: '500',
+    fontWeight: '400',
   },
 });
