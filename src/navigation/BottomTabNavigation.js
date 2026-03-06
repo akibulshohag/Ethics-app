@@ -19,6 +19,9 @@ import VProfileNavigation from './VProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
+import MessageListScreen from '../screens/MessageListScreen';
+import LiveOrdersScreen from '../screens/LiveOrdersScreen';
+import EarningsScreen from '../screens/EarningsScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +32,15 @@ const getTabBarStyle = route => {
   const routeName = getFocusedRouteNameFromRoute(route) ?? '';
   return BottomTabLessScreens.includes(routeName) ? { display: 'none' } : {};
 };
+
+/** Orders tab: user role → own orders + status only; owner/admin → Live Orders with Accept/Reject */
+function OrdersTabWrapper(props) {
+  const user = useSelector(state => state.app?.user);
+  const role = String(user?.role || '').toLowerCase();
+  const isOwnerOrAdmin = ['owner', 'admin', 'superadmin', 'super_admin'].includes(role);
+  if (isOwnerOrAdmin) return <LiveOrdersScreen {...props} />;
+  return <OrderListScreen {...props} />;
+}
 
 const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
@@ -102,6 +114,48 @@ const BottomNaivgation = () => {
               tabBarIcon: ({ focused, color }) => (
                 <Icon
                   name="play-box-multiple-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="MessageList"
+            component={MessageListScreen}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="message-text"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="OrdersList"
+            component={LiveOrdersScreen}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="clipboard-list-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Earnings"
+            component={EarningsScreen}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="currency-usd"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />

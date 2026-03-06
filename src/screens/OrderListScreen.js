@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
+import { useFocusEffect } from '@react-navigation/native';
 import { getRestaurantOrders, updateRestaurantOrderStatus } from '../services/orderService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 
@@ -21,6 +22,19 @@ const formatDate = (dateStr) => {
   const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   return `${date} ${time}`;
+};
+
+/** Backend status → display label (for user: Pending, Accepted, Rejected, etc.) */
+const statusToLabel = (status) => {
+  const s = String(status || '').toLowerCase();
+  switch (s) {
+    case 'pending': return 'Pending';
+    case 'confirmed': return 'Accepted';
+    case 'cancelled': return 'Rejected';
+    case 'preparing': return 'Preparing';
+    case 'completed': return 'Completed';
+    default: return status || 'Pending';
+  }
 };
 
 const statusColor = (status) => {
@@ -83,6 +97,12 @@ const OrderListScreen = ({ navigation }) => {
     load(true);
   }, [user?.token]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.token) load(true);
+    }, [user?.token, load]),
+  );
+
   const onRefresh = () => load(true);
 
   const updateStatus = async (orderId, newStatus) => {
@@ -109,7 +129,7 @@ const OrderListScreen = ({ navigation }) => {
         <View style={styles.cardRow}>
           <Text style={styles.cardId}>#{item.id.slice(0, 8)}</Text>
           <View style={[styles.badge, { backgroundColor: statusColor(item.status) }]}>
-            <Text style={styles.badgeText}>{String(item.status)}</Text>
+            <Text style={styles.badgeText}>{statusToLabel(item.status)}</Text>
           </View>
         </View>
         {role !== 'user' && (

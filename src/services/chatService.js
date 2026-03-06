@@ -12,6 +12,18 @@ function getUploadBaseUrl() {
 }
 
 /**
+ * Get conversation list for current user (owner sees who messaged). Requires auth.
+ */
+export async function getConversations(token) {
+  if (!token) throw new Error('Login required');
+  const res = await fetch(`${MESSAGES_URL}/conversations`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to load conversations');
+  return res.json();
+}
+
+/**
  * Get message history between two users (both directions).
  * @param {string} token - Auth token (optional; backend may not require it yet)
  * @param {string} senderId - Current user id

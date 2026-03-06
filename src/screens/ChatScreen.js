@@ -14,6 +14,7 @@ import {
   Alert,
   Modal,
   FlatList,
+  PermissionsAndroid,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -341,6 +342,25 @@ const ChatScreen = () => {
       return;
     }
     try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone permission',
+            message: 'This app needs microphone access to record voice messages.',
+            buttonNeutral: 'Ask Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert(
+            'Permission needed',
+            'Microphone access is required to record voice messages. Enable it in Settings > App > Permissions.',
+          );
+          return;
+        }
+      }
       recordingDurationRef.current = 0;
       Sound.addRecordBackListener((e) => {
         recordingDurationRef.current = e.currentPosition;
@@ -348,7 +368,11 @@ const ChatScreen = () => {
       await Sound.startRecorder(undefined, undefined, true);
       setRecording(true);
     } catch (e) {
-      Alert.alert('Recording failed', e?.message || 'Could not start recording');
+      const msg = e?.message || '';
+      const hint = msg.includes('setAudioSource') || msg.includes('MediaRecorder')
+        ? ' On emulators, recording often fails; try on a real device. Otherwise enable microphone permission in Settings.'
+        : '';
+      Alert.alert('Recording failed', (msg || 'Could not start recording') + hint);
     }
   }, [recording, user?.token, sendVoice]);
 

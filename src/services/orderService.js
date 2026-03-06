@@ -69,3 +69,17 @@ export const updateRestaurantOrderStatus = async (token, orderId, status) => {
   }
   return res.json();
 };
+
+/**
+ * Owner earnings: completed orders count, total earning, withdrawals. Requires owner role.
+ */
+export const getRestaurantEarnings = async (token) => {
+  const res = await fetch(`${API_URL}/earnings`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to load earnings');
+  }
+  return res.json();
+};

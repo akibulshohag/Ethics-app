@@ -14,13 +14,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 
-// Enable LayoutAnimation on Android (no-op in New Architecture; avoid calling to prevent warning)
+// LayoutAnimation: skip in New Architecture (fabric) to avoid "no-op" warning
 if (
   Platform.OS === 'android' &&
-  typeof global.__turboModuleProxy === 'undefined' &&
-  UIManager.setLayoutAnimationEnabledExperimental
+  typeof UIManager !== 'undefined' &&
+  typeof UIManager.setLayoutAnimationEnabledExperimental === 'function' &&
+  !(typeof global !== 'undefined' && global.__turboModuleProxy)
 ) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
+  try {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  } catch (_) {}
 }
 
 const HelpCenterScreen = () => {
