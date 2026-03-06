@@ -14,6 +14,11 @@ import {
 import HomeNavigation from './HomeNavigation';
 import LibraryNavigation from './LibraryStack';
 import ShortsNavigation from './ShortsStack';
+import HomeOneNavigation from './HomeOneStack';
+import HomeTwoNavigation from './HomeTwoStack';
+import HomeThreeNavigation from './HomeThreeStack';
+import HomeFourNavigation from './HomeFourStack';
+import HomeFiveNavigation from './HomeFiveStack';
 import UProfileNavigation from './UProfileStack';
 import VProfileNavigation from './VProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
@@ -84,6 +89,76 @@ const BottomNaivgation = () => {
             tabBarShowLabel: false,
           }}
         >
+          <Tab.Screen
+            name="Home1"
+            component={HomeOneNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home2"
+            component={HomeTwoNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home3"
+            component={HomeThreeNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home4"
+            component={HomeFourNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home5"
+            component={HomeFiveNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="home"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
           <Tab.Screen
             name="Home"
             component={HomeNavigation}
