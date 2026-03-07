@@ -12,17 +12,19 @@ import {
   Dimensions
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
 const HomeThreeScreen = ({ onBack }) => {
+  const navigation = useNavigation();
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => (onBack ? onBack() : navigation.goBack())} style={styles.backBtn}>
           <Icon name="chevron-left" size={20} color="#FFF" />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
@@ -109,7 +111,10 @@ const HomeThreeScreen = ({ onBack }) => {
            <Icon name="chevron-down" size={40} color="#333" />
         </View>
         
-        <TouchableOpacity style={styles.cartBar}>
+        <TouchableOpacity
+          style={styles.cartBar}
+          onPress={() => navigation.navigate('HomeFourScreen')}
+        >
           <Text style={styles.cartText}>2 items added</Text>
           <View style={styles.cartIconCircle}>
             <Icon name="arrow-right" size={18} color="#F5A623" />

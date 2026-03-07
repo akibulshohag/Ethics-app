@@ -2,6 +2,12 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import HomeOneScreen from '../screens/HomeOneScreen';
 import ProductShortsVideo from '../screens/NewScreen/ProductShortsVideo';
+import HomeThreeScreen from '../screens/HomeThreeScreen';
+import HomeFourScreen from '../screens/HomeFourScreen';
+import HomeFiveScreen from '../screens/HomeFiveScreen';
+import HomeTwoScreen from '../screens/HomeTwoScreen';
+import HomeSixScreen from '../screens/HomeSixScreen';
+import HomeSevenScreen from '../screens/HomeSevenScreen';
 
 const HomeOneStack = createStackNavigator();
 
@@ -18,6 +24,30 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="ProductShortsVideo"
         component={ProductShortsVideo}
+      />
+      <HomeOneStack.Screen
+        name="HomeThreeScreen"
+        component={HomeThreeScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeFourScreen"
+        component={HomeFourScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeFiveScreen"
+        component={HomeFiveScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeTwoScreen"
+        component={HomeTwoScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeSixScreen"
+        component={HomeSixScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeSevenScreen"
+        component={HomeSevenScreen}
       />
     </HomeOneStack.Navigator>
   );

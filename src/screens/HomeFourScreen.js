@@ -10,8 +10,10 @@ import {
   TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
 
 const HomeFourScreen = ({ onBack }) => {
+  const navigation = useNavigation();
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
@@ -19,7 +21,7 @@ const HomeFourScreen = ({ onBack }) => {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => (onBack ? onBack() : navigation.goBack())} style={styles.backBtn}>
             <Icon name="chevron-left" size={18} color="#FFF" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
@@ -132,7 +134,10 @@ const HomeFourScreen = ({ onBack }) => {
           <Text style={styles.methodName}>Credit Card</Text>
         </View>
 
-        <TouchableOpacity style={styles.placeOrderBtn}>
+        <TouchableOpacity
+          style={styles.placeOrderBtn}
+          onPress={() => navigation.navigate('HomeFiveScreen')}
+        >
           <View>
             <Text style={styles.footerPrice}>$42.99</Text>
             <Text style={styles.footerTotalLabel}>Total Bill</Text>

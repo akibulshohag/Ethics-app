@@ -193,7 +193,17 @@ const ProductShortsVideo = () => {
                                 <Icon name="volume-off" size={18} color="#FFF" style={{ marginLeft: 15 }} />
                                 <Text style={styles.audioText}>Mute</Text>
                             </View>
-                            <TouchableOpacity style={styles.orderNowBtn}>
+                            <TouchableOpacity
+                                style={styles.orderNowBtn}
+                                onPress={() => navigation.navigate('HomeOneScreen', {
+                                    showRestaurantDetail: true,
+                                    restaurantItem: {
+                                        title: item.title,
+                                        location: item.location || 'Birmingham, UK',
+                                        img: item.img || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                                    },
+                                })}
+                            >
                                 <Text style={styles.orderNowText}>Order Now</Text>
                             </TouchableOpacity>
                         </View>

@@ -11,10 +11,12 @@ import {
   Dimensions
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 
 const HomeTwoScreen = ({ onBack }) => {
+  const navigation = useNavigation();
   const [rememberMe, setRememberMe] = useState(false);
 
   return (
@@ -28,7 +30,7 @@ const HomeTwoScreen = ({ onBack }) => {
         
         {/* Top Navigation */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => (onBack ? onBack() : navigation.goBack())} style={styles.backBtn}>
             <Icon name="chevron-left" size={20} color="#FFF" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
@@ -86,7 +88,10 @@ const HomeTwoScreen = ({ onBack }) => {
 
               {/* Buttons */}
               <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => navigation.navigate('HomeSixScreen')}
+                >
                   <Text style={styles.buttonText}>Sign Up</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton}>
