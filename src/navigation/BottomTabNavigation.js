@@ -22,6 +22,8 @@ import PromotionNavigation from './PromotionStack';
 import PromotionOneNavigation from './PromotionOneStack';
 import PromotionTwoNavigation from './PromotionTwoStack';
 import PromotionThreeNavigation from './PromotionThreeStack';
+import GalleryNavigation from './GalleryStack';
+import GalleryOneNavigation from './GalleryOneStack';
 import UProfileNavigation from './UProfileStack';
 import VProfileNavigation from './VProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
@@ -186,6 +188,34 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Home11"
             component={PromotionThreeNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home12"
+            component={GalleryNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
+          <Tab.Screen
+            name="Home13"
+            component={GalleryOneNavigation}
             options={{
               tabBarIcon: ({ focused, color }) => (
                 <Icon
