@@ -110,6 +110,8 @@ const ProductShortsVideo = () => {
         useEffect(() => {
             if (!isCurrentlyViewable) {
                 setIsPausedLocally(false);
+            } else {
+                setIsPausedLocally(false); // Force autoplay when coming back into view
             }
         }, [isCurrentlyViewable]);
 
@@ -151,32 +153,30 @@ const ProductShortsVideo = () => {
                 <View style={styles.videoOverlay} pointerEvents="box-none">
                     <View style={styles.videoHeader}>
                         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                            <Icon name="chevron-left" size={24} color="#FFF" />
+                            <Icon name="chevron-left" size={20} color="#FFF" />
                             <Text style={styles.backText}>Back</Text>
                         </TouchableOpacity>
                         <View style={styles.videoHeaderIcons}>
-                            <Icon name="magnify" size={26} color="#FFF" style={{ marginRight: 15 }} />
-                            <Icon name="dots-vertical" size={26} color="#FFF" />
+                            <Icon name="magnify" size={20} color="#FFF" style={{ marginRight: 15 }} />
+                            <Icon name="dots-vertical" size={20} color="#FFF" />
                         </View>
                     </View>
 
                     <View style={styles.rightActions}>
                         <View style={styles.actionItem}>
-                            <View style={styles.iconCircle}>
-                                <Icon name="account-circle" size={30} color="#FFF" />
-                            </View>
+                            <Icon name="eye" size={20} color="#FFF" />
                             <Text style={styles.actionText}>{item.likes || '100k'}</Text>
                         </View>
                         <View style={styles.actionItem}>
-                            <Icon name="heart" size={32} color="#FF4D4D" />
+                            <Icon name="heart" size={20} color="#FF4D4D" />
                             <Text style={styles.actionText}>{item.likes || '100k'}</Text>
                         </View>
                         <View style={styles.actionItem}>
-                            <Icon name="comment-text" size={32} color="#FFF" />
+                            <Icon name="comment-text" size={20} color="#FFF" />
                             <Text style={styles.actionText}>{item.comments || 'Com'}</Text>
                         </View>
                         <View style={styles.actionItem}>
-                            <Icon name="share" size={32} color="#FFF" />
+                            <Icon name="share" size={20} color="#FFF" />
                             <Text style={styles.actionText}>{item.shares || 'Share'}</Text>
                         </View>
                     </View>
@@ -223,6 +223,11 @@ const ProductShortsVideo = () => {
                 decelerationRate="fast"
                 onViewableItemsChanged={onViewableItemsChanged.current}
                 viewabilityConfig={viewabilityConfig.current}
+                initialNumToRender={2}
+                maxToRenderPerBatch={3}
+                windowSize={10}
+                removeClippedSubviews={false}
+                extraData={currentIndex}
             />
         </View>
     );
@@ -249,23 +254,22 @@ const styles = StyleSheet.create({
     },
     videoOverlay: { flex: 1, justifyContent: 'space-between', paddingBottom: 20, zIndex: 10 },
     videoHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, marginTop: 40, alignItems: 'center' },
-    backBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 5 },
-    backText: { color: '#FFF', fontWeight: 'bold', marginLeft: 5 },
+    backBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.3)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 5 },
+    backText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 5 },
     videoHeaderIcons: { flexDirection: 'row', alignItems: 'center' },
     rightActions: { position: 'absolute', right: 15, bottom: height * 0.25, alignItems: 'center' },
     actionItem: { alignItems: 'center', marginBottom: 20 },
-    iconCircle: { width: 45, height: 45, borderRadius: 22.5, borderWidth: 2, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
     actionText: { color: '#FFF', fontSize: 12, marginTop: 5, fontWeight: '600' },
-    videoFooter: { padding: 20, paddingBottom: 40 },
-    videoUser: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 5 },
-    videoDesc: { color: '#FFF', fontSize: 15, marginBottom: 5 },
+    videoFooter: { padding: 20, paddingBottom: 20 },
+    videoUser: { color: '#FFF', fontSize: 14, fontWeight: 'bold', marginBottom: 5 },
+    videoDesc: { color: '#FFF', fontSize: 14, marginBottom: 5 },
     videoHashtags: { color: '#FFF', fontSize: 14, fontWeight: '500', marginBottom: 5 },
-    translationText: { color: '#FFF', fontSize: 13, textDecorationLine: 'underline', marginBottom: 15 },
+    translationText: { color: '#FFF', fontSize: 14, textDecorationLine: 'underline', marginBottom: 15 },
     footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     audioRow: { flexDirection: 'row', alignItems: 'center' },
     audioText: { color: '#FFF', fontSize: 13, marginLeft: 5 },
-    orderNowBtn: { backgroundColor: '#F5A623', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 10 },
-    orderNowText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+    orderNowBtn: { backgroundColor: '#F5A623', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+    orderNowText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
     bottomArrow: { alignItems: 'center', marginTop: 20 }
 });
 
