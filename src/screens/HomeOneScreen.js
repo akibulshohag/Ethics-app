@@ -12,8 +12,8 @@ import {
   Dimensions,
   ImageBackground
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
 const { width, height } = Dimensions.get('window');
 
 const HomeOneScreen = () => {
@@ -22,9 +22,10 @@ const HomeOneScreen = () => {
   const [isRestaurantDetail, setIsRestaurantDetail] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
 
+  const navigation = useNavigation();
+
   const openVideo = (item) => {
-    setSelectedItem(item);
-    setIsVideoDetail(true);
+    navigation.navigate('ProductShortsVideo', { item });
   };
 
   const openRestaurantDetail = (item) => {
@@ -40,8 +41,8 @@ const HomeOneScreen = () => {
         <View style={styles.logoContainer}>
           <Text style={styles.logoText}>eat<Text style={{ fontWeight: 'bold' }}>ix</Text></Text>
         </View>
-        <TouchableOpacity 
-          activeOpacity={1} 
+        <TouchableOpacity
+          activeOpacity={1}
           style={styles.landingSearchBox}
           onPress={() => setIsLanding(false)}
         >
@@ -70,12 +71,12 @@ const HomeOneScreen = () => {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.bannerWrapper}>
-          <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' }} 
+          <Image
+            source={{ uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' }}
             style={styles.bannerImage}
             resizeMode="cover"
           />
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.featuredBadge}
             onPress={() => openRestaurantDetail({ title: 'Tandoori Planet', location: 'Birmingham, UK', img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' })}
           >
@@ -91,7 +92,7 @@ const HomeOneScreen = () => {
             <Icon name="chevron-down" size={24} color="#FFF" />
           </View>
           <Text style={styles.addressSubtext}>Ground floor, p17/7 park street, s ...</Text>
-          
+
           <View style={styles.innerSearchBox}>
             <Icon name="magnify" size={20} color="#999" />
             <TextInput placeholder="Food Search" style={styles.innerInput} />
@@ -100,19 +101,19 @@ const HomeOneScreen = () => {
 
         <View style={styles.feedPadding}>
           <Text style={styles.feedHint}>your search, served fresh... watch and choose</Text>
-          
-          <FoodCard 
-            title="Tandoori Planet" 
-            location="Birmingham, UK" 
+
+          <FoodCard
+            title="Tandoori Planet"
+            location="Birmingham, UK"
             isSponsored={true}
-            img="https://images.unsplash.com/photo-1541544741938-0af808871cc0" 
+            img="https://images.unsplash.com/photo-1541544741938-0af808871cc0"
             onPress={() => openVideo({ title: 'Tandoori Planet', img: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0' })}
           />
-          <FoodCard 
-            title="Abbots Burger" 
-            location="Birmingham, UK" 
+          <FoodCard
+            title="Abbots Burger"
+            location="Birmingham, UK"
             isSponsored={false}
-            img="https://images.unsplash.com/photo-1568901346375-23c9450c58cd" 
+            img="https://images.unsplash.com/photo-1568901346375-23c9450c58cd"
             onPress={() => openVideo({ title: 'Abbots Burger', img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' })}
           />
         </View>
@@ -138,7 +139,7 @@ const HomeOneScreen = () => {
         <View style={styles.rightActions}>
           <View style={styles.actionItem}>
             <View style={styles.iconCircle}>
-               <Icon name="account-circle" size={30} color="#FFF" />
+              <Icon name="account-circle" size={30} color="#FFF" />
             </View>
             <Text style={styles.actionText}>100k</Text>
           </View>
@@ -173,7 +174,7 @@ const HomeOneScreen = () => {
             </TouchableOpacity>
           </View>
           <View style={styles.bottomArrow}>
-             <Icon name="chevron-down" size={40} color="#FFF" />
+            <Icon name="chevron-down" size={40} color="#FFF" />
           </View>
         </View>
       </SafeAreaView>
@@ -232,14 +233,14 @@ const HomeOneScreen = () => {
           <Text style={styles.sectionTitle}>Description</Text>
           <View style={styles.descBox}>
             <Text style={styles.descText}>
-              A cozy restaurant serving fresh, delicious food made with quality ingredients. 
+              A cozy restaurant serving fresh, delicious food made with quality ingredients.
               Enjoy great taste, warm service, and a comfortable dining experience.
             </Text>
           </View>
         </View>
 
         <View style={styles.contactContainer}>
-          <Text style={styles.sectionTitle}>Contact : <Text style={{fontWeight:'normal'}}>44-236656784548</Text></Text>
+          <Text style={styles.sectionTitle}>Contact : <Text style={{ fontWeight: 'normal' }}>44-236656784548</Text></Text>
           <Text style={styles.contactEmail}>tandoriplanet.hc.bd@gmail.com</Text>
           <Text style={styles.contactAddr}>Address : United kingdom</Text>
         </View>
