@@ -8,6 +8,8 @@ import HomeFiveScreen from '../screens/HomeFiveScreen';
 import HomeTwoScreen from '../screens/HomeTwoScreen';
 import HomeSixScreen from '../screens/HomeSixScreen';
 import HomeSevenScreen from '../screens/HomeSevenScreen';
+import CartDetailsScreen from '../screens/CartDetailsScreen';
+import CheckoutScreen from '../screens/CheckoutScreen';
 
 const HomeOneStack = createStackNavigator();
 
@@ -48,6 +50,14 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="HomeSevenScreen"
         component={HomeSevenScreen}
+      />
+      <HomeOneStack.Screen
+        name="CartDetailsScreen"
+        component={CartDetailsScreen}
+      />
+      <HomeOneStack.Screen
+        name="CheckoutScreen"
+        component={CheckoutScreen}
       />
     </HomeOneStack.Navigator>
   );

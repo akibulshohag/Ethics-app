@@ -23,7 +23,6 @@ import DescriptionModal from '../components/DescriptionModal';
 import SaveModal from '../components/SaveModal';
 import CommentsModal from '../components/CommentsModal';
 import LiveChatModal from '../components/LiveChatModal';
-import ProductDetailModal from '../components/ProductDetailModal';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -145,7 +144,10 @@ const mapVideoApiToDisplay = v => {
     creatorLatitude: user.latitude ?? undefined,
     creatorLongitude: user.longitude ?? undefined,
     creatorSocialLinks: Array.isArray(user.socialLinks) ? user.socialLinks : [],
-    creatorRole: user.role ?? undefined,
+    creatorRole:
+      user.role != null ? String(user.role).toLowerCase() : undefined,
+
+    user: v.user ?? undefined,
   };
 };
 
@@ -180,8 +182,6 @@ const VideoDetailsScreen = () => {
   });
   const [subscribeLoading, setSubscribeLoading] = useState(false);
   const [liveChatModalVisible, setLiveChatModalVisible] = useState(false);
-  const [productDetailModalVisible, setProductDetailModalVisible] =
-    useState(false);
 
   // Video player states
   const [videoPaused, setVideoPaused] = useState(true);
@@ -204,7 +204,6 @@ const VideoDetailsScreen = () => {
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [videoPlaybackUri, setVideoPlaybackUri] = useState(null);
-
 
   const loadVideo = useCallback(async () => {
     if (!videoId && !offlineVideo) {
@@ -786,13 +785,43 @@ const VideoDetailsScreen = () => {
           />
         </View>
 
-        {/* Order Now / Visit Website / Message Now – owner (restaurant) or vendor (owner/admin can order from vendor) */}
-        {((currentVideo?.user?.role === 'owner' || currentVideo?.creatorRole === 'owner') ||
-          (currentVideo?.user?.role === 'vendor' || currentVideo?.creatorRole === 'vendor')) && (
+        {/* Order Now only for owner (restaurant); no modal – go to login or menu screen */}
+        {(currentVideo?.creatorRole === 'owner' ||
+          currentVideo?.user?.role === 'owner' ||
+          currentVideo?.userId ||
+          currentVideo?.user?.id) && (
           <View style={styles.ctaButtonsRow}>
             <TouchableOpacity
               style={styles.ctaButton}
-              onPress={() => setProductDetailModalVisible(true)}
+              onPress={() => {
+                if (!user?.id) {
+                  navigation.navigate('Login');
+                  return;
+                }
+                const role = (user?.role || '').toLowerCase();
+                if (role !== 'user') {
+                  Alert.alert(
+                    'Order',
+                    'Only diners can place orders from this restaurant. Sign in as a diner to order.',
+                  );
+                  return;
+                }
+                const ownerId = currentVideo?.userId || currentVideo?.user?.id;
+                if (ownerId) {
+                  try {
+                    navigation.getParent()?.navigate('Home1', {
+                      screen: 'HomeThreeScreen',
+                      params: {
+                        ownerId,
+                        title: currentVideo.title,
+                        location: currentVideo.creatorAddress || '',
+                      },
+                    });
+                  } catch (_) {
+                    navigation.navigate('Login');
+                  }
+                }
+              }}
             >
               <Text style={styles.ctaButtonText}>Order Now</Text>
             </TouchableOpacity>
@@ -1071,12 +1100,6 @@ const VideoDetailsScreen = () => {
             return next;
           });
         }}
-      />
-      <ProductDetailModal
-        visible={productDetailModalVisible}
-        onClose={() => setProductDetailModalVisible(false)}
-        ownerUserId={currentVideo?.userId}
-        token={user?.token}
       />
       <LiveChatModal
         visible={liveChatModalVisible}

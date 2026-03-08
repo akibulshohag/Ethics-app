@@ -30,7 +30,11 @@ const CartDetailsScreen = () => {
 
   const onCheckout = () => {
     if (!items.length || !ownerId) return;
-    navigation.navigate('CheckoutScreen', { ownerId, items });
+    navigation.navigate('HomeFourScreen', {
+      ownerId,
+      items,
+      ownerName: route.params?.ownerName || 'Restaurant',
+    });
   };
 
   return (

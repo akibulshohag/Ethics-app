@@ -15,7 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { config } from '../../config';
@@ -24,7 +24,10 @@ const { width, height } = Dimensions.get('window');
 
 const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const navigation = useNavigation();
+  const route = useRoute();
   const dispatch = useDispatch();
+  const returnToOrder = route.params?.returnToOrder;
+  const ownerUserId = route.params?.ownerUserId;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
@@ -78,7 +81,13 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       dispatch(appSetUser(userData));
 
       try {
-        navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+        if (returnToOrder && ownerUserId) {
+          navigation.navigate('HomeThreeScreen', {
+            ownerId: ownerUserId,
+          });
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+        }
       } catch (_) {}
     } catch (error) {
       console.error('Login error:', error);

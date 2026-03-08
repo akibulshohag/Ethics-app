@@ -29,6 +29,31 @@ export async function reverseGeocode(lat, lng) {
   }
 }
 
+/**
+ * Geocode address string to lat/lng using Google Geocoding API.
+ * @param {string} address - Address string to geocode
+ * @returns {Promise<{ lat: number, lng: number } | null>}
+ */
+export async function geocodeAddress(address) {
+  if (!address || !String(address).trim()) return null;
+  try {
+    const { config } = require('../../config');
+    const key = config?.googleMapsApiKey;
+    if (!key || !key.trim()) return null;
+    const encoded = encodeURIComponent(String(address).trim());
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${key}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const loc = data?.results?.[0]?.geometry?.location;
+    if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
+      return { lat: loc.lat, lng: loc.lng };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 let _geolocation = null;
 let _checked = false;
 
