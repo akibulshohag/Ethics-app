@@ -22,6 +22,13 @@ import {
   deleteComment,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import {
+  getPostComments,
+  addPostComment,
+  togglePostCommentLike,
+  togglePostCommentDislike,
+  deletePostComment,
+} from '../services/postService';
 
 const { height } = Dimensions.get('window');
 
@@ -360,7 +367,8 @@ const CommentsModal = ({
   contentId,
 }) => {
   const isShort = contentType === 'short';
-  const contentIdResolved = isShort ? contentId : videoId;
+  const isPost = contentType === 'post';
+  const contentIdResolved = isPost ? contentId : (isShort ? contentId : videoId);
   const supportsCommentLikeDislike = true;
   const [activeFilter, setActiveFilter] = useState('Top');
   const [comments, setComments] = useState([]);
@@ -383,9 +391,14 @@ const CommentsModal = ({
       const p = reset ? 1 : page;
       if (p === 1) setLoading(true);
       try {
-        const res = isShort
-          ? await shortsService.getComments(contentIdResolved, p, 20, user?.id)
-          : await getComments(contentIdResolved, p, 20, user?.id);
+        let res;
+        if (isPost) {
+          res = await getPostComments(contentIdResolved, p, 20, user?.id);
+        } else if (isShort) {
+          res = await shortsService.getComments(contentIdResolved, p, 20, user?.id);
+        } else {
+          res = await getComments(contentIdResolved, p, 20, user?.id);
+        }
         const list = (res?.comments || []).map(c => mapApiCommentToDisplay(c, user));
         setComments(prev => (reset ? list : [...prev, ...list]));
         setHasMore(
@@ -399,7 +412,7 @@ const CommentsModal = ({
         setLoading(false);
       }
     },
-    [contentIdResolved, isShort, page, user?.id],
+    [contentIdResolved, isShort, isPost, page, user?.id],
   );
 
   useEffect(() => {
@@ -412,7 +425,9 @@ const CommentsModal = ({
     if (!commentText.trim() || !user?.id || !contentIdResolved) return;
     setSubmitting(true);
     try {
-      if (isShort) {
+      if (isPost) {
+        await addPostComment(contentIdResolved, user.id, commentText.trim());
+      } else if (isShort) {
         await shortsService.addComment(contentIdResolved, user.id, commentText.trim());
       } else {
         await addComment(contentIdResolved, user.id, commentText.trim());
@@ -472,7 +487,9 @@ const CommentsModal = ({
         ),
       }));
       try {
-        if (isShort) {
+        if (isPost) {
+          await togglePostCommentLike(comment.id, user.id);
+        } else if (isShort) {
           await shortsService.toggleCommentLike(comment.id, user.id);
         } else {
           await toggleCommentLike(comment.id, user.id);
@@ -489,7 +506,7 @@ const CommentsModal = ({
         }));
       }
     },
-    [user?.id, supportsCommentLikeDislike, isShort, updateCommentInList],
+    [user?.id, supportsCommentLikeDislike, isShort, isPost, updateCommentInList],
   );
 
   const handleCommentDislike = useCallback(
@@ -511,7 +528,9 @@ const CommentsModal = ({
         ),
       }));
       try {
-        if (isShort) {
+        if (isPost) {
+          await togglePostCommentDislike(comment.id, user.id);
+        } else if (isShort) {
           await shortsService.toggleCommentDislike(comment.id, user.id);
         } else {
           await toggleCommentDislike(comment.id, user.id);
@@ -528,12 +547,13 @@ const CommentsModal = ({
         }));
       }
     },
-    [user?.id, supportsCommentLikeDislike, isShort, updateCommentInList],
+    [user?.id, supportsCommentLikeDislike, isShort, isPost, updateCommentInList],
   );
 
   const handleDeleteComment = useCallback(
     comment => {
-      if (!user?.id || isShort) return;
+      if (!user?.id) return;
+      if (isShort) return; // Shorts may not support delete in API
       Alert.alert(
         'Delete comment',
         'Are you sure you want to delete this comment?',
@@ -544,9 +564,15 @@ const CommentsModal = ({
             style: 'destructive',
             onPress: async () => {
               try {
-                const res = await deleteComment(comment.id, user.id);
-                const replyCount = comment.repliesList?.length ?? 0;
-                onCommentDeleted?.(res?.wasTopLevel ?? !comment.parentId, 1 + replyCount);
+                if (isPost) {
+                  await deletePostComment(comment.id, user.id);
+                  const replyCount = comment.repliesList?.length ?? 0;
+                  onCommentDeleted?.(true, 1 + replyCount);
+                } else {
+                  const res = await deleteComment(comment.id, user.id);
+                  const replyCount = comment.repliesList?.length ?? 0;
+                  onCommentDeleted?.(res?.wasTopLevel ?? !comment.parentId, 1 + replyCount);
+                }
                 loadComments(true);
               } catch {
                 Alert.alert('Error', 'Could not delete comment');
@@ -556,7 +582,7 @@ const CommentsModal = ({
         ],
       );
     },
-    [user?.id, loadComments, onCommentDeleted],
+    [user?.id, isPost, loadComments, onCommentDeleted],
   );
 
   return (

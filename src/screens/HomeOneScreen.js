@@ -13,6 +13,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import Video from 'react-native-video';
 import {
@@ -875,31 +876,26 @@ const HomeOneScreen = () => {
 
         <View style={styles.resSocialRow}>
           <View style={styles.resIconGroup}>
-            <Icon
-              name="instagram"
-              size={24}
-              color="#333"
-              style={styles.socialIcon}
-            />
-            <Icon
-              name="facebook"
-              size={24}
-              color="#333"
-              style={styles.socialIcon}
-            />
-            <Icon
-              name="twitter"
-              size={24}
-              color="#333"
-              style={styles.socialIcon}
-            />
-            <Icon
-              name="google"
-              size={24}
-              color="#333"
-              style={styles.socialIcon}
-            />
-            <Icon name="web" size={24} color="#333" style={styles.socialIcon} />
+            {[
+              { type: 'instagram', icon: 'instagram' },
+              { type: 'facebook', icon: 'facebook' },
+              { type: 'x', icon: 'twitter' },
+              { type: 'website', icon: 'web' },
+            ].map(({ type, icon }) => {
+              const link = (selectedItem?.user?.socialLinks || selectedItem?.creatorSocialLinks || []).find(
+                s => (s.type || '').toLowerCase() === type.toLowerCase(),
+              );
+              const url = link?.url || null;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => url && Linking.openURL(url)}
+                  style={styles.socialIconWrap}
+                >
+                  <Icon name={icon} size={24} color={url ? '#333' : '#ccc'} style={styles.socialIcon} />
+                </TouchableOpacity>
+              );
+            })}
           </View>
           <View>
             <TouchableOpacity style={styles.bookNowBtn}>
@@ -910,15 +906,17 @@ const HomeOneScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-        <Text style={styles.webText}>www.tandoriplanet.com</Text>
+        <Text style={styles.webText}>
+          {(selectedItem?.user?.socialLinks || selectedItem?.creatorSocialLinks || []).find(
+            s => (s.type || '').toLowerCase() === 'website',
+          )?.url || (selectedItem?.user?.businessName ? `www.${String(selectedItem.user.businessName).toLowerCase().replace(/\s+/g, '')}.com` : null) || '—'}
+        </Text>
 
         <View style={styles.descContainer}>
           <Text style={styles.sectionTitle}>Description</Text>
           <View style={styles.descBox}>
             <Text style={styles.descText}>
-              A cozy restaurant serving fresh, delicious food made with quality
-              ingredients. Enjoy great taste, warm service, and a comfortable
-              dining experience.
+              {selectedItem?.user?.channelAbout || selectedItem?.description || 'A cozy restaurant serving fresh, delicious food made with quality ingredients. Enjoy great taste, warm service, and a comfortable dining experience.'}
             </Text>
           </View>
         </View>
@@ -926,10 +924,16 @@ const HomeOneScreen = () => {
         <View style={styles.contactContainer}>
           <Text style={styles.sectionTitle}>
             Contact :{' '}
-            <Text style={{ fontWeight: 'normal' }}>44-236656784548</Text>
+            <Text style={{ fontWeight: 'normal' }}>
+              {selectedItem?.user?.phone || '—'}
+            </Text>
           </Text>
-          <Text style={styles.contactEmail}>tandoriplanet.hc.bd@gmail.com</Text>
-          <Text style={styles.contactAddr}>Address : United kingdom</Text>
+          <Text style={styles.contactEmail}>
+            {selectedItem?.user?.email || '—'}
+          </Text>
+          <Text style={styles.contactAddr}>
+            Address : {selectedItem?.location || selectedItem?.creatorAddress || selectedItem?.user?.address || '—'}
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1373,7 +1377,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   resIconGroup: { flexDirection: 'row', flexWrap: 'wrap', width: '60%' },
-  socialIcon: { marginRight: 15, marginBottom: 10 },
+  socialIconWrap: { marginRight: 15, marginBottom: 10 },
+  socialIcon: {},
   bookNowBtn: {
     backgroundColor: '#F5A623',
     paddingHorizontal: 30,

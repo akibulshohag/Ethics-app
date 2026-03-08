@@ -9,16 +9,33 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
-const BusinessProfileCard = () => {
+const formatCount = (n) => {
+  if (n == null || n < 0) return "0";
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(n);
+};
+
+const BusinessProfileCard = ({
+  profile,
+  isOwnProfile,
+  onEditProfile,
+}) => {
+  const coverUri = "https://images.unsplash.com/photo-1552566626-52f8b828add9";
+  const channelName = profile?.channelName || profile?.nickname || profile?.name || "—";
+  const channelAvatar = profile?.channelAvatar || null;
+  const followerCount = profile?.subscriberCount ?? 0;
+  const followingCount = profile?.followingCount ?? 0;
+  const channelAbout = profile?.channelAbout || "";
+
   return (
     <View style={styles.cardContainer}>
       <ImageBackground
-        source={{ uri: "https://images.unsplash.com/photo-1552566626-52f8b828add9" }}
+        source={{ uri: coverUri }}
         style={styles.bgImage}
         imageStyle={{ borderRadius: 12 }}
       >
         <View style={styles.contentOverlay}>
-          {/* Top Right Badges */}
           <View style={styles.badgeContainer}>
             <TouchableOpacity style={styles.twoPartBadge}>
               <View style={styles.badgeIconPart}>
@@ -28,44 +45,50 @@ const BusinessProfileCard = () => {
                 <Text style={styles.badgeText}>Orders</Text>
               </View>
             </TouchableOpacity>
-
             <TouchableOpacity style={[styles.twoPartBadge, { marginTop: 10 }]}>
               <View style={styles.badgeIconPart}>
                 <Icon name="lock" size={16} color="#222" />
               </View>
-              <View style={[styles.badgeTextPart, { backgroundColor: '#FFa31A' }]}>
+              <View style={[styles.badgeTextPart, { backgroundColor: "#FFa31A" }]}>
                 <Text style={styles.badgeText}>Wallet</Text>
               </View>
             </TouchableOpacity>
           </View>
 
-          {/* Amber Profile Box Overlay */}
           <View style={styles.amberOverlayBox}>
             <View style={styles.profileHeaderRow}>
               <View style={styles.avatarContainer}>
                 <View style={styles.avatarCircle}>
-                  <Icon name="account" size={40} color="#F5A623" />
+                  {channelAvatar ? (
+                    <Image source={{ uri: channelAvatar }} style={styles.avatarImage} />
+                  ) : (
+                    <Icon name="account" size={40} color="#F5A623" />
+                  )}
                 </View>
-                <View style={styles.editPencilBadge}>
-                  <Icon name="pencil-outline" size={14} color="#aaa" />
-                </View>
+                {isOwnProfile && (
+                  <View style={styles.editPencilBadge}>
+                    <Icon name="pencil-outline" size={14} color="#aaa" />
+                  </View>
+                )}
               </View>
-
               <View style={styles.profileTextGroup}>
-                <Text style={styles.businessNameHeading}>Dalchini</Text>
+                <Text style={styles.businessNameHeading} numberOfLines={1}>
+                  {channelName}
+                </Text>
                 <View style={styles.verifiedIndicatorRow}>
                   <Icon name="check-circle-outline" size={15} color="#fff" />
                   <Text style={styles.verifiedAccountLabel}>verified account</Text>
-                  <View style={styles.faintDotSeparator} />
                 </View>
               </View>
             </View>
 
             <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={styles.editProfileRectBtn}>
-                <Text style={styles.editProfileLabel}>Edit Profile</Text>
-                <Icon name="square-edit-outline" size={20} color="#111" />
-              </TouchableOpacity>
+              {isOwnProfile && (
+                <TouchableOpacity style={styles.editProfileRectBtn} onPress={onEditProfile}>
+                  <Text style={styles.editProfileLabel}>Edit Profile</Text>
+                  <Icon name="square-edit-outline" size={20} color="#111" />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.squareIconBtn}>
                 <Icon name="camera-outline" size={24} color="#111" />
               </TouchableOpacity>
@@ -75,29 +98,24 @@ const BusinessProfileCard = () => {
             </View>
           </View>
 
-          {/* Bottom Section - Stats and Status Message */}
           <View style={styles.bottomBlock}>
-            {/* Opaque Stats Bar */}
             <View style={styles.statsOpaqueBar}>
               <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>625k</Text>
+                <Text style={styles.statValMain}>{formatCount(followerCount)}</Text>
                 <Text style={styles.statLabelMain}>Followers</Text>
               </View>
               <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>124k</Text>
+                <Text style={styles.statValMain}>{formatCount(followingCount)}</Text>
                 <Text style={styles.statLabelMain}>Following</Text>
               </View>
               <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>89</Text>
+                <Text style={styles.statValMain}>—</Text>
                 <Text style={styles.statLabelMain}>MSG</Text>
               </View>
             </View>
-
-            {/* Opaque Status Box */}
             <View style={styles.statusWhiteBox}>
-              <Text style={styles.statusBodyText}>
-                Hi! You haven't added any medicines yet. Want me to help you set up
-                the first one?
+              <Text style={styles.statusBodyText} numberOfLines={3}>
+                {channelAbout || "No status yet."}
               </Text>
             </View>
           </View>
@@ -187,12 +205,17 @@ const styles = StyleSheet.create({
   avatarCircle: {
     width: 70,
     height: 70,
-    borderRadius: 45,
-    backgroundColor: '#222',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 35,
+    backgroundColor: "#222",
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 2,
-    borderColor: '#fff',
+    borderColor: "#fff",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   editPencilBadge: {
     position: 'absolute',

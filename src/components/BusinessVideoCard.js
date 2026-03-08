@@ -2,10 +2,34 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const BusinessVideoCard = ({ video, onPress }) => {
-  return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.9}>
+const BusinessVideoCard = ({
+  video,
+  onPress,
+  postId,
+  onLike,
+  onDislike,
+  onCommentPress,
+  onShare,
+}) => {
+  const wrap = (callback, content) =>
+    callback ? (
+      <TouchableOpacity
+        style={styles.interactionItem}
+        onPress={callback}
+        activeOpacity={0.7}
+      >
+        {content}
+      </TouchableOpacity>
+    ) : (
+      <View style={styles.interactionItem}>{content}</View>
+    );
 
+  return (
+    <TouchableOpacity
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
       {/* 1. Header (Avatar, Name, Time, Menu) */}
       <View style={styles.headerContainer}>
         <View style={styles.headerLeft}>
@@ -30,7 +54,7 @@ const BusinessVideoCard = ({ video, onPress }) => {
           <Text style={styles.website}>{video.website}</Text>
         )}
 
-        {video.hashtags && (
+        {video.hashtags && video.hashtags.length > 0 && (
           <Text style={styles.hashtags}>
             {video.hashtags.map(tag => `#${tag} `)}
           </Text>
@@ -40,34 +64,44 @@ const BusinessVideoCard = ({ video, onPress }) => {
       {/* 3. Media (Thumbnail Image with Duration Overlay) */}
       <View style={styles.thumbnailContainer}>
         <Image source={{ uri: video.thumbnail }} style={styles.thumbnail} />
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{video.duration}</Text>
-        </View>
+        {(video.duration != null && video.duration !== '') && (
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>{video.duration}</Text>
+          </View>
+        )}
       </View>
 
       {/* 4. Interactions Bottom Bar */}
       <View style={styles.interactionsContainer}>
-        <View style={styles.interactionItem}>
-          <MaterialCommunityIcons name="thumb-up-outline" size={22} color="#444" />
-          <Text style={styles.interactionText}>{video.likes || '0'}</Text>
-        </View>
-
-        <View style={styles.interactionItem}>
-          <MaterialCommunityIcons name="thumb-down-outline" size={22} color="#444" />
-          <Text style={styles.interactionText}>{video.dislikes || '0'}</Text>
-        </View>
-
-        <View style={styles.interactionItem}>
-          <MaterialCommunityIcons name="message-outline" size={22} color="#444" />
-          <Text style={styles.interactionText}>{video.comments || '0'}</Text>
-        </View>
-
-        <View style={styles.interactionItem}>
-          <MaterialCommunityIcons name="share-outline" size={24} color="#444" />
-          <Text style={styles.interactionText}>{video.shares || '0'}</Text>
-        </View>
+        {wrap(
+          onLike,
+          <>
+            <MaterialCommunityIcons name="thumb-up-outline" size={22} color="#444" />
+            <Text style={styles.interactionText}>{video.likes || '0'}</Text>
+          </>,
+        )}
+        {wrap(
+          onDislike,
+          <>
+            <MaterialCommunityIcons name="thumb-down-outline" size={22} color="#444" />
+            <Text style={styles.interactionText}>{video.dislikes || '0'}</Text>
+          </>,
+        )}
+        {wrap(
+          onCommentPress,
+          <>
+            <MaterialCommunityIcons name="message-outline" size={22} color="#444" />
+            <Text style={styles.interactionText}>{video.comments || '0'}</Text>
+          </>,
+        )}
+        {wrap(
+          onShare,
+          <>
+            <MaterialCommunityIcons name="share-outline" size={24} color="#444" />
+            <Text style={styles.interactionText}>{video.shares || '0'}</Text>
+          </>,
+        )}
       </View>
-
     </TouchableOpacity>
   );
 };
