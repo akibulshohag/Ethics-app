@@ -45,12 +45,12 @@ const HomeFiveScreen = ({ onHomePress }) => {
       </View>
 
       {/* Optional: Navigation back to home */}
-      <TouchableOpacity 
+      {/* <TouchableOpacity 
         style={styles.homeLink} 
         onPress={onHomePress}
       >
         <Text style={styles.homeLinkText}>Back to Home</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </SafeAreaView>
   );
 };

@@ -293,7 +293,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 15,
-    borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
@@ -367,9 +366,10 @@ const styles = StyleSheet.create({
   noteInput: {
     flex: 1,
     marginLeft: 10,
-    color: '#333',
+    color: '#424242',
     fontSize: 15,
     padding: 0,
+    fontWeight: '600',
   },
   promoContainer: {
     flexDirection: 'row',
@@ -457,9 +457,9 @@ const styles = StyleSheet.create({
     width: '60%',
   },
   placeOrderBtnDisabled: { opacity: 0.6 },
-  footerPrice: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  footerPrice: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
   footerTotalLabel: { color: '#FFF', fontSize: 12, opacity: 0.8 },
-  placeOrderText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  placeOrderText: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
 });
 
 export default HomeFourScreen;

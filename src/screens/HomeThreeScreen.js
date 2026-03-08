@@ -47,6 +47,37 @@ const HomeThreeScreen = ({ onBack }) => {
       .finally(() => setMenuLoading(false));
   }, [ownerId]);
 
+  // Filter Bar Component
+  const FilterBar = () => (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={false} 
+      style={styles.filterContainer}
+      contentContainerStyle={styles.filterContent}
+    >
+      <TouchableOpacity style={styles.filterChip}>
+        <Icon name="tune" size={18} color="#444" />
+        <Text style={styles.filterText}>Filters</Text>
+        <Icon name="chevron-down" size={18} color="#444" />
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.filterChip}>
+        <Icon name="tune" size={18} color="#444" />
+        <Text style={styles.filterText}>Sweets</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.filterChip}>
+        <Icon name="tune" size={18} color="#444" />
+        <Text style={styles.filterText}>Bestseller</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.filterChip}>
+        <Icon name="star" size={18} color="#FFC107" />
+        <Text style={styles.filterText}>Rated</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
   const setItemQty = (id, qty) => {
     const n = Math.max(
       0,
@@ -155,20 +186,25 @@ const HomeThreeScreen = ({ onBack }) => {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.resInfoSection}>
-          <View style={styles.resTitleRow}>
-            <View>
-              <Text style={styles.resTitle}>Restaurant</Text>
-              <Text style={styles.resSubTitle}>Restaurant menu</Text>
-            </View>
-            {/* {!hasDynamicMenu && ( */}
-            <View style={styles.ratingBadge}>
-              <Text style={styles.ratingText}>—</Text>
-              <Icon name="star" size={14} color="#FFF" />
-            </View>
-            {/* )} */}
-          </View>
-          <View style={styles.divider} />
+    <View style={styles.resTitleRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.resTitle}>Tandoori Planet</Text>
+        <Text style={styles.resSubTitle}>42 min - Birmingham, UK</Text>
+      </View>
+
+      {/* Right side container to stack badge and text */}
+      <View style={styles.ratingContainer}>
+        <View style={styles.ratingBadge}>
+          <Text style={styles.ratingText}>4.5</Text>
+          <Icon name="star" size={14} color="#FFF" />
         </View>
+        <Text style={styles.ratingCount}>12k rating</Text>
+      </View>
+    </View>
+    <View style={styles.divider} />
+  </View>
+
+        <FilterBar />
 
         {menuLoading ? (
           <View style={styles.menuLoading}>
@@ -207,7 +243,7 @@ const HomeThreeScreen = ({ onBack }) => {
                         <Icon
                           name="minus"
                           size={18}
-                          color={qty === 0 ? '#999' : '#FFF'}
+                          color={qty === 0 ? '#fff' : '#FFF'}
                         />
                       </TouchableOpacity>
                       <Text style={styles.stepperVal}>{qty}</Text>
@@ -365,6 +401,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
     fontSize: 14,
   },
+  ratingCount: { fontSize: 12, color: '#999', textAlign: 'right', marginTop: 2 },
   divider: {
     height: 4,
     backgroundColor: '#F0F4F7',
@@ -376,6 +413,31 @@ const styles = StyleSheet.create({
   menuLoadingText: { marginTop: 12, fontSize: 14, color: '#666' },
   emptyMenu: { padding: 20, alignItems: 'center' },
   emptyMenuText: { fontSize: 14, color: '#666', textAlign: 'center' },
+  // NEW FILTER STYLES
+  filterContainer: {
+    marginVertical: 15,
+    paddingLeft: 15,
+  },
+  filterContent: {
+    paddingRight: 30,
+    alignItems: 'center',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 10,
+    backgroundColor: '#FFF',
+  },
+  filterText: {
+    fontSize: 14,
+    color: '#444',
+    marginHorizontal: 6,
+  },
   sectionHeading: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -468,7 +530,7 @@ const styles = StyleSheet.create({
   },
   bottomInput: { flex: 1, marginLeft: 8, fontSize: 14 },
   menuBtn: {
-    backgroundColor: '#444',
+    backgroundColor: '#424242',
     flexDirection: 'row',
     alignItems: 'center',
     height: 45,
@@ -476,6 +538,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   menuBtnText: { color: '#FFF', fontWeight: 'bold', marginLeft: 5 },
-});
+}); 
 
 export default HomeThreeScreen;

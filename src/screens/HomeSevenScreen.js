@@ -104,11 +104,17 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
   return (
     <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' }}
+      source={{
+        uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+      }}
       style={styles.backgroundImage}
       resizeMode="cover"
     >
-      <StatusBar barStyle="light-content" transparent backgroundColor="transparent" />
+      <StatusBar
+        barStyle="light-content"
+        transparent
+        backgroundColor="transparent"
+      />
       <SafeAreaView style={styles.overlay}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
@@ -137,7 +143,12 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
               <View style={styles.cardBody}>
                 {/* Email Input */}
                 <View style={styles.inputWrapper}>
-                  <Icon name="email-outline" size={22} color="#FFF" style={styles.inputIcon} />
+                  <Icon
+                    name="email-outline"
+                    size={22}
+                    color="#FFF"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     placeholder="Enter your email"
                     placeholderTextColor="rgba(255,255,255,0.7)"
@@ -152,7 +163,12 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
                 {/* Password Input */}
                 <View style={styles.inputWrapper}>
-                  <Icon name="lock-outline" size={22} color="#FFF" style={styles.inputIcon} />
+                  <Icon
+                    name="lock-outline"
+                    size={22}
+                    color="#FFF"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     placeholder="Password"
                     placeholderTextColor="rgba(255,255,255,0.7)"
@@ -182,7 +198,11 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     disabled={loading}
                   >
                     <Icon
-                      name={rememberMe ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                      name={
+                        rememberMe
+                          ? 'checkbox-marked'
+                          : 'checkbox-blank-outline'
+                      }
                       size={18}
                       color="#6D4C41"
                     />
@@ -193,12 +213,17 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                       try {
                         navigation.navigate('ForgotPassword');
                       } catch (_) {
-                        Alert.alert('Info', 'Forgot password flow not available from this screen.');
+                        Alert.alert(
+                          'Info',
+                          'Forgot password flow not available from this screen.',
+                        );
                       }
                     }}
                     disabled={loading}
                   >
-                    <Text style={[styles.utilityText, styles.underline]}>Forgot Password?</Text>
+                    <Text style={[styles.utilityText, styles.underline]}>
+                      Forgot Password?
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
@@ -206,13 +231,17 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                 <View style={styles.buttonRow}>
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => (onSignUp ? onSignUp() : navigation.navigate('HomeSixScreen'))}
+                    onPress={() =>
+                      onSignUp
+                        ? onSignUp()
+                        : navigation.navigate('HomeSixScreen')
+                    }
                     disabled={loading}
                   >
                     <Text style={styles.btnText}>Sign Up</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.actionBtn, styles.loginBtn]}
+                    style={[styles.actionBtn]}
                     onPress={handleLogin}
                     disabled={loading}
                   >
@@ -231,10 +260,10 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
               <Text style={styles.socialTitle}>Sign in with</Text>
               <View style={styles.socialPill}>
                 <TouchableOpacity style={styles.socialIcon} disabled={loading}>
-                  <Icon name="facebook" size={32} color="#1877F2" />
+                  <Icon name="facebook" size={36} color="#1877F2" />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.socialIcon} disabled={loading}>
-                  <Icon name="google" size={32} color="#EA4335" />
+                  <Icon name="google" size={36} color="#EA4335" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -277,7 +306,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 10,
   },
-  cardHeader: { backgroundColor: '#F5A623', paddingVertical: 18, alignItems: 'center' },
+  cardHeader: {
+    backgroundColor: '#F5A623',
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#1A1A1A' },
   cardBody: { padding: 25 },
   inputWrapper: {
@@ -303,8 +336,8 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between' },
   actionBtn: {
     backgroundColor: '#F5A623',
-    width: '46%',
-    height: 48,
+    width: '40%',
+    height: 43,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -314,15 +347,20 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   socialContainer: { alignItems: 'center', marginTop: 35 },
-  socialTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  socialTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '500',
+    marginBottom: 12,
+  },
   socialPill: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    paddingHorizontal: 22,
+    paddingHorizontal: 0,
     paddingVertical: 4,
     borderRadius: 30,
   },
-  socialIcon: { marginHorizontal: 12 },
+  socialIcon: { marginHorizontal: 10 },
 });
 
 export default HomeSevenScreen;
