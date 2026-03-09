@@ -34,8 +34,20 @@ import {
   togglePostDislike,
   recordPostShare,
 } from '../../services/postService';
-import { getChannelProfile, updateChannelProfile } from '../../services/channelService';
+import { launchImageLibrary } from 'react-native-image-picker';
+import {
+  getChannelProfile,
+  updateChannelProfile,
+  uploadProfilePhoto,
+  getGallery,
+  uploadGallery,
+  deleteGalleryPhoto,
+} from '../../services/channelService';
+import { getUserVideos } from '../../services/videoService';
+import { shortsService } from '../../services/shortsService';
+import { getNotificationsByUserId } from '../../services/notificationService';
 import { appSetUser } from '../../redux/actions/appSlice';
+import { safeImageUri } from '../../utils/helper';
 
 const { width } = Dimensions.get('window');
 
@@ -268,7 +280,17 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [editChannelAbout, setEditChannelAbout] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editSocialLinks, setEditSocialLinks] = useState([]);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [galleryPhotos, setGalleryPhotos] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [ownerVideos, setOwnerVideos] = useState([]);
+  const [ownerVideosLoading, setOwnerVideosLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   const loadPosts = useCallback(
     async (refresh = false) => {
@@ -298,6 +320,130 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     }
   }, [activeTab, profileUserId, loadPosts]);
 
+  const loadGallery = useCallback(async () => {
+    if (!profileUserId) return;
+    setGalleryLoading(true);
+    try {
+      const res = await getGallery(profileUserId);
+      setGalleryPhotos(res?.photos ?? []);
+    } catch (e) {
+      setGalleryPhotos([]);
+    } finally {
+      setGalleryLoading(false);
+    }
+  }, [profileUserId]);
+
+  const loadOwnerVideos = useCallback(async () => {
+    if (!profileUserId) return;
+    setOwnerVideosLoading(true);
+    try {
+      const [vRes, sRes] = await Promise.all([
+        getUserVideos(profileUserId, 1, 50),
+        shortsService.getUserShorts(profileUserId, 1, 50),
+      ]);
+      const videos = (vRes?.videos ?? []).map(v => ({
+        ...v,
+        id: v.id,
+        _type: 'video',
+        title: v.title,
+        thumbnail: v.thumbnailUrl,
+        views: formatCount(v.viewCount),
+        duration: v.duration ? `${Math.floor(v.duration / 60)}:${String(v.duration % 60).padStart(2, '0')}` : '',
+      }));
+      const shorts = (sRes?.shorts ?? []).map(s => ({
+        ...s,
+        id: s.id,
+        _type: 'short',
+        title: s.title || 'Short',
+        thumbnail: s.thumbnailUrl || s.coverUrl,
+        views: formatCount(s.viewCount),
+        duration: s.duration ? `${Math.floor(s.duration / 60)}:${String(s.duration % 60).padStart(2, '0')}` : '',
+      }));
+      setOwnerVideos([...videos, ...shorts]);
+    } catch (e) {
+      setOwnerVideos([]);
+    } finally {
+      setOwnerVideosLoading(false);
+    }
+  }, [profileUserId]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!profileUserId) return;
+    setNotificationsLoading(true);
+    try {
+      const data = await getNotificationsByUserId(profileUserId);
+      setNotifications(Array.isArray(data) ? data : data?.notifications ?? []);
+    } catch (e) {
+      setNotifications([]);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [profileUserId]);
+
+  useEffect(() => {
+    if (activeTab === 'Grid' && profileUserId) loadGallery();
+  }, [activeTab, profileUserId, loadGallery]);
+
+  useEffect(() => {
+    if (activeTab === 'Video' && profileUserId) loadOwnerVideos();
+  }, [activeTab, profileUserId, loadOwnerVideos]);
+
+  useEffect(() => {
+    if (activeTab === 'Notification' && profileUserId) loadNotifications();
+  }, [activeTab, profileUserId, loadNotifications]);
+
+  const handleGalleryUpload = useCallback(() => {
+    if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading) return;
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: 10 },
+      async res => {
+        if (res.didCancel || res.errorCode || !res.assets?.length) return;
+        setGalleryUploading(true);
+        try {
+          await uploadGallery(
+            profileUserId,
+            res.assets.map(a => ({
+              uri: a.uri,
+              type: a.type || 'image/jpeg',
+              name: a.fileName || 'photo.jpg',
+            })),
+          );
+          await loadGallery();
+        } catch (e) {
+          Alert.alert('Error', e?.message || 'Failed to upload photos');
+        } finally {
+          setGalleryUploading(false);
+        }
+      },
+    );
+  }, [profileUserId, currentUser?.id, galleryUploading, loadGallery]);
+
+  const handleDeleteGalleryPhoto = useCallback(
+    async photoId => {
+      if (!profileUserId || profileUserId !== currentUser?.id) return;
+      Alert.alert(
+        'Delete photo',
+        'Remove this photo from your gallery?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteGalleryPhoto(profileUserId, photoId);
+                setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
+              } catch (e) {
+                Alert.alert('Error', e?.message || 'Failed to delete');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [profileUserId, currentUser?.id],
+  );
+
   const loadProfile = useCallback(async () => {
     if (!profileUserId) return;
     setProfileLoading(true);
@@ -319,21 +465,71 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setEditName(profile?.name ?? currentUser?.name ?? '');
     setEditNickname(profile?.nickname ?? profile?.channelName ?? currentUser?.nickname ?? '');
     setEditChannelAbout(profile?.channelAbout ?? currentUser?.channelAbout ?? '');
-    setEditPhone(currentUser?.phone ?? '');
+    setEditPhone(currentUser?.phone ?? profile?.phone ?? '');
     setEditAddress(profile?.address ?? currentUser?.address ?? '');
+    const links = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
+    const linkMap = Array.isArray(links)
+      ? links.reduce((acc, l) => ({ ...acc, [l.type]: l.url || '' }), {})
+      : {};
+    setEditSocialLinks(
+      [
+        { value: 'instagram', label: 'Instagram' },
+        { value: 'facebook', label: 'Facebook' },
+        { value: 'x', label: 'X (Twitter)' },
+        { value: 'google_email', label: 'Google / Email' },
+        { value: 'website', label: 'Website' },
+      ].map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
+    );
     setEditProfileVisible(true);
   };
+
+  const handleAvatarPress = useCallback(() => {
+    if (!profileUserId || profileUserId !== currentUser?.id || uploadingAvatar) return;
+    launchImageLibrary(
+      { mediaType: 'photo', quality: 0.8 },
+      async res => {
+        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+        const asset = res.assets[0];
+        setUploadingAvatar(true);
+        try {
+          const data = await uploadProfilePhoto(profileUserId, {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.fileName || 'avatar.jpg',
+          });
+          await loadProfile();
+          const photoUrl = data?.photoUrl || data?.userUpdate?.photos?.[0]?.src;
+          if (currentUser?.id === profileUserId && photoUrl) {
+            dispatch(
+              appSetUser({
+                ...currentUser,
+                photos: [{ title: 'avatar', src: photoUrl }],
+              }),
+            );
+          }
+        } catch (e) {
+          Alert.alert('Error', e?.message || 'Failed to upload photo');
+        } finally {
+          setUploadingAvatar(false);
+        }
+      },
+    );
+  }, [profileUserId, currentUser, uploadingAvatar, loadProfile, dispatch]);
 
   const saveProfile = async () => {
     if (!profileUserId || profileUserId !== currentUser?.id) return;
     setSavingProfile(true);
     try {
+      const socialLinks = editSocialLinks
+        .map(l => ({ type: (l.type || 'website').trim(), url: (l.url || '').trim() }))
+        .filter(l => l.url);
       await updateChannelProfile(profileUserId, {
         name: editName.trim() || undefined,
         nickname: editNickname.trim() || undefined,
         channelAbout: editChannelAbout.trim() || undefined,
         phone: editPhone.trim() || undefined,
         address: editAddress.trim() || undefined,
+        socialLinks: socialLinks.length ? socialLinks : undefined,
       });
       await loadProfile();
       if (currentUser?.id === profileUserId) {
@@ -344,6 +540,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
           phone: editPhone.trim() || currentUser.phone,
           address: editAddress.trim() || currentUser.address,
+          socialLinks: socialLinks.length ? socialLinks : currentUser.socialLinks,
         }));
       }
       setEditProfileVisible(false);
@@ -353,6 +550,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       setSavingProfile(false);
     }
   };
+
+  const updateSocialLinkUrl = (idx, value) => {
+    setEditSocialLinks(prev =>
+      prev.map((l, i) => (i === idx ? { ...l, url: value } : l)),
+    );
+  };
+
+  const SOCIAL_TYPES = [
+    { value: 'instagram', label: 'Instagram', icon: 'instagram' },
+    { value: 'facebook', label: 'Facebook', icon: 'facebook' },
+    { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
+    { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
+    { value: 'website', label: 'Website', icon: 'web' },
+  ];
 
   const updatePostInList = useCallback((postId, updater) => {
     setPosts(prev =>
@@ -469,6 +680,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         profile={profile}
         isOwnProfile={isOwnProfile}
         onEditProfile={openEditProfile}
+        onAvatarPress={handleAvatarPress}
       />
 
       {/* Tabs */}
@@ -513,11 +725,24 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             ? 'Gallery'
             : activeTab === 'Video'
             ? 'Videos'
+            : activeTab === 'Notification'
+            ? 'Notifications'
             : activeTab}
         </Text>
         {activeTab === 'Posts' && profileUserId === currentUser?.id ? (
           <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
+          </TouchableOpacity>
+        ) : activeTab === 'Grid' && isOwnProfile ? (
+          <TouchableOpacity
+            onPress={handleGalleryUpload}
+            disabled={galleryUploading}
+          >
+            <MaterialCommunityIcons
+              name="plus"
+              size={24}
+              color={galleryUploading ? '#999' : '#333'}
+            />
           </TouchableOpacity>
         ) : (
           <View style={styles.plusPlaceholder} />
@@ -533,9 +758,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Promotions':
         return MOCK_PROMOTIONS;
       case 'Grid':
-        return MOCK_GRID_IMAGES;
+        return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
       case 'Video':
-        return MOCK_VIDEOS;
+        return ownerVideos;
+      case 'Notification':
+        return notifications;
       default:
         return [];
     }
@@ -563,12 +790,55 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (activeTab === 'Promotions') return <PromotionCard item={item} />;
     if (activeTab === 'Grid') {
       return (
-        <View style={styles.gridImageContainer}>
-          <Image source={{ uri: item.image }} style={styles.gridImage} />
+        <TouchableOpacity
+          style={styles.gridImageContainer}
+          onLongPress={() => isOwnProfile && item.id && handleDeleteGalleryPhoto(item.id)}
+          activeOpacity={1}
+        >
+          <Image source={{ uri: safeImageUri(item.image) }} style={styles.gridImage} />
+          {isOwnProfile && item.id ? (
+            <View style={styles.galleryDeleteBadge}>
+              <MaterialCommunityIcons name="delete-outline" size={18} color="#fff" />
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      );
+    }
+    if (activeTab === 'Video') {
+      return (
+        <BusinessVideoTabCard
+          item={{
+            ...item,
+            thumbnail: item.thumbnail || item.thumbnailUrl,
+            title: item.title || 'Video',
+            views: item.views || formatCount(item.viewCount),
+          }}
+        />
+      );
+    }
+    if (activeTab === 'Notification') {
+      return (
+        <View style={styles.notificationRow}>
+          <MaterialCommunityIcons
+            name={item.type === 'order' ? 'cart' : item.type === 'content' ? 'video' : 'bell'}
+            size={22}
+            color="#666"
+            style={styles.notificationIcon}
+          />
+          <View style={styles.notificationBody}>
+            <Text style={styles.notificationMessage} numberOfLines={2}>
+              {item.message}
+            </Text>
+            <Text style={styles.notificationMeta}>
+              {item.type || 'general'} • {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}
+            </Text>
+          </View>
+          {item.status === 'unread' ? (
+            <View style={styles.unreadDot} />
+          ) : null}
         </View>
       );
     }
-    if (activeTab === 'Video') return <BusinessVideoTabCard item={item} />;
     return null;
   };
 
@@ -581,10 +851,28 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading posts...</Text>
         </View>
       ) : null}
+      {activeTab === 'Grid' && galleryLoading && galleryPhotos.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading gallery...</Text>
+        </View>
+      ) : null}
+      {activeTab === 'Video' && ownerVideosLoading && ownerVideos.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading videos...</Text>
+        </View>
+      ) : null}
+      {activeTab === 'Notification' && notificationsLoading && notifications.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading notifications...</Text>
+        </View>
+      ) : null}
       <FlatList
         key={activeTab === 'Grid' ? 'grid-3-col' : `list-1-col-${activeTab}`}
         data={getListData()}
-        keyExtractor={item => item.id}
+        keyExtractor={(item, index) => item.id || `item-${index}`}
         renderItem={renderContentItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
@@ -598,6 +886,27 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <RefreshControl
               refreshing={postsRefreshing}
               onRefresh={() => loadPosts(true)}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
+          ) : activeTab === 'Grid' ? (
+            <RefreshControl
+              refreshing={galleryLoading}
+              onRefresh={loadGallery}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
+          ) : activeTab === 'Video' ? (
+            <RefreshControl
+              refreshing={ownerVideosLoading}
+              onRefresh={loadOwnerVideos}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
+          ) : activeTab === 'Notification' ? (
+            <RefreshControl
+              refreshing={notificationsLoading}
+              onRefresh={loadNotifications}
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
@@ -660,12 +969,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholder="Nickname"
                 placeholderTextColor="#999"
               />
-              <Text style={styles.editLabel}>About</Text>
+              <Text style={styles.editLabel}>Description</Text>
               <TextInput
                 style={[styles.editInput, styles.editInputMultiline]}
                 value={editChannelAbout}
                 onChangeText={setEditChannelAbout}
-                placeholder="About your channel"
+                placeholder="Short description about you or your business"
                 placeholderTextColor="#999"
                 multiline
                 numberOfLines={3}
@@ -687,6 +996,39 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholder="Address"
                 placeholderTextColor="#999"
               />
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>Social links</Text>
+              <View style={styles.socialLinksCard}>
+                {SOCIAL_TYPES.map((t, idx) => (
+                  <View
+                    key={t.value}
+                    style={[
+                      styles.socialLinkRow,
+                      idx === SOCIAL_TYPES.length - 1 && styles.socialLinkRowLast,
+                    ]}
+                  >
+                    <View style={styles.socialLinkLabelWrap}>
+                      <MaterialCommunityIcons
+                        name={t.icon}
+                        size={20}
+                        color="#555"
+                        style={styles.socialLinkIcon}
+                      />
+                      <Text style={styles.socialLinkLabel} numberOfLines={1}>
+                        {t.label}
+                      </Text>
+                    </View>
+                    <TextInput
+                      style={styles.socialLinkInput}
+                      value={editSocialLinks[idx]?.url ?? ''}
+                      onChangeText={v => updateSocialLinkUrl(idx, v)}
+                      placeholder="https://..."
+                      placeholderTextColor="#999"
+                      autoCapitalize="none"
+                      keyboardType="url"
+                    />
+                  </View>
+                ))}
+              </View>
             </ScrollView>
             <TouchableOpacity
               style={[styles.editSaveBtn, savingProfile && styles.editSaveBtnDisabled]}
@@ -991,15 +1333,58 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   gridImageContainer: {
-    width: (width - 24 - 16) / 3, // Full width minus horizontal padding minus inner gaps
-    aspectRatio: 0.8, // Slightly taller than square as per Figma
+    width: (width - 24 - 16) / 3,
+    aspectRatio: 0.8,
     marginBottom: 8,
+    position: 'relative',
+  },
+  galleryDeleteBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   gridImage: {
     width: '100%',
     height: '100%',
     borderRadius: 8,
     resizeMode: 'cover',
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  notificationIcon: {
+    marginRight: 12,
+  },
+  notificationBody: {
+    flex: 1,
+  },
+  notificationMessage: {
+    fontSize: 14,
+    color: '#333',
+  },
+  notificationMeta: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF7F0B',
+    marginLeft: 8,
   },
   editModalOverlay: {
     flex: 1,
@@ -1070,6 +1455,46 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  socialLinksCard: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+  },
+  socialLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  socialLinkRowLast: {
+    marginBottom: 0,
+  },
+  socialLinkLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 120,
+    minWidth: 120,
+  },
+  socialLinkIcon: {
+    marginRight: 8,
+  },
+  socialLinkLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  socialLinkInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#fff',
   },
 });
 

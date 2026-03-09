@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { useNavigation } from "@react-navigation/native";
+import { safeImageUri } from "../utils/helper";
 
 const formatCount = (n) => {
   if (n == null || n < 0) return "0";
@@ -20,10 +22,12 @@ const BusinessProfileCard = ({
   profile,
   isOwnProfile,
   onEditProfile,
+  onAvatarPress,
 }) => {
+  const navigation = useNavigation();
   const coverUri = "https://images.unsplash.com/photo-1552566626-52f8b828add9";
   const channelName = profile?.channelName || profile?.nickname || profile?.name || "—";
-  const channelAvatar = profile?.channelAvatar || null;
+  const channelAvatar = safeImageUri(profile?.channelAvatar, "https://via.placeholder.com/100");
   const followerCount = profile?.subscriberCount ?? 0;
   const followingCount = profile?.followingCount ?? 0;
   const channelAbout = profile?.channelAbout || "";
@@ -37,17 +41,25 @@ const BusinessProfileCard = ({
       >
         <View style={styles.contentOverlay}>
           <View style={styles.badgeContainer}>
-            <TouchableOpacity style={styles.twoPartBadge}>
+            <TouchableOpacity
+              style={styles.twoPartBadge}
+              onPress={() => navigation.navigate("OrdersList")}
+              activeOpacity={0.7}
+            >
               <View style={styles.badgeIconPart}>
-                <Icon name="lock" size={16} color="#222" />
+                <Icon name="clipboard-list-outline" size={16} color="#222" />
               </View>
               <View style={styles.badgeTextPart}>
                 <Text style={styles.badgeText}>Orders</Text>
               </View>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.twoPartBadge, { marginTop: 10 }]}>
+            <TouchableOpacity
+              style={[styles.twoPartBadge, { marginTop: 10 }]}
+              onPress={() => navigation.navigate("Earnings")}
+              activeOpacity={0.7}
+            >
               <View style={styles.badgeIconPart}>
-                <Icon name="lock" size={16} color="#222" />
+                <Icon name="currency-usd" size={16} color="#222" />
               </View>
               <View style={[styles.badgeTextPart, { backgroundColor: "#FFa31A" }]}>
                 <Text style={styles.badgeText}>Wallet</Text>
@@ -58,13 +70,14 @@ const BusinessProfileCard = ({
           <View style={styles.amberOverlayBox}>
             <View style={styles.profileHeaderRow}>
               <View style={styles.avatarContainer}>
-                <View style={styles.avatarCircle}>
-                  {channelAvatar ? (
-                    <Image source={{ uri: channelAvatar }} style={styles.avatarImage} />
-                  ) : (
-                    <Icon name="account" size={40} color="#F5A623" />
-                  )}
-                </View>
+                <TouchableOpacity
+                  style={styles.avatarCircle}
+                  onPress={isOwnProfile && onAvatarPress ? onAvatarPress : undefined}
+                  activeOpacity={isOwnProfile && onAvatarPress ? 0.7 : 1}
+                  disabled={!isOwnProfile || !onAvatarPress}
+                >
+                  <Image source={{ uri: channelAvatar }} style={styles.avatarImage} />
+                </TouchableOpacity>
                 {isOwnProfile && (
                   <View style={styles.editPencilBadge}>
                     <Icon name="pencil-outline" size={14} color="#aaa" />
@@ -92,7 +105,11 @@ const BusinessProfileCard = ({
               <TouchableOpacity style={styles.squareIconBtn}>
                 <Icon name="camera-outline" size={24} color="#111" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.squareIconBtn}>
+              <TouchableOpacity
+                style={styles.squareIconBtn}
+                onPress={() => navigation.navigate("MessageList")}
+                activeOpacity={0.7}
+              >
                 <Icon name="message-text-outline" size={22} color="#111" />
               </TouchableOpacity>
             </View>

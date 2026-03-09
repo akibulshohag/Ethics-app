@@ -3,91 +3,91 @@ import { config } from '../../config';
 
 const API_URL = `${config.apiBaseUrl}/videos`;
 
+const getAuthHeaders = () => {
+  try {
+    const { store } = require('../redux');
+    const token = store.getState()?.app?.user?.token;
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+  } catch {}
+  return {};
+};
+
 /**
- * Upload video with thumbnail
+ * Upload video with thumbnail - same approach as profile/gallery (fetch + FormData, no Content-Type).
+ * React Native sends file URIs correctly this way.
  */
 export const uploadVideo = async videoData => {
   if (!videoData?.userId) {
     throw new Error('User ID is required. Please log in to upload videos.');
   }
+  if (!videoData?.videoUri || !videoData?.thumbnailUri) {
+    throw new Error('Video and thumbnail are required.');
+  }
+  const formData = new FormData();
+  formData.append('files', {
+    uri: videoData.videoUri,
+    type: videoData.videoType || 'video/mp4',
+    name: videoData.videoName || 'video.mp4',
+  });
+  formData.append('files', {
+    uri: videoData.thumbnailUri,
+    type: videoData.thumbnailType || 'image/jpeg',
+    name: videoData.thumbnailName || 'thumbnail.jpg',
+  });
+  formData.append('userId', videoData.userId);
+  formData.append('title', videoData.title);
+  if (videoData.description) {
+    formData.append('description', videoData.description);
+  }
+  if (videoData.category) {
+    formData.append('category', videoData.category);
+  }
+  if (videoData.tags && videoData.tags.length > 0) {
+    formData.append('tags', JSON.stringify(videoData.tags));
+  }
+  if (videoData.visibility) {
+    formData.append('visibility', videoData.visibility);
+  }
+  if (videoData.duration !== undefined && !isNaN(videoData.duration)) {
+    formData.append('duration', String(Math.floor(Number(videoData.duration))));
+  }
+  if (videoData.width !== undefined && !isNaN(videoData.width) && videoData.width > 0) {
+    formData.append('width', String(Math.floor(Number(videoData.width))));
+  }
+  if (videoData.height !== undefined && !isNaN(videoData.height) && videoData.height > 0) {
+    formData.append('height', String(Math.floor(Number(videoData.height))));
+  }
+
+  const headers = getAuthHeaders();
   try {
-    const formData = new FormData();
-
-    // Add video file
-    formData.append('files', {
-      uri: videoData.videoUri,
-      type: videoData.videoType,
-      name: videoData.videoName,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min for video
+    const response = await fetch(`${API_URL}/upload`, {
+      method: 'POST',
+      headers: { ...headers },
+      body: formData,
+      signal: controller.signal,
     });
-
-    // Add thumbnail file
-    formData.append('files', {
-      uri: videoData.thumbnailUri,
-      type: videoData.thumbnailType,
-      name: videoData.thumbnailName,
-    });
-
-    // Add video metadata
-    formData.append('userId', videoData.userId);
-    formData.append('title', videoData.title);
-    if (videoData.description) {
-      formData.append('description', videoData.description);
+    clearTimeout(timeoutId);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        data?.message ||
+        (Array.isArray(data?.message) ? data.message.join(' ') : null) ||
+        `Upload failed (${response.status})`;
+      console.error('[uploadVideo]', response.status, data);
+      throw new Error(msg);
     }
-    if (videoData.category) {
-      formData.append('category', videoData.category);
-    }
-    if (videoData.tags && videoData.tags.length > 0) {
-      formData.append('tags', JSON.stringify(videoData.tags));
-    }
-    if (videoData.visibility) {
-      formData.append('visibility', videoData.visibility);
-    }
-    // Only append numeric values if they are valid numbers
-    if (videoData.duration !== undefined && !isNaN(videoData.duration)) {
-      formData.append(
-        'duration',
-        String(Math.floor(Number(videoData.duration))),
-      );
-    }
-    if (
-      videoData.width !== undefined &&
-      !isNaN(videoData.width) &&
-      videoData.width > 0
-    ) {
-      formData.append('width', String(Math.floor(Number(videoData.width))));
-    }
-    if (
-      videoData.height !== undefined &&
-      !isNaN(videoData.height) &&
-      videoData.height > 0
-    ) {
-      formData.append('height', String(Math.floor(Number(videoData.height))));
-    }
-
-    const response = await axios.post(`${API_URL}/upload`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: progressEvent => {
-        if (videoData.onUploadProgress) {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total,
-          );
-          videoData.onUploadProgress(percentCompleted);
-        }
-      },
-    });
-
-    return response.data;
-  } catch (error) {
-    const data = error.response?.data;
-    const msg = Array.isArray(data?.message)
-      ? data.message.join(' ')
-      : data?.message || error.message || 'Failed to upload video';
-    console.error('Error uploading video:', error.response?.status, msg, data);
-    const err = new Error(msg);
-    err.response = error.response;
-    throw err;
+    return data;
+  } catch (err) {
+    const msg =
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : err.message || 'Network error. Check connection and try again.';
+    console.error('[uploadVideo]', err.message, err);
+    throw new Error(msg);
   }
 };
 

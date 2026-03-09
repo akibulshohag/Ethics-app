@@ -104,7 +104,7 @@ export const getSubscribedFeed = async (userId, page = 1, limit = 30) => {
 };
 
 /**
- * Update channel profile (nickname, channelAbout) - only for own channel
+ * Update channel profile (nickname, channelAbout, socialLinks, etc.) - only for own channel
  */
 export const updateChannelProfile = async (userId, data) => {
   try {
@@ -116,4 +116,115 @@ export const updateChannelProfile = async (userId, data) => {
     console.error('Error updating channel profile:', error);
     throw error;
   }
+};
+
+/**
+ * Upload profile avatar - only for own profile
+ * Uses fetch so React Native correctly sends file from URI (avoids axios FormData issues).
+ */
+export const uploadProfilePhoto = async (userId, file) => {
+  if (!file?.uri) {
+    throw new Error('Image is required');
+  }
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    type: file.type || 'image/jpeg',
+    name: file.name || 'avatar.jpg',
+  });
+  const headers = getAuthHeaders();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const response = await fetch(`${API_URL}/${userId}/upload-avatar`, {
+      method: 'POST',
+      headers: { ...headers },
+      body: formData,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        data?.message ||
+        (Array.isArray(data?.message) ? data.message.join(' ') : null) ||
+        `Upload failed (${response.status})`;
+      console.error('[uploadProfilePhoto]', response.status, data);
+      throw new Error(msg);
+    }
+    return data;
+  } catch (err) {
+    const msg =
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : err.message || 'Network error. Check connection and try again.';
+    console.error('[uploadProfilePhoto]', err.message, err);
+    throw new Error(msg);
+  }
+};
+
+/**
+ * Get user gallery photos
+ */
+export const getGallery = async userId => {
+  const response = await axios.get(`${API_URL}/${userId}/gallery`, {
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
+/**
+ * Upload multiple gallery photos (owner only)
+ * Uses fetch so React Native correctly sends files from URIs.
+ */
+export const uploadGallery = async (userId, files) => {
+  if (!files?.length) throw new Error('Select at least one image');
+  const formData = new FormData();
+  files.forEach((f, i) => {
+    formData.append('files', {
+      uri: f.uri,
+      type: f.type || 'image/jpeg',
+      name: f.name || `photo-${i}.jpg`,
+    });
+  });
+  const headers = getAuthHeaders();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const response = await fetch(`${API_URL}/${userId}/gallery/upload`, {
+      method: 'POST',
+      headers: { ...headers },
+      body: formData,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        data?.message ||
+        (Array.isArray(data?.message) ? data.message.join(' ') : null) ||
+        `Upload failed (${response.status})`;
+      console.error('[uploadGallery]', response.status, data);
+      throw new Error(msg);
+    }
+    return data;
+  } catch (err) {
+    const msg =
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : err.message || 'Network error. Check connection and try again.';
+    console.error('[uploadGallery]', err.message, err);
+    throw new Error(msg);
+  }
+};
+
+/**
+ * Delete one gallery photo (owner only)
+ */
+export const deleteGalleryPhoto = async (userId, photoId) => {
+  const response = await axios.delete(
+    `${API_URL}/${userId}/gallery/${photoId}`,
+    { headers: getAuthHeaders() },
+  );
+  return response.data;
 };

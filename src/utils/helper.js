@@ -34,3 +34,13 @@ export const navigationRef = createNavigationContainerRef();
 export function navigate(name, params) {
   navigationRef?.current?.navigate(name, params);
 }
+
+/** Ensure Image source.uri is always a string (avoids "cannot cast ReadableNativeMap to String" crash) */
+export function safeImageUri(val, placeholder = 'https://via.placeholder.com/200') {
+  if (typeof val === 'string' && val.trim().length > 0) return val.trim();
+  if (val != null && typeof val === 'object') {
+    const s = val.src ?? val.uri;
+    if (typeof s === 'string' && s.trim().length > 0) return s.trim();
+  }
+  return placeholder;
+}

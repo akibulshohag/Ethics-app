@@ -27,6 +27,9 @@ import {
   getCurrentPositionSafe,
   reverseGeocode,
   geocodeAddress,
+  getPlaceSuggestions,
+  getCoordsFromPlaceId,
+  getFallbackCoordsForBDArea,
 } from '../utils/geolocation';
 import { getFeaturedByLocation } from '../services/featuredService';
 import { getSponsoredByLocation } from '../services/sponsoredService';
@@ -94,7 +97,11 @@ const HomeOneScreen = () => {
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [addressText, setAddressText] = useState('');
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const debounceTimerRef = useRef(null);
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
   const [feedVideos, setFeedVideos] = useState([]);
@@ -221,6 +228,7 @@ const HomeOneScreen = () => {
 
   const useMyLocation = () => {
     setLocationLoading(true);
+    setShowAddressSuggestions(false);
     getCurrentPositionSafe(
       async pos => {
         const lat = pos.coords.latitude;
@@ -238,7 +246,61 @@ const HomeOneScreen = () => {
     );
   };
 
+  useEffect(() => {
+    const trimmed = addressText.trim();
+    if (!trimmed) {
+      setAddressSuggestions([]);
+      setShowAddressSuggestions(false);
+      setSuggestionsLoading(false);
+      return;
+    }
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(async () => {
+      setSuggestionsLoading(true);
+      setShowAddressSuggestions(true);
+      const list = await getPlaceSuggestions(trimmed);
+      setAddressSuggestions(list || []);
+      setSuggestionsLoading(false);
+      debounceTimerRef.current = null;
+    }, 280);
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [addressText]);
+
+  const handleSelectSuggestion = async (description, placeId) => {
+    setAddressText(description);
+    setShowAddressSuggestions(false);
+    setAddressSuggestions([]);
+    setLocationLoading(true);
+    try {
+      let coords = placeId ? await getCoordsFromPlaceId(placeId) : null;
+      if (!coords) coords = await geocodeAddress(description);
+      if (!coords) coords = await geocodeAddress(description + ', Bangladesh');
+      if (!coords) coords = getFallbackCoordsForBDArea(description);
+      if (coords) {
+        setSelectedLocation(coords);
+        setIsLanding(false);
+      } else {
+        Alert.alert(
+          'Address',
+          'Could not get location for this address. Try "Use my location".',
+        );
+      }
+    } catch (_) {
+      const fallback = getFallbackCoordsForBDArea(description);
+      if (fallback) {
+        setSelectedLocation(fallback);
+        setIsLanding(false);
+      } else {
+        Alert.alert('Address', 'Something went wrong. Try "Use my location".');
+      }
+    }
+    setLocationLoading(false);
+  };
+
   const handleAddressSubmit = async () => {
+    setShowAddressSuggestions(false);
     const trimmed = addressText.trim();
     if (trimmed) {
       setLocationLoading(true);
@@ -256,6 +318,8 @@ const HomeOneScreen = () => {
             coords = await geocodeAddress(parts[parts.length - 1]);
           }
         }
+        if (!coords) coords = await geocodeAddress(trimmed + ', Bangladesh');
+        if (!coords) coords = getFallbackCoordsForBDArea(trimmed);
         if (coords) {
           setSelectedLocation(coords);
           setIsLanding(false);
@@ -266,7 +330,13 @@ const HomeOneScreen = () => {
           );
         }
       } catch (_) {
-        Alert.alert('Address', 'Could not find that address.');
+        const fallback = getFallbackCoordsForBDArea(trimmed);
+        if (fallback) {
+          setSelectedLocation(fallback);
+          setIsLanding(false);
+        } else {
+          Alert.alert('Address', 'Could not find that address.');
+        }
       }
       setLocationLoading(false);
       return;
@@ -398,7 +468,7 @@ const HomeOneScreen = () => {
           </Text>
         </View>
         <View style={styles.landingSearchBox}>
-          <Icon name="magnify" size={22} color="#999" />
+          <Icon name="magnify" size={22} color="#999" style={styles.landingSearchIcon} />
           <TextInput
             style={styles.landingSearchInput}
             placeholder="Search Your address"
@@ -410,9 +480,10 @@ const HomeOneScreen = () => {
             editable={!locationLoading}
           />
           <TouchableOpacity
-            onPress={locationLoading ? undefined : useMyLocation}
+            onPress={locationLoading ? undefined : handleAddressSubmit}
             style={styles.landingMapIcon}
             disabled={locationLoading}
+            activeOpacity={0.7}
           >
             {locationLoading ? (
               <ActivityIndicator size="small" color="#F5A623" />
@@ -421,6 +492,45 @@ const HomeOneScreen = () => {
             )}
           </TouchableOpacity>
         </View>
+        {addressText.trim().length > 0 && (
+          <View style={styles.suggestionsContainer}>
+            {suggestionsLoading ? (
+              <View style={styles.suggestionItem}>
+                <ActivityIndicator size="small" color="#F5A623" />
+                <Text style={styles.suggestionText}>Searching areas...</Text>
+              </View>
+            ) : addressSuggestions.length > 0 ? (
+              <ScrollView
+                style={styles.suggestionsScroll}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+              >
+                {addressSuggestions.slice(0, 8).map((item, idx) => (
+                  <TouchableOpacity
+                    key={item.place_id ? item.place_id : `fb-${idx}-${item.description}`}
+                    style={styles.suggestionItem}
+                    onPress={() =>
+                      handleSelectSuggestion(item.description, item.place_id)
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="map-marker-outline" size={18} color="#666" />
+                    <Text style={styles.suggestionText} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.suggestionItem}>
+                <Icon name="map-marker-outline" size={18} color="#999" />
+                <Text style={styles.suggestionHint}>
+                  No areas found. Type full address (e.g. Mirpur 10, Dhaka) or tap the location icon.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
         <Text style={styles.slogan}>See it, Love it, order it</Text>
       </SafeAreaView>
     </View>
@@ -1017,18 +1127,50 @@ const styles = StyleSheet.create({
     height: 55,
     borderRadius: 10,
     alignItems: 'center',
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     elevation: 5,
+    overflow: 'hidden',
   },
+  landingSearchIcon: { marginRight: 8 },
   landingSearchInput: {
     flex: 1,
+    minWidth: 0,
     fontSize: 16,
     color: '#333',
-    marginLeft: 10,
-    paddingVertical: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-  landingMapIcon: { padding: 8, marginRight: -8 },
+  landingMapIcon: { padding: 8, marginLeft: 4 },
   landingSearchPlaceholder: { color: '#999', fontSize: 16, marginLeft: 10 },
+  suggestionsContainer: {
+    width: '100%',
+    marginTop: 8,
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    maxHeight: 220,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#eee',
+    gap: 10,
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#333',
+  },
+  suggestionHint: {
+    flex: 1,
+    fontSize: 14,
+    color: '#666',
+  },
+  suggestionsScroll: { maxHeight: 260 },
   slogan: { color: '#FFF', marginTop: 20, fontSize: 14, fontWeight: '500' },
   feedLoading: { paddingVertical: 40, alignItems: 'center' },
   feedLoadingText: { marginTop: 10, fontSize: 14, color: '#666' },

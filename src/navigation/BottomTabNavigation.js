@@ -27,11 +27,9 @@ import VProfileNavigation from './VProfileStack';
 import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
-import MessageListScreen from '../screens/MessageListScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
-import EarningsScreen from '../screens/EarningsScreen';
 import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
-import UserProfileCardScreen from '../screens/NewScreen/UserProfileCardScreen';
+import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -61,8 +59,11 @@ const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
   const user = useSelector(state => state.app?.user);
   const navigation = useNavigation();
+  const role = (user?.role || '').toLowerCase();
+  const isOwner = role === 'owner';
+  const isUser = role === 'user';
   const showCreateTab = user?.role === 'owner' || user?.role === 'admin';
-  const showVProfileTab = (user?.role || '').toLowerCase() === 'vendor';
+  const showVProfileTab = role === 'vendor';
 
   const requireLogin = (e, tabName) => {
     if (!user) {
@@ -113,33 +114,37 @@ const BottomNaivgation = () => {
             }}
           />
 
-          <Tab.Screen
-            name="Profile"
-            component={BusinessProfileViewScreen}
-            options={{
-              tabBarIcon: ({ focused }) => (
-                <Icon
-                  name="menu"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
+          {isOwner && (
+            <Tab.Screen
+              name="Profile"
+              component={BusinessProfileViewScreen}
+              options={{
+                tabBarIcon: ({ focused }) => (
+                  <Icon
+                    name="menu"
+                    size={28}
+                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                  />
+                ),
+              }}
+            />
+          )}
 
-          <Tab.Screen
-            name="UserProfileCard"
-            component={UserProfileCardScreen}
-            options={{
-              tabBarIcon: ({ focused }) => (
-                <Icon
-                  name="account-circle-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
+          {isUser && (
+            <Tab.Screen
+              name="UserProfileCard"
+              component={UserViewsScreen}
+              options={{
+                tabBarIcon: ({ focused }) => (
+                  <Icon
+                    name="account-circle-outline"
+                    size={28}
+                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                  />
+                ),
+              }}
+            />
+          )}
 
           <Tab.Screen
             name="Home8"
@@ -227,48 +232,6 @@ const BottomNaivgation = () => {
               tabBarIcon: ({ focused, color }) => (
                 <Icon
                   name="play-box-multiple-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="MessageList"
-            component={MessageListScreen}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="message-text"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="OrdersList"
-            component={LiveOrdersScreen}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="clipboard-list-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Earnings"
-            component={EarningsScreen}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="currency-usd"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />

@@ -107,8 +107,7 @@ export const createPost = async (data) => {
 
 /**
  * Upload post with thumbnail (required) and optional video.
- * Pass: userId, title, thumbnailUri/thumbnailType/thumbnailName,
- * optional: videoUri/videoType/videoName, description, website, hashtags (array or comma string), duration (seconds), onUploadProgress.
+ * Same approach as profile/gallery: fetch + FormData so React Native sends file URIs correctly.
  */
 export const uploadPost = async (data) => {
   if (!data?.userId) {
@@ -120,58 +119,63 @@ export const uploadPost = async (data) => {
   if (!data?.thumbnailUri) {
     throw new Error('Thumbnail image is required.');
   }
-  try {
-    const formData = new FormData();
+  const formData = new FormData();
+  formData.append('files', {
+    uri: data.thumbnailUri,
+    type: data.thumbnailType || 'image/jpeg',
+    name: data.thumbnailName || 'thumbnail.jpg',
+  });
+  if (data.videoUri) {
     formData.append('files', {
-      uri: data.thumbnailUri,
-      type: data.thumbnailType || 'image/jpeg',
-      name: data.thumbnailName || 'thumbnail.jpg',
+      uri: data.videoUri,
+      type: data.videoType || 'video/mp4',
+      name: data.videoName || 'video.mp4',
     });
-    if (data.videoUri) {
-      formData.append('files', {
-        uri: data.videoUri,
-        type: data.videoType || 'video/mp4',
-        name: data.videoName || 'video.mp4',
-      });
-    }
-    formData.append('userId', data.userId);
-    formData.append('title', data.title.trim());
-    if (data.description?.trim()) {
-      formData.append('description', data.description.trim());
-    }
-    if (data.website?.trim()) {
-      formData.append('website', data.website.trim());
-    }
-    if (data.hashtags?.length) {
-      formData.append(
-        'hashtags',
-        Array.isArray(data.hashtags) ? JSON.stringify(data.hashtags) : String(data.hashtags),
-      );
-    }
-    if (data.duration !== undefined && data.duration != null && !Number.isNaN(Number(data.duration))) {
-      formData.append('duration', String(Math.floor(Number(data.duration))));
-    }
-    const response = await axios.post(`${API_URL}/upload`, formData, {
-      headers: getAuthHeaders(),
-      onUploadProgress:
-        data.onUploadProgress &&
-        (progressEvent => {
-          if (progressEvent.total) {
-            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            data.onUploadProgress(percent);
-          }
-        }),
+  }
+  formData.append('userId', data.userId);
+  formData.append('title', data.title.trim());
+  if (data.description?.trim()) {
+    formData.append('description', data.description.trim());
+  }
+  if (data.website?.trim()) {
+    formData.append('website', data.website.trim());
+  }
+  if (data.hashtags?.length) {
+    formData.append(
+      'hashtags',
+      Array.isArray(data.hashtags) ? JSON.stringify(data.hashtags) : String(data.hashtags),
+    );
+  }
+  if (data.duration !== undefined && data.duration != null && !Number.isNaN(Number(data.duration))) {
+    formData.append('duration', String(Math.floor(Number(data.duration))));
+  }
+  const headers = getAuthHeaders();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const response = await fetch(`${API_URL}/upload`, {
+      method: 'POST',
+      headers: { ...headers },
+      body: formData,
+      signal: controller.signal,
     });
-    return response.data;
-  } catch (error) {
+    clearTimeout(timeoutId);
+    const resData = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        resData?.message ||
+        (Array.isArray(resData?.message) ? resData.message.join(' ') : null) ||
+        `Upload failed (${response.status})`;
+      console.error('[uploadPost]', response.status, resData);
+      throw new Error(msg);
+    }
+    return resData;
+  } catch (err) {
     const msg =
-      error.response?.data?.message ||
-      (Array.isArray(error.response?.data?.message)
-        ? error.response.data.message.join(' ')
-        : null) ||
-      error.message ||
-      'Failed to upload post';
-    console.error('Error uploading post:', error.response?.status, msg);
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : err.message || 'Failed to upload post';
+    console.error('[uploadPost]', err.message, err);
     throw new Error(msg);
   }
 };

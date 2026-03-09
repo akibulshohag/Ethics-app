@@ -32,6 +32,7 @@ import {
 } from '../services/channelService';
 import { getUserVideos } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import { safeImageUri } from '../utils/helper';
 
 const TABS = ['Home', 'Videos', 'About'];
 const FILTERS = ['Videos', 'Shorts'];
@@ -42,9 +43,6 @@ const formatCount = n => {
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(n);
 };
-
-// Ensure Image uri is always a string (avoids "cannot cast Boolean to String" crash)
-const safeUri = val => (typeof val === 'string' && val.trim().length > 0 ? val.trim() : 'https://via.placeholder.com/100');
 
 const formatDuration = seconds => {
   if (!seconds || seconds < 0) return '0:00';
@@ -72,9 +70,9 @@ const mapVideoApiToDisplay = v => {
   const viewCount = v.viewCount ?? v._count?.views ?? 0;
   const channelName = user.nickname || user.name || 'Unknown';
   const rawAvatar = user.photos?.[0]?.src ?? (Array.isArray(user.photos) && user.photos[0]?.src);
-  const channelAvatar = safeUri(rawAvatar) === 'https://via.placeholder.com/100'
+  const channelAvatar = safeImageUri(rawAvatar) === 'https://via.placeholder.com/100'
     ? `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=111&color=fff`
-    : safeUri(rawAvatar);
+    : safeImageUri(rawAvatar);
   const pubAt = v.publishedAt || v.createdAt;
   return {
     id: v.id,
@@ -83,7 +81,7 @@ const mapVideoApiToDisplay = v => {
     channelAvatar,
     views: `${formatCount(viewCount)} views`,
     publishedAt: formatTimeAgo(pubAt),
-    thumbnail: safeUri(v.thumbnailUrl || v.videoUrl) || 'https://via.placeholder.com/300',
+    thumbnail: safeImageUri(v.thumbnailUrl || v.videoUrl, 'https://via.placeholder.com/300'),
     duration: formatDuration(v.duration),
     userId: v.userId,
   };
@@ -95,7 +93,7 @@ const mapShortApiToDisplay = s => {
     id: s.id,
     title: (s.title || 'Untitled').slice(0, 50) + (s.title?.length > 50 ? '...' : ''),
     views: `${formatCount(viewCount)} views`,
-    thumbnail: safeUri(s.thumbnailUrl || s.videoUrl) || 'https://via.placeholder.com/300',
+    thumbnail: safeImageUri(s.thumbnailUrl || s.videoUrl, 'https://via.placeholder.com/300'),
   };
 };
 
@@ -243,7 +241,7 @@ const ChannelDetailsScreen = () => {
 
       {activeTab === 'Home' && profile && (
         <View style={styles.profileContainer}>
-          <Image source={{ uri: safeUri(profile.channelAvatar) }} style={styles.profileAvatar} />
+          <Image source={{ uri: safeImageUri(profile.channelAvatar, 'https://via.placeholder.com/100') }} style={styles.profileAvatar} />
           <View style={styles.nameContainer}>
             <Text style={styles.profileName}>{profile.channelName}</Text>
             <MaterialCommunityIcons name="check-decagram" size={16} color="#3ea6ff" style={styles.verifiedIcon} />

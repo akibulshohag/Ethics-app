@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { config } from '../../config';
-import { navigationRef } from '../utils/helper';
+import { navigationRef, safeImageUri } from '../utils/helper';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
@@ -734,7 +734,12 @@ const HomeVersion = () => {
     >
       <View style={styles.storyBorder}>
         <Image
-          source={{ uri: channel?.avatar || 'https://via.placeholder.com/100' }}
+          source={{
+            uri: safeImageUri(
+              channel?.avatar,
+              'https://via.placeholder.com/100',
+            ),
+          }}
           style={styles.storyImage}
         />
       </View>
@@ -914,7 +919,7 @@ const HomeVersion = () => {
                 activeOpacity={0.9}
               >
                 <Image
-                  source={{ uri: short.image }}
+                  source={{ uri: safeImageUri(short.image) }}
                   style={styles.shortImage}
                 />
                 <View style={styles.shortOverlay}>
@@ -955,7 +960,7 @@ const HomeVersion = () => {
                 activeOpacity={0.9}
               >
                 <Image
-                  source={{ uri: c.thumbnail || c.image }}
+                  source={{ uri: safeImageUri(c.thumbnail || c.image) }}
                   style={styles.continueImage}
                 />
                 <View style={styles.playButtonSmall}>
@@ -978,7 +983,7 @@ const HomeVersion = () => {
         >
           <View style={styles.thumbnailWrapper}>
             <Image
-              source={{ uri: item.thumbnail }}
+              source={{ uri: safeImageUri(item.thumbnail) }}
               style={styles.videoThumbnail}
             />
             {item.isSponsored && (
@@ -1029,7 +1034,7 @@ const HomeVersion = () => {
         >
           <View style={styles.thumbnailWrapper}>
             <Image
-              source={{ uri: item.thumbnail }}
+              source={{ uri: safeImageUri(item.thumbnail) }}
               style={styles.videoThumbnail}
             />
             {item.duration != null && item.duration !== '' && (
@@ -1129,8 +1134,7 @@ const HomeVersion = () => {
         keyExtractor={(item, index) => {
           if (item.type === 'VIDEO')
             return `video-${item.id || index}-${index}`;
-          if (item.type === 'POST')
-            return `post-${item.id || index}-${index}`;
+          if (item.type === 'POST') return `post-${item.id || index}-${index}`;
           if (item.type === 'SHORTS')
             return `${item.id || `s-${index}`}-${index}`;
           if (item.type === 'CONTINUE') return `${item.id || 'cont'}-${index}`;

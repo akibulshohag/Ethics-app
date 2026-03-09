@@ -26,6 +26,7 @@ import {
 } from '../constants/theme';
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
+import { safeImageUri } from '../utils/helper';
 
 const DARK_MODE_KEY = '@ethics_dark_mode';
 
@@ -132,12 +133,12 @@ const ProfileScreen = () => {
           <View style={styles.avatarContainer}>
             <Image
               source={{
-                uri:
-                  user?.photos?.[0] ||
-                  (Array.isArray(user?.photos) && user?.photos[0]) ||
+                uri: safeImageUri(
+                  user?.photos?.[0] ?? (Array.isArray(user?.photos) ? user.photos[0] : null),
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(
                     user?.name || user?.email || 'U',
                   )}&background=FF8C00&color=fff`,
+                ),
               }}
               style={styles.avatar}
             />

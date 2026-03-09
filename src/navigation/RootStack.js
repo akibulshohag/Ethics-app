@@ -12,6 +12,9 @@ import MenuManageScreen from '../screens/MenuManageScreen';
 import ChatScreen from '../screens/ChatScreen';
 import DetailedChatScreen from '../screens/DetailedChatScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
+import LiveOrdersScreen from '../screens/LiveOrdersScreen';
+import EarningsScreen from '../screens/EarningsScreen';
+import MessageListScreen from '../screens/MessageListScreen';
 
 const Root = createStackNavigator();
 
@@ -34,6 +37,9 @@ const RootStack = () => {
       <Root.Screen name="ChatScreen" component={ChatScreen} />
       <Root.Screen name="DetailedChatScreen" component={DetailedChatScreen} />
       <Root.Screen name="OrderDetailsScreen" component={OrderDetailsScreen} />
+      <Root.Screen name="OrdersList" component={LiveOrdersScreen} />
+      <Root.Screen name="Earnings" component={EarningsScreen} />
+      <Root.Screen name="MessageList" component={MessageListScreen} />
     </Root.Navigator>
   );
 };
