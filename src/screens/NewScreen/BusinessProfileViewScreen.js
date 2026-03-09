@@ -46,8 +46,10 @@ import {
 import { getUserVideos } from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
 import { getNotificationsByUserId } from '../../services/notificationService';
+import { getPromotionsByUser } from '../../services/promotionService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
+import CreatePromotionModal from '../../components/CreatePromotionModal';
 
 const { width } = Dimensions.get('window');
 
@@ -291,6 +293,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [ownerVideosLoading, setOwnerVideosLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [promotions, setPromotions] = useState([]);
+  const [promotionsLoading, setPromotionsLoading] = useState(false);
+  const [promotionsRefreshing, setPromotionsRefreshing] = useState(false);
+  const [createPromotionModalVisible, setCreatePromotionModalVisible] = useState(false);
 
   const loadPosts = useCallback(
     async (refresh = false) => {
@@ -380,6 +386,27 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     }
   }, [profileUserId]);
 
+  const loadPromotions = useCallback(
+    async (refresh = false) => {
+      if (!profileUserId) {
+        setPromotions([]);
+        return;
+      }
+      if (refresh) setPromotionsRefreshing(true);
+      else setPromotionsLoading(true);
+      try {
+        const res = await getPromotionsByUser(profileUserId, 1, 50);
+        setPromotions(res?.promotions ?? []);
+      } catch (e) {
+        setPromotions([]);
+      } finally {
+        setPromotionsLoading(false);
+        setPromotionsRefreshing(false);
+      }
+    },
+    [profileUserId],
+  );
+
   useEffect(() => {
     if (activeTab === 'Grid' && profileUserId) loadGallery();
   }, [activeTab, profileUserId, loadGallery]);
@@ -391,6 +418,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   useEffect(() => {
     if (activeTab === 'Notification' && profileUserId) loadNotifications();
   }, [activeTab, profileUserId, loadNotifications]);
+
+  useEffect(() => {
+    if (activeTab === 'Promotions' && profileUserId) loadPromotions();
+  }, [activeTab, profileUserId, loadPromotions]);
 
   const handleGalleryUpload = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading) return;
@@ -733,6 +764,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
+        ) : activeTab === 'Promotions' && isOwnProfile ? (
+          <TouchableOpacity onPress={() => setCreatePromotionModalVisible(true)}>
+            <MaterialCommunityIcons name="plus" size={24} color="#333" />
+          </TouchableOpacity>
         ) : activeTab === 'Grid' && isOwnProfile ? (
           <TouchableOpacity
             onPress={handleGalleryUpload}
@@ -756,7 +791,17 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Posts':
         return posts;
       case 'Promotions':
-        return MOCK_PROMOTIONS;
+        return promotions.map(p => ({
+          id: p.id,
+          title: p.title,
+          image: p.thumbnailUrl || p.videoUrl,
+          price: p.promoAmount != null ? `${p.promoCode || ''} • ${p.promoAmount}% off` : (p.promoCode || ''),
+          views: formatCount(p.viewCount),
+          promoCode: p.promoCode,
+          promoAmount: p.promoAmount,
+          startDate: p.startDate,
+          expireDate: p.expireDate,
+        }));
       case 'Grid':
         return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
       case 'Video':
@@ -787,7 +832,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         />
       );
     }
-    if (activeTab === 'Promotions') return <PromotionCard item={item} />;
+    if (activeTab === 'Promotions') {
+      return (
+        <PromotionCard
+          item={{
+            ...item,
+            image: item.image ? safeImageUri(item.image) : 'https://via.placeholder.com/300',
+          }}
+        />
+      );
+    }
     if (activeTab === 'Grid') {
       return (
         <TouchableOpacity
@@ -869,6 +923,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
       ) : null}
+      {activeTab === 'Promotions' && promotionsLoading && promotions.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading promotions...</Text>
+        </View>
+      ) : null}
       <FlatList
         key={activeTab === 'Grid' ? 'grid-3-col' : `list-1-col-${activeTab}`}
         data={getListData()}
@@ -910,6 +970,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
+          ) : activeTab === 'Promotions' && profileUserId ? (
+            <RefreshControl
+              refreshing={promotionsRefreshing}
+              onRefresh={() => loadPromotions(true)}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
           ) : undefined
         }
       />
@@ -928,6 +995,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         visible={createPostModalVisible}
         onClose={() => setCreatePostModalVisible(false)}
         onSuccess={() => loadPosts(true)}
+        userId={currentUser?.id}
+      />
+      <CreatePromotionModal
+        visible={createPromotionModalVisible}
+        onClose={() => setCreatePromotionModalVisible(false)}
+        onSuccess={() => loadPromotions(true)}
         userId={currentUser?.id}
       />
 
