@@ -38,6 +38,7 @@ import {
   getVideoById,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import logo from '../assets/logo.png';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
@@ -463,10 +464,8 @@ const HomeOneScreen = () => {
   const renderLanding = () => (
     <View style={styles.landingContainer}>
       <View style={styles.centerContent}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>
-            eat<Text style={{ fontWeight: 'bold' }}>ix</Text>
-          </Text>
+        <View style={[styles.logoContainer, { marginBottom: 20 }]}>
+          <Image source={logo} style={{ width: 200, height: 50 }} resizeMode='contain' />
         </View>
         <View style={styles.landingSearchBox}>
           <Icon
@@ -557,7 +556,9 @@ const HomeOneScreen = () => {
           >
             <Text style={styles.navBtnText}>{'<'} Home</Text>
           </TouchableOpacity>
-          <Text style={styles.headerLogo}>eatix</Text>
+          <View style={styles.headerLogoContainer}>
+            <Image source={logo} style={styles.logoImage} resizeMode="contain" />
+          </View>
           <TouchableOpacity
             style={[styles.navBtn]}
           >
@@ -1271,6 +1272,15 @@ const styles = StyleSheet.create({
   },
   navBtnText: { color: '#424242', fontSize: 12, fontWeight: '600' },
   headerLogo: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
+  headerLogoContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoImage: {
+    width: 100,
+    height: 30,
+  },
   resultsTitle: {
     color: '#FFF',
     marginTop: 10,
