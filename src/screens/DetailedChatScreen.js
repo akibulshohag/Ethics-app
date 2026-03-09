@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#FDB022',
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    padding: 50,
   },
   backButton: {
     flexDirection: 'row',
@@ -761,7 +761,7 @@ const styles = StyleSheet.create({
   avatar: { width: 55, height: 55, borderRadius: 27.5 },
   avatarSpacer: { width: 55, height: 55 },
   bubbleContainer: { maxWidth: '75%', position: 'relative' },
-  receivedBubbleContainer: { marginLeft: 15 },
+  receivedBubbleContainer: { marginLeft: -35 },
   sentBubbleContainer: { marginRight: 15 },
   bubble: {
     backgroundColor: '#E0E0E0',

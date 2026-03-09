@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
     marginLeft: 2,
   },
-  liveOrdersText: { fontSize: 18, fontWeight: '700', color: '#F04438' },
+  liveOrdersText: { fontSize: 18, fontWeight: '700', color: '#DF485E' },
   tabBar: { flexDirection: 'row', marginTop: 10 },
   tabItem: {
     flex: 1,
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   viewBtn: { borderWidth: 1, borderColor: '#FDB022' },
-  rejectBtn: { backgroundColor: '#F04438' },
+  rejectBtn: { backgroundColor: '#DF485E' },
   acceptBtn: { backgroundColor: '#FDB022' },
   viewBtnText: { color: '#FDB022', fontWeight: '600' },
   btnText: { color: 'white', fontWeight: '600' },

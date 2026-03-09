@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   },
   subscribeBtnText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
   },
   bgImage: {

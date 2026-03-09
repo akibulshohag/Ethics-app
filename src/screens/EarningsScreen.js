@@ -127,12 +127,12 @@ export default function EarningsScreen() {
           }
         >
           <View style={styles.summaryRow}>
-            <View style={[styles.summaryCard, { backgroundColor: '#FEF0D7' }]}>
-              <Text style={[styles.summaryLabel, { color: '#FDB022' }]}>Completed Orders</Text>
+            <View style={[styles.summaryCard, { backgroundColor: '#FBEDD9' }]}>
+              <Text style={[styles.summaryLabel, { color: '#F6A421' }]}>Completed Orders</Text>
               <Text style={styles.summaryValue}>{Number(data?.completedOrders ?? 0)}</Text>
             </View>
-            <View style={[styles.summaryCard, { backgroundColor: '#FEF0D7' }]}>
-              <Text style={[styles.summaryLabel, { color: '#FDB022' }]}>Total Earning</Text>
+            <View style={[styles.summaryCard, { backgroundColor: '#FBEDD9' }]}>
+              <Text style={[styles.summaryLabel, { color: '#F6A421' }]}>Total Earning</Text>
               <Text style={styles.summaryValue}>
                 {data?.currency || 'BDT'} {(Number(data?.totalEarning ?? 0)).toFixed(2)}
               </Text>
@@ -185,12 +185,13 @@ const styles = StyleSheet.create({
   summaryCard: {
     width: '48%',
     paddingVertical: 25,
+    paddingHorizontal: 5,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   summaryLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  summaryValue: { fontSize: 28, fontWeight: '700', color: '#475467' },
+  summaryValue: { fontSize: 24, fontWeight: '700', color: '#475467', },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',

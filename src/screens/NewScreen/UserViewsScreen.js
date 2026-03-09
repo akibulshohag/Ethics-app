@@ -46,7 +46,7 @@ const MOCK_PLAYLISTS = [
   },
   {
     id: '3',
-    title: 'Most Listened Song in Century',
+    title: 'Most Listened Songin Century',
     price: 'World of Music\n\n300 videos',
     image: 'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '300',

@@ -240,8 +240,8 @@ const styles = StyleSheet.create({
   avatar: { width: 80, height: 80, borderRadius: 12 },
   chatInfo: { flex: 1, marginLeft: 15 },
   chatHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  userName: { fontSize: 18, fontWeight: '600', color: '#333', flex: 1 },
-  timeText: { fontSize: 14, color: '#A0A0A0' },
+  userName: { fontSize: 18, fontWeight: '600', color: '#616161', flex: 1 },
+  timeText: { fontSize: 14, color: '#9E9E9E' },
   messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  messageText: { fontSize: 14, color: '#888', flex: 1, marginRight: 10 },
+  messageText: { fontSize: 14, color: '#9E9E9E', flex: 1, marginRight: 10 },
 });

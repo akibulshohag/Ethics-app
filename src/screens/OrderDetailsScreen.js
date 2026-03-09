@@ -212,7 +212,7 @@ export default function OrderDetailsScreen() {
           <View style={styles.addressSection}>
             <Text style={styles.sectionLabel}>Delivery Address</Text>
             <Text style={styles.addressText}>{order.deliveryAddress || '—'}</Text>
-            <Text style={[styles.sectionLabel, { marginTop: 15 }]}>Order Time</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 15 }]}>Delivery Time</Text>
             <View style={styles.timeRow}>
               <Icon name="truck-delivery-outline" size={20} color="#1A1C1E" />
               <Text style={styles.timeText}>{formatDate(order.createdAt)}</Text>
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
   card: { backgroundColor: 'white', borderRadius: 16, marginBottom: 15, overflow: 'hidden' },
   customerHeader: { backgroundColor: '#FDB022', padding: 20 },
-  customerLabel: { color: '#1A1C1E', fontSize: 18, fontWeight: '600', marginBottom: 10 },
+  customerLabel: { color: '#424242', fontSize: 18, fontWeight: '600', marginBottom: 10 },
   customerInfoRow: { flexDirection: 'row', alignItems: 'center' },
   customerAvatar: {
     width: 70,
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  qtyText: { color: '#F04438', fontSize: 12, fontWeight: 'bold' },
+  qtyText: { color: '#1A1C1E', fontSize: 14, fontWeight: 'bold' },
   priceCalc: { color: '#1A1C1E', fontSize: 14, fontWeight: '600' },
   itemTotal: { fontSize: 16, fontWeight: '700', color: '#1A1C1E' },
   billingRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15 },
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 8,
   },
-  rejectBtn: { backgroundColor: '#F04438' },
+  rejectBtn: { backgroundColor: '#F75555' },
   acceptBtn: { backgroundColor: '#FDB022' },
   footerBtnText: { color: 'white', fontSize: 18, fontWeight: '700' },
 });
