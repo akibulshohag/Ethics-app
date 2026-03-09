@@ -381,7 +381,8 @@ const HomeOneScreen = () => {
 
   const handleFeedItemPress = item => {
     if (item?.type === 'short') {
-      openShortDetail(item)
+      // openShortDetail(item)
+      navigation.navigate('ProductShortsVideo', { item })
     } else {
       openRestaurantDetail(item);
     }
