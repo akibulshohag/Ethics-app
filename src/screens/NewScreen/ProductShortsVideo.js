@@ -76,15 +76,15 @@ const ProductShortsVideo = () => {
             return [
                 {
                     ...initialItem,
-                    id: '0',
-                    user: initialItem.title.toLowerCase().replace(' ', ''),
-                    videoUrl: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-                    likes: '100k',
-                    comments: 'Com',
-                    shares: 'Share',
-                    hashtags: '#hashtags #music #dance',
-                    audio: 'Original Sound',
-                    desc: 'Description goes here'
+                    id: initialItem.id || '0',
+                    user: initialItem.user?.nickname || initialItem.title?.toLowerCase().replace(/\s+/g, ''),
+                    videoUrl: initialItem.videoUrl || 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+                    likes: initialItem.likes || '100k',
+                    comments: initialItem.comments || 'Com',
+                    shares: initialItem.shares || 'Share',
+                    hashtags: initialItem.hashtags || '#hashtags #food #ethics',
+                    audio: initialItem.audio || 'Original Sound',
+                    desc: initialItem.title || 'Description goes here'
                 },
                 ...DUMMY_VIDEOS
             ];
@@ -195,14 +195,22 @@ const ProductShortsVideo = () => {
                             </View>
                             <TouchableOpacity
                                 style={styles.orderNowBtn}
-                                onPress={() => navigation.navigate('HomeOneScreen', {
-                                    showRestaurantDetail: true,
-                                    restaurantItem: {
-                                        title: item.title,
-                                        location: item.location || 'Birmingham, UK',
-                                        img: item.img || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-                                    },
-                                })}
+                                onPress={() => {
+                                    const ownerId =
+                                        initialItem?.user?.id ?? initialItem?.userId ?? null;
+                                    if (ownerId) {
+                                        navigation.navigate('HomeThreeScreen', {
+                                            ownerId,
+                                            title: initialItem?.title,
+                                            location:
+                                                initialItem?.location ||
+                                                initialItem?.creatorAddress ||
+                                                '',
+                                        });
+                                    } else {
+                                        navigation.navigate('HomeThreeScreen');
+                                    }
+                                }}
                             >
                                 <Text style={styles.orderNowText}>Order Now</Text>
                             </TouchableOpacity>
