@@ -7,7 +7,6 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Dimensions,
   Pressable,
@@ -39,6 +38,7 @@ import {
   getVideoById,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -358,7 +358,7 @@ const HomeOneScreen = () => {
           const full = mapToDisplayItem(res, 'short');
           setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   };
 
@@ -375,13 +375,13 @@ const HomeOneScreen = () => {
           const full = mapToDisplayItem(res, item?.type || 'video');
           setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   };
 
   const handleFeedItemPress = item => {
     if (item?.type === 'short') {
-      openShortDetail(item);
+      openShortDetail(item)
     } else {
       openRestaurantDetail(item);
     }
@@ -389,22 +389,22 @@ const HomeOneScreen = () => {
 
   const featuredItem = featuredVideo?.video
     ? mapToDisplayItem(
-        {
-          ...featuredVideo.video,
-          user: featuredVideo.video.user || featuredVideo.user,
-        },
-        'video',
-      )
+      {
+        ...featuredVideo.video,
+        user: featuredVideo.video.user || featuredVideo.user,
+      },
+      'video',
+    )
     : null;
 
   const sponsoredItem = sponsoredVideo?.video
     ? mapToDisplayItem(
-        {
-          ...sponsoredVideo.video,
-          user: sponsoredVideo.video.user || sponsoredVideo.user,
-        },
-        'video',
-      )
+      {
+        ...sponsoredVideo.video,
+        user: sponsoredVideo.video.user || sponsoredVideo.user,
+      },
+      'video',
+    )
     : null;
 
   // Sectioned feed: sponsored → 2 shorts → 2 videos → continue (3) → 4 shorts → 4 videos → 6 → 6 ...
@@ -461,7 +461,7 @@ const HomeOneScreen = () => {
 
   const renderLanding = () => (
     <View style={styles.landingContainer}>
-      <SafeAreaView style={styles.centerContent}>
+      <View style={styles.centerContent}>
         <View style={styles.logoContainer}>
           <Text style={styles.logoText}>
             eat<Text style={{ fontWeight: 'bold' }}>ix</Text>
@@ -542,7 +542,7 @@ const HomeOneScreen = () => {
           </View>
         )}
         <Text style={styles.slogan}>See it, Love it, order it</Text>
-      </SafeAreaView>
+      </View>
     </View>
   );
 
@@ -558,7 +558,7 @@ const HomeOneScreen = () => {
           </TouchableOpacity>
           <Text style={styles.headerLogo}>eatix</Text>
           <TouchableOpacity
-            style={[styles.navBtn, { backgroundColor: '#F5A623' }]}
+            style={[styles.navBtn]}
           >
             <Text style={styles.navBtnText}>Login {'>'}</Text>
           </TouchableOpacity>
@@ -623,7 +623,10 @@ const HomeOneScreen = () => {
               {feedSections.map((section, sectionIdx) => (
                 <View key={`${section.type}-${sectionIdx}`}>
                   {section.type === 'SHORTS' && section.data.length > 0 && (
-                    <Text style={styles.sectionTitle}>Shorts</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Icon style={{ marginRight: 5, marginTop: -5 }} name="camera" size={24} color="#d17409ff" />
+                      <Text style={styles.sectionTitle}>Shorts</Text>
+                    </View>
                   )}
                   {section.type === 'VIDEOS' && section.data.length > 0 && (
                     <Text style={styles.sectionTitle}>Videos</Text>
@@ -678,8 +681,8 @@ const HomeOneScreen = () => {
     setVideoLoading(false);
     setVideoError(
       e?.error?.localizedDescription ||
-        e?.errorString ||
-        'Failed to play video.',
+      e?.errorString ||
+      'Failed to play video.',
     );
   };
 
@@ -691,7 +694,6 @@ const HomeOneScreen = () => {
   };
   const renderVideoDetail = () => (
     <View style={styles.videoBackground}>
-      <StatusBar hidden />
       {selectedItem?.videoUrl ? (
         <>
           <Video
@@ -744,7 +746,7 @@ const HomeOneScreen = () => {
         style={styles.videoOverlay}
         onPress={() => !videoError && setVideoPaused(p => !p)}
       >
-        <SafeAreaView style={styles.videoOverlayInner}>
+        <View style={styles.videoOverlayInner}>
           <View style={styles.videoHeader}>
             <TouchableOpacity
               onPress={() => setIsVideoDetail(false)}
@@ -870,14 +872,13 @@ const HomeOneScreen = () => {
               <Icon name="chevron-down" size={40} color="#FFF" />
             </View>
           </View>
-        </SafeAreaView>
+        </View>
       </Pressable>
     </View>
   );
 
   const renderRestaurantDetail = () => (
-    <SafeAreaView style={styles.resContainer}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+    <View style={styles.resContainer}>
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.resHeader}>
           <TouchableOpacity
@@ -972,11 +973,12 @@ const HomeOneScreen = () => {
                   setVideoLoading(false);
                   setVideoError(
                     e?.error?.localizedDescription ||
-                      e?.errorString ||
-                      'Playback failed',
+                    e?.errorString ||
+                    'Playback failed',
                   );
                 }}
               />
+
               {videoLoading && (
                 <View style={styles.resVideoLoadingOverlay}>
                   <ActivityIndicator size="small" color="#F5A623" />
@@ -1041,8 +1043,8 @@ const HomeOneScreen = () => {
                 >
                   <Icon
                     name={icon}
-                    size={24}
-                    color={url ? '#333' : '#ccc'}
+                    size={28}
+                    color={url ? '#333' : '#000'}
                     style={styles.socialIcon}
                   />
                 </TouchableOpacity>
@@ -1066,8 +1068,8 @@ const HomeOneScreen = () => {
           ).find(s => (s.type || '').toLowerCase() === 'website')?.url ||
             (selectedItem?.user?.businessName
               ? `www.${String(selectedItem.user.businessName)
-                  .toLowerCase()
-                  .replace(/\s+/g, '')}.com`
+                .toLowerCase()
+                .replace(/\s+/g, '')}.com`
               : null) ||
             '—'}
         </Text>
@@ -1102,20 +1104,42 @@ const HomeOneScreen = () => {
           </Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 
+  const barStyle = isRestaurantDetail
+    ? 'dark-content'
+    : isVideoDetail
+      ? 'light-content'
+      : 'light-content';
+
+  const statusBarBg = isRestaurantDetail
+    ? '#FFF'
+    : isVideoDetail
+      ? '#000'
+      : '#F5A623';
+
+  const safeAreaBg = isVideoDetail ? '#000' : statusBarBg;
+
   return (
-    <View style={{ flex: 1 }}>
-      <StatusBar barStyle="light-content" backgroundColor="#F5A623" />
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: safeAreaBg }}
+      edges={['top']}
+    >
+      <StatusBar
+        barStyle={barStyle}
+        backgroundColor={statusBarBg}
+        hidden={isVideoDetail}
+        translucent={isVideoDetail}
+      />
       {isRestaurantDetail
         ? renderRestaurantDetail()
         : isVideoDetail
-        ? renderVideoDetail()
-        : isLanding
-        ? renderLanding()
-        : renderResults()}
-    </View>
+          ? renderVideoDetail()
+          : isLanding
+            ? renderLanding()
+            : renderResults()}
+    </SafeAreaView>
   );
 };
 
@@ -1157,6 +1181,7 @@ const FoodCard = ({ title, location, isSponsored, img, onPress }) => (
     <View style={styles.cardInfo}>
       <View>
         <Text style={styles.cardTitle}>{title}</Text>
+        <Text numberOfLines={1} style={{ width: 150, color: '#666', fontSize: 12 }}>{location}</Text>
       </View>
       <View style={styles.cardStats}>
         <Text style={styles.statSmall}>100k views</Text>
@@ -1231,7 +1256,7 @@ const styles = StyleSheet.create({
   feedLoading: { paddingVertical: 40, alignItems: 'center' },
   feedLoadingText: { marginTop: 10, fontSize: 14, color: '#666' },
   mainContainer: { flex: 1, backgroundColor: '#FFF' },
-  header: { backgroundColor: '#F5A623', padding: 15, paddingTop: 10 },
+  header: { backgroundColor: '#F5A623', padding: 15 },
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1240,16 +1265,16 @@ const styles = StyleSheet.create({
   navBtn: {
     backgroundColor: 'rgba(255,255,255,0.25)',
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingVertical: 6,
+    borderRadius: 4,
   },
-  navBtnText: { color: '#FFF', fontSize: 13, fontWeight: '600' },
+  navBtnText: { color: '#424242', fontSize: 12, fontWeight: '600' },
   headerLogo: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
   resultsTitle: {
     color: '#FFF',
-    marginTop: 15,
-    fontSize: 17,
-    fontWeight: '500',
+    marginTop: 10,
+    fontSize: 18,
+    fontWeight: '700',
   },
   bannerWrapper: { width: '100%', height: 210, position: 'relative' },
   bannerImage: { width: '100%', height: '100%' },
@@ -1257,17 +1282,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 20,
     left: 15,
-    backgroundColor: '#FF7A00',
+    backgroundColor: '#212121',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 25,
+    borderRadius: 8,
   },
   featuredText: {
     color: '#FFF',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 14,
     marginRight: 5,
   },
   locationSection: {
@@ -1290,15 +1315,24 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   innerSearchBox: {
+    position: 'absolute',
+    bottom: -22,
+    left: 15,
+    right: 15,
     flexDirection: 'row',
     backgroundColor: '#FFF',
     height: 45,
     borderRadius: 8,
     alignItems: 'center',
     paddingHorizontal: 12,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   innerInput: { flex: 1, marginLeft: 10, fontSize: 15 },
-  feedPadding: { padding: 15 },
+  feedPadding: { padding: 15, marginTop: 20 },
   feedHint: {
     textAlign: 'center',
     fontSize: 11,
@@ -1323,8 +1357,8 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   shortCard: {
-    height: 200,
-    borderRadius: 15,
+    height: 280,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#222',
   },
@@ -1345,18 +1379,19 @@ const styles = StyleSheet.create({
   shortCardTitle: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 14,
   },
   shortCardViews: { color: '#fff', fontSize: 11, marginTop: 4 },
   card: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#F4F7F8',
     borderRadius: 15,
     marginBottom: 25,
-    elevation: 3,
+    elevation: 1,
     overflow: 'hidden',
+    padding: 10,
   },
   cardImageContainer: { height: 200, position: 'relative' },
-  cardImage: { width: '100%', height: '100%' },
+  cardImage: { width: '100%', height: '100%', borderRadius: 10 },
   playIconOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -1373,7 +1408,7 @@ const styles = StyleSheet.create({
   },
   sponsoredTagText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
   cardInfo: {
-    padding: 15,
+    paddingTop: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1529,8 +1564,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
   },
-  resMainTitle: { fontSize: 24, fontWeight: 'bold', color: '#333' },
-  resSubLoc: { fontSize: 14, color: '#999' },
+  resMainTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  resSubLoc: { fontSize: 12, color: '#999', width: 200 },
   resOrderBtn: {
     backgroundColor: '#F5A623',
     paddingHorizontal: 20,
