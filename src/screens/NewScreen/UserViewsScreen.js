@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,8 @@ import {
   StatusBar,
   Dimensions,
   Image,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -16,45 +18,16 @@ import VideoCard from '../../components/VideoCard';
 import CompactVideoCard from '../../components/CompactVideoCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
 import PromotionCard from '../../components/PromotionCard';
+import { useRoute } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import { safeImageUri } from '../../utils/helper';
+import { getUserVideos } from '../../services/videoService';
+import { getPostsByUser } from '../../services/postService';
+import { getChannelProfile, getGallery } from '../../services/channelService';
 
 const { width } = Dimensions.get('window');
 
-const TABS = ['Home', 'Posts', 'Grid', 'Videos', 'Playlists'];
-
-const MOCK_GRID_IMAGES = [
-  { id: '1', image: 'https://images.pexels.com/photos/2641886/pexels-photo-2641886.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '2', image: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '3', image: 'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '4', image: 'https://images.pexels.com/photos/376464/pexels-photo-376464.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '5', image: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '6', image: 'https://images.pexels.com/photos/1146760/pexels-photo-1146760.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '7', image: 'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '8', image: 'https://images.pexels.com/photos/718742/pexels-photo-718742.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-  { id: '9', image: 'https://images.pexels.com/photos/675951/pexels-photo-675951.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' },
-];
-
-const MOCK_VIDEOS = [
-  {
-    id: '1',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'BBC Earth',
-    channelAvatar: 'https://via.placeholder.com/100',
-    publishedAt: '5 months ago',
-    thumbnail: 'https://images.pexels.com/photos/2641886/pexels-photo-2641886.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    duration: '15:27',
-    views: '9.5M views',
-  },
-  {
-    id: '2',
-    title: 'Special Beef Burger - Homemade Style',
-    channelName: 'BBC Earth',
-    channelAvatar: 'https://via.placeholder.com/100',
-    publishedAt: '2 months ago',
-    thumbnail: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    duration: '10:15',
-    views: '5.1M views',
-  },
-];
+const TABS = ['Home', 'Posts', 'Gallery', 'Videos', 'Playlists'];
 
 const MOCK_PLAYLISTS = [
   {
@@ -80,8 +53,189 @@ const MOCK_PLAYLISTS = [
   },
 ];
 
+const formatCount = n => {
+  const num = Number(n || 0);
+  if (!Number.isFinite(num) || num <= 0) return '0';
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  return String(Math.floor(num));
+};
+
+const formatDuration = seconds => {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return '';
+  const mm = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  return `${mm}:${String(ss).padStart(2, '0')}`;
+};
+
+const timeAgo = dateStr => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+  if (diffYears > 0) return `${diffYears}y ago`;
+  if (diffMonths > 0) return `${diffMonths}mo ago`;
+  if (diffDays > 0) return `${diffDays}d ago`;
+  return 'Recently';
+};
+
+const mapVideoToCard = (v, profile) => {
+  const name =
+    profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
+  const avatar = safeImageUri(
+    profile?.photos?.[0]?.src || profile?.photos?.[0],
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=111&color=fff`,
+  );
+  const viewCount = v?.viewCount ?? v?._count?.views ?? 0;
+  return {
+    id: v.id,
+    title: v.title || 'Untitled',
+    channelName: name,
+    channelAvatar: avatar,
+    publishedAt: timeAgo(v.publishedAt || v.createdAt),
+    thumbnail: safeImageUri(
+      v.thumbnailUrl || v.videoUrl,
+      'https://via.placeholder.com/600',
+    ),
+    duration: formatDuration(v.duration),
+    views: `${formatCount(viewCount)} views`,
+  };
+};
+
+const mapPostToCard = (p, profile) => {
+  const name =
+    profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
+  const avatar = safeImageUri(
+    profile?.photos?.[0]?.src || profile?.photos?.[0],
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=111&color=fff`,
+  );
+  return {
+    id: p.id,
+    postId: p.id,
+    title: p.title || 'Untitled',
+    channelName: name,
+    channelAvatar: avatar,
+    publishedAt: timeAgo(p.publishedAt || p.createdAt),
+    thumbnail: safeImageUri(
+      p.thumbnailUrl || p.mediaUrl,
+      'https://via.placeholder.com/600',
+    ),
+    duration:
+      p.mediaType === 'video' && p.duration != null ? formatDuration(p.duration) : '',
+    likes: formatCount(p.likeCount ?? 0),
+    dislikes: formatCount(p.dislikeCount ?? 0),
+    comments: formatCount(p.commentCount ?? 0),
+    shares: formatCount(p.shareCount ?? 0),
+    website: p.website || '',
+    hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
+  };
+};
+
 const UserViewsScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('Home');
+  const route = useRoute();
+  const currentUser = useSelector(state => state.app?.user);
+  const profileUserId = route.params?.userId || currentUser?.id || null;
+
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  const [rawVideos, setRawVideos] = useState([]);
+  const [videosLoading, setVideosLoading] = useState(false);
+
+  const [rawPosts, setRawPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+
+  const [galleryPhotos, setGalleryPhotos] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+
+  const headerTitle = useMemo(() => {
+    return (
+      profile?.channelName ||
+      profile?.nickname ||
+      profile?.name ||
+      'User'
+    );
+  }, [profile]);
+
+  const videos = useMemo(() => {
+    return (rawVideos || []).map(v => mapVideoToCard(v, profile));
+  }, [rawVideos, profile]);
+
+  const posts = useMemo(() => {
+    return (rawPosts || []).map(p => mapPostToCard(p, profile));
+  }, [rawPosts, profile]);
+
+  const loadProfile = useCallback(async () => {
+    if (!profileUserId) return;
+    setProfileLoading(true);
+    try {
+      const data = await getChannelProfile(profileUserId, currentUser?.id);
+      setProfile(data);
+    } catch (e) {
+      setProfile(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [profileUserId, currentUser?.id]);
+
+  const loadVideos = useCallback(async () => {
+    if (!profileUserId) return;
+    setVideosLoading(true);
+    try {
+      const res = await getUserVideos(profileUserId, 1, 50);
+      setRawVideos(res?.videos || []);
+    } catch (e) {
+      setRawVideos([]);
+    } finally {
+      setVideosLoading(false);
+    }
+  }, [profileUserId]);
+
+  const loadPosts = useCallback(async () => {
+    if (!profileUserId) return;
+    setPostsLoading(true);
+    try {
+      const res = await getPostsByUser(profileUserId, 1, 50);
+      setRawPosts(res?.posts || []);
+    } catch (e) {
+      setRawPosts([]);
+    } finally {
+      setPostsLoading(false);
+    }
+  }, [profileUserId]);
+
+  const loadGallery = useCallback(async () => {
+    if (!profileUserId) return;
+    setGalleryLoading(true);
+    try {
+      const res = await getGallery(profileUserId);
+      setGalleryPhotos(res?.photos ?? []);
+    } catch (e) {
+      setGalleryPhotos([]);
+    } finally {
+      setGalleryLoading(false);
+    }
+  }, [profileUserId]);
+
+  useEffect(() => {
+    if (!profileUserId) return;
+    loadProfile();
+    // Load Home tab data right away
+    loadVideos();
+  }, [profileUserId, loadProfile, loadVideos]);
+
+  useEffect(() => {
+    if (!profileUserId) return;
+    if (activeTab === 'Posts') loadPosts();
+    if (activeTab === 'Gallery') loadGallery();
+    if (activeTab === 'Videos') loadVideos();
+  }, [activeTab, profileUserId, loadPosts, loadGallery, loadVideos]);
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
@@ -98,12 +252,12 @@ const UserViewsScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <UserProfileCard />
+      <UserProfileCard profile={profile} loading={profileLoading} />
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         {TABS.map(tab => {
-          const isGrid = tab === 'Grid';
+          const isGrid = tab === 'Gallery';
           const isActive = activeTab === tab;
           return (
             <TouchableOpacity
@@ -135,10 +289,10 @@ const UserViewsScreen = ({ navigation }) => {
 
   const getListData = () => {
     switch (activeTab) {
-      case 'Home': return MOCK_VIDEOS;
-      case 'Posts': return MOCK_VIDEOS;
-      case 'Grid': return MOCK_GRID_IMAGES;
-      case 'Videos': return MOCK_VIDEOS; // Reuse same mock data for now, just render differently
+      case 'Home': return videos;
+      case 'Posts': return posts;
+      case 'Gallery': return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
+      case 'Videos': return videos;
       case 'Playlists': return MOCK_PLAYLISTS;
       default: return [];
     }
@@ -147,7 +301,7 @@ const UserViewsScreen = ({ navigation }) => {
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Home') return <VideoCard video={item} />;
     if (activeTab === 'Posts') return <BusinessVideoCard video={item} />;
-    if (activeTab === 'Grid') {
+    if (activeTab === 'Gallery') {
       return (
         <View style={styles.gridImageContainer}>
           <Image source={{ uri: item.image }} style={styles.gridImage} />
@@ -170,16 +324,42 @@ const UserViewsScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
+      {!profileUserId ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Login required</Text>
+          <Text style={styles.emptyText}>Please login to view this profile.</Text>
+        </View>
+      ) : null}
       <FlatList
-        key={activeTab === 'Grid' ? 'grid-3-col' : `list-1-col-${activeTab}`}
+        key={activeTab === 'Gallery' ? 'grid-3-col' : `list-1-col-${activeTab}`}
         data={getListData()}
-        keyExtractor={item => item.id}
+        keyExtractor={item => String(item.id)}
         renderItem={renderContentItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        numColumns={activeTab === 'Grid' ? 3 : 1}
-        columnWrapperStyle={activeTab === 'Grid' ? styles.gridColumnWrapper : undefined}
+        numColumns={activeTab === 'Gallery' ? 3 : 1}
+        columnWrapperStyle={activeTab === 'Gallery' ? styles.gridColumnWrapper : undefined}
+        ListEmptyComponent={() => {
+          const loading =
+            (activeTab === 'Home' && videosLoading) ||
+            (activeTab === 'Videos' && videosLoading) ||
+            (activeTab === 'Posts' && postsLoading) ||
+            (activeTab === 'Gallery' && galleryLoading);
+          if (loading) {
+            return (
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator size="large" color="#FFAD33" />
+                <Text style={styles.loadingText}>Loading...</Text>
+              </View>
+            );
+          }
+          return (
+            <View style={styles.loadingWrap}>
+              <Text style={styles.loadingText}>No data found.</Text>
+            </View>
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -269,6 +449,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     resizeMode: 'cover',
   },
+  loadingWrap: { paddingVertical: 30, alignItems: 'center' },
+  loadingText: { marginTop: 10, color: '#666' },
+  emptyState: { padding: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
+  emptyText: { marginTop: 6, color: '#666' },
 });
 
 export default UserViewsScreen;

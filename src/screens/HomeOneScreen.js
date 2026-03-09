@@ -468,7 +468,12 @@ const HomeOneScreen = () => {
           </Text>
         </View>
         <View style={styles.landingSearchBox}>
-          <Icon name="magnify" size={22} color="#999" style={styles.landingSearchIcon} />
+          <Icon
+            name="magnify"
+            size={22}
+            color="#999"
+            style={styles.landingSearchIcon}
+          />
           <TextInput
             style={styles.landingSearchInput}
             placeholder="Search Your address"
@@ -507,7 +512,11 @@ const HomeOneScreen = () => {
               >
                 {addressSuggestions.slice(0, 8).map((item, idx) => (
                   <TouchableOpacity
-                    key={item.place_id ? item.place_id : `fb-${idx}-${item.description}`}
+                    key={
+                      item.place_id
+                        ? item.place_id
+                        : `fb-${idx}-${item.description}`
+                    }
                     style={styles.suggestionItem}
                     onPress={() =>
                       handleSelectSuggestion(item.description, item.place_id)
@@ -525,7 +534,8 @@ const HomeOneScreen = () => {
               <View style={styles.suggestionItem}>
                 <Icon name="map-marker-outline" size={18} color="#999" />
                 <Text style={styles.suggestionHint}>
-                  No areas found. Type full address (e.g. Mirpur 10, Dhaka) or tap the location icon.
+                  No areas found. Type full address (e.g. Mirpur 10, Dhaka) or
+                  tap the location icon.
                 </Text>
               </View>
             )}
@@ -789,9 +799,23 @@ const HomeOneScreen = () => {
             </TouchableOpacity>
           )}
           <View style={styles.videoFooter}>
-            <Text style={styles.videoUser}>
-              @{(selectedItem?.title || '').toLowerCase().replace(/\s+/g, '')}
-            </Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                const ownerId =
+                  selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+                if (ownerId) {
+                  navigation.navigate('UserViewsScreen', { userId: ownerId });
+                }
+              }}
+              disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
+            >
+              <Text style={styles.videoUser}>
+                @{(selectedItem?.title || '')
+                  .toLowerCase()
+                  .replace(/\s+/g, '')}
+              </Text>
+            </TouchableOpacity>
             <Text style={styles.videoDesc}>
               {selectedItem?.title || 'Description'}
             </Text>
@@ -868,7 +892,18 @@ const HomeOneScreen = () => {
 
         <View style={styles.resTitleRow}>
           <View>
-            <Text style={styles.resMainTitle}>{selectedItem?.title}</Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                const ownerId = selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+                if (ownerId) {
+                  navigation.navigate('UserViewsScreen', { userId: ownerId });
+                }
+              }}
+              disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
+            >
+              <Text style={styles.resMainTitle}>{selectedItem?.title}</Text>
+            </TouchableOpacity>
             <Text style={styles.resSubLoc}>{selectedItem?.location}</Text>
           </View>
           {(selectedItem?.creatorRole === 'owner' ||
@@ -992,9 +1027,11 @@ const HomeOneScreen = () => {
               { type: 'x', icon: 'twitter' },
               { type: 'website', icon: 'web' },
             ].map(({ type, icon }) => {
-              const link = (selectedItem?.user?.socialLinks || selectedItem?.creatorSocialLinks || []).find(
-                s => (s.type || '').toLowerCase() === type.toLowerCase(),
-              );
+              const link = (
+                selectedItem?.user?.socialLinks ||
+                selectedItem?.creatorSocialLinks ||
+                []
+              ).find(s => (s.type || '').toLowerCase() === type.toLowerCase());
               const url = link?.url || null;
               return (
                 <TouchableOpacity
@@ -1002,7 +1039,12 @@ const HomeOneScreen = () => {
                   onPress={() => url && Linking.openURL(url)}
                   style={styles.socialIconWrap}
                 >
-                  <Icon name={icon} size={24} color={url ? '#333' : '#ccc'} style={styles.socialIcon} />
+                  <Icon
+                    name={icon}
+                    size={24}
+                    color={url ? '#333' : '#ccc'}
+                    style={styles.socialIcon}
+                  />
                 </TouchableOpacity>
               );
             })}
@@ -1017,16 +1059,26 @@ const HomeOneScreen = () => {
           </View>
         </View>
         <Text style={styles.webText}>
-          {(selectedItem?.user?.socialLinks || selectedItem?.creatorSocialLinks || []).find(
-            s => (s.type || '').toLowerCase() === 'website',
-          )?.url || (selectedItem?.user?.businessName ? `www.${String(selectedItem.user.businessName).toLowerCase().replace(/\s+/g, '')}.com` : null) || '—'}
+          {(
+            selectedItem?.user?.socialLinks ||
+            selectedItem?.creatorSocialLinks ||
+            []
+          ).find(s => (s.type || '').toLowerCase() === 'website')?.url ||
+            (selectedItem?.user?.businessName
+              ? `www.${String(selectedItem.user.businessName)
+                  .toLowerCase()
+                  .replace(/\s+/g, '')}.com`
+              : null) ||
+            '—'}
         </Text>
 
         <View style={styles.descContainer}>
           <Text style={styles.sectionTitle}>Description</Text>
           <View style={styles.descBox}>
             <Text style={styles.descText}>
-              {selectedItem?.user?.channelAbout || selectedItem?.description || 'A cozy restaurant serving fresh, delicious food made with quality ingredients. Enjoy great taste, warm service, and a comfortable dining experience.'}
+              {selectedItem?.user?.channelAbout ||
+                selectedItem?.description ||
+                'A cozy restaurant serving fresh, delicious food made with quality ingredients. Enjoy great taste, warm service, and a comfortable dining experience.'}
             </Text>
           </View>
         </View>
@@ -1042,7 +1094,11 @@ const HomeOneScreen = () => {
             {selectedItem?.user?.email || '—'}
           </Text>
           <Text style={styles.contactAddr}>
-            Address : {selectedItem?.location || selectedItem?.creatorAddress || selectedItem?.user?.address || '—'}
+            Address :{' '}
+            {selectedItem?.location ||
+              selectedItem?.creatorAddress ||
+              selectedItem?.user?.address ||
+              '—'}
           </Text>
         </View>
       </ScrollView>

@@ -8,12 +8,54 @@ import {
   TouchableOpacity,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { safeImageUri } from "../utils/helper";
 
-const UserProfileCard = () => {
+const formatCount = (n) => {
+  const num = Number(n || 0);
+  if (!Number.isFinite(num) || num <= 0) return "0";
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(Math.floor(num));
+};
+
+const UserProfileCard = ({
+  profile,
+  loading = false,
+  canEdit = false,
+  onSubscribe,
+  subscribeLoading = false,
+  showSubscribe = true,
+}) => {
+  const coverUri =
+    profile?.coverUrl ||
+    profile?.coverImage ||
+    "https://images.unsplash.com/photo-1552566626-52f8b828add9";
+  const name =
+    profile?.channelName ||
+    profile?.nickname ||
+    profile?.name ||
+    "yourname";
+  const displayName =
+    profile?.nickname && !String(profile.nickname).startsWith("@")
+      ? `@${profile.nickname}`
+      : profile?.nickname
+      ? String(profile.nickname)
+      : name;
+  const avatarUri = safeImageUri(
+    profile?.photos?.[0]?.src || profile?.photos?.[0],
+    "",
+  );
+  const followers = formatCount(profile?.subscriberCount ?? profile?.followersCount ?? 0);
+  const following = formatCount(profile?.followingCount ?? 0);
+  const msgCount = formatCount(profile?.messageCount ?? 0);
+  const statusText =
+    (profile?.channelAbout && String(profile.channelAbout).trim()) ||
+    "Hi! Welcome to this profile.";
+
   return (
     <View style={styles.cardContainer}>
       <ImageBackground
-        source={{ uri: "https://images.unsplash.com/photo-1552566626-52f8b828add9" }}
+        source={{ uri: coverUri }}
         style={styles.bgImage}
         imageStyle={{ borderRadius: 12 }}
       >
@@ -24,15 +66,23 @@ const UserProfileCard = () => {
             <View style={styles.profileHeaderRow}>
               <View style={styles.avatarContainer}>
                 <View style={styles.avatarCircle}>
-                  <Icon name="account" size={40} color="#F5A623" />
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  ) : (
+                    <Icon name="account" size={40} color="#F5A623" />
+                  )}
                 </View>
-                <View style={styles.editPencilBadge}>
-                  <Icon name="pencil-outline" size={14} color="#aaa" />
-                </View>
+                {canEdit && (
+                  <View style={styles.editPencilBadge}>
+                    <Icon name="pencil-outline" size={14} color="#aaa" />
+                  </View>
+                )}
               </View>
 
               <View style={styles.profileTextGroup}>
-                <Text style={styles.businessNameHeading}>Dalchini</Text>
+                <Text style={styles.businessNameHeading} numberOfLines={1}>
+                  {loading ? "Loading..." : displayName}
+                </Text>
                 <View style={styles.verifiedIndicatorRow}>
                   <Icon name="check-circle-outline" size={15} color="#fff" />
                   <Text style={styles.verifiedAccountLabel}>verified account</Text>
@@ -47,15 +97,15 @@ const UserProfileCard = () => {
             {/* Opaque Stats Bar */}
             <View style={styles.statsOpaqueBar}>
               <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>625k</Text>
+                <Text style={styles.statValMain}>{followers}</Text>
                 <Text style={styles.statLabelMain}>Followers</Text>
               </View>
               <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>124k</Text>
+                <Text style={styles.statValMain}>{following}</Text>
                 <Text style={styles.statLabelMain}>Following</Text>
               </View>
               <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>89</Text>
+                <Text style={styles.statValMain}>{msgCount}</Text>
                 <Text style={styles.statLabelMain}>MSG</Text>
               </View>
             </View>
@@ -63,14 +113,22 @@ const UserProfileCard = () => {
             {/* Opaque Status Box */}
             <View style={styles.statusWhiteBox}>
               <Text style={styles.statusBodyText}>
-                Hi! You haven't added any medicines yet. Want me to help you set up
-                the first one?
+                {statusText}
               </Text>
             </View>
             <View style={styles.subscribeBtnContainer}>
-              <TouchableOpacity style={styles.subscribeBtn}>
-                <Text style={styles.subscribeBtnText}>Subscribe</Text>
-              </TouchableOpacity>
+              {showSubscribe && (
+                <TouchableOpacity
+                  style={[styles.subscribeBtn, subscribeLoading && { opacity: 0.7 }]}
+                  onPress={onSubscribe}
+                  disabled={!onSubscribe || subscribeLoading}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.subscribeBtnText}>
+                    {subscribeLoading ? "..." : "Subscribe"}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -146,6 +204,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
   },
+  avatarImage: { width: 70, height: 70, borderRadius: 45 },
   editPencilBadge: {
     position: 'absolute',
     top: 4,
