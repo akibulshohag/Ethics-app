@@ -724,7 +724,7 @@ const PromotionScreen = ({ onBack }) => {
             <Icon name="chevron-left" size={18} color="#FFF" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
-        </View>
+    </View>
         <View style={styles.centered}>
           <Text style={styles.loginPrompt}>
             Please log in to view your profile.
@@ -737,7 +737,7 @@ const PromotionScreen = ({ onBack }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
-
+      
       <View style={styles.navBar}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Icon name="chevron-left" size={18} color="#FFF" />
@@ -790,8 +790,8 @@ const PromotionScreen = ({ onBack }) => {
               <Text style={styles.coverEditHintText}>Change cover photo</Text>
             </View>
           )}
-          <View style={styles.headerWrapper}>
-            <View style={styles.profileHeaderCard}>
+        <View style={styles.headerWrapper}>
+          <View style={styles.profileHeaderCard}>
               {profileLoading && !profile ? (
                 <ActivityIndicator
                   size="large"
@@ -800,7 +800,7 @@ const PromotionScreen = ({ onBack }) => {
                 />
               ) : (
                 <>
-                  <View style={styles.brandRow}>
+            <View style={styles.brandRow}>
                     <TouchableOpacity
                       style={styles.avatarBorder}
                       onPress={handleAvatarPress}
@@ -813,7 +813,7 @@ const PromotionScreen = ({ onBack }) => {
                           style={styles.avatar}
                         />
                       ) : (
-                        <Image
+                <Image 
                           source={{
                             uri: avatarUri
                               ? safeImageUri(avatarUri)
@@ -821,11 +821,11 @@ const PromotionScreen = ({ onBack }) => {
                                   displayName,
                                 )}&background=333&color=fff`,
                           }}
-                          style={styles.avatar}
-                        />
+                  style={styles.avatar} 
+                />
                       )}
                     </TouchableOpacity>
-                  </View>
+              </View>
                   <Text style={styles.userName}>{displayName}</Text>
                   <Text style={styles.userLocation}>
                     {displayLocation || '—'}
@@ -860,24 +860,24 @@ const PromotionScreen = ({ onBack }) => {
                         color="#1A1A1A"
                       />
                     </TouchableOpacity>
-                  </View>
+            </View>
                 </>
               )}
-            </View>
-            <View style={styles.bioContainer}>
-              <View style={styles.bioContentRow}>
+          </View>
+          <View style={styles.bioContainer}>
+            <View style={styles.bioContentRow}>
                 <Text style={styles.bioText} numberOfLines={4}>
                   {bio || 'No description yet.'}
-                </Text>
+              </Text>
                 <TouchableOpacity
                   style={styles.editIcon}
                   onPress={openEditProfile}
                 >
-                  <Icon name="pencil-box-outline" size={22} color="#999" />
-                </TouchableOpacity>
-              </View>
+                <Icon name="pencil-box-outline" size={22} color="#999" />
+              </TouchableOpacity>
             </View>
           </View>
+        </View>
         </View>
         {/* MOST LIKED VIDEOS */}
         <View style={styles.section}>
@@ -893,7 +893,7 @@ const PromotionScreen = ({ onBack }) => {
               Videos you like will appear here.
             </Text>
           ) : (
-            <View style={styles.videoGrid}>
+          <View style={styles.videoGrid}>
               {mostLikedItems.slice(0, 6).map((item, idx) => (
                 <TouchableOpacity
                   key={item.id || idx}
@@ -906,7 +906,7 @@ const PromotionScreen = ({ onBack }) => {
                   />
                 </TouchableOpacity>
               ))}
-            </View>
+          </View>
           )}
         </View>
 
@@ -924,7 +924,7 @@ const PromotionScreen = ({ onBack }) => {
               No promotions near you right now.
             </Text>
           ) : (
-            <View style={styles.promoGrid}>
+          <View style={styles.promoGrid}>
               {nearbyPromotions.slice(0, 8).map((p, idx) => (
                 <TouchableOpacity
                   key={p.id || idx}
@@ -945,9 +945,9 @@ const PromotionScreen = ({ onBack }) => {
                       {p.promoCode}
                     </Text>
                   ) : null}
-                </TouchableOpacity>
+            </TouchableOpacity>
               ))}
-            </View>
+          </View>
           )}
         </View>
 
@@ -963,7 +963,7 @@ const PromotionScreen = ({ onBack }) => {
           ) : savedItems.length === 0 ? (
             <Text style={styles.emptyHint}>Save videos to watch later.</Text>
           ) : (
-            <View style={styles.videoGrid}>
+          <View style={styles.videoGrid}>
               {savedItems.slice(0, 6).map((item, idx) => (
                 <TouchableOpacity
                   key={item.id || idx}
@@ -976,7 +976,7 @@ const PromotionScreen = ({ onBack }) => {
                   />
                 </TouchableOpacity>
               ))}
-            </View>
+          </View>
           )}
         </View>
 
@@ -992,7 +992,7 @@ const PromotionScreen = ({ onBack }) => {
           ) : myVideos.length === 0 ? (
             <Text style={styles.emptyHint}>Your uploads will appear here.</Text>
           ) : (
-            <View style={styles.videoGrid}>
+          <View style={styles.videoGrid}>
               {myVideos.slice(0, 6).map((item, idx) => (
                 <TouchableOpacity
                   key={item.id || idx}
@@ -1005,7 +1005,7 @@ const PromotionScreen = ({ onBack }) => {
                   />
                 </TouchableOpacity>
               ))}
-            </View>
+          </View>
           )}
         </View>
 
@@ -1512,24 +1512,24 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   loginPrompt: { fontSize: 16, color: '#666', textAlign: 'center' },
-  navBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  navBar: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
     padding: 15,
   },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  backBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#1A1A1A', 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
     borderRadius: 8,
   },
   backText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 4 },
   navRight: { flexDirection: 'row', alignItems: 'center' },
   messageLabel: { fontSize: 13, color: '#666', marginRight: 8 },
-
+  
   profileHeaderWithCover: {
     marginHorizontal: 15,
     marginTop: 0,
@@ -1564,11 +1564,11 @@ const styles = StyleSheet.create({
     // paddingHorizontal: 15,
     paddingBottom: 0,
   },
-  profileHeaderCard: {
+  profileHeaderCard: { 
     // backgroundColor: '#2C3E50',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingVertical: 25,
+    paddingVertical: 25, 
     alignItems: 'center',
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
@@ -1624,8 +1624,8 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
-  bioContainer: {
-    backgroundColor: '#F2F2F2',
+  bioContainer: { 
+    backgroundColor: '#F2F2F2', 
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
     padding: 15,

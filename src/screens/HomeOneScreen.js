@@ -100,6 +100,9 @@ const HomeOneScreen = () => {
   const [galleryError, setGalleryError] = useState(null);
   const [addressText, setAddressText] = useState('');
   const [locationLoading, setLocationLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
+  const searchDebounceRef = useRef(null);
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
   const [feedVideos, setFeedVideos] = useState([]);
@@ -197,6 +200,7 @@ const HomeOneScreen = () => {
     const lng = selectedLocation.lng;
     const role = viewerRole(user);
     const baseParams = { page: 1, limit: 50, sort: 'latest', viewerRole: role };
+    const searchTerm = searchDebounced?.trim() || undefined;
     const videoParams = {
       ...baseParams,
       nearbyLat: lat,
@@ -204,12 +208,14 @@ const HomeOneScreen = () => {
       radiusKm: 50,
       excludeSponsored: true,
       excludeFeatured: true,
+      ...(searchTerm && { search: searchTerm }),
     };
     const shortParams = {
       ...baseParams,
       nearbyLat: lat,
       nearbyLng: lng,
       radiusKm: 50,
+      ...(searchTerm && { search: searchTerm }),
     };
 
     // Featured + sponsored: direct GET /featured and GET /sponsored (no location check)
@@ -252,7 +258,7 @@ const HomeOneScreen = () => {
     } finally {
       setFeedLoading(false);
     }
-  }, [selectedLocation, user]);
+  }, [selectedLocation, user, searchDebounced]);
 
   const loadContinueWatching = useCallback(async () => {
     if (!user?.id) return;
@@ -280,10 +286,21 @@ const HomeOneScreen = () => {
   }, [user?.id]);
 
   useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchDebounced(searchQuery.trim());
+      searchDebounceRef.current = null;
+    }, 400);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
     if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
       loadFeaturedAndFeed();
     }
-  }, [selectedLocation?.lat, selectedLocation?.lng, loadFeaturedAndFeed]);
+  }, [selectedLocation?.lat, selectedLocation?.lng, searchDebounced, loadFeaturedAndFeed]);
 
   useEffect(() => {
     loadContinueWatching();
@@ -487,7 +504,15 @@ const HomeOneScreen = () => {
 
           <View style={styles.innerSearchBox}>
             <Icon name="magnify" size={20} color="#999" />
-            <TextInput placeholder="Food Search" style={styles.innerInput} />
+            <TextInput
+              placeholder="Search videos & shorts by title..."
+              placeholderTextColor="#999"
+              style={styles.innerInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
           </View>
         </View>
 
