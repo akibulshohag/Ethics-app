@@ -3,9 +3,13 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const BusinessVideoTabCard = ({ item }) => {
+const BusinessVideoTabCard = ({ item, onPress }) => {
   return (
-    <TouchableOpacity style={styles.cardContainer} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={styles.cardContainer}
+      activeOpacity={0.9}
+      onPress={onPress}
+    >
       <View style={styles.imageWrapper}>
         <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
         {/* Centered Play Button Overlay */}
