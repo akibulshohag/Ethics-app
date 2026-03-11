@@ -76,14 +76,22 @@ const BusinessVideoCard = ({
         {wrap(
           onLike,
           <>
-            <MaterialCommunityIcons name="thumb-up-outline" size={22} color="#444" />
+            <MaterialCommunityIcons
+              name={video.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+              size={22}
+              color={video.isLiked ? '#FF7F0B' : '#444'}
+            />
             <Text style={styles.interactionText}>{video.likes || '0'}</Text>
           </>,
         )}
         {wrap(
           onDislike,
           <>
-            <MaterialCommunityIcons name="thumb-down-outline" size={22} color="#444" />
+            <MaterialCommunityIcons
+              name={video.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+              size={22}
+              color={video.isDisliked ? '#FF7F0B' : '#444'}
+            />
             <Text style={styles.interactionText}>{video.dislikes || '0'}</Text>
           </>,
         )}

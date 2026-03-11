@@ -10,6 +10,11 @@ import {
   Image,
   ActivityIndicator,
   ScrollView,
+  Modal,
+  Share,
+  Alert,
+  Linking,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -21,9 +26,30 @@ import PromotionCard from '../../components/PromotionCard';
 import { useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { safeImageUri } from '../../utils/helper';
-import { getUserVideos } from '../../services/videoService';
-import { getPostsByUser } from '../../services/postService';
-import { getChannelProfile, getGallery } from '../../services/channelService';
+import Video from 'react-native-video';
+import Slider from '@react-native-community/slider';
+import {
+  getUserVideos,
+  getVideoById,
+  toggleLike as toggleVideoLike,
+  toggleDislike as toggleVideoDislike,
+  recordShare as recordVideoShare,
+} from '../../services/videoService';
+import {
+  getPostsByUser,
+  togglePostLike,
+  togglePostDislike,
+  recordPostShare,
+} from '../../services/postService';
+import {
+  getChannelProfile,
+  getGallery,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+} from '../../services/channelService';
+import CommentsModal from '../../components/CommentsModal';
+import SaveModal from '../../components/SaveModal';
+import { getSocialIcon } from '../../constants/socialLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -34,21 +60,24 @@ const MOCK_PLAYLISTS = [
     id: '1',
     title: 'Dance Competition 2022',
     price: 'World of Music\n\n120 videos', // Repurposing price field for multi-line subtitle as seen in image
-    image: 'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    image:
+      'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
   },
   {
     id: '2',
     title: 'Top Music of All Time',
     price: 'World of Music\n\n250 videos',
-    image: 'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    image:
+      'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '250',
   },
   {
     id: '3',
     title: 'Most Listened Songin Century',
     price: 'World of Music\n\n300 videos',
-    image: 'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
+    image:
+      'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '300',
   },
 ];
@@ -56,7 +85,8 @@ const MOCK_PLAYLISTS = [
 const formatCount = n => {
   const num = Number(n || 0);
   if (!Number.isFinite(num) || num <= 0) return '0';
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (num >= 1000000)
+    return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
   return String(Math.floor(num));
 };
@@ -89,7 +119,9 @@ const mapVideoToCard = (v, profile) => {
     profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
   const avatar = safeImageUri(
     profile?.photos?.[0]?.src || profile?.photos?.[0],
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=111&color=fff`,
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      name,
+    )}&background=111&color=fff`,
   );
   const viewCount = v?.viewCount ?? v?._count?.views ?? 0;
   return {
@@ -107,12 +139,42 @@ const mapVideoToCard = (v, profile) => {
   };
 };
 
+const mapVideoApiToModal = (v = {}) => {
+  const u = v.user || {};
+  const channelName = u.nickname || u.name || 'Unknown';
+  const channelAvatar =
+    u.photos?.[0] ||
+    (Array.isArray(u.photos) && u.photos[0]) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      channelName,
+    )}&background=111&color=fff`;
+  return {
+    id: v.id,
+    title: v.title || 'Untitled',
+    videoUrl: v.videoUrl,
+    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+    durationSeconds: v.duration ?? 0,
+    likeCount: v.likeCount ?? v._count?.likes ?? 0,
+    dislikeCount: v.dislikeCount ?? 0,
+    commentCount: v.commentCount ?? v._count?.comments ?? 0,
+    shareCount: v.shareCount ?? 0,
+    isLiked: v.isLiked ?? false,
+    isDisliked: v.isDisliked ?? false,
+    userId: v.userId,
+    channelName,
+    channelAvatar,
+    socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
+  };
+};
+
 const mapPostToCard = (p, profile) => {
   const name =
     profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
   const avatar = safeImageUri(
     profile?.photos?.[0]?.src || profile?.photos?.[0],
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=111&color=fff`,
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      name,
+    )}&background=111&color=fff`,
   );
   return {
     id: p.id,
@@ -126,13 +188,22 @@ const mapPostToCard = (p, profile) => {
       'https://via.placeholder.com/600',
     ),
     duration:
-      p.mediaType === 'video' && p.duration != null ? formatDuration(p.duration) : '',
+      p.mediaType === 'video' && p.duration != null
+        ? formatDuration(p.duration)
+        : '',
+    likeCount: p.likeCount ?? 0,
+    dislikeCount: p.dislikeCount ?? 0,
+    commentCount: p.commentCount ?? 0,
+    shareCount: p.shareCount ?? 0,
     likes: formatCount(p.likeCount ?? 0),
     dislikes: formatCount(p.dislikeCount ?? 0),
     comments: formatCount(p.commentCount ?? 0),
     shares: formatCount(p.shareCount ?? 0),
+    isLiked: p.isLiked ?? false,
+    isDisliked: p.isDisliked ?? false,
     website: p.website || '',
     hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
+    mediaUrl: p.mediaUrl,
   };
 };
 
@@ -142,8 +213,12 @@ const UserViewsScreen = ({ navigation }) => {
   const currentUser = useSelector(state => state.app?.user);
   const profileUserId = route.params?.userId || currentUser?.id || null;
 
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewImageUri, setPreviewImageUri] = useState(null);
+
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSubscribeLoading, setProfileSubscribeLoading] = useState(false);
 
   const [rawVideos, setRawVideos] = useState([]);
   const [videosLoading, setVideosLoading] = useState(false);
@@ -154,13 +229,31 @@ const UserViewsScreen = ({ navigation }) => {
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
 
+  const [postCommentsVisible, setPostCommentsVisible] = useState(false);
+  const [activePostId, setActivePostId] = useState(null);
+
+  // Video quick-view modal (no Order/Map/Related list)
+  const [videoModalVisible, setVideoModalVisible] = useState(false);
+  const [activeVideoId, setActiveVideoId] = useState(null);
+  const [videoModalLoading, setVideoModalLoading] = useState(false);
+  const [videoModalError, setVideoModalError] = useState(null);
+  const [modalVideo, setModalVideo] = useState(null);
+  const [modalPaused, setModalPaused] = useState(true);
+  const [modalProgress, setModalProgress] = useState({ currentTime: 0, duration: 0 });
+  const [modalIsSliding, setModalIsSliding] = useState(false);
+  const [modalSlidingValue, setModalSlidingValue] = useState(0);
+  const modalVideoRef = React.useRef(null);
+  const seekingRef = React.useRef(false);
+  const progressUpdateRef = React.useRef(0);
+
+  const [saveVisible, setSaveVisible] = useState(false);
+  const [videoCommentsVisible, setVideoCommentsVisible] = useState(false);
+
+  const [channelSub, setChannelSub] = useState({ isSubscribed: false, subscriberCount: 0 });
+  const [subLoading, setSubLoading] = useState(false);
+
   const headerTitle = useMemo(() => {
-    return (
-      profile?.channelName ||
-      profile?.nickname ||
-      profile?.name ||
-      'User'
-    );
+    return profile?.channelName || profile?.nickname || profile?.name || 'User';
   }, [profile]);
 
   const videos = useMemo(() => {
@@ -170,6 +263,257 @@ const UserViewsScreen = ({ navigation }) => {
   const posts = useMemo(() => {
     return (rawPosts || []).map(p => mapPostToCard(p, profile));
   }, [rawPosts, profile]);
+
+  const requireLogin = () => {
+    if (!currentUser?.id) {
+      Alert.alert('Login required', 'Please login to continue.');
+      return true;
+    }
+    return false;
+  };
+
+  const openVideoModal = async videoId => {
+    if (!videoId) return;
+    setActiveVideoId(videoId);
+    setVideoModalVisible(true);
+    setVideoModalLoading(true);
+    setVideoModalError(null);
+    setModalVideo(null);
+    setModalPaused(true);
+    setModalProgress({ currentTime: 0, duration: 0 });
+    setModalIsSliding(false);
+    setModalSlidingValue(0);
+    setChannelSub({ isSubscribed: false, subscriberCount: 0 });
+    try {
+      const res = await getVideoById(videoId, currentUser?.id, currentUser?.role || 'user');
+      const mv = mapVideoApiToModal(res);
+      setModalVideo(mv);
+      setModalPaused(false);
+      if (mv?.userId) {
+        getChannelProfile(mv.userId, currentUser?.id)
+          .then(p => {
+            setChannelSub({
+              isSubscribed: p?.isSubscribed ?? false,
+              subscriberCount: p?.subscriberCount ?? 0,
+            });
+          })
+          .catch(() => {});
+      }
+    } catch (e) {
+      setVideoModalError(e?.response?.data?.message || e?.message || 'Failed to load video');
+    } finally {
+      setVideoModalLoading(false);
+    }
+  };
+
+  const closeVideoModal = () => {
+    setVideoModalVisible(false);
+    setActiveVideoId(null);
+    setModalVideo(null);
+    setVideoModalError(null);
+    setModalPaused(true);
+    setModalProgress({ currentTime: 0, duration: 0 });
+    setModalIsSliding(false);
+    setModalSlidingValue(0);
+    setVideoCommentsVisible(false);
+    setSaveVisible(false);
+  };
+
+  const formatTime = sec => {
+    if (!sec || isNaN(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
+  const modalDisplayTime = modalIsSliding ? modalSlidingValue : modalProgress.currentTime;
+
+  const handleModalLike = async () => {
+    if (requireLogin()) return;
+    if (!modalVideo?.id) return;
+    setModalVideo(prev => {
+      if (!prev) return prev;
+      const isLiked = !prev.isLiked;
+      const wasDisliked = prev.isDisliked;
+      return {
+        ...prev,
+        isLiked,
+        isDisliked: isLiked ? false : wasDisliked,
+        likeCount: Math.max(0, prev.likeCount + (isLiked ? 1 : -1)),
+        dislikeCount: isLiked && wasDisliked ? Math.max(0, prev.dislikeCount - 1) : prev.dislikeCount,
+      };
+    });
+    try {
+      const res = await toggleVideoLike(modalVideo.id, currentUser.id);
+      if (res) {
+        setModalVideo(prev => prev ? ({
+          ...prev,
+          ...(res.likeCount != null && { likeCount: res.likeCount }),
+          ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+          ...(res.isLiked != null && { isLiked: res.isLiked }),
+          ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+        }) : prev);
+      }
+    } catch (_) {}
+  };
+
+  const handleModalDislike = async () => {
+    if (requireLogin()) return;
+    if (!modalVideo?.id) return;
+    setModalVideo(prev => {
+      if (!prev) return prev;
+      const isDisliked = !prev.isDisliked;
+      const wasLiked = prev.isLiked;
+      return {
+        ...prev,
+        isDisliked,
+        isLiked: isDisliked ? false : wasLiked,
+        dislikeCount: Math.max(0, prev.dislikeCount + (isDisliked ? 1 : -1)),
+        likeCount: isDisliked && wasLiked ? Math.max(0, prev.likeCount - 1) : prev.likeCount,
+      };
+    });
+    try {
+      const res = await toggleVideoDislike(modalVideo.id, currentUser.id);
+      if (res) {
+        setModalVideo(prev => prev ? ({
+          ...prev,
+          ...(res.likeCount != null && { likeCount: res.likeCount }),
+          ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+          ...(res.isLiked != null && { isLiked: res.isLiked }),
+          ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+        }) : prev);
+      }
+    } catch (_) {}
+  };
+
+  const handleModalShare = async () => {
+    if (!modalVideo?.id) return;
+    try {
+      setModalVideo(prev => prev ? ({ ...prev, shareCount: (prev.shareCount ?? 0) + 1 }) : prev);
+      recordVideoShare(modalVideo.id);
+      await Share.share({
+        message: modalVideo?.title ? `${modalVideo.title}` : 'Check this video',
+        url: modalVideo?.videoUrl || '',
+        title: modalVideo?.title || 'Video',
+      });
+    } catch (_) {}
+  };
+
+  const handleSubscribe = async () => {
+    if (requireLogin()) return;
+    if (!modalVideo?.userId || !currentUser?.id) return;
+    if (String(modalVideo.userId) === String(currentUser.id)) return;
+    setSubLoading(true);
+    try {
+      if (channelSub.isSubscribed) {
+        await unsubscribeFromChannel(currentUser.id, modalVideo.userId);
+        setChannelSub(p => ({ ...p, isSubscribed: false, subscriberCount: Math.max(0, (p.subscriberCount ?? 0) - 1) }));
+      } else {
+        await subscribeToChannel(currentUser.id, modalVideo.userId);
+        setChannelSub(p => ({ ...p, isSubscribed: true, subscriberCount: (p.subscriberCount ?? 0) + 1 }));
+      }
+    } catch (_) {} finally {
+      setSubLoading(false);
+    }
+  };
+
+  const updatePostLocal = (postId, updater) => {
+    setRawPosts(prev =>
+      (prev || []).map(p => (String(p.id) === String(postId) ? updater(p) : p)),
+    );
+  };
+
+  const handlePostLike = async post => {
+    if (requireLogin()) return;
+    const postId = post?.postId || post?.id;
+    if (!postId) return;
+
+    // Optimistic UI
+    updatePostLocal(postId, p => {
+      const isLiked = !(p.isLiked ?? false);
+      const wasDisliked = p.isDisliked ?? false;
+      return {
+        ...p,
+        isLiked,
+        isDisliked: isLiked ? false : wasDisliked,
+        likeCount: Math.max(0, (p.likeCount ?? 0) + (isLiked ? 1 : -1)),
+        dislikeCount: isLiked && wasDisliked ? Math.max(0, (p.dislikeCount ?? 0) - 1) : (p.dislikeCount ?? 0),
+      };
+    });
+
+    try {
+      const res = await togglePostLike(postId, currentUser.id);
+      if (res) {
+        updatePostLocal(postId, p => ({
+          ...p,
+          ...(res.likeCount != null && { likeCount: res.likeCount }),
+          ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+          ...(res.isLiked != null && { isLiked: res.isLiked }),
+          ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+        }));
+      }
+    } catch (e) {
+      // revert by reloading posts
+      loadPosts();
+    }
+  };
+
+  const handlePostDislike = async post => {
+    if (requireLogin()) return;
+    const postId = post?.postId || post?.id;
+    if (!postId) return;
+
+    updatePostLocal(postId, p => {
+      const isDisliked = !(p.isDisliked ?? false);
+      const wasLiked = p.isLiked ?? false;
+      return {
+        ...p,
+        isDisliked,
+        isLiked: isDisliked ? false : wasLiked,
+        dislikeCount: Math.max(0, (p.dislikeCount ?? 0) + (isDisliked ? 1 : -1)),
+        likeCount: isDisliked && wasLiked ? Math.max(0, (p.likeCount ?? 0) - 1) : (p.likeCount ?? 0),
+      };
+    });
+
+    try {
+      const res = await togglePostDislike(postId, currentUser.id);
+      if (res) {
+        updatePostLocal(postId, p => ({
+          ...p,
+          ...(res.likeCount != null && { likeCount: res.likeCount }),
+          ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+          ...(res.isLiked != null && { isLiked: res.isLiked }),
+          ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+        }));
+      }
+    } catch (e) {
+      loadPosts();
+    }
+  };
+
+  const handlePostShare = async post => {
+    const postId = post?.postId || post?.id;
+    if (!postId) return;
+    try {
+      updatePostLocal(postId, p => ({ ...p, shareCount: (p.shareCount ?? 0) + 1 }));
+      recordPostShare(postId);
+      await Share.share({
+        message: post?.title ? `${post.title}` : 'Check this post',
+        url: post?.mediaUrl || '',
+        title: post?.title || 'Post',
+      });
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const openPostComments = post => {
+    if (requireLogin()) return;
+    const postId = post?.postId || post?.id;
+    if (!postId) return;
+    setActivePostId(postId);
+    setPostCommentsVisible(true);
+  };
 
   const loadProfile = useCallback(async () => {
     if (!profileUserId) return;
@@ -183,6 +527,50 @@ const UserViewsScreen = ({ navigation }) => {
       setProfileLoading(false);
     }
   }, [profileUserId, currentUser?.id]);
+
+  const showProfileSubscribe =
+    !!profileUserId &&
+    !!currentUser?.id &&
+    String(profileUserId) !== String(currentUser.id);
+
+  const handleProfileSubscribe = async () => {
+    if (requireLogin()) return;
+    if (!profileUserId || !currentUser?.id) return;
+    if (String(profileUserId) === String(currentUser.id)) return;
+    if (!profile) return;
+
+    setProfileSubscribeLoading(true);
+    try {
+      if (profile?.isSubscribed) {
+        await unsubscribeFromChannel(currentUser.id, profileUserId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: false,
+                subscriberCount: Math.max(0, (prev.subscriberCount ?? 0) - 1),
+              }
+            : prev,
+        );
+      } else {
+        await subscribeToChannel(currentUser.id, profileUserId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: true,
+                subscriberCount: (prev.subscriberCount ?? 0) + 1,
+              }
+            : prev,
+        );
+      }
+    } catch (_) {
+      // refresh from server on failure
+      loadProfile();
+    } finally {
+      setProfileSubscribeLoading(false);
+    }
+  };
 
   const loadVideos = useCallback(async () => {
     if (!profileUserId) return;
@@ -241,9 +629,16 @@ const UserViewsScreen = ({ navigation }) => {
     <View style={styles.headerContainer}>
       {/* Top Navigation - OUTSIDE the image */}
       <View style={styles.topNavigation}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation?.goBack()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation?.goBack()}
+        >
           <View style={styles.backButtonInner}>
-            <MaterialCommunityIcons name="chevron-left" size={16} color="#fff" />
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={16}
+              color="#fff"
+            />
             <Text style={styles.backText}>Back</Text>
           </View>
         </TouchableOpacity>
@@ -252,7 +647,13 @@ const UserViewsScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <UserProfileCard profile={profile} loading={profileLoading} />
+      <UserProfileCard
+        profile={profile}
+        loading={profileLoading}
+        showSubscribe={showProfileSubscribe}
+        onSubscribe={handleProfileSubscribe}
+        subscribeLoading={profileSubscribeLoading}
+      />
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
@@ -265,7 +666,7 @@ const UserViewsScreen = ({ navigation }) => {
               style={[
                 styles.tabItem,
                 isActive && styles.activeTabItem,
-                isGrid && styles.gridTabItem
+                isGrid && styles.gridTabItem,
               ]}
               onPress={() => setActiveTab(tab)}
             >
@@ -273,10 +674,12 @@ const UserViewsScreen = ({ navigation }) => {
                 <MaterialCommunityIcons
                   name="view-grid"
                   size={22}
-                  color={isActive ? "#FF7F0B" : "#444"}
+                  color={isActive ? '#FF7F0B' : '#444'}
                 />
               ) : (
-                <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+                <Text
+                  style={[styles.tabText, isActive && styles.activeTabText]}
+                >
                   {tab}
                 </Text>
               )}
@@ -289,35 +692,82 @@ const UserViewsScreen = ({ navigation }) => {
 
   const getListData = () => {
     switch (activeTab) {
-      case 'Home': return videos;
-      case 'Posts': return posts;
-      case 'Gallery': return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
-      case 'Videos': return videos;
-      case 'Playlists': return MOCK_PLAYLISTS;
-      default: return [];
+      case 'Home':
+        return videos;
+      case 'Posts':
+        return posts;
+      case 'Gallery':
+        return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
+      case 'Videos':
+        return videos;
+      case 'Playlists':
+        return MOCK_PLAYLISTS;
+      default:
+        return [];
     }
   };
 
   const renderContentItem = ({ item }) => {
-    if (activeTab === 'Home') return <VideoCard video={item} />;
-    if (activeTab === 'Posts') return <BusinessVideoCard video={item} />;
+    if (activeTab === 'Home')
+      return (
+        <VideoCard
+          video={item}
+          onPress={() => openVideoModal(item.id)}
+        />
+      );
+    if (activeTab === 'Posts')
+      return (
+        <BusinessVideoCard
+          video={{
+            ...item,
+            likes: formatCount(item.likeCount ?? 0),
+            dislikes: formatCount(item.dislikeCount ?? 0),
+            comments: formatCount(item.commentCount ?? 0),
+            shares: formatCount(item.shareCount ?? 0),
+          }}
+          onLike={() => handlePostLike(item)}
+          onDislike={() => handlePostDislike(item)}
+          onCommentPress={() => openPostComments(item)}
+          onShare={() => handlePostShare(item)}
+        />
+      );
     if (activeTab === 'Gallery') {
       return (
-        <View style={styles.gridImageContainer}>
+        <TouchableOpacity
+          style={styles.gridImageContainer}
+          activeOpacity={0.85}
+          onPress={() => {
+            setPreviewImageUri(item.image);
+            setPreviewVisible(true);
+          }}
+        >
           <Image source={{ uri: item.image }} style={styles.gridImage} />
-        </View>
+        </TouchableOpacity>
       );
     }
-    if (activeTab === 'Videos') return <CompactVideoCard video={item} />;
-    if (activeTab === 'Playlists') return (
-      <View style={{ position: 'relative' }}>
-        <PromotionCard item={item} />
-        {/* Inject dots menu over the promotion card right side since promotion card doesn't have it natively */}
-        <TouchableOpacity style={{ position: 'absolute', top: 12, right: 16, padding: 4 }}>
-          <MaterialCommunityIcons name="dots-vertical" size={20} color="#333" />
-        </TouchableOpacity>
-      </View>
-    );
+    if (activeTab === 'Videos')
+      return (
+        <CompactVideoCard
+          video={item}
+          onPress={() => openVideoModal(item.id)}
+        />
+      );
+    if (activeTab === 'Playlists')
+      return (
+        <View style={{ position: 'relative' }}>
+          <PromotionCard item={item} />
+          {/* Inject dots menu over the promotion card right side since promotion card doesn't have it natively */}
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 12, right: 16, padding: 4 }}
+          >
+            <MaterialCommunityIcons
+              name="dots-vertical"
+              size={20}
+              color="#333"
+            />
+          </TouchableOpacity>
+        </View>
+      );
     return null;
   };
 
@@ -327,7 +777,9 @@ const UserViewsScreen = ({ navigation }) => {
       {!profileUserId ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Login required</Text>
-          <Text style={styles.emptyText}>Please login to view this profile.</Text>
+          <Text style={styles.emptyText}>
+            Please login to view this profile.
+          </Text>
         </View>
       ) : null}
       <FlatList
@@ -339,7 +791,9 @@ const UserViewsScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         numColumns={activeTab === 'Gallery' ? 3 : 1}
-        columnWrapperStyle={activeTab === 'Gallery' ? styles.gridColumnWrapper : undefined}
+        columnWrapperStyle={
+          activeTab === 'Gallery' ? styles.gridColumnWrapper : undefined
+        }
         ListEmptyComponent={() => {
           const loading =
             (activeTab === 'Home' && videosLoading) ||
@@ -361,6 +815,322 @@ const UserViewsScreen = ({ navigation }) => {
           );
         }}
       />
+
+      {/* Gallery image preview modal */}
+      <Modal
+        visible={previewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setPreviewVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {previewImageUri ? (
+            <Image
+              source={{ uri: previewImageUri }}
+              style={styles.previewImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* Post comments modal */}
+      <CommentsModal
+        visible={postCommentsVisible}
+        onClose={() => {
+          setPostCommentsVisible(false);
+          setActivePostId(null);
+        }}
+        user={currentUser}
+        contentType="post"
+        contentId={activePostId}
+        onCommentAdded={() => {
+          if (!activePostId) return;
+          updatePostLocal(activePostId, p => ({
+            ...p,
+            commentCount: (p.commentCount ?? 0) + 1,
+          }));
+        }}
+        onCommentDeleted={(wasTopLevel, deletedCount) => {
+          if (!activePostId) return;
+          const dec = deletedCount || (wasTopLevel ? 1 : 0) || 0;
+          if (dec <= 0) return;
+          updatePostLocal(activePostId, p => ({
+            ...p,
+            commentCount: Math.max(0, (p.commentCount ?? 0) - dec),
+          }));
+        }}
+      />
+
+      {/* Video quick-view modal (from UserViewsScreen) */}
+      <Modal
+        visible={videoModalVisible}
+        animationType="slide"
+        onRequestClose={closeVideoModal}
+      >
+        <SafeAreaView style={styles.videoModalContainer} edges={['top']}>
+          <View style={styles.videoModalHeader}>
+            <TouchableOpacity onPress={closeVideoModal} style={styles.videoModalHeaderBtn}>
+              <MaterialCommunityIcons name="chevron-down" size={30} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
+              {modalVideo?.title || 'Video'}
+            </Text>
+            <View style={styles.videoModalHeaderBtn} />
+          </View>
+
+          <View style={styles.videoPlayerWrap}>
+            {videoModalLoading ? (
+              <View style={styles.videoLoadingOverlay}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.videoLoadingText}>Loading…</Text>
+              </View>
+            ) : videoModalError ? (
+              <View style={styles.videoErrorOverlay}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={44} color="#fff" />
+                <Text style={styles.videoErrorText}>{videoModalError}</Text>
+                <TouchableOpacity
+                  style={styles.videoRetryBtn}
+                  onPress={() => activeVideoId && openVideoModal(activeVideoId)}
+                >
+                  <MaterialCommunityIcons name="refresh" size={18} color="#fff" />
+                  <Text style={styles.videoRetryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : modalVideo?.videoUrl ? (
+              <>
+                <Video
+                  ref={modalVideoRef}
+                  source={{ uri: String(modalVideo.videoUrl).trim() }}
+                  poster={modalVideo.thumbnail}
+                  posterResizeMode="cover"
+                  style={styles.videoPlayer}
+                  resizeMode="contain"
+                  paused={modalPaused}
+                  repeat={false}
+                  controls={false}
+                  playInBackground={false}
+                  playWhenInactive={false}
+                  ignoreSilentSwitch="ignore"
+                  onLoad={data => {
+                    setModalProgress(p => ({ ...p, duration: data?.duration || 0 }));
+                    setModalPaused(false);
+                  }}
+                  onProgress={data => {
+                    if (seekingRef.current) return;
+                    const now = Date.now();
+                    if (now - progressUpdateRef.current < 500) return;
+                    progressUpdateRef.current = now;
+                    setModalProgress(p => ({
+                      currentTime: data?.currentTime ?? p.currentTime,
+                      duration: data?.seekableDuration || data?.duration || p.duration,
+                    }));
+                  }}
+                  onError={() => setVideoModalError('Failed to play video. The video format may not be supported or the URL is inaccessible.')}
+                />
+                <Pressable
+                  style={styles.videoTapOverlay}
+                  onPress={() => setModalPaused(p => !p)}
+                >
+                  <MaterialCommunityIcons
+                    name={modalPaused ? 'play-circle-outline' : 'pause-circle-outline'}
+                    size={74}
+                    color="rgba(255,255,255,0.9)"
+                  />
+                </Pressable>
+
+                <View style={styles.videoSliderRow}>
+                  <Slider
+                    style={styles.videoSlider}
+                    value={modalDisplayTime}
+                    minimumValue={0}
+                    maximumValue={Math.max(0.1, modalProgress.duration)}
+                    minimumTrackTintColor="#fff"
+                    maximumTrackTintColor="rgba(255,255,255,0.35)"
+                    thumbTintColor="#fff"
+                    onSlidingStart={() => {
+                      setModalIsSliding(true);
+                      setModalSlidingValue(modalProgress.currentTime);
+                    }}
+                    onValueChange={val => setModalSlidingValue(val)}
+                    onSlidingComplete={val => {
+                      if (!modalVideoRef.current || modalProgress.duration <= 0) {
+                        setModalIsSliding(false);
+                        return;
+                      }
+                      const clamped = Math.max(0, Math.min(val, modalProgress.duration));
+                      seekingRef.current = true;
+                      modalVideoRef.current.seek(clamped);
+                      setModalProgress(p => ({ ...p, currentTime: clamped }));
+                      progressUpdateRef.current = Date.now();
+                      setTimeout(() => {
+                        seekingRef.current = false;
+                      }, 300);
+                      setModalIsSliding(false);
+                    }}
+                  />
+                  <Text style={styles.videoTimeText}>
+                    {formatTime(modalDisplayTime)} / {formatTime(modalProgress.duration)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.videoErrorOverlay}>
+                <Text style={styles.videoErrorText}>Video not available</Text>
+              </View>
+            )}
+          </View>
+
+          <ScrollView style={styles.videoModalBody} showsVerticalScrollIndicator={false}>
+            <View style={styles.videoActionsRow}>
+              <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalLike}>
+                <MaterialCommunityIcons
+                  name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+                  size={22}
+                  color={modalVideo?.isLiked ? '#FF7F0B' : '#222'}
+                />
+                <Text style={styles.videoActionText}>{formatCount(modalVideo?.likeCount ?? 0)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalDislike}>
+                <MaterialCommunityIcons
+                  name={modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+                  size={22}
+                  color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
+                />
+                <Text style={styles.videoActionText}>{formatCount(modalVideo?.dislikeCount ?? 0)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={() => {
+                  if (requireLogin()) return;
+                  setVideoCommentsVisible(true);
+                }}
+              >
+                <MaterialCommunityIcons name="comment-text-outline" size={22} color="#222" />
+                <Text style={styles.videoActionText}>{formatCount(modalVideo?.commentCount ?? 0)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalShare}>
+                <MaterialCommunityIcons name="share-outline" size={22} color="#222" />
+                <Text style={styles.videoActionText}>{formatCount(modalVideo?.shareCount ?? 0)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={() => {
+                  if (requireLogin()) return;
+                  setSaveVisible(true);
+                }}
+              >
+                <MaterialCommunityIcons name="bookmark-outline" size={22} color="#222" />
+                <Text style={styles.videoActionText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.channelRow}>
+              <View style={styles.channelLeft}>
+                <Image source={{ uri: modalVideo?.channelAvatar }} style={styles.channelAvatar} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.channelName} numberOfLines={1}>
+                    {modalVideo?.channelName || 'Channel'}
+                  </Text>
+                  <Text style={styles.channelSubText}>
+                    {formatCount(channelSub.subscriberCount ?? 0)} subscribers
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.subscribeBtn,
+                  channelSub.isSubscribed && styles.subscribedBtn,
+                ]}
+                onPress={handleSubscribe}
+                disabled={subLoading || !modalVideo?.userId}
+              >
+                {subLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[
+                    styles.subscribeText,
+                    channelSub.isSubscribed && styles.subscribedText,
+                  ]}>
+                    {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.contactRow}>
+              <TouchableOpacity
+                style={styles.messageBtn}
+                onPress={() => {
+                  if (requireLogin()) return;
+                  if (!modalVideo?.userId) return;
+                  navigation.navigate('ChatScreen', {
+                    partnerId: modalVideo.userId,
+                    partnerName: modalVideo.channelName || 'Channel',
+                    partnerAvatar: modalVideo.channelAvatar,
+                  });
+                }}
+              >
+                <MaterialCommunityIcons name="message-text-outline" size={18} color="#fff" />
+                <Text style={styles.messageBtnText}>Message</Text>
+              </TouchableOpacity>
+
+              <View style={styles.socialRow}>
+                {(modalVideo?.socialLinks || [])
+                  .filter(l => (l?.url || '').trim())
+                  .slice(0, 6)
+                  .map((l, idx) => (
+                    <TouchableOpacity
+                      key={`${l.type}-${idx}`}
+                      style={styles.socialBtn}
+                      onPress={() => {
+                        const url = (l.url || '').trim();
+                        if (!url) return;
+                        Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name={getSocialIcon((l.type || '').toLowerCase())}
+                        size={20}
+                        color="#FF7F0B"
+                      />
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            </View>
+          </ScrollView>
+
+          <CommentsModal
+            visible={videoCommentsVisible}
+            onClose={() => setVideoCommentsVisible(false)}
+            videoId={modalVideo?.id}
+            video={modalVideo}
+            user={currentUser}
+            onCommentAdded={() => {
+              if (!modalVideo?.id) return;
+              setModalVideo(prev => prev ? ({ ...prev, commentCount: (prev.commentCount ?? 0) + 1 }) : prev);
+            }}
+            onCommentDeleted={(wasTopLevel, deletedCount) => {
+              const dec = deletedCount || (wasTopLevel ? 1 : 0) || 0;
+              if (dec <= 0) return;
+              setModalVideo(prev => prev ? ({ ...prev, commentCount: Math.max(0, (prev.commentCount ?? 0) - dec) }) : prev);
+            }}
+          />
+
+          <SaveModal
+            visible={saveVisible}
+            onClose={() => setSaveVisible(false)}
+            contentType="video"
+            contentId={modalVideo?.id}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -454,6 +1224,233 @@ const styles = StyleSheet.create({
   emptyState: { padding: 20 },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
   emptyText: { marginTop: 6, color: '#666' },
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 8,
+    zIndex: 2,
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  videoModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  videoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  videoModalHeaderBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoModalHeaderTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  videoPlayerWrap: {
+    width: '100%',
+    height: (width * 9) / 16,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  videoPlayer: {
+    width: '100%',
+    height: '100%',
+  },
+  videoTapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoSliderRow: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  videoSlider: {
+    flex: 1,
+    height: 28,
+    marginRight: 8,
+  },
+  videoTimeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  videoLoadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  videoErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+  },
+  videoErrorText: {
+    color: '#fff',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  videoRetryBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  videoRetryText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  videoModalBody: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  videoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  videoActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minWidth: 60,
+  },
+  videoActionText: {
+    fontSize: 12,
+    color: '#222',
+    fontWeight: '600',
+  },
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  channelLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 10,
+  },
+  channelAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#111',
+  },
+  channelName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111',
+  },
+  channelSubText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  subscribeBtn: {
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  subscribedBtn: {
+    backgroundColor: '#f2f2f2',
+  },
+  subscribeText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  subscribedText: {
+    color: '#333',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  messageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#111',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  messageBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flex: 1,
+    paddingLeft: 10,
+    flexWrap: 'wrap',
+  },
+  socialBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF4EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default UserViewsScreen;

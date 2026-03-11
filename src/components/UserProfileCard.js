@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   View,
   Text,
@@ -6,15 +6,16 @@ import {
   ImageBackground,
   Image,
   TouchableOpacity,
-} from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { safeImageUri } from "../utils/helper";
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { safeImageUri } from '../utils/helper';
 
-const formatCount = (n) => {
+const formatCount = n => {
   const num = Number(n || 0);
-  if (!Number.isFinite(num) || num <= 0) return "0";
-  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+  if (!Number.isFinite(num) || num <= 0) return '0';
+  if (num >= 1000000)
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(Math.floor(num));
 };
 
@@ -29,28 +30,28 @@ const UserProfileCard = ({
   const coverUri =
     profile?.coverUrl ||
     profile?.coverImage ||
-    "https://images.unsplash.com/photo-1552566626-52f8b828add9";
+    'https://images.unsplash.com/photo-1552566626-52f8b828add9';
   const name =
-    profile?.channelName ||
-    profile?.nickname ||
-    profile?.name ||
-    "yourname";
+    profile?.channelName || profile?.nickname || profile?.name || 'yourname';
   const displayName =
-    profile?.nickname && !String(profile.nickname).startsWith("@")
+    profile?.nickname && !String(profile.nickname).startsWith('@')
       ? `@${profile.nickname}`
       : profile?.nickname
       ? String(profile.nickname)
       : name;
   const avatarUri = safeImageUri(
     profile?.photos?.[0]?.src || profile?.photos?.[0],
-    "",
+    '',
   );
-  const followers = formatCount(profile?.subscriberCount ?? profile?.followersCount ?? 0);
+  const followers = formatCount(
+    profile?.subscriberCount ?? profile?.followersCount ?? 0,
+  );
   const following = formatCount(profile?.followingCount ?? 0);
   const msgCount = formatCount(profile?.messageCount ?? 0);
   const statusText =
     (profile?.channelAbout && String(profile.channelAbout).trim()) ||
-    "Hi! Welcome to this profile.";
+    'Hi! Welcome to this profile.';
+  const isSubscribed = !!profile?.isSubscribed;
 
   return (
     <View style={styles.cardContainer}>
@@ -60,14 +61,16 @@ const UserProfileCard = ({
         imageStyle={{ borderRadius: 12 }}
       >
         <View style={styles.contentOverlay}>
-
           {/* Amber Profile Box Overlay */}
           <View style={styles.amberOverlayBox}>
             <View style={styles.profileHeaderRow}>
               <View style={styles.avatarContainer}>
                 <View style={styles.avatarCircle}>
                   {avatarUri ? (
-                    <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                    <Image
+                      source={{ uri: avatarUri }}
+                      style={styles.avatarImage}
+                    />
                   ) : (
                     <Icon name="account" size={40} color="#F5A623" />
                   )}
@@ -81,11 +84,13 @@ const UserProfileCard = ({
 
               <View style={styles.profileTextGroup}>
                 <Text style={styles.businessNameHeading} numberOfLines={1}>
-                  {loading ? "Loading..." : displayName}
+                  {loading ? 'Loading...' : displayName}
                 </Text>
                 <View style={styles.verifiedIndicatorRow}>
                   <Icon name="check-circle-outline" size={15} color="#fff" />
-                  <Text style={styles.verifiedAccountLabel}>verified account</Text>
+                  <Text style={styles.verifiedAccountLabel}>
+                    verified account
+                  </Text>
                   <View style={styles.faintDotSeparator} />
                 </View>
               </View>
@@ -113,19 +118,23 @@ const UserProfileCard = ({
             {/* Opaque Status Box */}
             <View style={styles.statusWhiteBox}>
               <Text style={styles.statusBodyText}>
-                {statusText}
+                {statusText.slice(0, 100) || 'No status yet.'}...
               </Text>
             </View>
             <View style={styles.subscribeBtnContainer}>
               {showSubscribe && (
                 <TouchableOpacity
-                  style={[styles.subscribeBtn, subscribeLoading && { opacity: 0.7 }]}
+                  style={[
+                    styles.subscribeBtn,
+                    isSubscribed && styles.subscribedBtn,
+                    subscribeLoading && { opacity: 0.7 },
+                  ]}
                   onPress={onSubscribe}
                   disabled={!onSubscribe || subscribeLoading}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.subscribeBtnText}>
-                    {subscribeLoading ? "..." : "Subscribe"}
+                    {subscribeLoading ? '...' : isSubscribed ? 'Subscribed' : 'Subscribe'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -162,6 +171,9 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginHorizontal: 16,
     marginBottom: 10,
+  },
+  subscribedBtn: {
+    backgroundColor: '#333',
   },
   subscribeBtnText: {
     color: '#fff',

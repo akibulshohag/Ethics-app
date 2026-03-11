@@ -6,7 +6,6 @@ import {
   Image,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -16,14 +15,21 @@ import {
   FlatList,
   PermissionsAndroid,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { COLORS } from '../constants/theme';
 
-const ActionSheetIOS = Platform.OS === 'ios' ? require('react-native').ActionSheetIOS : null;
-import { getMessages, uploadChatFiles, getAttachmentFullUrl } from '../services/chatService';
+const ActionSheetIOS =
+  Platform.OS === 'ios' ? require('react-native').ActionSheetIOS : null;
+import {
+  getMessages,
+  uploadChatFiles,
+  getAttachmentFullUrl,
+} from '../services/chatService';
 import {
   connectChatSocket,
   disconnectChatSocket,
@@ -33,29 +39,99 @@ import {
   emitTyping,
 } from '../services/chatSocket';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { pick as pickDocumentNative, types as docTypes, errorCodes as docErrorCodes, isErrorWithCode } from '@react-native-documents/picker';
+import {
+  pick as pickDocumentNative,
+  types as docTypes,
+  errorCodes as docErrorCodes,
+  isErrorWithCode,
+} from '@react-native-documents/picker';
 import Sound from 'react-native-nitro-sound';
 
-const normalizeId = (id) => String(id ?? '').trim().toLowerCase();
+const normalizeId = id =>
+  String(id ?? '')
+    .trim()
+    .toLowerCase();
 
 function formatTime(dateOrStamp) {
   const d = dateOrStamp instanceof Date ? dateOrStamp : new Date(dateOrStamp);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
 }
 
 const EMOJI_LIST = [
-  '😀','😃','😄','😁','😅','😂','🤣','😊','😇','🙂','😉','😍','🥰','😘','😗','😋','😛','😜','🤪','😝',
-  '👍','👎','👏','🙌','🤝','🙏','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓',
-  '🔥','⭐','🌟','✨','💫','✅','❌','❗','❓','💬','📷','📎','🎤','🔊','📌','🕐','📅',
+  '😀',
+  '😃',
+  '😄',
+  '😁',
+  '😅',
+  '😂',
+  '🤣',
+  '😊',
+  '😇',
+  '🙂',
+  '😉',
+  '😍',
+  '🥰',
+  '😘',
+  '😗',
+  '😋',
+  '😛',
+  '😜',
+  '🤪',
+  '😝',
+  '👍',
+  '👎',
+  '👏',
+  '🙌',
+  '🤝',
+  '🙏',
+  '❤️',
+  '🧡',
+  '💛',
+  '💚',
+  '💙',
+  '💜',
+  '🖤',
+  '🤍',
+  '🤎',
+  '💔',
+  '❣️',
+  '💕',
+  '💞',
+  '💓',
+  '🔥',
+  '⭐',
+  '🌟',
+  '✨',
+  '💫',
+  '✅',
+  '❌',
+  '❗',
+  '❓',
+  '💬',
+  '📷',
+  '📎',
+  '🎤',
+  '🔊',
+  '📌',
+  '🕐',
+  '📅',
 ];
 
 const ChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { partnerId: rawPartnerId, partnerName = 'Channel', partnerAvatar, orderId, orderDetails } = route.params || {};
+  const {
+    partnerId: rawPartnerId,
+    partnerName = 'Channel',
+    partnerAvatar,
+    orderId,
+    orderDetails,
+  } = route.params || {};
   const partnerId = normalizeId(rawPartnerId);
-  const user = useSelector((s) => s?.app?.user);
+  const user = useSelector(s => s?.app?.user);
   const myId = user?.id ? normalizeId(user.id) : '';
   const displayName = partnerName || 'Chat';
   const isOrderChat = !!orderId;
@@ -72,20 +148,23 @@ const ChatScreen = () => {
   const inputRef = useRef(null);
   const recordingDurationRef = useRef(0);
 
-  const apiToMessage = useCallback((m) => {
-    const isMe = m.senderId === myId;
-    return {
-      id: m.id,
-      isMe,
-      senderId: m.senderId,
-      text: m.content || '',
-      type: m.type || 'text',
-      attachments: Array.isArray(m.attachments) ? m.attachments : [],
-      voiceUrl: m.voiceUrl,
-      duration: m.duration,
-      time: formatTime(m.createdAt),
-    };
-  }, [myId]);
+  const apiToMessage = useCallback(
+    m => {
+      const isMe = m.senderId === myId;
+      return {
+        id: m.id,
+        isMe,
+        senderId: m.senderId,
+        text: m.content || '',
+        type: m.type || 'text',
+        attachments: Array.isArray(m.attachments) ? m.attachments : [],
+        voiceUrl: m.voiceUrl,
+        duration: m.duration,
+        time: formatTime(m.createdAt),
+      };
+    },
+    [myId],
+  );
 
   useEffect(() => {
     if (!myId || !partnerId) {
@@ -113,10 +192,10 @@ const ChatScreen = () => {
   }, [myId, partnerId]);
 
   useEffect(() => {
-    const unsubMsg = onChatMessage((payload) => {
+    const unsubMsg = onChatMessage(payload => {
       const from = normalizeId(payload.from);
       if (from !== partnerId) return;
-      setMessages((prev) => [
+      setMessages(prev => [
         ...prev,
         {
           id: `recv-${payload.timestamp}-${from}`,
@@ -131,7 +210,7 @@ const ChatScreen = () => {
         },
       ]);
     });
-    const unsubTyping = onChatTyping((payload) => {
+    const unsubTyping = onChatTyping(payload => {
       if (normalizeId(payload.userId) === partnerId) setPartnerTyping(true);
     });
     return () => {
@@ -159,7 +238,7 @@ const ChatScreen = () => {
       type: 'text',
       time: formatTime(timestamp),
     };
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages(prev => [...prev, newMsg]);
     setInputText('');
     setSending(true);
     try {
@@ -170,82 +249,100 @@ const ChatScreen = () => {
         timestamp,
         type: 'text',
       });
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, id: `sent-${timestamp}` } : m)));
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === tempId ? { ...m, id: `sent-${timestamp}` } : m,
+        ),
+      );
     } catch (e) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       Alert.alert('Send failed', e?.message || 'Could not send message');
     } finally {
       setSending(false);
     }
   }, [inputText, myId, partnerId, sending]);
 
-  const sendWithAttachments = useCallback(async (urls, type = 'image') => {
-    if (!myId || !partnerId || sending || !urls?.length) return;
-    const timestamp = Date.now();
-    const tempId = `temp-${timestamp}`;
-    const newMsg = {
-      id: tempId,
-      isMe: true,
-      senderId: myId,
-      text: '',
-      type,
-      attachments: urls,
-      time: formatTime(timestamp),
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setSending(true);
-    try {
-      await sendChatMessage({
-        to: partnerId,
-        from: myId,
-        message: '',
-        timestamp,
+  const sendWithAttachments = useCallback(
+    async (urls, type = 'image') => {
+      if (!myId || !partnerId || sending || !urls?.length) return;
+      const timestamp = Date.now();
+      const tempId = `temp-${timestamp}`;
+      const newMsg = {
+        id: tempId,
+        isMe: true,
+        senderId: myId,
+        text: '',
         type,
         attachments: urls,
-      });
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, id: `sent-${timestamp}` } : m)));
-    } catch (e) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      Alert.alert('Send failed', e?.message || 'Could not send');
-    } finally {
-      setSending(false);
-    }
-  }, [myId, partnerId, sending]);
+        time: formatTime(timestamp),
+      };
+      setMessages(prev => [...prev, newMsg]);
+      setSending(true);
+      try {
+        await sendChatMessage({
+          to: partnerId,
+          from: myId,
+          message: '',
+          timestamp,
+          type,
+          attachments: urls,
+        });
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === tempId ? { ...m, id: `sent-${timestamp}` } : m,
+          ),
+        );
+      } catch (e) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        Alert.alert('Send failed', e?.message || 'Could not send');
+      } finally {
+        setSending(false);
+      }
+    },
+    [myId, partnerId, sending],
+  );
 
-  const sendVoice = useCallback(async (voiceUrl, durationSec) => {
-    if (!myId || !partnerId || sending) return;
-    const timestamp = Date.now();
-    const tempId = `temp-${timestamp}`;
-    const newMsg = {
-      id: tempId,
-      isMe: true,
-      senderId: myId,
-      text: '🎤 Voice message',
-      type: 'voice',
-      voiceUrl,
-      duration: Math.round(durationSec || 0),
-      time: formatTime(timestamp),
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setSending(true);
-    try {
-      await sendChatMessage({
-        to: partnerId,
-        from: myId,
-        message: 'Voice message',
-        timestamp,
+  const sendVoice = useCallback(
+    async (voiceUrl, durationSec) => {
+      if (!myId || !partnerId || sending) return;
+      const timestamp = Date.now();
+      const tempId = `temp-${timestamp}`;
+      const newMsg = {
+        id: tempId,
+        isMe: true,
+        senderId: myId,
+        text: '🎤 Voice message',
         type: 'voice',
         voiceUrl,
         duration: Math.round(durationSec || 0),
-      });
-      setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, id: `sent-${timestamp}` } : m)));
-    } catch (e) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      Alert.alert('Send failed', e?.message || 'Could not send voice');
-    } finally {
-      setSending(false);
-    }
-  }, [myId, partnerId, sending]);
+        time: formatTime(timestamp),
+      };
+      setMessages(prev => [...prev, newMsg]);
+      setSending(true);
+      try {
+        await sendChatMessage({
+          to: partnerId,
+          from: myId,
+          message: 'Voice message',
+          timestamp,
+          type: 'voice',
+          voiceUrl,
+          duration: Math.round(durationSec || 0),
+        });
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === tempId ? { ...m, id: `sent-${timestamp}` } : m,
+          ),
+        );
+      } catch (e) {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        Alert.alert('Send failed', e?.message || 'Could not send voice');
+      } finally {
+        setSending(false);
+      }
+    },
+    [myId, partnerId, sending],
+  );
 
   const onPlus = useCallback(() => {
     const options = [
@@ -254,10 +351,17 @@ const ChatScreen = () => {
       { text: 'Record voice', onPress: toggleRecordVoice },
       { text: 'Cancel', style: 'cancel' },
     ];
-    if (Platform.OS === 'ios' && ActionSheetIOS && typeof ActionSheetIOS.showActionSheetWithOptions === 'function') {
+    if (
+      Platform.OS === 'ios' &&
+      ActionSheetIOS &&
+      typeof ActionSheetIOS.showActionSheetWithOptions === 'function'
+    ) {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Photo', 'File', 'Record voice', 'Cancel'], cancelButtonIndex: 3 },
-        (idx) => {
+        {
+          options: ['Photo', 'File', 'Record voice', 'Cancel'],
+          cancelButtonIndex: 3,
+        },
+        idx => {
           if (idx === 0) pickImage();
           else if (idx === 1) pickDocument();
           else if (idx === 2) toggleRecordVoice();
@@ -270,16 +374,23 @@ const ChatScreen = () => {
 
   const pickImage = useCallback(async () => {
     try {
-      const result = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 5 });
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        selectionLimit: 5,
+      });
       const assets = result?.assets || [];
       if (assets.length === 0) return;
       setUploading(true);
       const formData = new FormData();
       assets.forEach((a, i) => {
-        formData.append('files', { uri: a.uri, type: a.type || 'image/jpeg', name: a.fileName || `image-${i}.jpg` });
+        formData.append('files', {
+          uri: a.uri,
+          type: a.type || 'image/jpeg',
+          name: a.fileName || `image-${i}.jpg`,
+        });
       });
       const { files } = await uploadChatFiles(user?.token, formData);
-      const urls = files.map((f) => f.url).filter(Boolean);
+      const urls = files.map(f => f.url).filter(Boolean);
       if (urls.length) await sendWithAttachments(urls, 'image');
     } catch (e) {
       Alert.alert('Upload failed', e?.message || 'Could not upload image');
@@ -294,7 +405,7 @@ const ChatScreen = () => {
         type: [docTypes.pdf, docTypes.plainText, docTypes.images],
         allowMultiSelection: true,
       });
-      const picked = Array.isArray(res) ? res : (res ? [res] : []);
+      const picked = Array.isArray(res) ? res : res ? [res] : [];
       if (picked.length === 0) return;
       setUploading(true);
       const formData = new FormData();
@@ -306,10 +417,11 @@ const ChatScreen = () => {
         });
       });
       const { files } = await uploadChatFiles(user?.token, formData);
-      const urls = files.map((f) => f.url).filter(Boolean);
+      const urls = files.map(f => f.url).filter(Boolean);
       if (urls.length) await sendWithAttachments(urls, 'file');
     } catch (e) {
-      if (isErrorWithCode(e) && e.code === docErrorCodes.OPERATION_CANCELED) return;
+      if (isErrorWithCode(e) && e.code === docErrorCodes.OPERATION_CANCELED)
+        return;
       Alert.alert('Upload failed', e?.message || 'Could not upload file');
     } finally {
       setUploading(false);
@@ -326,7 +438,10 @@ const ChatScreen = () => {
           return;
         }
         setUploading(true);
-        const uri = typeof path === 'string' && !path.startsWith('file://') ? `file://${path}` : path;
+        const uri =
+          typeof path === 'string' && !path.startsWith('file://')
+            ? `file://${path}`
+            : path;
         const formData = new FormData();
         formData.append('files', { uri, type: 'audio/m4a', name: 'voice.m4a' });
         const { files } = await uploadChatFiles(user?.token, formData);
@@ -347,7 +462,8 @@ const ChatScreen = () => {
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
           {
             title: 'Microphone permission',
-            message: 'This app needs microphone access to record voice messages.',
+            message:
+              'This app needs microphone access to record voice messages.',
             buttonNeutral: 'Ask Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
@@ -362,27 +478,34 @@ const ChatScreen = () => {
         }
       }
       recordingDurationRef.current = 0;
-      Sound.addRecordBackListener((e) => {
+      Sound.addRecordBackListener(e => {
         recordingDurationRef.current = e.currentPosition;
       });
       await Sound.startRecorder(undefined, undefined, true);
       setRecording(true);
     } catch (e) {
       const msg = e?.message || '';
-      const hint = msg.includes('setAudioSource') || msg.includes('MediaRecorder')
-        ? ' On emulators, recording often fails; try on a real device. Otherwise enable microphone permission in Settings.'
-        : '';
-      Alert.alert('Recording failed', (msg || 'Could not start recording') + hint);
+      const hint =
+        msg.includes('setAudioSource') || msg.includes('MediaRecorder')
+          ? ' On emulators, recording often fails; try on a real device. Otherwise enable microphone permission in Settings.'
+          : '';
+      Alert.alert(
+        'Recording failed',
+        (msg || 'Could not start recording') + hint,
+      );
     }
   }, [recording, user?.token, sendVoice]);
 
-  const onInputChange = useCallback((t) => {
-    setInputText(t);
-    if (partnerId) emitTyping(partnerId);
-  }, [partnerId]);
+  const onInputChange = useCallback(
+    t => {
+      setInputText(t);
+      if (partnerId) emitTyping(partnerId);
+    },
+    [partnerId],
+  );
 
-  const insertEmoji = useCallback((emoji) => {
-    setInputText((prev) => prev + emoji);
+  const insertEmoji = useCallback(emoji => {
+    setInputText(prev => prev + emoji);
   }, []);
 
   if (!user?.id) {
@@ -397,21 +520,39 @@ const ChatScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12}>
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {displayName}
+            </Text>
           </View>
           <View style={styles.headerRight}>
-            {partnerTyping ? <Text style={styles.headerTime}>typing...</Text> : <Text style={styles.headerTime}>7m</Text>}
+            {partnerTyping ? (
+              <Text style={styles.headerTime}>typing...</Text>
+            ) : (
+              <Text style={styles.headerTime}>7m</Text>
+            )}
             <TouchableOpacity style={styles.headerIconBtn}>
-              <MaterialCommunityIcons name="store-minus-outline" size={24} color="#000" />
+              <MaterialCommunityIcons
+                name="store-minus-outline"
+                size={24}
+                color="#000"
+              />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerIconBtn}>
-              <Ionicons name="ellipsis-horizontal-circle" size={24} color="#000" />
+              <Ionicons
+                name="ellipsis-horizontal-circle"
+                size={24}
+                color="#000"
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -421,21 +562,44 @@ const ChatScreen = () => {
             <View style={styles.orderCard}>
               <View style={styles.orderHeader}>
                 <Text style={styles.orderTitle}>Order Information</Text>
-                <TouchableOpacity><MaterialCommunityIcons name="pencil-outline" size={20} color="#000" /></TouchableOpacity>
+                <TouchableOpacity>
+                  <MaterialCommunityIcons
+                    name="pencil-outline"
+                    size={20}
+                    color="#000"
+                  />
+                </TouchableOpacity>
               </View>
               <View style={styles.divider} />
               <View style={styles.orderItem}>
-                <Image source={{ uri: orderDetails.itemImage || 'https://via.placeholder.com/50' }} style={styles.orderImage} />
-                <Text style={styles.orderName} numberOfLines={1}>{orderDetails.itemName || 'Order item'}</Text>
+                <Image
+                  source={{
+                    uri:
+                      orderDetails.itemImage ||
+                      'https://via.placeholder.com/50',
+                  }}
+                  style={styles.orderImage}
+                />
+                <Text style={styles.orderName} numberOfLines={1}>
+                  {orderDetails.itemName || 'Order item'}
+                </Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.orderFooter}>
                 <Text style={styles.orderLabel}>Order ID</Text>
-                <Text style={styles.orderValue} numberOfLines={1}>{orderId}</Text>
+                <Text style={styles.orderValue} numberOfLines={1}>
+                  {orderId}
+                </Text>
               </View>
               <TouchableOpacity
                 style={styles.viewDetailsBtn}
-                onPress={() => orderId && navigation.navigate('Library', { screen: 'OrderListScreen', params: { highlightOrderId: orderId } })}
+                onPress={() =>
+                  orderId &&
+                  navigation.navigate('Library', {
+                    screen: 'OrderListScreen',
+                    params: { highlightOrderId: orderId },
+                  })
+                }
               >
                 <Text style={styles.viewDetailsText}>View Order Details</Text>
                 <Ionicons name="chevron-forward" size={16} color="#999" />
@@ -446,21 +610,31 @@ const ChatScreen = () => {
         )}
 
         {loading ? (
-          <View style={styles.centered}><ActivityIndicator size="large" color={COLORS.primaryOrange} /></View>
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={COLORS.primaryOrange} />
+          </View>
         ) : (
           <ScrollView
             ref={scrollRef}
             contentContainerStyle={styles.chatContainer}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={() =>
+              scrollRef.current?.scrollToEnd({ animated: true })
+            }
           >
-            {messages.map((msg) => (
+            {messages.map(msg => (
               <View key={msg.id}>
                 {!msg.isMe ? (
                   <View style={styles.leftMessageRow}>
                     <Image
-                      source={{ uri: partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=111&color=fff` }}
+                      source={{
+                        uri:
+                          partnerAvatar ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                            displayName,
+                          )}&background=111&color=fff`,
+                      }}
                       style={styles.avatar}
                     />
                     <View style={styles.messageContent}>
@@ -468,15 +642,27 @@ const ChatScreen = () => {
                       <View style={styles.leftBubble}>
                         {msg.type === 'voice' && msg.voiceUrl ? (
                           <View style={styles.voiceRow}>
-                            <Ionicons name="play-circle" size={28} color={COLORS.primaryOrange} />
-                            <Text style={styles.voiceLabel}>{msg.duration ? `${msg.duration}s` : 'Voice'}</Text>
+                            <Ionicons
+                              name="play-circle"
+                              size={28}
+                              color={COLORS.primaryOrange}
+                            />
+                            <Text style={styles.voiceLabel}>
+                              {msg.duration ? `${msg.duration}s` : 'Voice'}
+                            </Text>
                           </View>
                         ) : msg.attachments?.length > 0 ? (
                           <>
                             {msg.attachments.map((url, i) => (
-                              <Image key={i} source={{ uri: getAttachmentFullUrl(url) }} style={styles.msgImage} />
+                              <Image
+                                key={i}
+                                source={{ uri: getAttachmentFullUrl(url) }}
+                                style={styles.msgImage}
+                              />
                             ))}
-                            {msg.text ? <Text style={styles.messageText}>{msg.text}</Text> : null}
+                            {msg.text ? (
+                              <Text style={styles.messageText}>{msg.text}</Text>
+                            ) : null}
                           </>
                         ) : (
                           <Text style={styles.messageText}>{msg.text}</Text>
@@ -489,19 +675,31 @@ const ChatScreen = () => {
                     <View style={styles.rightBubble}>
                       {msg.type === 'voice' && msg.voiceUrl ? (
                         <View style={styles.voiceRow}>
-                          <Ionicons name="play-circle" size={28} color={COLORS.primaryOrange} />
-                          <Text style={styles.voiceLabel}>{msg.duration ? `${msg.duration}s` : 'Voice'}</Text>
+                          <Ionicons
+                            name="play-circle"
+                            size={28}
+                            color={COLORS.primaryOrange}
+                          />
+                          <Text style={styles.voiceLabel}>
+                            {msg.duration ? `${msg.duration}s` : 'Voice'}
+                          </Text>
                         </View>
                       ) : msg.attachments?.length > 0 ? (
                         <>
                           {msg.attachments.map((url, i) => (
-                            <Image key={i} source={{ uri: getAttachmentFullUrl(url) }} style={styles.msgImage} />
+                            <Image
+                              key={i}
+                              source={{ uri: getAttachmentFullUrl(url) }}
+                              style={styles.msgImage}
+                            />
                           ))}
-                          {msg.text ? <Text style={styles.messageText}>{msg.text}</Text> : null}
+                          {msg.text ? (
+                            <Text style={styles.messageText}>{msg.text}</Text>
+                          ) : null}
                         </>
                       ) : (
-                          <Text style={styles.messageText}>{msg.text}</Text>
-                        )}
+                        <Text style={styles.messageText}>{msg.text}</Text>
+                      )}
                     </View>
                     <View style={styles.smallAvatar} />
                   </View>
@@ -513,12 +711,24 @@ const ChatScreen = () => {
         )}
 
         <View style={styles.inputWrapper}>
-          <TouchableOpacity style={styles.plusButton} onPress={onPlus} disabled={uploading}>
-            {uploading ? <ActivityIndicator size="small" color="#1A1A1A" /> : <Ionicons name="add-circle" size={32} color="#1A1A1A" />}
+          <TouchableOpacity
+            style={styles.plusButton}
+            onPress={onPlus}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color="#1A1A1A" />
+            ) : (
+              <Ionicons name="add-circle" size={32} color="#1A1A1A" />
+            )}
           </TouchableOpacity>
           <View style={styles.inputContainer}>
-            <TouchableOpacity onPress={() => setShowEmoji((s) => !s)}>
-              <MaterialCommunityIcons name="emoticon-happy-outline" size={24} color={COLORS.primaryOrange} />
+            <TouchableOpacity onPress={() => setShowEmoji(s => !s)}>
+              <MaterialCommunityIcons
+                name="emoticon-happy-outline"
+                size={24}
+                color={COLORS.primaryOrange}
+              />
             </TouchableOpacity>
             <TextInput
               ref={inputRef}
@@ -530,28 +740,48 @@ const ChatScreen = () => {
               multiline
               maxLength={1000}
             />
-            <TouchableOpacity onPress={sendText} disabled={sending || !inputText.trim()}>
-              <Ionicons name="send" size={20} color={inputText.trim() ? COLORS.primaryOrange : '#ccc'} />
+            <TouchableOpacity
+              onPress={sendText}
+              disabled={sending || !inputText.trim()}
+            >
+              <Ionicons
+                name="send"
+                size={20}
+                color={inputText.trim() ? COLORS.primaryOrange : '#ccc'}
+              />
             </TouchableOpacity>
           </View>
         </View>
 
         {recording && (
           <View style={styles.recordingBar}>
-            <MaterialCommunityIcons name="microphone" size={24} color={COLORS.primaryOrange} />
-            <Text style={styles.recordingText}>Recording... Tap + again to send</Text>
+            <MaterialCommunityIcons
+              name="microphone"
+              size={24}
+              color={COLORS.primaryOrange}
+            />
+            <Text style={styles.recordingText}>
+              Recording... Tap + again to send
+            </Text>
           </View>
         )}
 
         <Modal visible={showEmoji} transparent animationType="fade">
-          <TouchableOpacity style={styles.emojiOverlay} activeOpacity={1} onPress={() => setShowEmoji(false)}>
+          <TouchableOpacity
+            style={styles.emojiOverlay}
+            activeOpacity={1}
+            onPress={() => setShowEmoji(false)}
+          >
             <View style={styles.emojiPanel}>
               <FlatList
                 data={EMOJI_LIST}
                 numColumns={8}
                 keyExtractor={(item, i) => `${item}-${i}`}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.emojiCell} onPress={() => insertEmoji(item)}>
+                  <TouchableOpacity
+                    style={styles.emojiCell}
+                    onPress={() => insertEmoji(item)}
+                  >
                     <Text style={styles.emojiText}>{item}</Text>
                   </TouchableOpacity>
                 )}
@@ -575,14 +805,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
-  headerTitle: { fontSize: 18, fontWeight: '700', marginLeft: 10, color: '#000' },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 10,
+    color: '#000',
+  },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
   headerTime: { fontSize: 14, color: '#666', marginLeft: 4 },
   headerIconBtn: { marginLeft: 15 },
 
   chatContainer: { padding: 15, paddingBottom: 24 },
-  timestamp: { textAlign: 'center', color: '#999', fontSize: 12, marginVertical: 15 },
+  timestamp: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 12,
+    marginVertical: 15,
+  },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   helperText: { fontSize: 16, color: '#666' },
 
@@ -594,16 +839,33 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 10,
   },
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   orderTitle: { fontSize: 16, fontWeight: '600', color: '#444' },
-  orderItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  orderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
   orderImage: { width: 40, height: 40, borderRadius: 6 },
   orderName: { marginLeft: 12, fontSize: 16, fontWeight: '500', flex: 1 },
-  orderFooter: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
+  orderFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
   orderLabel: { color: '#444', fontSize: 15 },
   orderValue: { color: '#999', fontSize: 14, maxWidth: '60%' },
   divider: { height: 1, backgroundColor: '#F0F0F0' },
-  viewDetailsBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+  viewDetailsBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
   viewDetailsText: { color: '#999', marginRight: 5, fontSize: 14 },
 
   leftMessageRow: { flexDirection: 'row', marginBottom: 8 },
@@ -616,7 +878,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderTopLeftRadius: 0,
   },
-  rightMessageRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 },
+  rightMessageRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 8,
+  },
   rightBubble: {
     backgroundColor: '#F3EFFF',
     padding: 12,
@@ -628,7 +894,13 @@ const styles = StyleSheet.create({
   msgImage: { width: 180, height: 180, borderRadius: 8, marginVertical: 4 },
   voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   voiceLabel: { fontSize: 14, color: '#333' },
-  smallAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#1A1A1A', marginLeft: 10 },
+  smallAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#1A1A1A',
+    marginLeft: 10,
+  },
 
   inputWrapper: {
     flexDirection: 'row',
@@ -662,7 +934,11 @@ const styles = StyleSheet.create({
   },
   recordingText: { fontSize: 14, color: '#333' },
 
-  emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  emojiOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
   emojiPanel: { backgroundColor: '#fff', maxHeight: 280, padding: 12 },
   emojiCell: { padding: 8, alignItems: 'center', justifyContent: 'center' },
   emojiText: { fontSize: 24 },

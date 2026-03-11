@@ -13,6 +13,8 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
+  FlatList,
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -32,6 +34,7 @@ import {
   getVideoById,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import { getGallery } from '../services/channelService';
 import logo from '../assets/logo.png';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -57,6 +60,7 @@ const mapToDisplayItem = (v, type) => {
       (type === 'short'
         ? (v.description || 'Short').substring(0, 50)
         : 'Untitled'),
+    description: v.description ?? '',
     location: u.address || 'Near you',
     img:
       v.thumbnailUrl ||
@@ -90,6 +94,10 @@ const HomeOneScreen = () => {
   const [isRestaurantDetail, setIsRestaurantDetail] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [galleryImages, setGalleryImages] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryError, setGalleryError] = useState(null);
   const [addressText, setAddressText] = useState('');
   const [locationLoading, setLocationLoading] = useState(false);
   const [featuredVideo, setFeaturedVideo] = useState(null);
@@ -115,6 +123,38 @@ const HomeOneScreen = () => {
   });
   const [resIsSliding, setResIsSliding] = useState(false);
   const [resSlidingValue, setResSlidingValue] = useState(0);
+
+  const galleryUserId =
+    selectedItem?.userId || selectedItem?.user?.id;
+
+  useEffect(() => {
+    if (!showGalleryModal) {
+      setGalleryImages([]);
+      setGalleryError(null);
+      return;
+    }
+    if (!galleryUserId) {
+      setGalleryError('No user');
+      setGalleryLoading(false);
+      return;
+    }
+    setGalleryLoading(true);
+    setGalleryError(null);
+    getGallery(galleryUserId)
+      .then(data => setGalleryImages(data?.photos || []))
+      .catch(err =>
+        setGalleryError(err?.message || 'Failed to load gallery'),
+      )
+      .finally(() => setGalleryLoading(false));
+  }, [showGalleryModal, galleryUserId]);
+
+  const openGalleryModal = useCallback(() => {
+    setShowGalleryModal(true);
+  }, []);
+
+  const closeGalleryModal = useCallback(() => {
+    setShowGalleryModal(false);
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -775,7 +815,9 @@ const HomeOneScreen = () => {
               }}
               disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
             >
-              <Text style={styles.resMainTitle}>{selectedItem?.title}</Text>
+              <Text style={styles.resMainTitle}>
+                {selectedItem?.title.slice(0, 20)}...
+              </Text>
             </TouchableOpacity>
             <Text style={styles.resSubLoc}>{selectedItem?.location}</Text>
           </View>
@@ -919,7 +961,10 @@ const HomeOneScreen = () => {
                     }}
                     onValueChange={val => setResSlidingValue(val)}
                     onSlidingComplete={val => {
-                      if (!resVideoRef.current || resVideoProgress.duration <= 0) {
+                      if (
+                        !resVideoRef.current ||
+                        resVideoProgress.duration <= 0
+                      ) {
                         setResIsSliding(false);
                         return;
                       }
@@ -929,7 +974,10 @@ const HomeOneScreen = () => {
                       );
                       resSeekingRef.current = true;
                       resVideoRef.current.seek(clamped);
-                      setResVideoProgress(p => ({ ...p, currentTime: clamped }));
+                      setResVideoProgress(p => ({
+                        ...p,
+                        currentTime: clamped,
+                      }));
                       resProgressUpdateRef.current = Date.now();
                       setTimeout(() => {
                         resSeekingRef.current = false;
@@ -938,7 +986,8 @@ const HomeOneScreen = () => {
                     }}
                   />
                   <Text style={styles.resTimeText}>
-                    {formatTime(resDisplayTime)} / {formatTime(resVideoProgress.duration)}
+                    {formatTime(resDisplayTime)} /{' '}
+                    {formatTime(resVideoProgress.duration)}
                   </Text>
                 </View>
               )}
@@ -994,7 +1043,10 @@ const HomeOneScreen = () => {
             <TouchableOpacity style={styles.bookNowBtn}>
               <Text style={styles.bookNowText}>Book Now</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.galleryBtn}>
+            <TouchableOpacity
+              style={styles.galleryBtn}
+              onPress={openGalleryModal}
+            >
               <Text style={styles.galleryText}>Gallery</Text>
             </TouchableOpacity>
           </View>
@@ -1017,22 +1069,22 @@ const HomeOneScreen = () => {
           <Text style={styles.sectionTitle}>Description</Text>
           <View style={styles.descBox}>
             <Text style={styles.descText}>
-              {selectedItem?.user?.channelAbout ||
-                selectedItem?.description ||
-                'A cozy restaurant serving fresh, delicious food made with quality ingredients. Enjoy great taste, warm service, and a comfortable dining experience.'}
+              {selectedItem?.description ||
+                selectedItem?.user?.channelAbout ||
+                'No description.'}
             </Text>
           </View>
         </View>
 
         <View style={styles.contactContainer}>
           <Text style={styles.sectionTitle}>
-            Contact :{' '}
+            Phone :{' '}
             <Text style={{ fontWeight: 'normal' }}>
               {selectedItem?.user?.phone || '—'}
             </Text>
           </Text>
           <Text style={styles.contactEmail}>
-            {selectedItem?.user?.email || '—'}
+            Email : {selectedItem?.user?.email || '—'}
           </Text>
           <Text style={styles.contactAddr}>
             Address :{' '}
@@ -1076,6 +1128,70 @@ const HomeOneScreen = () => {
         : isVideoDetail
         ? renderVideoDetail()
         : renderResults()}
+
+      <Modal
+        visible={showGalleryModal}
+        animationType="slide"
+        transparent
+        onRequestClose={closeGalleryModal}
+      >
+        <View style={styles.galleryModalOverlay}>
+          <View style={styles.galleryModalContent}>
+            <View style={styles.galleryModalHeader}>
+              <Text style={styles.galleryModalTitle}>Gallery</Text>
+              <TouchableOpacity
+                onPress={closeGalleryModal}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Icon name="close" size={28} color="#333" />
+              </TouchableOpacity>
+            </View>
+            {galleryLoading ? (
+              <View style={styles.galleryModalLoading}>
+                <ActivityIndicator size="large" color="#F5A623" />
+                <Text style={styles.galleryModalLoadingText}>
+                  Loading gallery…
+                </Text>
+              </View>
+            ) : galleryError ? (
+              <View style={styles.galleryModalEmpty}>
+                <Icon name="image-off" size={48} color="#999" />
+                <Text style={styles.galleryModalEmptyText}>{galleryError}</Text>
+              </View>
+            ) : !galleryImages?.length ? (
+              <View style={styles.galleryModalEmpty}>
+                <Icon name="image-multiple" size={48} color="#999" />
+                <Text style={styles.galleryModalEmptyText}>
+                  No gallery images
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={galleryImages}
+                keyExtractor={item => item?.id || item?.src || String(Math.random())}
+                numColumns={2}
+                contentContainerStyle={styles.galleryGridContent}
+                renderItem={({ item }) => {
+                  const uri =
+                    typeof item === 'string'
+                      ? item
+                      : item?.src ?? item?.url ?? null;
+                  if (!uri) return null;
+                  return (
+                    <View style={styles.galleryGridItem}>
+                      <Image
+                        source={{ uri }}
+                        style={styles.galleryGridImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1558,7 +1674,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
   },
-  resRetryText: { color: '#FFF', fontSize: 13, fontWeight: '600', marginLeft: 6 },
+  resRetryText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
   resPlayOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -1629,6 +1750,64 @@ const styles = StyleSheet.create({
   contactContainer: { paddingHorizontal: 15, paddingBottom: 30 },
   contactEmail: { color: '#555', marginTop: 5 },
   contactAddr: { color: '#555', marginTop: 5 },
+  galleryModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  galleryModalContent: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: height * 0.85,
+    paddingBottom: 24,
+  },
+  galleryModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+  },
+  galleryModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  galleryModalLoading: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  galleryModalLoadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  galleryModalEmpty: {
+    paddingVertical: 48,
+    alignItems: 'center',
+  },
+  galleryModalEmptyText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+  },
+  galleryGridContent: {
+    padding: 8,
+    paddingBottom: 24,
+  },
+  galleryGridItem: {
+    flex: 1,
+    aspectRatio: 1,
+    padding: 4,
+  },
+  galleryGridImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
 });
 
 export default HomeOneScreen;

@@ -47,7 +47,10 @@ import {
 import { getUserVideos } from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
 import { getNotificationsByUserId } from '../../services/notificationService';
-import { getPromotionsByUser, getNearbyPromotions } from '../../services/promotionService';
+import {
+  getPromotionsByUser,
+  getNearbyPromotions,
+} from '../../services/promotionService';
 import { getMenuByUserId } from '../../services/menuService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
@@ -300,9 +303,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [promotionsLoading, setPromotionsLoading] = useState(false);
   const [promotionsRefreshing, setPromotionsRefreshing] = useState(false);
   const [nearbyPromotionsCross, setNearbyPromotionsCross] = useState([]);
-  const [nearbyPromotionsCrossLoading, setNearbyPromotionsCrossLoading] = useState(false);
-  const [nearbyPromotionsCrossRefreshing, setNearbyPromotionsCrossRefreshing] = useState(false);
-  const [createPromotionModalVisible, setCreatePromotionModalVisible] = useState(false);
+  const [nearbyPromotionsCrossLoading, setNearbyPromotionsCrossLoading] =
+    useState(false);
+  const [nearbyPromotionsCrossRefreshing, setNearbyPromotionsCrossRefreshing] =
+    useState(false);
+  const [createPromotionModalVisible, setCreatePromotionModalVisible] =
+    useState(false);
   const [menuItems, setMenuItems] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
 
@@ -362,7 +368,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         title: v.title,
         thumbnail: v.thumbnailUrl,
         views: formatCount(v.viewCount),
-        duration: v.duration ? `${Math.floor(v.duration / 60)}:${String(v.duration % 60).padStart(2, '0')}` : '',
+        duration: v.duration
+          ? `${Math.floor(v.duration / 60)}:${String(v.duration % 60).padStart(
+              2,
+              '0',
+            )}`
+          : '',
       }));
       const shorts = (sRes?.shorts ?? []).map(s => ({
         ...s,
@@ -371,7 +382,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         title: s.title || 'Short',
         thumbnail: s.thumbnailUrl || s.coverUrl,
         views: formatCount(s.viewCount),
-        duration: s.duration ? `${Math.floor(s.duration / 60)}:${String(s.duration % 60).padStart(2, '0')}` : '',
+        duration: s.duration
+          ? `${Math.floor(s.duration / 60)}:${String(s.duration % 60).padStart(
+              2,
+              '0',
+            )}`
+          : '',
       }));
       setOwnerVideos([...videos, ...shorts]);
     } catch (e) {
@@ -438,7 +454,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         setNearbyPromotionsCrossRefreshing(false);
       }
     },
-    [isOwnProfile, currentUser?.id, currentUser?.latitude, currentUser?.longitude, currentRole, profile?.latitude, profile?.longitude],
+    [
+      isOwnProfile,
+      currentUser?.id,
+      currentUser?.latitude,
+      currentUser?.longitude,
+      currentRole,
+      profile?.latitude,
+      profile?.longitude,
+    ],
   );
 
   useEffect(() => {
@@ -458,7 +482,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross();
       else loadPromotions();
     }
-  }, [activeTab, profileUserId, isOwnProfile, isOwnerOrVendor, loadPromotions, loadNearbyPromotionsCross]);
+  }, [
+    activeTab,
+    profileUserId,
+    isOwnProfile,
+    isOwnerOrVendor,
+    loadPromotions,
+    loadNearbyPromotionsCross,
+  ]);
 
   const loadMenu = useCallback(async () => {
     if (!profileUserId) return;
@@ -478,7 +509,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   }, [activeTab, profileUserId, loadMenu]);
 
   const handleGalleryUpload = useCallback(() => {
-    if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading) return;
+    if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading)
+      return;
     launchImageLibrary(
       { mediaType: 'photo', selectionLimit: 10 },
       async res => {
@@ -506,25 +538,21 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const handleDeleteGalleryPhoto = useCallback(
     async photoId => {
       if (!profileUserId || profileUserId !== currentUser?.id) return;
-      Alert.alert(
-        'Delete photo',
-        'Remove this photo from your gallery?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await deleteGalleryPhoto(profileUserId, photoId);
-                setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
-              } catch (e) {
-                Alert.alert('Error', e?.message || 'Failed to delete');
-              }
-            },
+      Alert.alert('Delete photo', 'Remove this photo from your gallery?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteGalleryPhoto(profileUserId, photoId);
+              setGalleryPhotos(prev => prev.filter(p => p.id !== photoId));
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to delete');
+            }
           },
-        ],
-      );
+        },
+      ]);
     },
     [profileUserId, currentUser?.id],
   );
@@ -548,8 +576,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   const openEditProfile = () => {
     setEditName(profile?.name ?? currentUser?.name ?? '');
-    setEditNickname(profile?.nickname ?? profile?.channelName ?? currentUser?.nickname ?? '');
-    setEditChannelAbout(profile?.channelAbout ?? currentUser?.channelAbout ?? '');
+    setEditNickname(
+      profile?.nickname ?? profile?.channelName ?? currentUser?.nickname ?? '',
+    );
+    setEditChannelAbout(
+      profile?.channelAbout ?? currentUser?.channelAbout ?? '',
+    );
     setEditPhone(currentUser?.phone ?? profile?.phone ?? '');
     setEditAddress(profile?.address ?? currentUser?.address ?? '');
     const links = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
@@ -569,60 +601,56 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   };
 
   const handleCoverPress = useCallback(() => {
-    if (!profileUserId || profileUserId !== currentUser?.id || uploadingCover) return;
-    launchImageLibrary(
-      { mediaType: 'photo', quality: 0.8 },
-      async res => {
-        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-        const asset = res.assets[0];
-        setUploadingCover(true);
-        try {
-          await uploadCoverImage(profileUserId, {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || 'cover.jpg',
-          });
-          await loadProfile();
-        } catch (e) {
-          Alert.alert('Error', e?.message || 'Failed to upload cover image');
-        } finally {
-          setUploadingCover(false);
-        }
-      },
-    );
+    if (!profileUserId || profileUserId !== currentUser?.id || uploadingCover)
+      return;
+    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
+      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      setUploadingCover(true);
+      try {
+        await uploadCoverImage(profileUserId, {
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || 'cover.jpg',
+        });
+        await loadProfile();
+      } catch (e) {
+        Alert.alert('Error', e?.message || 'Failed to upload cover image');
+      } finally {
+        setUploadingCover(false);
+      }
+    });
   }, [profileUserId, currentUser?.id, uploadingCover, loadProfile]);
 
   const handleAvatarPress = useCallback(() => {
-    if (!profileUserId || profileUserId !== currentUser?.id || uploadingAvatar) return;
-    launchImageLibrary(
-      { mediaType: 'photo', quality: 0.8 },
-      async res => {
-        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-        const asset = res.assets[0];
-        setUploadingAvatar(true);
-        try {
-          const data = await uploadProfilePhoto(profileUserId, {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || 'avatar.jpg',
-          });
-          await loadProfile();
-          const photoUrl = data?.photoUrl || data?.userUpdate?.photos?.[0]?.src;
-          if (currentUser?.id === profileUserId && photoUrl) {
-            dispatch(
-              appSetUser({
-                ...currentUser,
-                photos: [{ title: 'avatar', src: photoUrl }],
-              }),
-            );
-          }
-        } catch (e) {
-          Alert.alert('Error', e?.message || 'Failed to upload photo');
-        } finally {
-          setUploadingAvatar(false);
+    if (!profileUserId || profileUserId !== currentUser?.id || uploadingAvatar)
+      return;
+    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
+      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      setUploadingAvatar(true);
+      try {
+        const data = await uploadProfilePhoto(profileUserId, {
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || 'avatar.jpg',
+        });
+        await loadProfile();
+        const photoUrl = data?.photoUrl || data?.userUpdate?.photos?.[0]?.src;
+        if (currentUser?.id === profileUserId && photoUrl) {
+          dispatch(
+            appSetUser({
+              ...currentUser,
+              photos: [{ title: 'avatar', src: photoUrl }],
+            }),
+          );
         }
-      },
-    );
+      } catch (e) {
+        Alert.alert('Error', e?.message || 'Failed to upload photo');
+      } finally {
+        setUploadingAvatar(false);
+      }
+    });
   }, [profileUserId, currentUser, uploadingAvatar, loadProfile, dispatch]);
 
   const saveProfile = async () => {
@@ -630,7 +658,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setSavingProfile(true);
     try {
       const socialLinks = editSocialLinks
-        .map(l => ({ type: (l.type || 'website').trim(), url: (l.url || '').trim() }))
+        .map(l => ({
+          type: (l.type || 'website').trim(),
+          url: (l.url || '').trim(),
+        }))
         .filter(l => l.url);
       await updateChannelProfile(profileUserId, {
         name: editName.trim() || undefined,
@@ -642,15 +673,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       });
       await loadProfile();
       if (currentUser?.id === profileUserId) {
-        dispatch(appSetUser({
-          ...currentUser,
-          name: editName.trim() || currentUser.name,
-          nickname: editNickname.trim() || currentUser.nickname,
-          channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
-          phone: editPhone.trim() || currentUser.phone,
-          address: editAddress.trim() || currentUser.address,
-          socialLinks: socialLinks.length ? socialLinks : currentUser.socialLinks,
-        }));
+        dispatch(
+          appSetUser({
+            ...currentUser,
+            name: editName.trim() || currentUser.name,
+            nickname: editNickname.trim() || currentUser.nickname,
+            channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
+            phone: editPhone.trim() || currentUser.phone,
+            address: editAddress.trim() || currentUser.address,
+            socialLinks: socialLinks.length
+              ? socialLinks
+              : currentUser.socialLinks,
+          }),
+        );
       }
       setEditProfileVisible(false);
     } catch (e) {
@@ -797,7 +832,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {(isOwnProfile && isOwnerOrVendor ? ['Posts', 'Promotions', 'Menus', 'Grid', 'Video', 'Notification'] : BASE_TABS).map(tab => {
+          {(isOwnProfile && isOwnerOrVendor
+            ? ['Posts', 'Promotions', 'Menus', 'Grid', 'Video', 'Notification']
+            : BASE_TABS
+          ).map(tab => {
             const isGrid = tab === 'Grid';
             const isActive = activeTab === tab;
 
@@ -843,7 +881,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             : activeTab}
         </Text>
         {activeTab === 'Menus' && isOwnProfile && isOwnerOrVendor ? (
-          <TouchableOpacity onPress={() => navigation?.navigate('MenuManageScreen')}>
+          <TouchableOpacity
+            onPress={() => navigation?.navigate('MenuManageScreen')}
+          >
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Posts' && profileUserId === currentUser?.id ? (
@@ -851,7 +891,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Promotions' && isOwnProfile && isOwnerOrVendor ? (
-          <TouchableOpacity onPress={() => setCreatePromotionModalVisible(true)}>
+          <TouchableOpacity
+            onPress={() => setCreatePromotionModalVisible(true)}
+          >
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Grid' && isOwnProfile ? (
@@ -877,12 +919,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Posts':
         return posts;
       case 'Promotions': {
-        const list = isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCross : promotions;
+        const list =
+          isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCross : promotions;
         return list.map(p => ({
           id: p.id,
           title: p.title,
           image: p.thumbnailUrl || p.videoUrl,
-          price: p.promoAmount != null ? `${p.promoCode || ''} • ${p.promoAmount}% off` : (p.promoCode || ''),
+          price:
+            p.promoAmount != null
+              ? `${p.promoCode || ''} • ${p.promoAmount}% off`
+              : p.promoCode || '',
           views: formatCount(p.viewCount),
           promoCode: p.promoCode,
           promoAmount: p.promoAmount,
@@ -893,7 +939,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Grid':
         return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
       case 'Menus':
-        return menuItems.map(m => ({ id: m.id, itemName: m.itemName, price: m.price, imageUrl: m.imageUrl }));
+        return menuItems.map(m => ({
+          id: m.id,
+          itemName: m.itemName,
+          price: m.price,
+          imageUrl: m.imageUrl,
+        }));
       case 'Video':
         return ownerVideos;
       case 'Notification':
@@ -927,7 +978,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         <PromotionCard
           item={{
             ...item,
-            image: item.image ? safeImageUri(item.image) : 'https://via.placeholder.com/300',
+            image: item.image
+              ? safeImageUri(item.image)
+              : 'https://via.placeholder.com/300',
           }}
         />
       );
@@ -936,15 +989,22 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       return (
         <View style={styles.menuRowItem}>
           {item.imageUrl ? (
-            <Image source={{ uri: safeImageUri(item.imageUrl) }} style={styles.menuRowImage} />
+            <Image
+              source={{ uri: safeImageUri(item.imageUrl) }}
+              style={styles.menuRowImage}
+            />
           ) : (
             <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
               <MaterialCommunityIcons name="food" size={24} color="#999" />
             </View>
           )}
           <View style={styles.menuRowBody}>
-            <Text style={styles.menuRowName} numberOfLines={1}>{item.itemName}</Text>
-            <Text style={styles.menuRowPrice}>{item.price != null ? `$${Number(item.price).toFixed(2)}` : '—'}</Text>
+            <Text style={styles.menuRowName} numberOfLines={1}>
+              {item.itemName}
+            </Text>
+            <Text style={styles.menuRowPrice}>
+              {item.price != null ? `$${Number(item.price).toFixed(2)}` : '—'}
+            </Text>
           </View>
         </View>
       );
@@ -953,13 +1013,22 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       return (
         <TouchableOpacity
           style={styles.gridImageContainer}
-          onLongPress={() => isOwnProfile && item.id && handleDeleteGalleryPhoto(item.id)}
+          onLongPress={() =>
+            isOwnProfile && item.id && handleDeleteGalleryPhoto(item.id)
+          }
           activeOpacity={1}
         >
-          <Image source={{ uri: safeImageUri(item.image) }} style={styles.gridImage} />
+          <Image
+            source={{ uri: safeImageUri(item.image) }}
+            style={styles.gridImage}
+          />
           {isOwnProfile && item.id ? (
             <View style={styles.galleryDeleteBadge}>
-              <MaterialCommunityIcons name="delete-outline" size={18} color="#fff" />
+              <MaterialCommunityIcons
+                name="delete-outline"
+                size={18}
+                color="#fff"
+              />
             </View>
           ) : null}
         </TouchableOpacity>
@@ -981,7 +1050,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       return (
         <View style={styles.notificationRow}>
           <MaterialCommunityIcons
-            name={item.type === 'order' ? 'cart' : item.type === 'content' ? 'video' : 'bell'}
+            name={
+              item.type === 'order'
+                ? 'cart'
+                : item.type === 'content'
+                ? 'video'
+                : 'bell'
+            }
             size={22}
             color="#666"
             style={styles.notificationIcon}
@@ -991,12 +1066,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               {item.message}
             </Text>
             <Text style={styles.notificationMeta}>
-              {item.type || 'general'} • {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : ''}
+              {item.type || 'general'} •{' '}
+              {item.createdAt
+                ? new Date(item.createdAt).toLocaleDateString()
+                : ''}
             </Text>
           </View>
-          {item.status === 'unread' ? (
-            <View style={styles.unreadDot} />
-          ) : null}
+          {item.status === 'unread' ? <View style={styles.unreadDot} /> : null}
         </View>
       );
     }
@@ -1018,19 +1094,29 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading gallery...</Text>
         </View>
       ) : null}
-      {activeTab === 'Video' && ownerVideosLoading && ownerVideos.length === 0 ? (
+      {activeTab === 'Video' &&
+      ownerVideosLoading &&
+      ownerVideos.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading videos...</Text>
         </View>
       ) : null}
-      {activeTab === 'Notification' && notificationsLoading && notifications.length === 0 ? (
+      {activeTab === 'Notification' &&
+      notificationsLoading &&
+      notifications.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
       ) : null}
-      {activeTab === 'Promotions' && (isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCrossLoading : promotionsLoading) && (isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCross.length : promotions.length) === 0 ? (
+      {activeTab === 'Promotions' &&
+      (isOwnProfile && isOwnerOrVendor
+        ? nearbyPromotionsCrossLoading
+        : promotionsLoading) &&
+      (isOwnProfile && isOwnerOrVendor
+        ? nearbyPromotionsCross.length
+        : promotions.length) === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading promotions...</Text>
@@ -1043,7 +1129,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       ) : null}
       <FlatList
-        key={activeTab === 'Grid' ? 'grid-3-col' : activeTab === 'Menus' ? 'menus' : `list-1-col-${activeTab}`}
+        key={
+          activeTab === 'Grid'
+            ? 'grid-3-col'
+            : activeTab === 'Menus'
+            ? 'menus'
+            : `list-1-col-${activeTab}`
+        }
         data={getListData()}
         keyExtractor={(item, index) => item.id || `item-${index}`}
         renderItem={renderContentItem}
@@ -1085,8 +1177,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             />
           ) : activeTab === 'Promotions' && profileUserId ? (
             <RefreshControl
-              refreshing={isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCrossRefreshing : promotionsRefreshing}
-              onRefresh={() => (isOwnProfile && isOwnerOrVendor ? loadNearbyPromotionsCross(true) : loadPromotions(true))}
+              refreshing={
+                isOwnProfile && isOwnerOrVendor
+                  ? nearbyPromotionsCrossRefreshing
+                  : promotionsRefreshing
+              }
+              onRefresh={() =>
+                isOwnProfile && isOwnerOrVendor
+                  ? loadNearbyPromotionsCross(true)
+                  : loadPromotions(true)
+              }
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
@@ -1148,7 +1248,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 <MaterialCommunityIcons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
-            <ScrollView style={styles.editModalScroll} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={styles.editModalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.editLabel}>Name</Text>
               <TextInput
                 style={styles.editInput}
@@ -1192,14 +1295,17 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholder="Address"
                 placeholderTextColor="#999"
               />
-              <Text style={[styles.editLabel, { marginTop: 16 }]}>Social links</Text>
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                Social links
+              </Text>
               <View style={styles.socialLinksCard}>
                 {SOCIAL_TYPES.map((t, idx) => (
                   <View
                     key={t.value}
                     style={[
                       styles.socialLinkRow,
-                      idx === SOCIAL_TYPES.length - 1 && styles.socialLinkRowLast,
+                      idx === SOCIAL_TYPES.length - 1 &&
+                        styles.socialLinkRowLast,
                     ]}
                   >
                     <View style={styles.socialLinkLabelWrap}>
@@ -1227,7 +1333,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               </View>
             </ScrollView>
             <TouchableOpacity
-              style={[styles.editSaveBtn, savingProfile && styles.editSaveBtnDisabled]}
+              style={[
+                styles.editSaveBtn,
+                savingProfile && styles.editSaveBtnDisabled,
+              ]}
               onPress={saveProfile}
               disabled={savingProfile}
             >

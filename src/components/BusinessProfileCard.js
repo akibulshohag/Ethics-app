@@ -183,7 +183,7 @@ const BusinessProfileCard = ({
               </View>
               <View style={styles.statusWhiteBox}>
                 <Text style={styles.statusBodyText} numberOfLines={3}>
-                  {channelAbout || 'No status yet.'}
+                  {channelAbout.slice(0, 100) || 'No status yet.'}
                 </Text>
               </View>
             </View>

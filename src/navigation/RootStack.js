@@ -16,6 +16,7 @@ import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import EarningsScreen from '../screens/EarningsScreen';
 import MessageListScreen from '../screens/MessageListScreen';
 import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
+import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 
 const Root = createStackNavigator();
 
@@ -42,6 +43,7 @@ const RootStack = () => {
       <Root.Screen name="Earnings" component={EarningsScreen} />
       <Root.Screen name="MessageList" component={MessageListScreen} />
       <Root.Screen name="UserViewsScreen" component={UserViewsScreen} />
+      <Root.Screen name="VideoDetailsScreen" component={VideoDetailsScreen} />
     </Root.Navigator>
   );
 };
