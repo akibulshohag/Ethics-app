@@ -72,11 +72,29 @@ const ProfileScreen = () => {
                 // Clear AsyncStorage data
                 await AsyncStorage.clear();
 
-                // Force navigation to Login screen
-                // Reset navigation stack to prevent going back
+                // Reset to Home1 tab with HameSevenScreen (no back stack)
                 navigation.reset({
                   index: 0,
-                  routes: [{ name: 'Login' }],
+                  routes: [
+                    {
+                      name: 'Root',
+                      state: {
+                        index: 0,
+                        routes: [
+                          {
+                            name: 'Home1',
+                            state: {
+                              index: 1,
+                              routes: [
+                                { name: 'LandingScreen' },
+                                { name: 'HameSevenScreen' },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
                 });
               } catch (error) {
                 console.error('Logout error:', error);
@@ -120,9 +138,7 @@ const ProfileScreen = () => {
           <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('SettingsScreen')}
-        >
+        <TouchableOpacity onPress={() => navigation.navigate('SettingsScreen')}>
           <Icon name="dots-vertical" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -134,7 +150,8 @@ const ProfileScreen = () => {
             <Image
               source={{
                 uri: safeImageUri(
-                  user?.photos?.[0] ?? (Array.isArray(user?.photos) ? user.photos[0] : null),
+                  user?.photos?.[0] ??
+                    (Array.isArray(user?.photos) ? user.photos[0] : null),
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(
                     user?.name || user?.email || 'U',
                   )}&background=FF8C00&color=fff`,
@@ -149,30 +166,36 @@ const ProfileScreen = () => {
               <Icon name="pencil" size={14} color={COLORS.white} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{user?.name || user?.nickname || 'Guest User'}</Text>
+          <Text style={styles.userName}>
+            {user?.name || user?.nickname || 'Guest User'}
+          </Text>
           <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
-          {Array.isArray(user?.socialLinks) && user.socialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
-            <View style={styles.socialLinksRow}>
-              {user.socialLinks
-                .filter(l => (l?.url || '').trim())
-                .map((link, index) => (
-                  <TouchableOpacity
-                    key={`${link.type}-${index}`}
-                    style={styles.socialLinkIconBtn}
-                    onPress={() => {
-                      const url = (link.url || '').trim();
-                      if (url) Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
-                    }}
-                  >
-                    <Icon
-                      name={getSocialIcon(link.type)}
-                      size={26}
-                      color={COLORS.primaryOrange}
-                    />
-                  </TouchableOpacity>
-                ))}
-            </View>
-          )}
+          {Array.isArray(user?.socialLinks) &&
+            user.socialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
+              <View style={styles.socialLinksRow}>
+                {user.socialLinks
+                  .filter(l => (l?.url || '').trim())
+                  .map((link, index) => (
+                    <TouchableOpacity
+                      key={`${link.type}-${index}`}
+                      style={styles.socialLinkIconBtn}
+                      onPress={() => {
+                        const url = (link.url || '').trim();
+                        if (url)
+                          Linking.openURL(
+                            url.startsWith('http') ? url : `https://${url}`,
+                          );
+                      }}
+                    >
+                      <Icon
+                        name={getSocialIcon(link.type)}
+                        size={26}
+                        color={COLORS.primaryOrange}
+                      />
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )}
         </View>
 
         {/* Profile location map */}
@@ -184,7 +207,13 @@ const ProfileScreen = () => {
             ) : null}
             <Image
               source={{
-                uri: `https://maps.googleapis.com/maps/api/staticmap?center=${user.latitude},${user.longitude}&zoom=14&size=${Dimensions.get('window').width - 32}x120&markers=${user.latitude},${user.longitude}&key=${config.googleMapsApiKey}`,
+                uri: `https://maps.googleapis.com/maps/api/staticmap?center=${
+                  user.latitude
+                },${user.longitude}&zoom=14&size=${
+                  Dimensions.get('window').width - 32
+                }x120&markers=${user.latitude},${user.longitude}&key=${
+                  config.googleMapsApiKey
+                }`,
               }}
               style={styles.locationMapImage}
               resizeMode="cover"
@@ -220,7 +249,9 @@ const ProfileScreen = () => {
             title="Your Channel"
             onPress={() =>
               user?.id
-                ? navigation.navigate('ChannelDetailsScreen', { userId: user.id })
+                ? navigation.navigate('ChannelDetailsScreen', {
+                    userId: user.id,
+                  })
                 : navigation.navigate('AccountScreen')
             }
           />
@@ -244,7 +275,11 @@ const ProfileScreen = () => {
           )}
           <MenuItem
             iconName="cart-check"
-            title={String(user?.role || '').toLowerCase() === 'owner' ? 'Restaurant orders' : 'My orders'}
+            title={
+              String(user?.role || '').toLowerCase() === 'owner'
+                ? 'Restaurant orders'
+                : 'My orders'
+            }
             onPress={() => navigation.navigate('OrderListScreen')}
           />
 

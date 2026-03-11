@@ -1,5 +1,6 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import LandingScreen from '../screens/LandingScreen';
 import HomeOneScreen from '../screens/HomeOneScreen';
 import ProductShortsVideo from '../screens/NewScreen/ProductShortsVideo';
 import HomeThreeScreen from '../screens/HomeThreeScreen';
@@ -17,12 +18,10 @@ const HomeOneNavigation = () => {
   return (
     <HomeOneStack.Navigator
       screenOptions={{ headerShown: false }}
-      initialRouteName="HomeOneScreen"
+      initialRouteName="LandingScreen"
     >
-      <HomeOneStack.Screen
-        name="HomeOneScreen"
-        component={HomeOneScreen}
-      />
+      <HomeOneStack.Screen name="LandingScreen" component={LandingScreen} />
+      <HomeOneStack.Screen name="HomeOneScreen" component={HomeOneScreen} />
       <HomeOneStack.Screen
         name="ProductShortsVideo"
         component={ProductShortsVideo}

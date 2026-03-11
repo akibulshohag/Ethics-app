@@ -78,6 +78,9 @@ const LoginScreen = () => {
         latitude: data.user.latitude,
         longitude: data.user.longitude,
         pin: data.user.pin, // Boolean indicating if user has PIN
+        photos: data.user.photos ?? [],
+        channelAbout: data.user.channelAbout,
+        socialLinks: data.user.socialLinks,
         rememberMe: rememberMe,
         token: data.token,
       };

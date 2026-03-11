@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
-  SafeAreaView,
   StatusBar,
   Dimensions,
   Alert,
@@ -14,6 +13,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
@@ -81,13 +82,11 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       dispatch(appSetUser(userData));
 
       try {
-        if (returnToOrder && ownerUserId) {
-          navigation.navigate('HomeThreeScreen', {
-            ownerId: ownerUserId,
-          });
-        } else {
-          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
-        }
+        // After login, always redirect to LandingScreen (clear login from stack)
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'LandingScreen' }],
+        });
       } catch (_) {}
     } catch (error) {
       console.error('Login error:', error);

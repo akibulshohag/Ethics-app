@@ -15,6 +15,27 @@ const getAuthHeaders = () => {
 };
 
 /**
+ * Get promotions from owners or vendors near the given location.
+ * creatorRole: 'owner' | 'vendor' — show promotions created by that role nearby. Default 'owner'.
+ * Returns { promotions: [...], pagination: { total, page, limit, totalPages } }
+ */
+export const getNearbyPromotions = async (latitude, longitude, radiusKm = 50, page = 1, limit = 50, creatorRole = 'owner') => {
+  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+    return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+  }
+  try {
+    const response = await axios.get(`${API_URL}/nearby`, {
+      params: { latitude, longitude, radiusKm, page, limit, creatorRole },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching nearby promotions:', error);
+    return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+  }
+};
+
+/**
  * Get promotions by owner user ID (public, for profile Promotions tab).
  * Returns { promotions: [...], pagination: { total, page, limit, totalPages } }
  */

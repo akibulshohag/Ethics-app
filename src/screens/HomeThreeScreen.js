@@ -27,9 +27,10 @@ const HomeThreeScreen = ({ onBack }) => {
   const ownerId = route.params?.ownerId;
   const resTitle = route.params?.title || 'Restaurant';
   const resLocation = route.params?.location || '';
+  const singleMenuItem = route.params?.singleMenuItem;
 
   const [menuItems, setMenuItems] = useState([]);
-  const [menuLoading, setMenuLoading] = useState(!!ownerId);
+  const [menuLoading, setMenuLoading] = useState(!!ownerId && !singleMenuItem);
   const [selectedItems, setSelectedItems] = useState({});
   const [staticQuantities, setStaticQuantities] = useState({
     0: 1,
@@ -38,6 +39,12 @@ const HomeThreeScreen = ({ onBack }) => {
   });
 
   useEffect(() => {
+    if (singleMenuItem && singleMenuItem.id) {
+      setMenuItems([singleMenuItem]);
+      setMenuLoading(false);
+      setSelectedItems({ [singleMenuItem.id]: 1 });
+      return;
+    }
     if (!ownerId) return;
     setMenuLoading(true);
     setSelectedItems({});
@@ -45,7 +52,7 @@ const HomeThreeScreen = ({ onBack }) => {
       .then(({ menu }) => setMenuItems(menu || []))
       .catch(() => setMenuItems([]))
       .finally(() => setMenuLoading(false));
-  }, [ownerId]);
+  }, [ownerId, singleMenuItem?.id]);
 
   // Filter Bar Component
   const FilterBar = () => (

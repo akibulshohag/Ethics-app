@@ -36,9 +36,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS } from '../constants/theme';
 
+/** Hide tab bar for these screens (LandingScreen, ProductShortsVideo, etc.) */
 const getTabBarStyle = route => {
   const routeName = getFocusedRouteNameFromRoute(route) ?? '';
-  return BottomTabLessScreens.includes(routeName) ? { display: 'none' } : {};
+  const name = routeName || (route?.name === 'Home1' ? 'LandingScreen' : '');
+  return BottomTabLessScreens.includes(name)
+    ? { display: 'none' }
+    : undefined;
 };
 
 /** Orders tab: user role → own orders + status only; owner/admin → Live Orders with Accept/Reject */
@@ -61,14 +65,19 @@ const BottomNaivgation = () => {
   const navigation = useNavigation();
   const role = (user?.role || '').toLowerCase();
   const isOwner = role === 'owner';
+  const isVendor = role === 'vendor';
   const isUser = role === 'user';
+  const isAdmin = role === 'admin';
   const showCreateTab = user?.role === 'owner' || user?.role === 'admin';
   const showVProfileTab = role === 'vendor';
 
   const requireLogin = (e, tabName) => {
     if (!user) {
       e.preventDefault();
-      navigation.navigate('Login');
+      navigation.navigate('Root', {
+        screen: 'Home1',
+        params: { screen: 'HomeSevenScreen' },
+      });
     }
   };
 
@@ -103,10 +112,78 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Home1"
             component={HomeOneNavigation}
+            options={({ route }) => {
+              const hidden = getTabBarStyle(route);
+              const defaultVisibleStyle = {
+                backgroundColor: COLORS.white,
+                borderTopWidth: 1,
+                borderTopColor: COLORS.gray200,
+                height: tabHeight,
+                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+                paddingTop: 8,
+              };
+              return {
+                tabBarIcon: ({ focused, color }) => (
+                  <Icon
+                    name="home"
+                    size={28}
+                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                  />
+                ),
+                tabBarStyle: hidden ?? defaultVisibleStyle,
+              };
+            }}
+          />
+
+          {/* <Tab.Screen
+            name="Home9"
+            component={PromotionOneNavigation}
             options={{
               tabBarIcon: ({ focused, color }) => (
                 <Icon
-                  name="home"
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          /> */}
+
+          {/* <Tab.Screen
+            name="Home10"
+            component={PromotionTwoNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          /> */}
+
+          {/* <Tab.Screen
+            name="Home11"
+            component={PromotionThreeNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          /> */}
+
+          <Tab.Screen
+            name="Shorts"
+            component={ShortsNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="play-box-multiple-outline"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
@@ -114,7 +191,65 @@ const BottomNaivgation = () => {
             }}
           />
 
-          {isOwner && (
+          {/* <Tab.Screen
+            name="UProfile"
+            component={UProfileNavigation}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="account-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          /> */}
+
+          {/* {showVProfileTab && (
+            <Tab.Screen
+              name="VProfile"
+              component={VProfileNavigation}
+              options={{
+                tabBarIcon: ({ focused, color }) => (
+                  <Icon
+                    name="account-outline"
+                    size={28}
+                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                  />
+                ),
+              }}
+            />
+          )} */}
+
+          <Tab.Screen
+            name="Create"
+            component={CreateVideoModalScreen}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <View style={styles.fabContainer}>
+                  <Icon name="plus" size={30} color={COLORS.white} />
+                </View>
+              ),
+            }}
+          />
+
+          {/* <Tab.Screen
+            name="Subscriptions"
+            component={SubscriptionsScreen}
+            listeners={{
+              tabPress: e => requireLogin(e, 'Subscriptions'),
+            }}
+            options={{
+              tabBarIcon: ({ focused, color }) => (
+                <Icon
+                  name="youtube-subscription"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          /> */}
+          {(isOwner || isVendor) && (
             <Tab.Screen
               name="Profile"
               component={BusinessProfileViewScreen}
@@ -132,12 +267,12 @@ const BottomNaivgation = () => {
 
           {isUser && (
             <Tab.Screen
-              name="UserProfileCard"
-              component={UserViewsScreen}
+              name="Home8"
+              component={PromotionNavigation}
               options={{
-                tabBarIcon: ({ focused }) => (
+                tabBarIcon: ({ focused, color }) => (
                   <Icon
-                    name="account-circle-outline"
+                    name="account-outline"
                     size={28}
                     color={focused ? COLORS.primaryOrange : COLORS.gray500}
                   />
@@ -146,63 +281,7 @@ const BottomNaivgation = () => {
             />
           )}
 
-          <Tab.Screen
-            name="Home8"
-            component={PromotionNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="account-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Home9"
-            component={PromotionOneNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="account-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Home10"
-            component={PromotionTwoNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="account-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Home11"
-            component={PromotionThreeNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="account-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
+          {/* <Tab.Screen
             name="Home"
             component={HomeNavigation}
             options={({ route }) => ({
@@ -223,44 +302,16 @@ const BottomNaivgation = () => {
                 />
               ),
             })}
-          />
+          /> */}
 
-          <Tab.Screen
-            name="Shorts"
-            component={ShortsNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="play-box-multiple-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="UProfile"
-            component={UProfileNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="account-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          {showVProfileTab && (
+          {isAdmin && (
             <Tab.Screen
-              name="VProfile"
-              component={VProfileNavigation}
+              name="Admin"
+              component={AdminScreen}
               options={{
                 tabBarIcon: ({ focused, color }) => (
                   <Icon
-                    name="account-outline"
+                    name="cog"
                     size={28}
                     color={focused ? COLORS.primaryOrange : COLORS.gray500}
                   />
@@ -268,49 +319,6 @@ const BottomNaivgation = () => {
               }}
             />
           )}
-
-          <Tab.Screen
-            name="Create"
-            component={CreateVideoModalScreen}
-            options={{
-              tabBarIcon: ({ focused }) => (
-                <View style={styles.fabContainer}>
-                  <Icon name="plus" size={30} color={COLORS.white} />
-                </View>
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Subscriptions"
-            component={SubscriptionsScreen}
-            listeners={{
-              tabPress: e => requireLogin(e, 'Subscriptions'),
-            }}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="youtube-subscription"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Admin"
-            component={AdminScreen}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="cog"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          />
 
           <Tab.Screen
             name="Library"

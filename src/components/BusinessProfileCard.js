@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   View,
   Text,
@@ -6,138 +6,190 @@ import {
   ImageBackground,
   Image,
   TouchableOpacity,
-} from "react-native";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useNavigation } from "@react-navigation/native";
-import { safeImageUri } from "../utils/helper";
+  ActivityIndicator,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
+import { safeImageUri } from '../utils/helper';
 
-const formatCount = (n) => {
-  if (n == null || n < 0) return "0";
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+const formatCount = n => {
+  if (n == null || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(n);
 };
+
+const DEFAULT_COVER =
+  'https://images.unsplash.com/photo-1552566626-52f8b828add9';
 
 const BusinessProfileCard = ({
   profile,
   isOwnProfile,
   onEditProfile,
   onAvatarPress,
+  onCoverPress,
+  coverUploading,
 }) => {
   const navigation = useNavigation();
-  const coverUri = "https://images.unsplash.com/photo-1552566626-52f8b828add9";
-  const channelName = profile?.channelName || profile?.nickname || profile?.name || "—";
-  const channelAvatar = safeImageUri(profile?.channelAvatar, "https://via.placeholder.com/100");
+  const coverUri = profile?.coverUrl || profile?.coverImage || DEFAULT_COVER;
+  const channelName =
+    profile?.channelName || profile?.nickname || profile?.name || '—';
+  const channelAvatar = safeImageUri(
+    profile?.channelAvatar,
+    'https://via.placeholder.com/100',
+  );
   const followerCount = profile?.subscriberCount ?? 0;
   const followingCount = profile?.followingCount ?? 0;
-  const channelAbout = profile?.channelAbout || "";
+  const channelAbout = profile?.channelAbout || '';
+
+  const CoverWrapper = isOwnProfile && onCoverPress ? TouchableOpacity : View;
+  const coverProps =
+    isOwnProfile && onCoverPress
+      ? {
+          onPress: coverUploading ? undefined : onCoverPress,
+          activeOpacity: 0.9,
+        }
+      : {};
 
   return (
     <View style={styles.cardContainer}>
-      <ImageBackground
-        source={{ uri: coverUri }}
-        style={styles.bgImage}
-        imageStyle={{ borderRadius: 12 }}
-      >
-        <View style={styles.contentOverlay}>
-          <View style={styles.badgeContainer}>
-            <TouchableOpacity
-              style={styles.twoPartBadge}
-              onPress={() => navigation.navigate("OrdersList")}
-              activeOpacity={0.7}
-            >
-              <View style={styles.badgeIconPart}>
-                <Icon name="clipboard-list-outline" size={16} color="#222" />
-              </View>
-              <View style={styles.badgeTextPart}>
-                <Text style={styles.badgeText}>Orders</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.twoPartBadge, { marginTop: 10 }]}
-              onPress={() => navigation.navigate("Earnings")}
-              activeOpacity={0.7}
-            >
-              <View style={styles.badgeIconPart}>
-                <Icon name="currency-usd" size={16} color="#222" />
-              </View>
-              <View style={[styles.badgeTextPart, { backgroundColor: "#FFa31A" }]}>
-                <Text style={styles.badgeText}>Wallet</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.amberOverlayBox}>
-            <View style={styles.profileHeaderRow}>
-              <View style={styles.avatarContainer}>
-                <TouchableOpacity
-                  style={styles.avatarCircle}
-                  onPress={isOwnProfile && onAvatarPress ? onAvatarPress : undefined}
-                  activeOpacity={isOwnProfile && onAvatarPress ? 0.7 : 1}
-                  disabled={!isOwnProfile || !onAvatarPress}
-                >
-                  <Image source={{ uri: channelAvatar }} style={styles.avatarImage} />
-                </TouchableOpacity>
-                {isOwnProfile && (
-                  <View style={styles.editPencilBadge}>
-                    <Icon name="pencil-outline" size={14} color="#aaa" />
-                  </View>
-                )}
-              </View>
-              <View style={styles.profileTextGroup}>
-                <Text style={styles.businessNameHeading} numberOfLines={1}>
-                  {channelName}
-                </Text>
-                <View style={styles.verifiedIndicatorRow}>
-                  <Icon name="check-circle-outline" size={15} color="#fff" />
-                  <Text style={styles.verifiedAccountLabel}>verified account</Text>
-                </View>
-              </View>
+      <CoverWrapper style={styles.bgImageWrap} {...coverProps}>
+        <ImageBackground
+          source={{ uri: safeImageUri(coverUri, DEFAULT_COVER) }}
+          style={styles.bgImage}
+          imageStyle={{ borderRadius: 12 }}
+        >
+          {coverUploading && (
+            <View style={styles.coverLoadingOverlay}>
+              <ActivityIndicator size="large" color="#FFF" />
+              <Text style={styles.coverLoadingText}>Updating cover...</Text>
             </View>
-
-            <View style={styles.actionButtonsRow}>
-              {isOwnProfile && (
-                <TouchableOpacity style={styles.editProfileRectBtn} onPress={onEditProfile}>
-                  <Text style={styles.editProfileLabel}>Edit Profile</Text>
-                  <Icon name="square-edit-outline" size={20} color="#111" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.squareIconBtn}>
-                <Icon name="camera-outline" size={24} color="#111" />
-              </TouchableOpacity>
+          )}
+          {isOwnProfile && onCoverPress && !coverUploading && (
+            <View style={styles.coverEditIcon} pointerEvents="none">
+              <Icon
+                name="pencil-circle"
+                size={32}
+                color="rgba(255,255,255,0.95)"
+              />
+            </View>
+          )}
+          <View style={styles.contentOverlay}>
+            <View style={styles.badgeContainer}>
               <TouchableOpacity
-                style={styles.squareIconBtn}
-                onPress={() => navigation.navigate("MessageList")}
+                style={styles.twoPartBadge}
+                onPress={() => navigation.navigate('OrdersList')}
                 activeOpacity={0.7}
               >
-                <Icon name="message-text-outline" size={22} color="#111" />
+                <View style={styles.badgeIconPart}>
+                  <Icon name="clipboard-list-outline" size={16} color="#222" />
+                </View>
+                <View style={styles.badgeTextPart}>
+                  <Text style={styles.badgeText}>Orders</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.twoPartBadge, { marginTop: 10 }]}
+                onPress={() => navigation.navigate('Earnings')}
+                activeOpacity={0.7}
+              >
+                <View style={styles.badgeIconPart}>
+                  <Icon name="currency-usd" size={16} color="#222" />
+                </View>
+                <View
+                  style={[styles.badgeTextPart, { backgroundColor: '#FFa31A' }]}
+                >
+                  <Text style={styles.badgeText}>Wallet</Text>
+                </View>
               </TouchableOpacity>
             </View>
-          </View>
 
-          <View style={styles.bottomBlock}>
-            <View style={styles.statsOpaqueBar}>
-              <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>{formatCount(followerCount)}</Text>
-                <Text style={styles.statLabelMain}>Followers</Text>
+            <View style={styles.amberOverlayBox}>
+              <View style={styles.profileHeaderRow}>
+                <View style={styles.avatarContainer}>
+                  <TouchableOpacity
+                    style={styles.avatarCircle}
+                    onPress={
+                      isOwnProfile && onAvatarPress ? onAvatarPress : undefined
+                    }
+                    activeOpacity={isOwnProfile && onAvatarPress ? 0.7 : 1}
+                    disabled={!isOwnProfile || !onAvatarPress}
+                  >
+                    <Image
+                      source={{ uri: channelAvatar }}
+                      style={styles.avatarImage}
+                    />
+                  </TouchableOpacity>
+                  {isOwnProfile && (
+                    <View style={styles.editPencilBadge}>
+                      <Icon name="pencil-outline" size={14} color="#aaa" />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.profileTextGroup}>
+                  <Text style={styles.businessNameHeading} numberOfLines={1}>
+                    {channelName}
+                  </Text>
+                  <View style={styles.verifiedIndicatorRow}>
+                    <Icon name="check-circle-outline" size={15} color="#fff" />
+                    <Text style={styles.verifiedAccountLabel}>
+                      verified account
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>{formatCount(followingCount)}</Text>
-                <Text style={styles.statLabelMain}>Following</Text>
-              </View>
-              <View style={styles.statColumn}>
-                <Text style={styles.statValMain}>—</Text>
-                <Text style={styles.statLabelMain}>MSG</Text>
+
+              <View style={styles.actionButtonsRow}>
+                {isOwnProfile && (
+                  <TouchableOpacity
+                    style={styles.editProfileRectBtn}
+                    onPress={onEditProfile}
+                  >
+                    <Text style={styles.editProfileLabel}>Edit Profile</Text>
+                    <Icon name="square-edit-outline" size={20} color="#111" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.squareIconBtn}>
+                  <Icon name="camera-outline" size={24} color="#111" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.squareIconBtn}
+                  onPress={() => navigation.navigate('MessageList')}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="message-text-outline" size={22} color="#111" />
+                </TouchableOpacity>
               </View>
             </View>
-            <View style={styles.statusWhiteBox}>
-              <Text style={styles.statusBodyText} numberOfLines={3}>
-                {channelAbout || "No status yet."}
-              </Text>
+
+            <View style={styles.bottomBlock}>
+              <View style={styles.statsOpaqueBar}>
+                <View style={styles.statColumn}>
+                  <Text style={styles.statValMain}>
+                    {formatCount(followerCount)}
+                  </Text>
+                  <Text style={styles.statLabelMain}>Followers</Text>
+                </View>
+                <View style={styles.statColumn}>
+                  <Text style={styles.statValMain}>
+                    {formatCount(followingCount)}
+                  </Text>
+                  <Text style={styles.statLabelMain}>Following</Text>
+                </View>
+                <View style={styles.statColumn}>
+                  <Text style={styles.statValMain}>—</Text>
+                  <Text style={styles.statLabelMain}>MSG</Text>
+                </View>
+              </View>
+              <View style={styles.statusWhiteBox}>
+                <Text style={styles.statusBodyText} numberOfLines={3}>
+                  {channelAbout || 'No status yet.'}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-      </ImageBackground>
+        </ImageBackground>
+      </CoverWrapper>
     </View>
   );
 };
@@ -152,11 +204,37 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
-    marginHorizontal: 16, // Assuming it takes full width minus some padding
+    marginHorizontal: 16,
   },
+  bgImageWrap: { width: '100%' },
   bgImage: {
     width: '100%',
     height: 410,
+  },
+  coverLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  coverLoadingText: { color: '#FFF', marginTop: 8, fontSize: 14 },
+  coverEditIcon: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+  },
+  coverEditHint: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  coverEditHintText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    marginTop: 4,
   },
   contentOverlay: {
     flex: 1,
@@ -192,7 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 65
+    width: 65,
   },
   badgeText: {
     color: '#fff',
@@ -223,16 +301,16 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: "#222",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: '#222',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
-    borderColor: "#fff",
-    overflow: "hidden",
+    borderColor: '#fff',
+    overflow: 'hidden',
   },
   avatarImage: {
-    width: "100%",
-    height: "100%",
+    width: '100%',
+    height: '100%',
   },
   editPencilBadge: {
     position: 'absolute',

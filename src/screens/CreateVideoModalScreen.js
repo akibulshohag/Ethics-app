@@ -25,7 +25,7 @@ const CreateVideoModalScreen = () => {
 
   const handleCreateShort = () => {
     setModalVisible(false);
-    navigation.navigate('Shorts', {
+    navigation.navigate('Library', {
       screen: 'CreateShortsScreen',
       params: { isLive: false },
     });
@@ -38,7 +38,7 @@ const CreateVideoModalScreen = () => {
 
   const handleGoLive = () => {
     setModalVisible(false);
-    navigation.navigate('Shorts', {
+    navigation.navigate('Library', {
       screen: 'CreateShortsScreen',
       params: { isLive: true },
     });

@@ -3,6 +3,22 @@ import { config } from '../../config';
 const API_URL = `${config.apiBaseUrl}/sponsored`;
 
 /**
+ * Get all sponsored campaigns (no location check). Use for home feed.
+ * Returns { sponsored: Array<{ id, videoId, video, user, areaName, ... }> }
+ */
+export const getSponsored = async () => {
+  try {
+    const res = await fetch(API_URL);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { sponsored: [] };
+    const list = Array.isArray(data.sponsored) ? data.sponsored : [];
+    return { sponsored: list };
+  } catch (e) {
+    return { sponsored: [] };
+  }
+};
+
+/**
  * Get sponsored video for user's current location (when they select "Use my location").
  * Returns { sponsored: { video, areaName, ... } | null }
  */
@@ -12,15 +28,10 @@ export const getSponsoredByLocation = async (latitude, longitude) => {
     const url = `${API_URL}/by-location?latitude=${latitude}&longitude=${longitude}`;
     const res = await fetch(url);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      console.warn('[Sponsored] by-location failed', res.status, data);
-      return { sponsored: null };
-    }
-    const sponsored = data.sponsored || null;
-    if (__DEV__) console.log('[Sponsored] by-location', { latitude, longitude, hasSponsored: !!sponsored, videoId: sponsored?.video?.id });
-    return { sponsored };
+    if (!res.ok) return { sponsored: null };
+    const sponsored = data.sponsored ?? data.data?.sponsored ?? null;
+    return { sponsored: sponsored && sponsored.video ? sponsored : null };
   } catch (e) {
-    console.warn('[Sponsored] by-location error', e?.message || e);
     return { sponsored: null };
   }
 };

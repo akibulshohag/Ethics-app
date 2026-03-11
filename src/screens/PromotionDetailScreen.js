@@ -6,57 +6,89 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useSelector } from 'react-redux';
-import { useNavigation } from '@react-navigation/native';
-import { getNearbyPromotions } from '../services/promotionService';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import { getMenuByUserId } from '../services/menuService';
 import { safeImageUri } from '../utils/helper';
 
-const PromotionsScreen = () => {
+// Same card design as PromotionOneScreen – menu items in grid
+const PromotionDetailScreen = () => {
+  const route = useRoute();
   const navigation = useNavigation();
-  const currentUser = useSelector(state => state.app?.user);
-  const [promotions, setPromotions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const promotion = route.params?.promotion;
+
+  const [menuItems, setMenuItems] = useState([]);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const lat = currentUser?.latitude ?? 23.8103;
-  const lng = currentUser?.longitude ?? 90.4125;
+  const ownerId = promotion?.userId;
+  const ownerName =
+    promotion?.user?.nickname || promotion?.user?.name || 'Restaurant';
+  const menuItemIds = Array.isArray(promotion?.menuItemIds)
+    ? promotion.menuItemIds
+    : [];
+  const offerText =
+    promotion?.promoAmount != null
+      ? `Get Flat ${promotion.promoAmount}% OFF`
+      : 'Special Offer';
+  const codeText = promotion?.promoCode ? promotion.promoCode : '';
 
-  const loadPromotions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getNearbyPromotions(lat, lng, 50, 1, 50);
-      setPromotions(res?.promotions ?? []);
-    } catch (e) {
-      setPromotions([]);
-    } finally {
-      setLoading(false);
+  const loadMenu = useCallback(async () => {
+    if (!ownerId) {
+      setMenuItems([]);
+      setMenuLoading(false);
+      return;
     }
-  }, [lat, lng]);
+    setMenuLoading(true);
+    try {
+      const res = await getMenuByUserId(ownerId);
+      let menu = res?.menu ?? [];
+      if (menuItemIds.length > 0) {
+        const idSet = new Set(menuItemIds);
+        menu = menu.filter(m => idSet.has(m.id));
+      }
+      setMenuItems(menu);
+    } catch (e) {
+      setMenuItems([]);
+    } finally {
+      setMenuLoading(false);
+    }
+  }, [ownerId, menuItemIds.join(',')]);
 
   useEffect(() => {
-    loadPromotions();
-  }, [loadPromotions]);
+    loadMenu();
+  }, [loadMenu]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadPromotions();
+    await loadMenu();
     setRefreshing(false);
-  }, [loadPromotions]);
+  }, [loadMenu]);
 
-  const handlePromoPress = (promotion) => {
-    if (promotion && promotion.id) {
-      navigation.navigate('PromotionDetail', { promotion });
-    }
-  };
+  if (!promotion) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Promotion not found.</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="chevron-left" size={16} color="#000" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  // Static placeholders when no API data (same design, no layout change)
-  const STATIC_CARDS = [
+  // Static placeholders when no menu data (same design as PromotionOneScreen)
+  const STATIC_MENU_CARDS = [
     { name: 'Tandoori Planet' },
     { name: 'Streetly balty' },
     { name: 'Bangal hub' },
@@ -65,16 +97,20 @@ const PromotionsScreen = () => {
     { name: 'Tandoori Planet' },
   ];
 
-  const PromotionCard = ({ promotion, isStatic }) => {
+  const MenuCard = ({ item, isStatic }) => {
     if (isStatic) {
       return (
         <View style={styles.promoCard}>
           <View style={styles.cardOrangeHeader}>
-            <Text style={styles.cardHeaderText} numberOfLines={1}>{promotion.name}</Text>
+            <Text style={styles.cardHeaderText} numberOfLines={1}>
+              {item.name}
+            </Text>
           </View>
           <View style={styles.imageContainer}>
             <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' }}
+              source={{
+                uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+              }}
               style={styles.foodImage}
             />
           </View>
@@ -87,21 +123,29 @@ const PromotionsScreen = () => {
         </View>
       );
     }
-    const name = promotion?.title || promotion?.user?.nickname || promotion?.user?.name || 'Offer';
-    const imageUri = promotion?.thumbnailUrl || promotion?.videoUrl || 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
-    const offerText = promotion?.promoAmount != null
-      ? `Get Flat ${promotion.promoAmount}% OFF`
-      : 'Special Offer';
-    const codeText = promotion?.promoCode ? `Code: ${promotion.promoCode}` : '';
+    const name = item?.itemName || 'Item';
+    const imageUri =
+      item?.imageUrl ||
+      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+    const priceStr =
+      item?.price != null ? `$${Number(item.price).toFixed(2)}` : '—';
 
     return (
       <TouchableOpacity
         style={styles.promoCard}
-        onPress={() => handlePromoPress(promotion)}
+        onPress={() =>
+          navigation.navigate('PromotionTwo', {
+            promotion,
+            menuItem: item,
+            menuItems,
+          })
+        }
         activeOpacity={0.8}
       >
         <View style={styles.cardOrangeHeader}>
-          <Text style={styles.cardHeaderText} numberOfLines={1}>{name}</Text>
+          <Text style={styles.cardHeaderText} numberOfLines={1}>
+            {name}
+          </Text>
         </View>
         <View style={styles.imageContainer}>
           <Image
@@ -112,13 +156,11 @@ const PromotionsScreen = () => {
         <View style={styles.cardFooter}>
           <Text style={styles.getFlatText}>
             {offerText}
-            {promotion?.promoCode ? (
-              <Text style={styles.highlightText}> • {promotion.promoCode}</Text>
+            {codeText ? (
+              <Text style={styles.highlightText}> • {codeText}</Text>
             ) : null}
           </Text>
-          {codeText ? (
-            <Text style={styles.uptoText}>{codeText}</Text>
-          ) : null}
+          <Text style={styles.uptoText}>{priceStr}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -128,6 +170,7 @@ const PromotionsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#2C3E50" />
 
+      {/* Same header as PromotionOneScreen */}
       <View style={styles.headerBackground}>
         <View style={styles.topNav}>
           <TouchableOpacity
@@ -162,22 +205,38 @@ const PromotionsScreen = () => {
           />
         }
       >
-        <View style={styles.promoGrid}>
-          {promotions.length > 0
-            ? promotions.map((p, idx) => (
-                <PromotionCard key={p.id || idx} promotion={p} isStatic={false} />
-              ))
-            : STATIC_CARDS.map((s, idx) => (
-                <PromotionCard key={`static-${idx}`} promotion={s} isStatic />
-              ))}
-        </View>
+        {menuLoading && menuItems.length === 0 ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color="#F5A623" />
+            <Text style={styles.loadingText}>Loading menu...</Text>
+          </View>
+        ) : (
+          <View style={styles.promoGrid}>
+            {menuItems.length > 0
+              ? menuItems.map(item => (
+                  <MenuCard key={item.id} item={item} isStatic={false} />
+                ))
+              : STATIC_MENU_CARDS.map((s, idx) => (
+                  <MenuCard key={`static-${idx}`} item={s} isStatic />
+                ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
+// Reuse same styles as PromotionOneScreen for identical design
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#FFF' },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: { fontSize: 16, color: '#666' },
+
   headerBackground: {
     backgroundColor: '#2C3E50',
     paddingBottom: 20,
@@ -220,10 +279,10 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 35,
     borderBottomRightRadius: 35,
   },
+
   scrollArea: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24 },
   loadingWrap: { paddingVertical: 40, alignItems: 'center' },
   loadingText: { marginTop: 8, fontSize: 14, color: '#666' },
-  emptyText: { fontSize: 14, color: '#888', textAlign: 'center' },
   promoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -253,4 +312,4 @@ const styles = StyleSheet.create({
   uptoText: { fontSize: 11, color: '#666' },
 });
 
-export default PromotionsScreen;
+export default PromotionDetailScreen;

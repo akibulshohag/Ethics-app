@@ -15,6 +15,7 @@ import {
   Linking,
 } from 'react-native';
 import Video from 'react-native-video';
+import Slider from '@react-native-community/slider';
 import {
   useNavigation,
   useRoute,
@@ -22,16 +23,9 @@ import {
 } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
-import {
-  getCurrentPositionSafe,
-  reverseGeocode,
-  geocodeAddress,
-  getPlaceSuggestions,
-  getCoordsFromPlaceId,
-  getFallbackCoordsForBDArea,
-} from '../utils/geolocation';
-import { getFeaturedByLocation } from '../services/featuredService';
-import { getSponsoredByLocation } from '../services/sponsoredService';
+import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
+import { getFeatured } from '../services/featuredService';
+import { getSponsored } from '../services/sponsoredService';
 import {
   getVideos,
   getVideoWatchHistory,
@@ -92,17 +86,12 @@ const mapToDisplayItem = (v, type) => {
 };
 
 const HomeOneScreen = () => {
-  const [isLanding, setIsLanding] = useState(true);
   const [isVideoDetail, setIsVideoDetail] = useState(false);
   const [isRestaurantDetail, setIsRestaurantDetail] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [addressText, setAddressText] = useState('');
-  const [addressSuggestions, setAddressSuggestions] = useState([]);
-  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
-  const debounceTimerRef = useRef(null);
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
   const [feedVideos, setFeedVideos] = useState([]);
@@ -112,25 +101,53 @@ const HomeOneScreen = () => {
   const [videoPaused, setVideoPaused] = useState(true);
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState(null);
+  const [restaurantVideoKey, setRestaurantVideoKey] = useState(0);
   const shortVideoRef = useRef(null);
+  const resVideoRef = useRef(null);
+  const resSeekingRef = useRef(false);
+  const resProgressUpdateRef = useRef(0);
   const navigation = useNavigation();
   const route = useRoute();
   const user = useSelector(state => state.app?.user);
+  const [resVideoProgress, setResVideoProgress] = useState({
+    currentTime: 0,
+    duration: 0,
+  });
+  const [resIsSliding, setResIsSliding] = useState(false);
+  const [resSlidingValue, setResSlidingValue] = useState(0);
 
   useFocusEffect(
     React.useCallback(() => {
-      const showRestaurant = route.params?.showRestaurantDetail;
-      const restaurantItem = route.params?.restaurantItem;
+      const params = route.params || {};
+      const showRestaurant = params.showRestaurantDetail;
+      const restaurantItem = params.restaurantItem;
       if (showRestaurant && restaurantItem) {
         setSelectedItem(restaurantItem);
         setIsRestaurantDetail(true);
-        setIsLanding(false);
         navigation.setParams({
           showRestaurantDetail: undefined,
           restaurantItem: undefined,
         });
+        return;
       }
-    }, [route.params, navigation]),
+      if (params.selectedLocation != null) {
+        setSelectedLocation(params.selectedLocation);
+        if (params.addressText != null) setAddressText(params.addressText);
+        navigation.setParams({
+          selectedLocation: undefined,
+          addressText: undefined,
+        });
+        return;
+      }
+      if (selectedLocation?.lat == null && selectedLocation?.lng == null) {
+        navigation.replace('LandingScreen');
+      }
+    }, [
+      route.params,
+      navigation,
+      selectedLocation?.lat,
+      selectedLocation?.lng,
+    ]),
   );
 
   const loadFeaturedAndFeed = useCallback(async () => {
@@ -154,16 +171,32 @@ const HomeOneScreen = () => {
       nearbyLng: lng,
       radiusKm: 50,
     };
+
+    // Featured + sponsored: direct GET /featured and GET /sponsored (no location check)
+    getFeatured()
+      .then(({ featured: list }) => {
+        const first =
+          Array.isArray(list) && list.length > 0 && list[0].video
+            ? list[0]
+            : null;
+        setFeaturedVideo(first);
+      })
+      .catch(() => setFeaturedVideo(null));
+    getSponsored()
+      .then(({ sponsored: list }) => {
+        const first =
+          Array.isArray(list) && list.length > 0 && list[0].video
+            ? list[0]
+            : null;
+        setSponsoredVideo(first);
+      })
+      .catch(() => setSponsoredVideo(null));
+
     try {
-      const [featuredRes, sponsoredRes, videosRes, shortsRes] =
-        await Promise.all([
-          getFeaturedByLocation(lat, lng),
-          getSponsoredByLocation(lat, lng),
-          getVideos(videoParams),
-          shortsService.getShorts(shortParams),
-        ]);
-      setFeaturedVideo(featuredRes?.featured || null);
-      setSponsoredVideo(sponsoredRes?.sponsored || null);
+      const [videosRes, shortsRes] = await Promise.all([
+        getVideos(videoParams),
+        shortsService.getShorts(shortParams),
+      ]);
       const videos = (videosRes?.videos || []).map(v =>
         mapToDisplayItem(v, 'video'),
       );
@@ -174,8 +207,6 @@ const HomeOneScreen = () => {
       setFeedShorts(shorts);
     } catch (e) {
       console.error('HomeOne load feed:', e);
-      setFeaturedVideo(null);
-      setSponsoredVideo(null);
       setFeedVideos([]);
       setFeedShorts([]);
     } finally {
@@ -209,19 +240,10 @@ const HomeOneScreen = () => {
   }, [user?.id]);
 
   useEffect(() => {
-    if (
-      selectedLocation?.lat != null &&
-      selectedLocation?.lng != null &&
-      !isLanding
-    ) {
+    if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
       loadFeaturedAndFeed();
     }
-  }, [
-    selectedLocation?.lat,
-    selectedLocation?.lng,
-    isLanding,
-    loadFeaturedAndFeed,
-  ]);
+  }, [selectedLocation?.lat, selectedLocation?.lng, loadFeaturedAndFeed]);
 
   useEffect(() => {
     loadContinueWatching();
@@ -229,7 +251,6 @@ const HomeOneScreen = () => {
 
   const useMyLocation = () => {
     setLocationLoading(true);
-    setShowAddressSuggestions(false);
     getCurrentPositionSafe(
       async pos => {
         const lat = pos.coords.latitude;
@@ -237,7 +258,6 @@ const HomeOneScreen = () => {
         setSelectedLocation({ lat, lng });
         const addr = await reverseGeocode(lat, lng);
         setAddressText(addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        setIsLanding(false);
         setLocationLoading(false);
       },
       err => {
@@ -245,104 +265,6 @@ const HomeOneScreen = () => {
         Alert.alert('Location', err || 'Could not get location.');
       },
     );
-  };
-
-  useEffect(() => {
-    const trimmed = addressText.trim();
-    if (!trimmed) {
-      setAddressSuggestions([]);
-      setShowAddressSuggestions(false);
-      setSuggestionsLoading(false);
-      return;
-    }
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = setTimeout(async () => {
-      setSuggestionsLoading(true);
-      setShowAddressSuggestions(true);
-      const list = await getPlaceSuggestions(trimmed);
-      setAddressSuggestions(list || []);
-      setSuggestionsLoading(false);
-      debounceTimerRef.current = null;
-    }, 280);
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, [addressText]);
-
-  const handleSelectSuggestion = async (description, placeId) => {
-    setAddressText(description);
-    setShowAddressSuggestions(false);
-    setAddressSuggestions([]);
-    setLocationLoading(true);
-    try {
-      let coords = placeId ? await getCoordsFromPlaceId(placeId) : null;
-      if (!coords) coords = await geocodeAddress(description);
-      if (!coords) coords = await geocodeAddress(description + ', Bangladesh');
-      if (!coords) coords = getFallbackCoordsForBDArea(description);
-      if (coords) {
-        setSelectedLocation(coords);
-        setIsLanding(false);
-      } else {
-        Alert.alert(
-          'Address',
-          'Could not get location for this address. Try "Use my location".',
-        );
-      }
-    } catch (_) {
-      const fallback = getFallbackCoordsForBDArea(description);
-      if (fallback) {
-        setSelectedLocation(fallback);
-        setIsLanding(false);
-      } else {
-        Alert.alert('Address', 'Something went wrong. Try "Use my location".');
-      }
-    }
-    setLocationLoading(false);
-  };
-
-  const handleAddressSubmit = async () => {
-    setShowAddressSuggestions(false);
-    const trimmed = addressText.trim();
-    if (trimmed) {
-      setLocationLoading(true);
-      try {
-        let coords = await geocodeAddress(trimmed);
-        if (!coords) {
-          const parts = trimmed
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean);
-          if (parts.length >= 2) {
-            coords = await geocodeAddress(parts.slice(-2).join(', '));
-          }
-          if (!coords && parts.length >= 1) {
-            coords = await geocodeAddress(parts[parts.length - 1]);
-          }
-        }
-        if (!coords) coords = await geocodeAddress(trimmed + ', Bangladesh');
-        if (!coords) coords = getFallbackCoordsForBDArea(trimmed);
-        if (coords) {
-          setSelectedLocation(coords);
-          setIsLanding(false);
-        } else {
-          Alert.alert(
-            'Address',
-            'Could not find that address. Try "Use my location" or check the address.',
-          );
-        }
-      } catch (_) {
-        const fallback = getFallbackCoordsForBDArea(trimmed);
-        if (fallback) {
-          setSelectedLocation(fallback);
-          setIsLanding(false);
-        } else {
-          Alert.alert('Address', 'Could not find that address.');
-        }
-      }
-      setLocationLoading(false);
-      return;
-    }
-    useMyLocation();
   };
 
   const openShortDetail = item => {
@@ -359,7 +281,7 @@ const HomeOneScreen = () => {
           const full = mapToDisplayItem(res, 'short');
           setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
         })
-        .catch(() => { });
+        .catch(() => {});
     }
   };
 
@@ -368,6 +290,10 @@ const HomeOneScreen = () => {
     setVideoPaused(true);
     setVideoError(null);
     setVideoLoading(false);
+    setRestaurantVideoKey(k => k + 1);
+    setResVideoProgress({ currentTime: 0, duration: 0 });
+    setResIsSliding(false);
+    setResSlidingValue(0);
     setIsVideoDetail(false);
     setIsRestaurantDetail(true);
     if (item?.id && (item?.type === 'video' || !item?.type)) {
@@ -376,37 +302,34 @@ const HomeOneScreen = () => {
           const full = mapToDisplayItem(res, item?.type || 'video');
           setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
         })
-        .catch(() => { });
+        .catch(() => {});
     }
   };
 
   const handleFeedItemPress = item => {
     if (item?.type === 'short') {
       // openShortDetail(item)
-      navigation.navigate('ProductShortsVideo', { item })
+      navigation.navigate('ProductShortsVideo', { item });
     } else {
       openRestaurantDetail(item);
     }
   };
 
-  const featuredItem = featuredVideo?.video
-    ? mapToDisplayItem(
-      {
-        ...featuredVideo.video,
-        user: featuredVideo.video.user || featuredVideo.user,
-      },
-      'video',
-    )
-    : null;
+  const featuredItem = (() => {
+    if (!featuredVideo?.video) return null;
+    const video = featuredVideo.video;
+    const user = video.user || featuredVideo.user;
+    return mapToDisplayItem({ ...video, user }, 'video');
+  })();
 
   const sponsoredItem = sponsoredVideo?.video
     ? mapToDisplayItem(
-      {
-        ...sponsoredVideo.video,
-        user: sponsoredVideo.video.user || sponsoredVideo.user,
-      },
-      'video',
-    )
+        {
+          ...sponsoredVideo.video,
+          user: sponsoredVideo.video.user || sponsoredVideo.user,
+        },
+        'video',
+      )
     : null;
 
   // Sectioned feed: sponsored → 2 shorts → 2 videos → continue (3) → 4 shorts → 4 videos → 6 → 6 ...
@@ -461,107 +384,24 @@ const HomeOneScreen = () => {
 
   // --- RENDERING HELPERS ---
 
-  const renderLanding = () => (
-    <View style={styles.landingContainer}>
-      <View style={styles.centerContent}>
-        <View style={[styles.logoContainer, { marginBottom: 20 }]}>
-          <Image source={logo} style={{ width: 200, height: 50 }} resizeMode='contain' />
-        </View>
-        <View style={styles.landingSearchBox}>
-          <Icon
-            name="magnify"
-            size={22}
-            color="#999"
-            style={styles.landingSearchIcon}
-          />
-          <TextInput
-            style={styles.landingSearchInput}
-            placeholder="Search Your address"
-            placeholderTextColor="#999"
-            value={addressText}
-            onChangeText={setAddressText}
-            onSubmitEditing={handleAddressSubmit}
-            returnKeyType="search"
-            editable={!locationLoading}
-          />
-          <TouchableOpacity
-            onPress={locationLoading ? undefined : handleAddressSubmit}
-            style={styles.landingMapIcon}
-            disabled={locationLoading}
-            activeOpacity={0.7}
-          >
-            {locationLoading ? (
-              <ActivityIndicator size="small" color="#F5A623" />
-            ) : (
-              <Icon name="map-marker-radius" size={26} color="#F5A623" />
-            )}
-          </TouchableOpacity>
-        </View>
-        {addressText.trim().length > 0 && (
-          <View style={styles.suggestionsContainer}>
-            {suggestionsLoading ? (
-              <View style={styles.suggestionItem}>
-                <ActivityIndicator size="small" color="#F5A623" />
-                <Text style={styles.suggestionText}>Searching areas...</Text>
-              </View>
-            ) : addressSuggestions.length > 0 ? (
-              <ScrollView
-                style={styles.suggestionsScroll}
-                keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled
-              >
-                {addressSuggestions.slice(0, 8).map((item, idx) => (
-                  <TouchableOpacity
-                    key={
-                      item.place_id
-                        ? item.place_id
-                        : `fb-${idx}-${item.description}`
-                    }
-                    style={styles.suggestionItem}
-                    onPress={() =>
-                      handleSelectSuggestion(item.description, item.place_id)
-                    }
-                    activeOpacity={0.7}
-                  >
-                    <Icon name="map-marker-outline" size={18} color="#666" />
-                    <Text style={styles.suggestionText} numberOfLines={2}>
-                      {item.description}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            ) : (
-              <View style={styles.suggestionItem}>
-                <Icon name="map-marker-outline" size={18} color="#999" />
-                <Text style={styles.suggestionHint}>
-                  No areas found. Type full address (e.g. Mirpur 10, Dhaka) or
-                  tap the location icon.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-        <Text style={styles.slogan}>See it, Love it, order it</Text>
-      </View>
-    </View>
-  );
-
   const renderResults = () => (
     <View style={styles.mainContainer}>
       <View style={styles.header}>
         <View style={styles.navRow}>
           <TouchableOpacity
-            onPress={() => setIsLanding(true)}
+            onPress={() => navigation.navigate('LandingScreen')}
             style={styles.navBtn}
           >
             <Text style={styles.navBtnText}>{'<'} Home</Text>
           </TouchableOpacity>
           <View style={styles.headerLogoContainer}>
-            <Image source={logo} style={styles.logoImage} resizeMode="contain" />
+            <Image
+              source={logo}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
-          <TouchableOpacity
-            style={[styles.navBtn]}
-          >
+          <TouchableOpacity style={[styles.navBtn]}>
             <Text style={styles.navBtnText}>Login {'>'}</Text>
           </TouchableOpacity>
         </View>
@@ -571,28 +411,29 @@ const HomeOneScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.bannerWrapper}>
-          <Image
-            source={{
-              uri:
-                featuredItem?.img ||
-                'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-            }}
-            style={styles.bannerImage}
-            resizeMode="cover"
-          />
-          <TouchableOpacity
-            style={styles.featuredBadge}
-            onPress={() => {
-              if (featuredItem) {
-                openRestaurantDetail(featuredItem);
-              }
-            }}
-          >
-            <Text style={styles.featuredText}>Featured</Text>
-            <Icon name="chevron-right" size={16} color="#FFF" />
-          </TouchableOpacity>
-        </View>
+        {featuredVideo?.video ? (
+          <View style={styles.bannerWrapper}>
+            <Image
+              source={{
+                uri:
+                  featuredVideo.video.thumbnailUrl ||
+                  featuredVideo.video.videoUrl ||
+                  featuredItem?.img ||
+                  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+              }}
+              style={styles.bannerImage}
+              resizeMode="cover"
+            />
+            <TouchableOpacity
+              style={styles.featuredBadge}
+              onPress={() => featuredItem && openRestaurantDetail(featuredItem)}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.featuredText}>Featured</Text>
+              <Icon name="chevron-right" size={16} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <View style={styles.locationSection}>
           <View style={styles.homeDropdown}>
@@ -625,8 +466,15 @@ const HomeOneScreen = () => {
               {feedSections.map((section, sectionIdx) => (
                 <View key={`${section.type}-${sectionIdx}`}>
                   {section.type === 'SHORTS' && section.data.length > 0 && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Icon style={{ marginRight: 5, marginTop: -5 }} name="camera" size={24} color="#d17409ff" />
+                    <View
+                      style={{ flexDirection: 'row', alignItems: 'center' }}
+                    >
+                      <Icon
+                        style={{ marginRight: 5, marginTop: -5 }}
+                        name="camera"
+                        size={24}
+                        color="#d17409ff"
+                      />
                       <Text style={styles.sectionTitle}>Shorts</Text>
                     </View>
                   )}
@@ -635,6 +483,9 @@ const HomeOneScreen = () => {
                   )}
                   {section.type === 'CONTINUE' && section.data.length > 0 && (
                     <Text style={styles.sectionTitle}>Continue watching</Text>
+                  )}
+                  {section.type === 'SPONSORED' && section.data.length > 0 && (
+                    <Text style={styles.sectionTitle}>Sponsored near you</Text>
                   )}
                   {section.type === 'SHORTS' ? (
                     <View style={styles.shortsGrid}>
@@ -679,13 +530,22 @@ const HomeOneScreen = () => {
     setVideoPaused(false);
   };
 
+  const getVideoErrorMessage = e => {
+    const fallback =
+      'Failed to play video. The video format may not be supported or the URL is inaccessible.';
+    if (!e) return fallback;
+    const msg =
+      e?.error?.localizedDescription ??
+      e?.errorString ??
+      e?.error?.errorString ??
+      e?.message ??
+      (typeof e === 'string' ? e : null);
+    return msg && String(msg).trim() ? String(msg) : fallback;
+  };
+
   const handleShortVideoError = e => {
     setVideoLoading(false);
-    setVideoError(
-      e?.error?.localizedDescription ||
-      e?.errorString ||
-      'Failed to play video.',
-    );
+    setVideoError(getVideoErrorMessage(e));
   };
 
   const handleRetryShortVideo = () => {
@@ -694,13 +554,24 @@ const HomeOneScreen = () => {
     setVideoPaused(true);
     setTimeout(() => setVideoPaused(false), 100);
   };
+
+  const formatTime = sec => {
+    if (!sec || isNaN(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
+  const resDisplayTime = resIsSliding
+    ? resSlidingValue
+    : resVideoProgress.currentTime;
   const renderVideoDetail = () => (
     <View style={styles.videoBackground}>
       {selectedItem?.videoUrl ? (
         <>
           <Video
             ref={shortVideoRef}
-            source={{ uri: selectedItem.videoUrl }}
+            source={{ uri: String(selectedItem.videoUrl).trim() }}
             poster={selectedItem?.img}
             posterResizeMode="cover"
             style={StyleSheet.absoluteFill}
@@ -776,7 +647,7 @@ const HomeOneScreen = () => {
             </View>
             <View style={styles.actionItem}>
               <Icon name="heart" size={32} color="#FF4D4D" />
-              <Text style={styles.actionText}>100k</Text>
+              <Text style={styles.actionText}>100ksss</Text>
             </View>
             <View style={styles.actionItem}>
               <Icon name="comment-text" size={32} color="#FFF" />
@@ -815,9 +686,7 @@ const HomeOneScreen = () => {
               disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
             >
               <Text style={styles.videoUser}>
-                @{(selectedItem?.title || '')
-                  .toLowerCase()
-                  .replace(/\s+/g, '')}
+                @{(selectedItem?.title || '').toLowerCase().replace(/\s+/g, '')}
               </Text>
             </TouchableOpacity>
             <Text style={styles.videoDesc}>
@@ -898,7 +767,8 @@ const HomeOneScreen = () => {
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => {
-                const ownerId = selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+                const ownerId =
+                  selectedItem?.user?.id ?? selectedItem?.userId ?? null;
                 if (ownerId) {
                   navigation.navigate('UserViewsScreen', { userId: ownerId });
                 }
@@ -953,10 +823,15 @@ const HomeOneScreen = () => {
         </View>
 
         <View style={styles.resVideoCard}>
-          {selectedItem?.videoUrl ? (
+          {selectedItem?.videoUrl &&
+          String(selectedItem.videoUrl).trim().startsWith('http') ? (
             <>
               <Video
-                source={{ uri: selectedItem.videoUrl }}
+                ref={resVideoRef}
+                key={restaurantVideoKey}
+                source={{
+                  uri: String(selectedItem.videoUrl).trim(),
+                }}
                 poster={selectedItem?.img}
                 posterResizeMode="cover"
                 style={styles.resVideoImg}
@@ -967,17 +842,26 @@ const HomeOneScreen = () => {
                 playInBackground={false}
                 playWhenInactive={false}
                 onLoadStart={() => setVideoLoading(true)}
-                onLoad={() => {
+                onLoad={data => {
                   setVideoLoading(false);
                   setVideoError(null);
+                  const dur = data?.duration || 0;
+                  setResVideoProgress(p => ({ ...p, duration: dur }));
+                }}
+                onProgress={data => {
+                  if (resSeekingRef.current) return;
+                  const now = Date.now();
+                  if (now - resProgressUpdateRef.current < 500) return;
+                  resProgressUpdateRef.current = now;
+                  setResVideoProgress(p => ({
+                    currentTime: data?.currentTime ?? p.currentTime,
+                    duration:
+                      data?.seekableDuration || data?.duration || p.duration,
+                  }));
                 }}
                 onError={e => {
                   setVideoLoading(false);
-                  setVideoError(
-                    e?.error?.localizedDescription ||
-                    e?.errorString ||
-                    'Playback failed',
-                  );
+                  setVideoError(getVideoErrorMessage(e));
                 }}
               />
 
@@ -991,11 +875,24 @@ const HomeOneScreen = () => {
                   <Text style={styles.resVideoErrorText} numberOfLines={2}>
                     {videoError}
                   </Text>
+                  <TouchableOpacity
+                    style={styles.resRetryBtn}
+                    onPress={() => {
+                      setVideoError(null);
+                      setVideoLoading(true);
+                      setVideoPaused(true);
+                      setRestaurantVideoKey(k => k + 1);
+                      setTimeout(() => setVideoPaused(false), 200);
+                    }}
+                  >
+                    <Icon name="refresh" size={20} color="#FFF" />
+                    <Text style={styles.resRetryText}>Retry</Text>
+                  </TouchableOpacity>
                 </View>
               )}
               <Pressable
                 style={styles.resPlayOverlay}
-                onPress={() => setVideoPaused(p => !p)}
+                onPress={() => !videoError && setVideoPaused(p => !p)}
               >
                 {!videoLoading && !videoError && (
                   <Icon
@@ -1005,6 +902,46 @@ const HomeOneScreen = () => {
                   />
                 )}
               </Pressable>
+
+              {!videoError && (
+                <View style={styles.resProgressBarContainer}>
+                  <Slider
+                    style={styles.resProgressSlider}
+                    value={resDisplayTime}
+                    minimumValue={0}
+                    maximumValue={Math.max(0.1, resVideoProgress.duration)}
+                    minimumTrackTintColor="#fff"
+                    maximumTrackTintColor="rgba(255,255,255,0.4)"
+                    thumbTintColor="#fff"
+                    onSlidingStart={() => {
+                      setResIsSliding(true);
+                      setResSlidingValue(resVideoProgress.currentTime);
+                    }}
+                    onValueChange={val => setResSlidingValue(val)}
+                    onSlidingComplete={val => {
+                      if (!resVideoRef.current || resVideoProgress.duration <= 0) {
+                        setResIsSliding(false);
+                        return;
+                      }
+                      const clamped = Math.max(
+                        0,
+                        Math.min(val, resVideoProgress.duration),
+                      );
+                      resSeekingRef.current = true;
+                      resVideoRef.current.seek(clamped);
+                      setResVideoProgress(p => ({ ...p, currentTime: clamped }));
+                      resProgressUpdateRef.current = Date.now();
+                      setTimeout(() => {
+                        resSeekingRef.current = false;
+                      }, 300);
+                      setResIsSliding(false);
+                    }}
+                  />
+                  <Text style={styles.resTimeText}>
+                    {formatTime(resDisplayTime)} / {formatTime(resVideoProgress.duration)}
+                  </Text>
+                </View>
+              )}
             </>
           ) : (
             <>
@@ -1070,8 +1007,8 @@ const HomeOneScreen = () => {
           ).find(s => (s.type || '').toLowerCase() === 'website')?.url ||
             (selectedItem?.user?.businessName
               ? `www.${String(selectedItem.user.businessName)
-                .toLowerCase()
-                .replace(/\s+/g, '')}.com`
+                  .toLowerCase()
+                  .replace(/\s+/g, '')}.com`
               : null) ||
             '—'}
         </Text>
@@ -1112,14 +1049,14 @@ const HomeOneScreen = () => {
   const barStyle = isRestaurantDetail
     ? 'dark-content'
     : isVideoDetail
-      ? 'light-content'
-      : 'light-content';
+    ? 'light-content'
+    : 'light-content';
 
   const statusBarBg = isRestaurantDetail
     ? '#FFF'
     : isVideoDetail
-      ? '#000'
-      : '#F5A623';
+    ? '#000'
+    : '#F5A623';
 
   const safeAreaBg = isVideoDetail ? '#000' : statusBarBg;
 
@@ -1137,10 +1074,8 @@ const HomeOneScreen = () => {
       {isRestaurantDetail
         ? renderRestaurantDetail()
         : isVideoDetail
-          ? renderVideoDetail()
-          : isLanding
-            ? renderLanding()
-            : renderResults()}
+        ? renderVideoDetail()
+        : renderResults()}
     </SafeAreaView>
   );
 };
@@ -1183,7 +1118,12 @@ const FoodCard = ({ title, location, isSponsored, img, onPress }) => (
     <View style={styles.cardInfo}>
       <View>
         <Text style={styles.cardTitle}>{title}</Text>
-        <Text numberOfLines={1} style={{ width: 150, color: '#666', fontSize: 12 }}>{location}</Text>
+        <Text
+          numberOfLines={1}
+          style={{ width: 150, color: '#666', fontSize: 12 }}
+        >
+          {location}
+        </Text>
       </View>
       <View style={styles.cardStats}>
         <Text style={styles.statSmall}>100k views</Text>
@@ -1608,11 +1548,44 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   resVideoErrorText: { color: '#FFF', fontSize: 12 },
+  resRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 8,
+    backgroundColor: 'rgba(245,166,35,0.9)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  resRetryText: { color: '#FFF', fontSize: 13, fontWeight: '600', marginLeft: 6 },
   resPlayOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 15,
+  },
+  resProgressBarContainer: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  resProgressSlider: {
+    flex: 1,
+    height: 28,
+    marginRight: 8,
+  },
+  resTimeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   resSocialRow: {
     flexDirection: 'row',

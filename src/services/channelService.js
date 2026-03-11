@@ -164,6 +164,51 @@ export const uploadProfilePhoto = async (userId, file) => {
 };
 
 /**
+ * Upload cover image - only for own profile.
+ * Backend should store and return coverUrl/coverImage in channel profile.
+ */
+export const uploadCoverImage = async (userId, file) => {
+  if (!file?.uri) {
+    throw new Error('Image is required');
+  }
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    type: file.type || 'image/jpeg',
+    name: file.name || 'cover.jpg',
+  });
+  const headers = getAuthHeaders();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const response = await fetch(`${API_URL}/${userId}/upload-cover`, {
+      method: 'POST',
+      headers: { ...headers },
+      body: formData,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        data?.message ||
+        (Array.isArray(data?.message) ? data.message.join(' ') : null) ||
+        `Upload failed (${response.status})`;
+      console.error('[uploadCoverImage]', response.status, data);
+      throw new Error(msg);
+    }
+    return data;
+  } catch (err) {
+    const msg =
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : err.message || 'Network error. Check connection and try again.';
+    console.error('[uploadCoverImage]', err.message, err);
+    throw new Error(msg);
+  }
+};
+
+/**
  * Get user gallery photos
  */
 export const getGallery = async userId => {

@@ -222,7 +222,7 @@ const MenuManageScreen = () => {
   };
 
   const roleNorm = String(user?.role || '').toLowerCase();
-  const isOwner = roleNorm === 'owner';
+  const isOwnerOrVendor = roleNorm === 'owner' || roleNorm === 'vendor';
 
   if (!user?.token) {
     return (
@@ -232,10 +232,10 @@ const MenuManageScreen = () => {
     );
   }
 
-  if (!isOwner) {
+  if (!isOwnerOrVendor) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.helperText}>Menu is for restaurant owners only.</Text>
+        <Text style={styles.helperText}>Menu is for restaurant owners and vendors only.</Text>
       </View>
     );
   }

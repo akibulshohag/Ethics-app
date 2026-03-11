@@ -39,6 +39,7 @@ import {
   getChannelProfile,
   updateChannelProfile,
   uploadProfilePhoto,
+  uploadCoverImage,
   getGallery,
   uploadGallery,
   deleteGalleryPhoto,
@@ -46,7 +47,8 @@ import {
 import { getUserVideos } from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
 import { getNotificationsByUserId } from '../../services/notificationService';
-import { getPromotionsByUser } from '../../services/promotionService';
+import { getPromotionsByUser, getNearbyPromotions } from '../../services/promotionService';
+import { getMenuByUserId } from '../../services/menuService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
 import CreatePromotionModal from '../../components/CreatePromotionModal';
@@ -108,7 +110,7 @@ const mapPostToCard = (post, user) => {
   };
 };
 
-const TABS = ['Posts', 'Promotions', 'Grid', 'Video', 'Notification'];
+const BASE_TABS = ['Posts', 'Promotions', 'Grid', 'Video', 'Notification'];
 // ... (I will handle the rest in the next edit chunk for the render function to avoid giant replaces)
 
 const MOCK_POSTS = [
@@ -285,6 +287,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [editSocialLinks, setEditSocialLinks] = useState([]);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -296,7 +299,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [promotions, setPromotions] = useState([]);
   const [promotionsLoading, setPromotionsLoading] = useState(false);
   const [promotionsRefreshing, setPromotionsRefreshing] = useState(false);
+  const [nearbyPromotionsCross, setNearbyPromotionsCross] = useState([]);
+  const [nearbyPromotionsCrossLoading, setNearbyPromotionsCrossLoading] = useState(false);
+  const [nearbyPromotionsCrossRefreshing, setNearbyPromotionsCrossRefreshing] = useState(false);
   const [createPromotionModalVisible, setCreatePromotionModalVisible] = useState(false);
+  const [menuItems, setMenuItems] = useState([]);
+  const [menuLoading, setMenuLoading] = useState(false);
 
   const loadPosts = useCallback(
     async (refresh = false) => {
@@ -407,6 +415,32 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     [profileUserId],
   );
 
+  const currentRole = (currentUser?.role || '').toLowerCase();
+  const isOwnerOrVendor = currentRole === 'owner' || currentRole === 'vendor';
+  const loadNearbyPromotionsCross = useCallback(
+    async (refresh = false) => {
+      if (!isOwnProfile || !currentUser?.id || !isOwnerOrVendor) {
+        setNearbyPromotionsCross([]);
+        return;
+      }
+      if (refresh) setNearbyPromotionsCrossRefreshing(true);
+      else setNearbyPromotionsCrossLoading(true);
+      const lat = currentUser?.latitude ?? profile?.latitude ?? 23.8103;
+      const lng = currentUser?.longitude ?? profile?.longitude ?? 90.4125;
+      const creatorRole = currentRole === 'owner' ? 'vendor' : 'owner';
+      try {
+        const res = await getNearbyPromotions(lat, lng, 50, 1, 50, creatorRole);
+        setNearbyPromotionsCross(res?.promotions ?? []);
+      } catch (e) {
+        setNearbyPromotionsCross([]);
+      } finally {
+        setNearbyPromotionsCrossLoading(false);
+        setNearbyPromotionsCrossRefreshing(false);
+      }
+    },
+    [isOwnProfile, currentUser?.id, currentUser?.latitude, currentUser?.longitude, currentRole, profile?.latitude, profile?.longitude],
+  );
+
   useEffect(() => {
     if (activeTab === 'Grid' && profileUserId) loadGallery();
   }, [activeTab, profileUserId, loadGallery]);
@@ -420,8 +454,28 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   }, [activeTab, profileUserId, loadNotifications]);
 
   useEffect(() => {
-    if (activeTab === 'Promotions' && profileUserId) loadPromotions();
-  }, [activeTab, profileUserId, loadPromotions]);
+    if (activeTab === 'Promotions' && profileUserId) {
+      if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross();
+      else loadPromotions();
+    }
+  }, [activeTab, profileUserId, isOwnProfile, isOwnerOrVendor, loadPromotions, loadNearbyPromotionsCross]);
+
+  const loadMenu = useCallback(async () => {
+    if (!profileUserId) return;
+    setMenuLoading(true);
+    try {
+      const res = await getMenuByUserId(profileUserId);
+      setMenuItems(res?.menu ?? []);
+    } catch (e) {
+      setMenuItems([]);
+    } finally {
+      setMenuLoading(false);
+    }
+  }, [profileUserId]);
+
+  useEffect(() => {
+    if (activeTab === 'Menus' && profileUserId) loadMenu();
+  }, [activeTab, profileUserId, loadMenu]);
 
   const handleGalleryUpload = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading) return;
@@ -513,6 +567,30 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     );
     setEditProfileVisible(true);
   };
+
+  const handleCoverPress = useCallback(() => {
+    if (!profileUserId || profileUserId !== currentUser?.id || uploadingCover) return;
+    launchImageLibrary(
+      { mediaType: 'photo', quality: 0.8 },
+      async res => {
+        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+        const asset = res.assets[0];
+        setUploadingCover(true);
+        try {
+          await uploadCoverImage(profileUserId, {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name: asset.fileName || 'cover.jpg',
+          });
+          await loadProfile();
+        } catch (e) {
+          Alert.alert('Error', e?.message || 'Failed to upload cover image');
+        } finally {
+          setUploadingCover(false);
+        }
+      },
+    );
+  }, [profileUserId, currentUser?.id, uploadingCover, loadProfile]);
 
   const handleAvatarPress = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || uploadingAvatar) return;
@@ -712,12 +790,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         isOwnProfile={isOwnProfile}
         onEditProfile={openEditProfile}
         onAvatarPress={handleAvatarPress}
+        onCoverPress={handleCoverPress}
+        coverUploading={uploadingCover}
       />
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {TABS.map(tab => {
+          {(isOwnProfile && isOwnerOrVendor ? ['Posts', 'Promotions', 'Menus', 'Grid', 'Video', 'Notification'] : BASE_TABS).map(tab => {
             const isGrid = tab === 'Grid';
             const isActive = activeTab === tab;
 
@@ -758,13 +838,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             ? 'Videos'
             : activeTab === 'Notification'
             ? 'Notifications'
+            : activeTab === 'Menus'
+            ? 'Menus'
             : activeTab}
         </Text>
-        {activeTab === 'Posts' && profileUserId === currentUser?.id ? (
+        {activeTab === 'Menus' && isOwnProfile && isOwnerOrVendor ? (
+          <TouchableOpacity onPress={() => navigation?.navigate('MenuManageScreen')}>
+            <MaterialCommunityIcons name="plus" size={24} color="#333" />
+          </TouchableOpacity>
+        ) : activeTab === 'Posts' && profileUserId === currentUser?.id ? (
           <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
-        ) : activeTab === 'Promotions' && isOwnProfile ? (
+        ) : activeTab === 'Promotions' && isOwnProfile && isOwnerOrVendor ? (
           <TouchableOpacity onPress={() => setCreatePromotionModalVisible(true)}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
@@ -790,8 +876,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     switch (activeTab) {
       case 'Posts':
         return posts;
-      case 'Promotions':
-        return promotions.map(p => ({
+      case 'Promotions': {
+        const list = isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCross : promotions;
+        return list.map(p => ({
           id: p.id,
           title: p.title,
           image: p.thumbnailUrl || p.videoUrl,
@@ -802,8 +889,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           startDate: p.startDate,
           expireDate: p.expireDate,
         }));
+      }
       case 'Grid':
         return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
+      case 'Menus':
+        return menuItems.map(m => ({ id: m.id, itemName: m.itemName, price: m.price, imageUrl: m.imageUrl }));
       case 'Video':
         return ownerVideos;
       case 'Notification':
@@ -840,6 +930,23 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             image: item.image ? safeImageUri(item.image) : 'https://via.placeholder.com/300',
           }}
         />
+      );
+    }
+    if (activeTab === 'Menus') {
+      return (
+        <View style={styles.menuRowItem}>
+          {item.imageUrl ? (
+            <Image source={{ uri: safeImageUri(item.imageUrl) }} style={styles.menuRowImage} />
+          ) : (
+            <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
+              <MaterialCommunityIcons name="food" size={24} color="#999" />
+            </View>
+          )}
+          <View style={styles.menuRowBody}>
+            <Text style={styles.menuRowName} numberOfLines={1}>{item.itemName}</Text>
+            <Text style={styles.menuRowPrice}>{item.price != null ? `$${Number(item.price).toFixed(2)}` : '—'}</Text>
+          </View>
+        </View>
       );
     }
     if (activeTab === 'Grid') {
@@ -923,14 +1030,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading notifications...</Text>
         </View>
       ) : null}
-      {activeTab === 'Promotions' && promotionsLoading && promotions.length === 0 ? (
+      {activeTab === 'Promotions' && (isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCrossLoading : promotionsLoading) && (isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCross.length : promotions.length) === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading promotions...</Text>
         </View>
       ) : null}
+      {activeTab === 'Menus' && menuLoading && menuItems.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading menu...</Text>
+        </View>
+      ) : null}
       <FlatList
-        key={activeTab === 'Grid' ? 'grid-3-col' : `list-1-col-${activeTab}`}
+        key={activeTab === 'Grid' ? 'grid-3-col' : activeTab === 'Menus' ? 'menus' : `list-1-col-${activeTab}`}
         data={getListData()}
         keyExtractor={(item, index) => item.id || `item-${index}`}
         renderItem={renderContentItem}
@@ -972,8 +1085,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             />
           ) : activeTab === 'Promotions' && profileUserId ? (
             <RefreshControl
-              refreshing={promotionsRefreshing}
-              onRefresh={() => loadPromotions(true)}
+              refreshing={isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCrossRefreshing : promotionsRefreshing}
+              onRefresh={() => (isOwnProfile && isOwnerOrVendor ? loadNearbyPromotionsCross(true) : loadPromotions(true))}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
+          ) : activeTab === 'Menus' ? (
+            <RefreshControl
+              refreshing={menuLoading}
+              onRefresh={loadMenu}
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
@@ -1000,7 +1120,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       <CreatePromotionModal
         visible={createPromotionModalVisible}
         onClose={() => setCreatePromotionModalVisible(false)}
-        onSuccess={() => loadPromotions(true)}
+        onSuccess={() => {
+          loadPromotions(true);
+          if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross(true);
+        }}
         userId={currentUser?.id}
       />
 
@@ -1569,6 +1692,28 @@ const styles = StyleSheet.create({
     color: '#333',
     backgroundColor: '#fff',
   },
+  menuRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuRowImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  menuRowImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuRowBody: { flex: 1, marginLeft: 12 },
+  menuRowName: { fontSize: 16, fontWeight: '600', color: '#212121' },
+  menuRowPrice: { fontSize: 14, color: '#666', marginTop: 2 },
 });
 
 export default BusinessProfileViewScreen;
