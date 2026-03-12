@@ -83,6 +83,14 @@ const VideoSection = ({ title, showPlus = false }) => (
   </View>
 );
 
+const SOCIAL_TYPES = [
+  { value: 'instagram', label: 'Instagram', icon: 'instagram' },
+  { value: 'facebook', label: 'Facebook', icon: 'facebook' },
+  { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
+  { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
+  { value: 'website', label: 'Website', icon: 'web' },
+];
+
 const PromotionScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
@@ -762,7 +770,10 @@ const PromotionScreen = ({ onBack }) => {
             <Text style={styles.profileLocation}>Birmingham</Text>
 
             <View style={styles.actionButtonGroup}>
-              <TouchableOpacity style={styles.editProfileButton}>
+              <TouchableOpacity 
+              style={styles.editProfileButton} 
+              onPress={openEditProfile}
+              >
                 <Text style={styles.editProfileText}>Edit Profile</Text>
                 <Icon name="pencil-box-outline" size={22} color="#333" />
               </TouchableOpacity>
@@ -787,6 +798,7 @@ const PromotionScreen = ({ onBack }) => {
           </View>
         </View>
 
+                  
         {/* Dynamic Video Sections */}
         <VideoSection title="Most Liked Videos" />
 
@@ -816,7 +828,8 @@ const PromotionScreen = ({ onBack }) => {
             </TouchableOpacity>
           </View>
         </View>
-
+         
+                  
         <VideoSection title="Saved Videos" />
         <VideoSection title="My Videos" showPlus={true} />
 
@@ -825,6 +838,127 @@ const PromotionScreen = ({ onBack }) => {
           <Icon name="chevron-down" size={45} color="#333" />
         </View>
       </ScrollView>
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={editProfileVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => !savingProfile && setEditProfileVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.editModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.editModalBackdrop} />
+          <View style={styles.editModalBox}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Edit Profile</Text>
+              <TouchableOpacity
+                onPress={() => !savingProfile && setEditProfileVisible(false)}
+                disabled={savingProfile}
+              >
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.editModalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.editLabel}>Name</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Name"
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.editLabel}>Nickname</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editNickname}
+                onChangeText={setEditNickname}
+                placeholder="Display name"
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.editLabel}>Description</Text>
+              <TextInput
+                style={[styles.editInput, styles.editInputMultiline]}
+                value={editChannelAbout}
+                onChangeText={setEditChannelAbout}
+                placeholder="About you or your business"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+              <Text style={styles.editLabel}>Phone</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editPhone}
+                onChangeText={setEditPhone}
+                placeholder="Phone"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+              />
+              <Text style={styles.editLabel}>Address</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editAddress}
+                onChangeText={setEditAddress}
+                placeholder="Address / Location"
+                placeholderTextColor="#999"
+              />
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                Social links
+              </Text>
+              <View style={styles.socialLinksCard}>
+                {SOCIAL_TYPES.map((t, idx) => (
+                  <View
+                    key={t.value}
+                    style={[
+                      styles.socialLinkRow,
+                      idx === SOCIAL_TYPES.length - 1 &&
+                        styles.socialLinkRowLast,
+                    ]}
+                  >
+                    <View style={styles.socialLinkLabelWrap}>
+                      <Icon
+                        name={t.icon}
+                        size={20}
+                        color="#555"
+                        style={styles.socialLinkIcon}
+                      />
+                      <Text style={styles.socialLinkLabel} numberOfLines={1}>
+                        {t.label}
+                      </Text>
+                    </View>
+                    <TextInput
+                      style={styles.socialLinkInput}
+                      value={editSocialLinks[idx]?.url ?? ''}
+                      onChangeText={v => updateSocialLinkUrl(idx, v)}
+                      placeholder="https://..."
+                      placeholderTextColor="#999"
+                      autoCapitalize="none"
+                      keyboardType="url"
+                    />
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+            <TouchableOpacity
+              style={[
+                styles.editSaveBtn,
+                savingProfile && styles.editSaveBtnDisabled,
+              ]}
+              onPress={saveProfile}
+              disabled={savingProfile}
+            >
+              <Text style={styles.editSaveBtnText}>
+                {savingProfile ? 'Saving...' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -961,6 +1095,131 @@ const styles = StyleSheet.create({
   logoImageIx: {
     width: 60,
     height: 30,
+  },
+
+  editModalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  editModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  editModalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '85%',
+    paddingBottom: 24,
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  editModalTitle: { fontSize: 18, fontWeight: '600', color: '#333' },
+  editModalScroll: { maxHeight: 400, paddingHorizontal: 16, paddingTop: 12 },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#333',
+  },
+  editInputMultiline: { minHeight: 80, textAlignVertical: 'top' },
+  editSaveBtn: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: '#FF7F0B',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  editSaveBtnDisabled: { opacity: 0.7 },
+  editSaveBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  socialLinksCard: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+  },
+  socialLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  socialLinkRowLast: { marginBottom: 0 },
+  socialLinkLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 120,
+    minWidth: 120,
+  },
+  socialLinkIcon: { marginRight: 8 },
+  socialLinkLabel: { fontSize: 14, fontWeight: '600', color: '#333', flex: 1 },
+  socialLinkInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#333',
+    backgroundColor: '#fff',
+  },
+  videoModalContainer: { flex: 1, backgroundColor: '#000' },
+  videoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  videoModalHeaderBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoModalHeaderTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  videoPlayerWrap: {
+    width: '100%',
+    height: (width * 9) / 16,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  videoPlayer: { width: '100%', height: '100%' },
+  videoTapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoSliderRow: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
 
