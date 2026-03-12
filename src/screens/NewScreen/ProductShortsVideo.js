@@ -8,13 +8,14 @@ import {
   Dimensions,
   FlatList,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Video from 'react-native-video';
 import { shortsService } from '../../services/shortsService';
 
-const { width, height } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const formatCount = (n) => {
   if (n == null || n < 0) return '0';
@@ -87,6 +88,7 @@ const ProductShortsVideo = () => {
   const route = useRoute();
   const initialItem = route.params?.item;
 
+  const { width, height } = useWindowDimensions();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -102,9 +104,9 @@ const ProductShortsVideo = () => {
       try {
         const currentNormalized = initialItem
           ? normalizeShort({
-              ...initialItem,
-              user: initialItem.user ?? { id: ownerId, nickname: initialItem.title?.toLowerCase().replace(/\s+/g, '') },
-            })
+            ...initialItem,
+            user: initialItem.user ?? { id: ownerId, nickname: initialItem.title?.toLowerCase().replace(/\s+/g, '') },
+          })
           : null;
 
         if (!ownerId && !initialItem) {
@@ -194,7 +196,7 @@ const ProductShortsVideo = () => {
     const isPaused = !isCurrentlyViewable || isPausedLocally;
 
     return (
-      <View style={styles.videoContainer}>
+      <View style={[styles.videoContainer, { height: height }]}>
         <Video
           source={{ uri: item.videoUrl }}
           style={StyleSheet.absoluteFill}
@@ -322,6 +324,12 @@ const ProductShortsVideo = () => {
     );
   };
 
+  const getItemLayout = (_, index) => ({
+    length: height,
+    offset: height * index,
+    index,
+  });
+
   const renderItem = ({ item, index }) => (
     <VideoItem item={item} index={index} currentIndex={currentIndex} />
   );
@@ -347,9 +355,11 @@ const ProductShortsVideo = () => {
         pagingEnabled
         showsVerticalScrollIndicator={false}
         snapToAlignment="start"
+        snapToInterval={height}
         decelerationRate="fast"
         onViewableItemsChanged={onViewableItemsChanged.current}
         viewabilityConfig={viewabilityConfig.current}
+        getItemLayout={getItemLayout}
         initialNumToRender={2}
         maxToRenderPerBatch={3}
         windowSize={10}
@@ -363,7 +373,7 @@ const ProductShortsVideo = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centered: { justifyContent: 'center', alignItems: 'center' },
-  videoContainer: { width: width, height: height, position: 'relative' },
+  videoContainer: { width: '100%', position: 'relative' },
   videoBackground: { ...StyleSheet.absoluteFillObject },
   touchOverlay: {
     position: 'absolute',
@@ -406,7 +416,7 @@ const styles = StyleSheet.create({
   rightActions: {
     position: 'absolute',
     right: 15,
-    bottom: height * 0.25,
+    bottom: SCREEN_HEIGHT * 0.25,
     alignItems: 'center',
   },
   actionItem: { alignItems: 'center', marginBottom: 20 },
