@@ -262,8 +262,8 @@ const LibraryScreen = ({ navigation }) => {
     if (currentView === 'favorites') title = 'My Favorite Songs';
 
     return (
-      <View style={styles.header}>
-        <View style={styles.logoRow}>
+      <>
+        {/* <View style={styles.logoRow}>
           {!isLibrary ? (
             <TouchableOpacity onPress={() => setCurrentView('library')}>
               <MaterialCommunityIcons
@@ -306,8 +306,26 @@ const LibraryScreen = ({ navigation }) => {
               </TouchableOpacity>
             </>
           )}
+        </View> */}
+        <View style={styles.topNavigation}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation?.goBack()}
+          >
+            <View style={styles.backButtonInner}>
+              <MaterialCommunityIcons
+                name="chevron-left"
+                size={16}
+                color="#fff"
+              />
+              <Text style={styles.backText}>Back</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.moreIcon}>
+            <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
+          </TouchableOpacity>
         </View>
-      </View>
+      </>
     );
   };
 
@@ -626,8 +644,9 @@ const LibraryScreen = ({ navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>History</Text>
-          <TouchableOpacity onPress={() => setCurrentView('history')}>
-            <Text style={styles.viewAllText}>View All</Text>
+          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7BB5B', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 }} onPress={() => setCurrentView('history')}>
+            <Text style={styles.viewAllText}>{'View All'} </Text>
+            <MaterialCommunityIcons name="chevron-right" size={14} color="#000" />
           </TouchableOpacity>
         </View>
         <ScrollView
@@ -637,40 +656,51 @@ const LibraryScreen = ({ navigation }) => {
         >
           {(watchHistory.length > 0 ? watchHistory.slice(0, 8) : []).map(
             (item, index) => (
-            <TouchableOpacity
-              key={`${item.id}-${item.type || 'v'}-${index}`}
-              style={styles.historyCard}
-              onPress={() => handleVideoPress(item)}
-              activeOpacity={1}
-            >
-              <View>
-                <Image
-                  source={{ uri: item.thumbnail }}
-                  style={styles.historyThumb}
-                />
-                <View style={styles.durationBadge}>
-                  <Text style={styles.durationText}>{item.duration}</Text>
+              <TouchableOpacity
+                key={`${item.id}-${item.type || 'v'}-${index}`}
+                style={styles.historyCard}
+                onPress={() => handleVideoPress(item)}
+                activeOpacity={1}
+              >
+                <View>
+                  <Image
+                    source={{ uri: item.thumbnail }}
+                    style={styles.historyThumb}
+                  />
+                  {/* <View style={styles.durationBadge}>
+                    <Text style={styles.durationText}>{item.duration}</Text>
+                  </View> */}
                 </View>
-              </View>
-              <View style={styles.historyInfo}>
-                <Text style={styles.historyTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                <View style={styles.historyMetaRow}>
-                  <Text style={styles.historyChannel}>
-                    {item.channelName || 'Channel'} • {item.publishedAt}
-                  </Text>
-                  <TouchableOpacity>
-                    <MaterialCommunityIcons
-                      name="dots-vertical"
-                      size={16}
-                      color="#666"
-                    />
-                  </TouchableOpacity>
+                <View style={styles.historyInfo}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={styles.historyTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ fontSize: 12, color: '#666' }}>100k</Text>
+                      <MaterialCommunityIcons name="eye" size={16} color="#666" />
+                    </View>
+                  </View>
+                  <View style={styles.historyMetaRow}>
+                    {/* <Text style={styles.historyChannel}>
+                      {item.channelName || 'Channel'} • {item.publishedAt}
+                    </Text> */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                      <MaterialCommunityIcons name="map-marker" size={16} color="#666" />
+                      <Text style={{ fontSize: 12, color: '#666' }}>Birmingham, UK</Text>
+                    </View>
+                    <TouchableOpacity>
+                      {/* <MaterialCommunityIcons
+                        name="dots-vertical"
+                        size={16}
+                        color="#666"
+                      /> */}
+                      <Text style={{ fontSize: 12, color: '#666' }}>12Km</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))}
         </ScrollView>
 
         <View style={styles.divider} />
@@ -708,8 +738,8 @@ const LibraryScreen = ({ navigation }) => {
             <Text style={styles.sortText}>Recently Added</Text>
             <MaterialCommunityIcons
               name="chevron-down"
-              size={20}
-              color="#F97507"
+              size={16}
+              color="#424242"
             />
           </TouchableOpacity>
         </View>
@@ -737,7 +767,7 @@ const LibraryScreen = ({ navigation }) => {
           </View>
           <View>
             <Text style={styles.menuText}>Watch Later</Text>
-            <Text style={styles.subText}>Videos and shorts saved to watch later</Text>
+            <Text style={styles.subText}>24 unwatched videos</Text>
           </View>
         </TouchableOpacity>
 
@@ -750,7 +780,7 @@ const LibraryScreen = ({ navigation }) => {
           </View>
           <View>
             <Text style={styles.menuText}>Liked Videos</Text>
-            <Text style={styles.subText}>Videos and shorts you liked</Text>
+            <Text style={styles.subText}>260 videos</Text>
           </View>
         </TouchableOpacity>
 
@@ -766,8 +796,8 @@ const LibraryScreen = ({ navigation }) => {
             />
           </View>
           <View>
-            <Text style={styles.menuText}>Favorites</Text>
-            <Text style={styles.subText}>Videos and shorts you saved</Text>
+            <Text style={styles.menuText}>My Favorite Songs</Text>
+            <Text style={styles.subText}>125 videos</Text>
           </View>
         </TouchableOpacity>
       </ScrollView>
@@ -779,6 +809,31 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   listContent: { paddingTop: 10 },
   emptyListContent: { flexGrow: 1 },
+  topNavigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  backButton: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  backButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  moreIcon: {
+    padding: 4,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -862,14 +917,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginTop: 20,
+    marginTop: 10,
     alignItems: 'center',
+    marginBottom: 10
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1a1a1a' },
-  viewAllText: { color: '#F97507', fontWeight: '600' },
+  viewAllText: { color: '#424242', fontWeight: '600', fontSize: 10 },
   historyScroll: { paddingLeft: 16, paddingVertical: 15 },
-  historyCard: { width: 160, marginRight: 15 },
-  historyThumb: { width: 160, height: 90, borderRadius: 8 },
+  historyCard: { width: 165, marginRight: 8 },
+  historyThumb: { width: 165, height: 164, borderRadius: 16 },
   durationBadge: {
     position: 'absolute',
     bottom: 6,
@@ -879,12 +935,13 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   durationText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
-  historyInfo: { marginTop: 8 },
+  historyInfo: { marginTop: 6 },
   historyTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#333',
     lineHeight: 18,
+    width: 100,
   },
   historyMetaRow: {
     flexDirection: 'row',
@@ -910,8 +967,8 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   menuText: { fontSize: 16, fontWeight: '600', color: '#333' },
-  recentlyAdded: { flexDirection: 'row', alignItems: 'center' },
-  sortText: { color: '#F97507', fontWeight: '600', marginRight: 4 },
+  recentlyAdded: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7BB5B', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 },
+  sortText: { color: '#424242', fontWeight: '600', marginRight: 4, fontSize: 12 },
   playlistItem: {
     flexDirection: 'row',
     alignItems: 'center',
