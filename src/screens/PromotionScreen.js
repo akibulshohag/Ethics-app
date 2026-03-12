@@ -766,13 +766,13 @@ const PromotionScreen = ({ onBack }) => {
               </View>
             </View>
 
-            <Text style={styles.profileName}>MC Mulen</Text>
-            <Text style={styles.profileLocation}>Birmingham</Text>
+            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileLocation}>{displayLocation || '—'}</Text>
 
             <View style={styles.actionButtonGroup}>
-              <TouchableOpacity 
-              style={styles.editProfileButton} 
-              onPress={openEditProfile}
+              <TouchableOpacity
+                style={styles.editProfileButton}
+                onPress={openEditProfile}
               >
                 <Text style={styles.editProfileText}>Edit Profile</Text>
                 <Icon name="pencil-box-outline" size={22} color="#333" />
@@ -788,17 +788,13 @@ const PromotionScreen = ({ onBack }) => {
 
           {/* Bio Section */}
           <View style={styles.bioBox}>
-            <Text style={styles.bioText}>
-              A cozy restaurant serving fresh, delicious food made with quality
-              ingredients. Enjoy great taste
-            </Text>
-            <TouchableOpacity>
+            <Text style={styles.bioText}>{bio || 'No description yet.'}</Text>
+            <TouchableOpacity onPress={openEditProfile}>
               <Icon name="square-edit-outline" size={20} color="#999" />
             </TouchableOpacity>
           </View>
         </View>
 
-                  
         {/* Dynamic Video Sections */}
         <VideoSection title="Most Liked Videos" />
 
@@ -828,8 +824,7 @@ const PromotionScreen = ({ onBack }) => {
             </TouchableOpacity>
           </View>
         </View>
-         
-                  
+
         <VideoSection title="Saved Videos" />
         <VideoSection title="My Videos" showPlus={true} />
 
@@ -1091,11 +1086,17 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 85,
     height: 30,
+    marginRight: 10,
+    marginTop: -30,
   },
   logoImageIx: {
     width: 60,
     height: 30,
+    marginLeft: 5,
+    marginTop: -30,
   },
+
+  brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: -10 },
 
   editModalOverlay: { flex: 1, justifyContent: 'flex-end' },
   editModalBackdrop: {
