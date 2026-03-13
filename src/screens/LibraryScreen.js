@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,14 +13,40 @@ import {
   TouchableWithoutFeedback,
   ActivityIndicator,
   RefreshControl,
+  Dimensions,
+  Share,
+  Linking,
+  Alert,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector } from 'react-redux';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Video from 'react-native-video';
+import Slider from '@react-native-community/slider';
 import CompactVideoCard from '../components/CompactVideoCard';
-import { getUserVideos, getVideoWatchHistory } from '../services/videoService';
+import CommentsModal from '../components/CommentsModal';
+import SaveModal from '../components/SaveModal';
+import {
+  getUserVideos,
+  getVideoWatchHistory,
+  getVideoById,
+  getLikedVideos,
+  toggleLike as toggleVideoLike,
+  toggleDislike as toggleVideoDislike,
+  recordShare as recordVideoShare,
+} from '../services/videoService';
+import { getWatchLater, getFavorites } from '../services/playlistService';
+import {
+  getChannelProfile,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+} from '../services/channelService';
 import { shortsService } from '../services/shortsService';
 import { getDownloadedVideos } from '../services/downloadService';
+import { getSocialIcon } from '../constants/socialLinks';
+
+const { width } = Dimensions.get('window');
 
 const formatCount = n => {
   if (!n || n < 0) return '0';
@@ -87,6 +113,34 @@ const mapShortApiToDisplay = s => {
   };
 };
 
+const mapVideoApiToModal = (v = {}) => {
+  const u = v.user || {};
+  const channelName = u.nickname || u.name || 'Unknown';
+  const channelAvatar =
+    u.photos?.[0] ||
+    (Array.isArray(u.photos) && u.photos[0]) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      channelName,
+    )}&background=111&color=fff`;
+  return {
+    id: v.id,
+    title: v.title || 'Untitled',
+    videoUrl: v.videoUrl,
+    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+    durationSeconds: v.duration ?? 0,
+    likeCount: v.likeCount ?? v._count?.likes ?? 0,
+    dislikeCount: v.dislikeCount ?? 0,
+    commentCount: v.commentCount ?? v._count?.comments ?? 0,
+    shareCount: v.shareCount ?? 0,
+    isLiked: v.isLiked ?? false,
+    isDisliked: v.isDisliked ?? false,
+    userId: v.userId,
+    channelName,
+    channelAvatar,
+    socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
+  };
+};
+
 const HISTORY_DATA = [
   {
     id: '1',
@@ -147,6 +201,30 @@ const LibraryScreen = ({ navigation }) => {
   const [downloadedVideos, setDownloadedVideos] = useState([]);
   const [downloadsLoading, setDownloadsLoading] = useState(false);
 
+  // Playlist counts (Watch Later, Liked, Favorites) - dynamic
+  const [watchLaterCount, setWatchLaterCount] = useState(0);
+  const [likedCount, setLikedCount] = useState(0);
+  const [favoritesCount, setFavoritesCount] = useState(0);
+  const [playlistCountsLoading, setPlaylistCountsLoading] = useState(false);
+
+  // Video quick-view modal (same as UserViewsScreen)
+  const [videoModalVisible, setVideoModalVisible] = useState(false);
+  const [activeVideoId, setActiveVideoId] = useState(null);
+  const [videoModalLoading, setVideoModalLoading] = useState(false);
+  const [videoModalError, setVideoModalError] = useState(null);
+  const [modalVideo, setModalVideo] = useState(null);
+  const [modalPaused, setModalPaused] = useState(true);
+  const [modalProgress, setModalProgress] = useState({ currentTime: 0, duration: 0 });
+  const [modalIsSliding, setModalIsSliding] = useState(false);
+  const [modalSlidingValue, setModalSlidingValue] = useState(0);
+  const modalVideoRef = useRef(null);
+  const seekingRef = useRef(false);
+  const progressUpdateRef = useRef(0);
+  const [saveVisible, setSaveVisible] = useState(false);
+  const [videoCommentsVisible, setVideoCommentsVisible] = useState(false);
+  const [channelSub, setChannelSub] = useState({ isSubscribed: false, subscriberCount: 0 });
+  const [subLoading, setSubLoading] = useState(false);
+
   const loadYourVideos = useCallback(async () => {
     if (!currentUser?.id) return;
     try {
@@ -195,18 +273,208 @@ const LibraryScreen = ({ navigation }) => {
     }
   }, [currentView, loadDownloads]);
 
+  const requireLogin = useCallback(() => {
+    if (!currentUser?.id) {
+      Alert.alert('Login required', 'Please login to continue.');
+      return true;
+    }
+    return false;
+  }, [currentUser?.id]);
+
+  const openVideoModal = useCallback(
+    async videoId => {
+      if (!videoId) return;
+      setActiveVideoId(videoId);
+      setVideoModalVisible(true);
+      setVideoModalLoading(true);
+      setVideoModalError(null);
+      setModalVideo(null);
+      setModalPaused(true);
+      setModalProgress({ currentTime: 0, duration: 0 });
+      setModalIsSliding(false);
+      setModalSlidingValue(0);
+      setChannelSub({ isSubscribed: false, subscriberCount: 0 });
+      try {
+        const res = await getVideoById(
+          videoId,
+          currentUser?.id,
+          currentUser?.role || 'user',
+        );
+        const mv = mapVideoApiToModal(res);
+        setModalVideo(mv);
+        setModalPaused(false);
+        if (mv?.userId) {
+          getChannelProfile(mv.userId, currentUser?.id)
+            .then(p => {
+              setChannelSub({
+                isSubscribed: p?.isSubscribed ?? false,
+                subscriberCount: p?.subscriberCount ?? 0,
+              });
+            })
+            .catch(() => {});
+        }
+      } catch (e) {
+        setVideoModalError(
+          e?.response?.data?.message || e?.message || 'Failed to load video',
+        );
+      } finally {
+        setVideoModalLoading(false);
+      }
+    },
+    [currentUser?.id, currentUser?.role],
+  );
+
+  const closeVideoModal = useCallback(() => {
+    setVideoModalVisible(false);
+    setActiveVideoId(null);
+    setModalVideo(null);
+    setVideoModalError(null);
+    setModalPaused(true);
+    setModalProgress({ currentTime: 0, duration: 0 });
+    setModalIsSliding(false);
+    setModalSlidingValue(0);
+    setVideoCommentsVisible(false);
+    setSaveVisible(false);
+  }, []);
+
+  const formatTime = useCallback(sec => {
+    if (!sec || isNaN(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }, []);
+
+  const modalDisplayTime = modalIsSliding ? modalSlidingValue : modalProgress.currentTime;
+
+  const handleModalLike = useCallback(async () => {
+    if (requireLogin()) return;
+    if (!modalVideo?.id) return;
+    setModalVideo(prev => {
+      if (!prev) return prev;
+      const isLiked = !prev.isLiked;
+      const wasDisliked = prev.isDisliked;
+      return {
+        ...prev,
+        isLiked,
+        isDisliked: isLiked ? false : wasDisliked,
+        likeCount: Math.max(0, prev.likeCount + (isLiked ? 1 : -1)),
+        dislikeCount:
+          isLiked && wasDisliked ? Math.max(0, prev.dislikeCount - 1) : prev.dislikeCount,
+      };
+    });
+    try {
+      const res = await toggleVideoLike(modalVideo.id, currentUser.id);
+      if (res) {
+        setModalVideo(prev =>
+          prev
+            ? {
+                ...prev,
+                ...(res.likeCount != null && { likeCount: res.likeCount }),
+                ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+                ...(res.isLiked != null && { isLiked: res.isLiked }),
+                ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+              }
+            : prev,
+        );
+      }
+    } catch (_) {}
+  }, [currentUser?.id, modalVideo?.id, requireLogin]);
+
+  const handleModalDislike = useCallback(async () => {
+    if (requireLogin()) return;
+    if (!modalVideo?.id) return;
+    setModalVideo(prev => {
+      if (!prev) return prev;
+      const isDisliked = !prev.isDisliked;
+      const wasLiked = prev.isLiked;
+      return {
+        ...prev,
+        isDisliked,
+        isLiked: isDisliked ? false : wasLiked,
+        dislikeCount: Math.max(0, prev.dislikeCount + (isDisliked ? 1 : -1)),
+        likeCount:
+          isDisliked && wasLiked ? Math.max(0, prev.likeCount - 1) : prev.likeCount,
+      };
+    });
+    try {
+      const res = await toggleVideoDislike(modalVideo.id, currentUser.id);
+      if (res) {
+        setModalVideo(prev =>
+          prev
+            ? {
+                ...prev,
+                ...(res.likeCount != null && { likeCount: res.likeCount }),
+                ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+                ...(res.isLiked != null && { isLiked: res.isLiked }),
+                ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+              }
+            : prev,
+        );
+      }
+    } catch (_) {}
+  }, [currentUser?.id, modalVideo?.id, requireLogin]);
+
+  const handleModalShare = useCallback(async () => {
+    if (!modalVideo?.id) return;
+    try {
+      setModalVideo(prev =>
+        prev ? { ...prev, shareCount: (prev.shareCount ?? 0) + 1 } : prev,
+      );
+      recordVideoShare(modalVideo.id);
+      await Share.share({
+        message: modalVideo?.title ? `${modalVideo.title}` : 'Check this video',
+        url: modalVideo?.videoUrl || '',
+        title: modalVideo?.title || 'Video',
+      });
+    } catch (_) {}
+  }, [modalVideo?.id, modalVideo?.title, modalVideo?.videoUrl]);
+
+  const handleSubscribe = useCallback(async () => {
+    if (requireLogin()) return;
+    if (!modalVideo?.userId || !currentUser?.id) return;
+    if (String(modalVideo.userId) === String(currentUser.id)) return;
+    setSubLoading(true);
+    try {
+      if (channelSub.isSubscribed) {
+        await unsubscribeFromChannel(currentUser.id, modalVideo.userId);
+        setChannelSub(p => ({
+          ...p,
+          isSubscribed: false,
+          subscriberCount: Math.max(0, (p.subscriberCount ?? 0) - 1),
+        }));
+      } else {
+        await subscribeToChannel(currentUser.id, modalVideo.userId);
+        setChannelSub(p => ({
+          ...p,
+          isSubscribed: true,
+          subscriberCount: (p.subscriberCount ?? 0) + 1,
+        }));
+      }
+    } catch (_) {}
+    finally {
+      setSubLoading(false);
+    }
+  }, [
+    channelSub.isSubscribed,
+    currentUser?.id,
+    modalVideo?.userId,
+    requireLogin,
+  ]);
+
   const handleVideoPress = useCallback(
     item => {
       if (item.type === 'short') {
         navigation?.navigate('ShortsVideoScreen', { shortId: item.id });
-      } else {
+      } else if (item.localPath) {
         navigation?.navigate('VideoDetailsScreen', {
           videoId: item.id,
-          offlineVideo: item.localPath ? item : undefined,
+          offlineVideo: item,
         });
+      } else {
+        openVideoModal(item.id);
       }
     },
-    [navigation],
+    [navigation, openVideoModal],
   );
 
   const loadHistory = useCallback(async () => {
@@ -251,6 +519,46 @@ const LibraryScreen = ({ navigation }) => {
     await loadHistory();
     setHistoryRefreshing(false);
   }, [currentUser?.id, loadHistory]);
+
+  const loadPlaylistCounts = useCallback(async () => {
+    if (!currentUser?.id) {
+      setWatchLaterCount(0);
+      setLikedCount(0);
+      setFavoritesCount(0);
+      return;
+    }
+    setPlaylistCountsLoading(true);
+    try {
+      const [watchLaterRes, likedVRes, likedSRes, favoritesRes] = await Promise.all([
+        getWatchLater(currentUser.id, 1, 500),
+        getLikedVideos(currentUser.id, 1, 500),
+        shortsService.getLikedShorts(currentUser.id, 1, 500),
+        getFavorites(currentUser.id, 1, 500),
+      ]);
+      const wlV = watchLaterRes?.videos?.length ?? 0;
+      const wlS = watchLaterRes?.shorts?.length ?? 0;
+      setWatchLaterCount(wlV + wlS);
+      const lv = likedVRes?.videos?.length ?? 0;
+      const ls = likedSRes?.shorts?.length ?? 0;
+      setLikedCount(lv + ls);
+      const fv = favoritesRes?.videos?.length ?? 0;
+      const fs = favoritesRes?.shorts?.length ?? 0;
+      setFavoritesCount(fv + fs);
+    } catch (e) {
+      console.error('Failed to load playlist counts:', e);
+      setWatchLaterCount(0);
+      setLikedCount(0);
+      setFavoritesCount(0);
+    } finally {
+      setPlaylistCountsLoading(false);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (currentView === 'library' && currentUser?.id) {
+      loadPlaylistCounts();
+    }
+  }, [currentView, currentUser?.id, loadPlaylistCounts]);
 
   const renderHeader = () => {
     const isLibrary = currentView === 'library';
@@ -310,7 +618,13 @@ const LibraryScreen = ({ navigation }) => {
         <View style={styles.topNavigation}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation?.goBack()}
+            onPress={() => {
+              if (currentView !== 'library') {
+                setCurrentView('library');
+              } else {
+                navigation?.goBack();
+              }
+            }}
           >
             <View style={styles.backButtonInner}>
               <MaterialCommunityIcons
@@ -412,6 +726,7 @@ const LibraryScreen = ({ navigation }) => {
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         {renderHeader()}
+        {renderVideoModal()}
         {isYourVideos && (
           <View style={styles.filterWrapper}>
             <ScrollView
@@ -500,6 +815,294 @@ const LibraryScreen = ({ navigation }) => {
     );
   };
 
+  const renderVideoModal = () => (
+    <Modal
+      visible={videoModalVisible}
+      animationType="slide"
+      onRequestClose={closeVideoModal}
+    >
+      <SafeAreaView style={styles.videoModalContainer} edges={['top']}>
+        <View style={styles.videoModalHeader}>
+          <TouchableOpacity onPress={closeVideoModal} style={styles.videoModalHeaderBtn}>
+            <MaterialCommunityIcons name="chevron-down" size={30} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
+            {modalVideo?.title || 'Video'}
+          </Text>
+          <View style={styles.videoModalHeaderBtn} />
+        </View>
+
+        <View style={styles.videoPlayerWrap}>
+          {videoModalLoading ? (
+            <View style={styles.videoLoadingOverlay}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.videoLoadingText}>Loading…</Text>
+            </View>
+          ) : videoModalError ? (
+            <View style={styles.videoErrorOverlay}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={44} color="#fff" />
+              <Text style={styles.videoErrorText}>{videoModalError}</Text>
+              <TouchableOpacity
+                style={styles.videoRetryBtn}
+                onPress={() => activeVideoId && openVideoModal(activeVideoId)}
+              >
+                <MaterialCommunityIcons name="refresh" size={18} color="#fff" />
+                <Text style={styles.videoRetryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : modalVideo?.videoUrl ? (
+            <>
+              <Video
+                ref={modalVideoRef}
+                source={{ uri: String(modalVideo.videoUrl).trim() }}
+                poster={modalVideo.thumbnail}
+                posterResizeMode="cover"
+                style={styles.videoPlayer}
+                resizeMode="contain"
+                paused={modalPaused}
+                repeat={false}
+                controls={false}
+                playInBackground={false}
+                playWhenInactive={false}
+                ignoreSilentSwitch="ignore"
+                onLoad={data => {
+                  setModalProgress(p => ({ ...p, duration: data?.duration || 0 }));
+                  setModalPaused(false);
+                }}
+                onProgress={data => {
+                  if (seekingRef.current) return;
+                  const now = Date.now();
+                  if (now - progressUpdateRef.current < 500) return;
+                  progressUpdateRef.current = now;
+                  setModalProgress(p => ({
+                    currentTime: data?.currentTime ?? p.currentTime,
+                    duration: data?.seekableDuration || data?.duration || p.duration,
+                  }));
+                }}
+                onError={() =>
+                  setVideoModalError(
+                    'Failed to play video. The video format may not be supported or the URL is inaccessible.',
+                  )
+                }
+              />
+              <Pressable
+                style={styles.videoTapOverlay}
+                onPress={() => setModalPaused(p => !p)}
+              >
+                <MaterialCommunityIcons
+                  name={modalPaused ? 'play-circle-outline' : 'pause-circle-outline'}
+                  size={74}
+                  color="rgba(255,255,255,0.9)"
+                />
+              </Pressable>
+
+              <View style={styles.videoSliderRow}>
+                <Slider
+                  style={styles.videoSlider}
+                  value={modalDisplayTime}
+                  minimumValue={0}
+                  maximumValue={Math.max(0.1, modalProgress.duration)}
+                  minimumTrackTintColor="#fff"
+                  maximumTrackTintColor="rgba(255,255,255,0.35)"
+                  thumbTintColor="#fff"
+                  onSlidingStart={() => {
+                    setModalIsSliding(true);
+                    setModalSlidingValue(modalProgress.currentTime);
+                  }}
+                  onValueChange={val => setModalSlidingValue(val)}
+                  onSlidingComplete={val => {
+                    if (!modalVideoRef.current || modalProgress.duration <= 0) {
+                      setModalIsSliding(false);
+                      return;
+                    }
+                    const clamped = Math.max(0, Math.min(val, modalProgress.duration));
+                    seekingRef.current = true;
+                    modalVideoRef.current.seek(clamped);
+                    setModalProgress(p => ({ ...p, currentTime: clamped }));
+                    progressUpdateRef.current = Date.now();
+                    setTimeout(() => {
+                      seekingRef.current = false;
+                    }, 300);
+                    setModalIsSliding(false);
+                  }}
+                />
+                <Text style={styles.videoTimeText}>
+                  {formatTime(modalDisplayTime)} / {formatTime(modalProgress.duration)}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.videoErrorOverlay}>
+              <Text style={styles.videoErrorText}>Video not available</Text>
+            </View>
+          )}
+        </View>
+
+        <ScrollView style={styles.videoModalBody} showsVerticalScrollIndicator={false}>
+          <View style={styles.videoActionsRow}>
+            <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalLike}>
+              <MaterialCommunityIcons
+                name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+                size={22}
+                color={modalVideo?.isLiked ? '#FF7F0B' : '#222'}
+              />
+              <Text style={styles.videoActionText}>
+                {formatCount(modalVideo?.likeCount ?? 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalDislike}>
+              <MaterialCommunityIcons
+                name={modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+                size={22}
+                color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
+              />
+              <Text style={styles.videoActionText}>
+                {formatCount(modalVideo?.dislikeCount ?? 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.videoActionBtn}
+              onPress={() => {
+                if (requireLogin()) return;
+                setVideoCommentsVisible(true);
+              }}
+            >
+              <MaterialCommunityIcons name="comment-text-outline" size={22} color="#222" />
+              <Text style={styles.videoActionText}>
+                {formatCount(modalVideo?.commentCount ?? 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalShare}>
+              <MaterialCommunityIcons name="share-outline" size={22} color="#222" />
+              <Text style={styles.videoActionText}>
+                {formatCount(modalVideo?.shareCount ?? 0)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.videoActionBtn}
+              onPress={() => {
+                if (requireLogin()) return;
+                setSaveVisible(true);
+              }}
+            >
+              <MaterialCommunityIcons name="bookmark-outline" size={22} color="#222" />
+              <Text style={styles.videoActionText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.channelRow}>
+            <View style={styles.channelLeft}>
+              <Image source={{ uri: modalVideo?.channelAvatar }} style={styles.channelAvatar} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.channelName} numberOfLines={1}>
+                  {modalVideo?.channelName || 'Channel'}
+                </Text>
+                <Text style={styles.channelSubText}>
+                  {formatCount(channelSub.subscriberCount ?? 0)} subscribers
+                </Text>
+              </View>
+            </View>
+            {!isOwnVideo && (
+              <TouchableOpacity
+                style={[
+                  styles.subscribeBtn,
+                  channelSub.isSubscribed && styles.subscribedBtn,
+                ]}
+                onPress={handleSubscribe}
+                disabled={subLoading || !modalVideo?.userId}
+              >
+                {subLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.subscribeText,
+                      channelSub.isSubscribed && styles.subscribedText,
+                    ]}
+                  >
+                    {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.contactRow}>
+            {!isOwnVideo && (
+              <TouchableOpacity
+                style={styles.messageBtn}
+                onPress={() => {
+                  if (requireLogin()) return;
+                  if (!modalVideo?.userId) return;
+                  navigation.navigate('ChatScreen', {
+                    partnerId: modalVideo.userId,
+                    partnerName: modalVideo.channelName || 'Channel',
+                    partnerAvatar: modalVideo.channelAvatar,
+                  });
+                }}
+              >
+                <MaterialCommunityIcons name="message-text-outline" size={18} color="#fff" />
+                <Text style={styles.messageBtnText}>Message</Text>
+              </TouchableOpacity>
+            )}
+            <View style={styles.socialRow}>
+              {(modalVideo?.socialLinks || [])
+                .filter(l => (l?.url || '').trim())
+                .slice(0, 6)
+                .map((l, idx) => (
+                  <TouchableOpacity
+                    key={`${l.type}-${idx}`}
+                    style={styles.socialBtn}
+                    onPress={() => {
+                      const url = (l.url || '').trim();
+                      if (!url) return;
+                      Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={getSocialIcon((l.type || '').toLowerCase())}
+                      size={20}
+                      color="#FF7F0B"
+                    />
+                  </TouchableOpacity>
+                ))}
+            </View>
+          </View>
+        </ScrollView>
+
+        <CommentsModal
+          visible={videoCommentsVisible}
+          onClose={() => setVideoCommentsVisible(false)}
+          videoId={modalVideo?.id}
+          video={modalVideo}
+          user={currentUser}
+          onCommentAdded={() => {
+            if (!modalVideo?.id) return;
+            setModalVideo(prev =>
+              prev ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 } : prev,
+            );
+          }}
+          onCommentDeleted={(wasTopLevel, deletedCount) => {
+            const dec = deletedCount || (wasTopLevel ? 1 : 0) || 0;
+            if (dec <= 0) return;
+            setModalVideo(prev =>
+              prev
+                ? { ...prev, commentCount: Math.max(0, (prev.commentCount ?? 0) - dec) }
+                : prev,
+            );
+          }}
+        />
+
+        <SaveModal
+          visible={saveVisible}
+          onClose={() => setSaveVisible(false)}
+          contentType="video"
+          contentId={modalVideo?.id}
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+
   if (currentView === 'history') {
     const historyList =
       historyFilter === 'Videos'
@@ -514,6 +1117,7 @@ const LibraryScreen = ({ navigation }) => {
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         {renderHeader()}
+        {renderVideoModal()}
         <View style={styles.filterWrapper}>
           <ScrollView
             horizontal
@@ -635,11 +1239,15 @@ const LibraryScreen = ({ navigation }) => {
     });
   }
 
+  const isOwnVideo =
+    !!currentUser?.id && !!modalVideo?.userId && String(currentUser.id) === String(modalVideo.userId);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       {renderHeader()}
       {renderNewPlaylistModal()}
+      {renderVideoModal()}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.sectionHeader}>
@@ -767,7 +1375,11 @@ const LibraryScreen = ({ navigation }) => {
           </View>
           <View>
             <Text style={styles.menuText}>Watch Later</Text>
-            <Text style={styles.subText}>24 unwatched videos</Text>
+            <Text style={styles.subText}>
+              {playlistCountsLoading
+                ? '...'
+                : `${watchLaterCount} unwatched video${watchLaterCount !== 1 ? 's' : ''}`}
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -780,7 +1392,9 @@ const LibraryScreen = ({ navigation }) => {
           </View>
           <View>
             <Text style={styles.menuText}>Liked Videos</Text>
-            <Text style={styles.subText}>260 videos</Text>
+            <Text style={styles.subText}>
+              {playlistCountsLoading ? '...' : `${likedCount} video${likedCount !== 1 ? 's' : ''}`}
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -797,7 +1411,9 @@ const LibraryScreen = ({ navigation }) => {
           </View>
           <View>
             <Text style={styles.menuText}>My Favorite Songs</Text>
-            <Text style={styles.subText}>125 videos</Text>
+            <Text style={styles.subText}>
+              {playlistCountsLoading ? '...' : `${favoritesCount} video${favoritesCount !== 1 ? 's' : ''}`}
+            </Text>
           </View>
         </TouchableOpacity>
       </ScrollView>
@@ -1076,6 +1692,218 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   createButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+
+  // Video quick-view modal (same as UserViewsScreen)
+  videoModalContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  videoModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  videoModalHeaderBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoModalHeaderTitle: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  videoPlayerWrap: {
+    width: '100%',
+    height: (width * 9) / 16,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  videoPlayer: {
+    width: '100%',
+    height: '100%',
+  },
+  videoTapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoSliderRow: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  videoSlider: {
+    flex: 1,
+    height: 28,
+    marginRight: 8,
+  },
+  videoTimeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  videoLoadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  videoErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+  },
+  videoErrorText: {
+    color: '#fff',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  videoRetryBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  videoRetryText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  videoModalBody: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  videoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  videoActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minWidth: 60,
+  },
+  videoActionText: {
+    fontSize: 12,
+    color: '#222',
+    fontWeight: '600',
+  },
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  channelLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 10,
+  },
+  channelAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#111',
+  },
+  channelName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111',
+  },
+  channelSubText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  subscribeBtn: {
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  subscribedBtn: {
+    backgroundColor: '#f2f2f2',
+  },
+  subscribeText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  subscribedText: {
+    color: '#333',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  messageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#111',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  messageBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flex: 1,
+    paddingLeft: 10,
+    flexWrap: 'wrap',
+  },
+  socialBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF4EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default LibraryScreen;

@@ -2097,49 +2097,57 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.subscribeBtn,
-                  channelSub.isSubscribed && styles.subscribedBtn,
-                ]}
-                onPress={handleSubscribe}
-                disabled={subLoading || !modalVideo?.userId}
-              >
-                {subLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text
-                    style={[
-                      styles.subscribeText,
-                      channelSub.isSubscribed && styles.subscribedText,
-                    ]}
-                  >
-                    {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              {modalVideo?.userId &&
+              currentUser?.id &&
+              String(modalVideo.userId) === String(currentUser.id) ? null : (
+                <TouchableOpacity
+                  style={[
+                    styles.subscribeBtn,
+                    channelSub.isSubscribed && styles.subscribedBtn,
+                  ]}
+                  onPress={handleSubscribe}
+                  disabled={subLoading || !modalVideo?.userId}
+                >
+                  {subLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.subscribeText,
+                        channelSub.isSubscribed && styles.subscribedText,
+                      ]}
+                    >
+                      {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.contactRow}>
-              <TouchableOpacity
-                style={styles.messageBtn}
-                onPress={() => {
-                  if (requireLogin()) return;
-                  if (!modalVideo?.userId) return;
-                  navigation.navigate('ChatScreen', {
-                    partnerId: modalVideo.userId,
-                    partnerName: modalVideo.channelName || 'Channel',
-                    partnerAvatar: modalVideo.channelAvatar,
-                  });
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="message-text-outline"
-                  size={18}
-                  color="#fff"
-                />
-                <Text style={styles.messageBtnText}>Message</Text>
-              </TouchableOpacity>
+              {modalVideo?.userId &&
+              currentUser?.id &&
+              String(modalVideo.userId) === String(currentUser.id) ? null : (
+                <TouchableOpacity
+                  style={styles.messageBtn}
+                  onPress={() => {
+                    if (requireLogin()) return;
+                    if (!modalVideo?.userId) return;
+                    navigation.navigate('ChatScreen', {
+                      partnerId: modalVideo.userId,
+                      partnerName: modalVideo.channelName || 'Channel',
+                      partnerAvatar: modalVideo.channelAvatar,
+                    });
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="message-text-outline"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.messageBtnText}>Message</Text>
+                </TouchableOpacity>
+              )}
 
               <View style={styles.socialRow}>
                 {(modalVideo?.socialLinks || [])
