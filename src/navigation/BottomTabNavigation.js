@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -34,15 +35,16 @@ import { BottomTabLessScreens } from '../constants/BottomLessScreens';
 import { useSelector } from 'react-redux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS } from '../constants/theme';
+
+const libraryTabIcon = require('../assets/Group.png');
 
 /** Hide tab bar for these screens (LandingScreen, ProductShortsVideo, etc.) */
 const getTabBarStyle = route => {
   const routeName = getFocusedRouteNameFromRoute(route) ?? '';
   const name = routeName || (route?.name === 'Home1' ? 'LandingScreen' : '');
-  return BottomTabLessScreens.includes(name)
-    ? { display: 'none' }
-    : undefined;
+  return BottomTabLessScreens.includes(name) ? { display: 'none' } : undefined;
 };
 
 /** Orders tab: user role → own orders + status only; owner/admin → Live Orders with Accept/Reject */
@@ -249,7 +251,7 @@ const BottomNaivgation = () => {
               ),
             }}
           /> */}
-          {(isOwner || isVendor) && (
+          {/* {(isOwner || isVendor) && (
             <Tab.Screen
               name="Profile"
               component={BusinessProfileViewScreen}
@@ -263,9 +265,9 @@ const BottomNaivgation = () => {
                 ),
               }}
             />
-          )}
+          )} */}
 
-          {isUser && (
+          {/* {isUser && (
             <Tab.Screen
               name="Home8"
               component={PromotionNavigation}
@@ -279,7 +281,7 @@ const BottomNaivgation = () => {
                 ),
               }}
             />
-          )}
+          )} */}
 
           {/* <Tab.Screen
             name="Home"
@@ -324,7 +326,7 @@ const BottomNaivgation = () => {
             name="Library"
             component={LibraryNavigation}
             listeners={{
-              tabPress: e => requireLogin(e, 'Library'),
+              tabPress: e => requireLogin(e, 'LibraryScreen'),
             }}
             options={({ route }) => ({
               tabBarStyle: {
@@ -336,11 +338,14 @@ const BottomNaivgation = () => {
                 paddingTop: 8,
                 ...getTabBarStyle(route),
               },
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="library-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+              tabBarIcon: ({ focused }) => (
+                <Image
+                  source={libraryTabIcon}
+                  style={[
+                    styles.libraryTabIcon,
+                    { opacity: focused ? 1 : 0.6 },
+                  ]}
+                  resizeMode="contain"
                 />
               ),
             })}
@@ -352,6 +357,10 @@ const BottomNaivgation = () => {
 };
 
 const styles = StyleSheet.create({
+  libraryTabIcon: {
+    width: 26,
+    height: 26,
+  },
   tabBarLabelStyle: {
     fontSize: 11,
     fontWeight: '400',

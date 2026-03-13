@@ -25,8 +25,9 @@ import {
   useFocusEffect,
 } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
+import { appSetUser } from '../redux/actions/appSlice';
 import { getFeatured } from '../services/featuredService';
 import { getSponsored } from '../services/sponsoredService';
 import {
@@ -35,8 +36,9 @@ import {
   getVideoById,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
-import { getGallery } from '../services/channelService';
+import { getGallery, getChannelProfile } from '../services/channelService';
 import logo from '../assets/logo.png';
+import { safeImageUri } from '../utils/helper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
@@ -129,7 +131,11 @@ const HomeOneScreen = () => {
   const resProgressUpdateRef = useRef(0);
   const navigation = useNavigation();
   const route = useRoute();
+  const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
+  const userRef = useRef(user);
+  userRef.current = user;
+  const userPhotosFetchedRef = useRef(false);
   const [resVideoProgress, setResVideoProgress] = useState({
     currentTime: 0,
     duration: 0,
@@ -325,6 +331,51 @@ const HomeOneScreen = () => {
     loadContinueWatching();
   }, [loadContinueWatching]);
 
+  // When logged in but Redux user has no photos (e.g. old session), fetch channel profile and update so header shows avatar
+  useEffect(() => {
+    if (!user?.id || userPhotosFetchedRef.current) return;
+    const firstPhoto = Array.isArray(user?.photos)
+      ? user.photos[0]
+      : user?.photos?.[0];
+    const hasSrc =
+      (typeof firstPhoto === 'string' && firstPhoto.trim()) ||
+      (firstPhoto &&
+        typeof firstPhoto === 'object' &&
+        typeof firstPhoto.src === 'string' &&
+        firstPhoto.src.trim());
+    if (hasSrc) {
+      userPhotosFetchedRef.current = true;
+      return;
+    }
+    userPhotosFetchedRef.current = true;
+    getChannelProfile(user.id, user.id)
+      .then(profile => {
+        const avatar =
+          profile?.channelAvatar ||
+          (profile?.photos?.[0] &&
+            (typeof profile.photos[0] === 'string'
+              ? profile.photos[0]
+              : profile.photos[0]?.src));
+        if (
+          avatar &&
+          typeof avatar === 'string' &&
+          avatar.trim() &&
+          !avatar.includes('ui-avatars.com')
+        ) {
+          const current = userRef.current;
+          if (current?.id) {
+            dispatch(
+              appSetUser({
+                ...current,
+                photos: [{ title: 'avatar', src: avatar.trim() }],
+              }),
+            );
+          }
+        }
+      })
+      .catch(() => {});
+  }, [user?.id, user?.photos, dispatch]);
+
   // Selected location is for feed only (nearby videos/shorts). Never updates user profile here:
   // owners keep their shop address from Edit Profile; other users' profile is not updated on home.
   const useMyLocation = () => {
@@ -364,11 +415,7 @@ const HomeOneScreen = () => {
   };
 
   useEffect(() => {
-    if (
-      !isVideoDetail ||
-      selectedItem?.type !== 'short' ||
-      !selectedItem?.id
-    )
+    if (!isVideoDetail || selectedItem?.type !== 'short' || !selectedItem?.id)
       return;
     shortsService
       .recordView(selectedItem.id, user?.id || null)
@@ -433,25 +480,24 @@ const HomeOneScreen = () => {
     [user?.id],
   );
 
-  const handleShortShare = useCallback(
-    async item => {
-      if (!item?.id) return;
-      const message = `${item.title || item.description || 'Short'}\neatix://shorts/${item.id}`;
-      try {
-        await Share.share({ message, title: item.title || 'Share Short' });
-        setSelectedItem(prev => {
-          if (!prev || prev.id !== item.id) return prev;
-          const newCount = (prev.shareCount ?? 0) + 1;
-          return { ...prev, shareCount: newCount };
-        });
-      } catch (e) {
-        if (e?.message !== 'User did not share') {
-          Alert.alert('Share', 'Share failed');
-        }
+  const handleShortShare = useCallback(async item => {
+    if (!item?.id) return;
+    const message = `${
+      item.title || item.description || 'Short'
+    }\neatix://shorts/${item.id}`;
+    try {
+      await Share.share({ message, title: item.title || 'Share Short' });
+      setSelectedItem(prev => {
+        if (!prev || prev.id !== item.id) return prev;
+        const newCount = (prev.shareCount ?? 0) + 1;
+        return { ...prev, shareCount: newCount };
+      });
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        Alert.alert('Share', 'Share failed');
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   const featuredItem = (() => {
     if (!featuredVideo?.video) return null;
@@ -539,12 +585,60 @@ const HomeOneScreen = () => {
               resizeMode="contain"
             />
           </View>
-          <TouchableOpacity
-            style={[styles.navBtn]}
-            onPress={() => navigation.navigate('HomeSevenScreen')}
-          >
-            <Text style={styles.navBtnText}>Login {'>'}</Text>
-          </TouchableOpacity>
+          {!(user?.token || user?.id) ? (
+            <TouchableOpacity
+              style={[styles.navBtn]}
+              onPress={() => navigation.navigate('HomeSevenScreen')}
+            >
+              <Text style={styles.navBtnText}>Login {'>'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              // style={[styles.navBtn]}
+              onPress={() => {
+                const role = (user?.role || '').toLowerCase();
+                if (role === 'owner' || role === 'vendor') {
+                  navigation.navigate('BusinessProfileViewScreen');
+                } else if (role === 'user') {
+                  navigation.navigate('PromotionScreen');
+                } else if (role === 'admin') {
+                  navigation.getParent()?.navigate('Admin');
+                } else {
+                  navigation
+                    .getParent()
+                    ?.navigate('Library', { screen: 'ProfileScreen' });
+                }
+              }}
+            >
+              {(() => {
+                // Same as PromotionScreen: backend photos are [{ src, title }]; use first photo src
+                const firstPhoto =
+                  user?.photos?.[0] ??
+                  (Array.isArray(user?.photos) ? user.photos[0] : null);
+                const photo =
+                  user?.avatar ||
+                  (typeof firstPhoto === 'string'
+                    ? firstPhoto
+                    : firstPhoto?.src) ||
+                  null;
+                const profileImageUri =
+                  typeof photo === 'string' && photo.trim()
+                    ? photo.trim()
+                    : null;
+                const hasProfileImage =
+                  profileImageUri && String(profileImageUri).trim().length > 0;
+                if (hasProfileImage) {
+                  return (
+                    <Image
+                      source={{ uri: safeImageUri(profileImageUri) }}
+                      style={styles.profileAvatar}
+                    />
+                  );
+                }
+                return <Icon name="account-outline" size={28} color="#FFF" />;
+              })()}
+            </TouchableOpacity>
+          )}
         </View>
         <Text style={styles.resultsTitle}>
           Your search results in {addressText || 'your area'}...
@@ -1469,6 +1563,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 4,
+  },
+  profileAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   navBtnText: { color: '#424242', fontSize: 12, fontWeight: '600' },
   headerLogo: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },

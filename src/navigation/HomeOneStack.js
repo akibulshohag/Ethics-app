@@ -9,6 +9,8 @@ import HomeFiveScreen from '../screens/HomeFiveScreen';
 import HomeTwoScreen from '../screens/HomeTwoScreen';
 import HomeSixScreen from '../screens/HomeSixScreen';
 import HomeSevenScreen from '../screens/HomeSevenScreen';
+import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
+import PromotionScreen from '../screens/PromotionScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 
@@ -49,6 +51,14 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="HomeSevenScreen"
         component={HomeSevenScreen}
+      />
+      <HomeOneStack.Screen
+        name="BusinessProfileViewScreen"
+        component={BusinessProfileViewScreen}
+      />
+      <HomeOneStack.Screen
+        name="PromotionScreen"
+        component={PromotionScreen}
       />
       <HomeOneStack.Screen
         name="CartDetailsScreen"

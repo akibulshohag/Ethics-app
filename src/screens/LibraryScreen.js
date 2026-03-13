@@ -20,7 +20,9 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { appSetUser } from '../redux/actions/appSlice';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -185,6 +187,7 @@ const HISTORY_DATA = [
 ];
 
 const LibraryScreen = ({ navigation }) => {
+  const dispatch = useDispatch();
   const { user: currentUser } = useSelector(state => state.app) || {};
   const [currentView, setCurrentView] = useState('library');
   const [modalVisible, setModalVisible] = useState(false);
@@ -280,6 +283,59 @@ const LibraryScreen = ({ navigation }) => {
     }
     return false;
   }, [currentUser?.id]);
+
+  const handleLogout = useCallback(() => {
+    Alert.alert(
+      'Log out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              dispatch(appSetUser(null));
+              await AsyncStorage.clear();
+              const parent = navigation.getParent();
+              const root = parent?.getParent?.();
+              if (root) {
+                root.reset({
+                  index: 0,
+                  routes: [
+                    {
+                      name: 'Root',
+                      state: {
+                        index: 0,
+                        routes: [
+                          {
+                            name: 'Home1',
+                            state: {
+                              index: 1,
+                              routes: [
+                                { name: 'LandingScreen' },
+                                { name: 'HomeSevenScreen' },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                });
+              } else {
+                navigation.navigate('HomeSevenScreen');
+              }
+            } catch (e) {
+              console.error('Logout error:', e);
+              Alert.alert('Error', 'Failed to log out. Please try again.');
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  }, [dispatch, navigation]);
 
   const openVideoModal = useCallback(
     async videoId => {
@@ -1416,6 +1472,25 @@ const LibraryScreen = ({ navigation }) => {
             </Text>
           </View>
         </TouchableOpacity>
+
+        {currentUser?.id ? (
+          <>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              style={[styles.playlistItem, styles.logoutButton]}
+              onPress={handleLogout}
+            >
+              <View style={[styles.menuIconContainer, styles.logoutIconContainer]}>
+                <MaterialCommunityIcons
+                  name="logout"
+                  size={24}
+                  color="#E53935"
+                />
+              </View>
+              <Text style={[styles.menuText, styles.logoutText]}>Log out</Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1592,6 +1667,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   subText: { fontSize: 12, color: '#666', marginTop: 2 },
+  logoutButton: { marginBottom: 24 },
+  logoutIconContainer: { backgroundColor: '#FFEBEE' },
+  logoutText: { color: '#E53935', fontWeight: '700' },
 
   playlistHeader: { padding: 16 },
   playlistActionRow: { flexDirection: 'row', justifyContent: 'space-between' },
