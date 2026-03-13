@@ -13,12 +13,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSelector } from 'react-redux';
 import { launchImageLibrary } from 'react-native-image-picker';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { uploadPromotion } from '../services/promotionService';
 import { getMenuByUserId } from '../services/menuService';
 
 const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
+  const token = useSelector(state => state.app?.user?.token);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [promoAmount, setPromoAmount] = useState('');
@@ -37,7 +39,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     if (visible && userId) {
       setMenuLoading(true);
       getMenuByUserId(userId)
-        .then((res) => {
+        .then(res => {
           const menu = res?.menu ?? [];
           setMenuItems(Array.isArray(menu) ? menu : []);
           setSelectedMenuIds([]);
@@ -68,37 +70,34 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     }
   };
 
-  const toggleMenuId = (id) => {
-    setSelectedMenuIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+  const toggleMenuId = id => {
+    setSelectedMenuIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
     );
   };
 
   const pickThumbnail = () => {
-    launchImageLibrary(
-      { mediaType: 'photo', quality: 0.8 },
-      (res) => {
-        if (res.didCancel) return;
-        if (res.errorCode) {
-          Alert.alert('Error', res.errorMessage || 'Failed to pick image');
-          return;
-        }
-        const asset = res.assets?.[0];
-        if (asset?.uri) {
-          setThumbnail({
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || 'thumbnail.jpg',
-          });
-        }
-      },
-    );
+    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, res => {
+      if (res.didCancel) return;
+      if (res.errorCode) {
+        Alert.alert('Error', res.errorMessage || 'Failed to pick image');
+        return;
+      }
+      const asset = res.assets?.[0];
+      if (asset?.uri) {
+        setThumbnail({
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || 'thumbnail.jpg',
+        });
+      }
+    });
   };
 
   const pickVideo = () => {
     launchImageLibrary(
       { mediaType: 'video', videoMaxDuration: 300, quality: 1 },
-      (res) => {
+      res => {
         if (res.didCancel) return;
         if (res.errorCode) {
           Alert.alert('Error', res.errorMessage || 'Failed to pick video');
@@ -106,7 +105,8 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
         }
         const asset = res.assets?.[0];
         if (asset?.uri) {
-          const duration = asset.duration != null ? Math.round(Number(asset.duration)) : 0;
+          const duration =
+            asset.duration != null ? Math.round(Number(asset.duration)) : 0;
           setVideoDuration(duration);
           setVideo({
             uri: asset.uri,
@@ -124,7 +124,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     setVideoDuration(0);
   };
 
-  const formatDateForInput = (d) => {
+  const formatDateForInput = d => {
     if (!d) return '';
     const date = typeof d === 'string' ? new Date(d) : d;
     if (Number.isNaN(date.getTime())) return '';
@@ -135,7 +135,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
   };
 
   const handleSubmit = async () => {
-    if (!userId) {
+    if (!userId || !token) {
       Alert.alert('Login required', 'Please log in to create a promotion.');
       return;
     }
@@ -150,7 +150,10 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     }
     const amount = parseFloat(promoAmount);
     if (Number.isNaN(amount) || amount < 0) {
-      Alert.alert('Invalid amount', 'Please enter a valid promo amount (e.g. 10 for 10% or 10 BDT).');
+      Alert.alert(
+        'Invalid amount',
+        'Please enter a valid promo amount (e.g. 10 for 10% or 10 USD).',
+      );
       return;
     }
     const code = promoCode.trim();
@@ -161,13 +164,19 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     const start = startDate.trim();
     const expire = expireDate.trim();
     if (!start || !expire) {
-      Alert.alert('Dates required', 'Please enter start date and expire date (YYYY-MM-DD).');
+      Alert.alert(
+        'Dates required',
+        'Please enter start date and expire date (YYYY-MM-DD).',
+      );
       return;
     }
     const startD = new Date(start);
     const expireD = new Date(expire);
     if (Number.isNaN(startD.getTime()) || Number.isNaN(expireD.getTime())) {
-      Alert.alert('Invalid dates', 'Use format YYYY-MM-DD for start and expire date.');
+      Alert.alert(
+        'Invalid dates',
+        'Use format YYYY-MM-DD for start and expire date.',
+      );
       return;
     }
     if (expireD <= startD) {
@@ -178,6 +187,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     try {
       await uploadPromotion({
         userId,
+        token,
         title: trimmedTitle,
         description: description.trim() || undefined,
         promoAmount: amount,
@@ -198,7 +208,10 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
       onSuccess?.();
     } catch (err) {
       setUploading(false);
-      Alert.alert('Upload failed', err?.message || 'Could not create promotion.');
+      Alert.alert(
+        'Upload failed',
+        err?.message || 'Could not create promotion.',
+      );
     }
   };
 
@@ -224,7 +237,11 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
         <View style={styles.modalBox}>
           <View style={styles.header}>
             <Text style={styles.title}>Create Promotion</Text>
-            <TouchableOpacity onPress={handleClose} disabled={uploading} hitSlop={12}>
+            <TouchableOpacity
+              onPress={handleClose}
+              disabled={uploading}
+              hitSlop={12}
+            >
               <MaterialCommunityIcons name="close" size={24} color="#333" />
             </TouchableOpacity>
           </View>
@@ -243,19 +260,32 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
             >
               {thumbnail?.uri ? (
                 <View style={styles.mediaPreview}>
-                  <Image source={{ uri: thumbnail.uri }} style={styles.previewImage} />
+                  <Image
+                    source={{ uri: thumbnail.uri }}
+                    style={styles.previewImage}
+                  />
                   <TouchableOpacity
                     style={styles.removeBtn}
                     onPress={removeThumbnail}
                     disabled={uploading}
                   >
-                    <MaterialCommunityIcons name="close-circle" size={28} color="#fff" />
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={28}
+                      color="#fff"
+                    />
                   </TouchableOpacity>
                 </View>
               ) : (
                 <View style={styles.placeholder}>
-                  <MaterialCommunityIcons name="image-plus" size={48} color="#999" />
-                  <Text style={styles.placeholderText}>Tap to add thumbnail</Text>
+                  <MaterialCommunityIcons
+                    name="image-plus"
+                    size={48}
+                    color="#999"
+                  />
+                  <Text style={styles.placeholderText}>
+                    Tap to add thumbnail
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -269,11 +299,21 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
               {video?.uri ? (
                 <View style={styles.mediaPreview}>
                   <View style={styles.videoPreviewPlaceholder}>
-                    <MaterialCommunityIcons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+                    <MaterialCommunityIcons
+                      name="play-circle"
+                      size={48}
+                      color="rgba(255,255,255,0.9)"
+                    />
                     {videoDuration > 0 && (
-                      <View style={[styles.durationBadge, styles.durationBadgeVideo]}>
+                      <View
+                        style={[
+                          styles.durationBadge,
+                          styles.durationBadgeVideo,
+                        ]}
+                      >
                         <Text style={styles.durationText}>
-                          {Math.floor(videoDuration / 60)}:{String(videoDuration % 60).padStart(2, '0')}
+                          {Math.floor(videoDuration / 60)}:
+                          {String(videoDuration % 60).padStart(2, '0')}
                         </Text>
                       </View>
                     )}
@@ -283,12 +323,20 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
                     onPress={removeVideo}
                     disabled={uploading}
                   >
-                    <MaterialCommunityIcons name="close-circle" size={28} color="#fff" />
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={28}
+                      color="#fff"
+                    />
                   </TouchableOpacity>
                 </View>
               ) : (
                 <View style={styles.placeholder}>
-                  <MaterialCommunityIcons name="video-plus" size={48} color="#999" />
+                  <MaterialCommunityIcons
+                    name="video-plus"
+                    size={48}
+                    color="#999"
+                  />
                   <Text style={styles.placeholderText}>Tap to add video</Text>
                 </View>
               )}
@@ -321,7 +369,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
               style={styles.input}
               value={promoAmount}
               onChangeText={setPromoAmount}
-              placeholder="e.g. 10 (for 10% or 10 BDT)"
+              placeholder="e.g. 10 (for 10% or 10 USD)"
               placeholderTextColor="#999"
               keyboardType="decimal-pad"
               editable={!uploading}
@@ -360,12 +408,18 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
 
             <Text style={styles.label}>Menu items in this offer</Text>
             {menuLoading ? (
-              <ActivityIndicator size="small" color="#FF7F0B" style={styles.menuLoader} />
+              <ActivityIndicator
+                size="small"
+                color="#FF7F0B"
+                style={styles.menuLoader}
+              />
             ) : menuItems.length === 0 ? (
-              <Text style={styles.hint}>No menu items yet. Add items in your menu first.</Text>
+              <Text style={styles.hint}>
+                No menu items yet. Add items in your menu first.
+              </Text>
             ) : (
               <View style={styles.menuList}>
-                {menuItems.map((item) => {
+                {menuItems.map(item => {
                   const checked = selectedMenuIds.includes(item.id);
                   return (
                     <TouchableOpacity
@@ -376,7 +430,9 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
                       activeOpacity={0.7}
                     >
                       <MaterialCommunityIcons
-                        name={checked ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                        name={
+                          checked ? 'checkbox-marked' : 'checkbox-blank-outline'
+                        }
                         size={24}
                         color={checked ? '#FF7F0B' : '#999'}
                       />
@@ -385,7 +441,9 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
                       </Text>
                       {item.price != null && (
                         <Text style={styles.menuItemPrice}>
-                          {typeof item.price === 'number' ? item.price.toFixed(2) : item.price}
+                          {typeof item.price === 'number'
+                            ? item.price.toFixed(2)
+                            : item.price}
                         </Text>
                       )}
                     </TouchableOpacity>

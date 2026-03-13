@@ -178,7 +178,10 @@ const mapPostToCard = (post, user) => {
   const channelAvatar =
     typeof avatarRaw === 'string'
       ? avatarRaw
-      : (avatarRaw?.src ?? avatarRaw?.uri) || `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=111&color=fff`;
+      : (avatarRaw?.src ?? avatarRaw?.uri) ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          channelName,
+        )}&background=111&color=fff`;
   const duration =
     post.mediaType === 'video' && post.duration != null
       ? `${Math.floor(post.duration / 60)}:${String(
@@ -756,7 +759,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               });
               const profileAvatar =
                 p?.channelAvatar ||
-                (p?.photos?.[0] && (typeof p.photos[0] === 'string' ? p.photos[0] : p.photos[0]?.src));
+                (p?.photos?.[0] &&
+                  (typeof p.photos[0] === 'string'
+                    ? p.photos[0]
+                    : p.photos[0]?.src));
               if (profileAvatar) {
                 setModalVideo(prev =>
                   prev
@@ -766,7 +772,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                           typeof profileAvatar === 'string'
                             ? profileAvatar
                             : profileAvatar?.src ?? prev.channelAvatar,
-                        channelName: p?.channelName || p?.nickname || prev.channelName,
+                        channelName:
+                          p?.channelName || p?.nickname || prev.channelName,
                       }
                     : prev,
                 );

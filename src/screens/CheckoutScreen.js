@@ -20,13 +20,16 @@ import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
 const CheckoutScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { user } = useSelector((state) => state.app) || {};
+  const { user } = useSelector(state => state.app) || {};
   const { ownerId, items = [], ownerName } = route.params || {};
 
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [placing, setPlacing] = useState(false);
 
-  const subtotal = items.reduce((sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1), 0);
+  const subtotal = items.reduce(
+    (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
+    0,
+  );
   const total = subtotal;
 
   const handleConfirmOrder = async () => {
@@ -45,7 +48,10 @@ const CheckoutScreen = () => {
     try {
       await createRestaurantOrder(user.token, {
         ownerId,
-        items: items.map((i) => ({ menuItemId: i.menuItemId, quantity: i.quantity || 1 })),
+        items: items.map(i => ({
+          menuItemId: i.menuItemId,
+          quantity: i.quantity || 1,
+        })),
         deliveryAddress: deliveryNotes.trim() || undefined,
       });
       Toast.show({
@@ -63,7 +69,10 @@ const CheckoutScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+        >
           <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
@@ -90,11 +99,11 @@ const CheckoutScreen = () => {
                 <View style={styles.rowLeft}>
                   <Text style={styles.itemName}>{item.itemName}</Text>
                   <Text style={styles.itemMeta}>
-                    {item.currency || 'BDT'} {price.toFixed(2)} × {qty}
+                    {item.currency || 'USD'} {price.toFixed(2)} × {qty}
                   </Text>
                 </View>
                 <Text style={styles.lineTotal}>
-                  {item.currency || 'BDT'} {lineTotal.toFixed(2)}
+                  {item.currency || 'USD'} {lineTotal.toFixed(2)}
                 </Text>
               </View>
             );
@@ -116,7 +125,7 @@ const CheckoutScreen = () => {
 
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>BDT {total.toFixed(2)}</Text>
+          <Text style={styles.totalValue}>USD {total.toFixed(2)}</Text>
         </View>
       </ScrollView>
 

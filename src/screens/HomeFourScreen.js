@@ -50,11 +50,12 @@ const HomeFourScreen = ({ onBack }) => {
     0,
   );
   const promoPercent =
-    appliedPromotion?.promoAmount != null ? Number(appliedPromotion.promoAmount) : 0;
-  const discountAmount =
-    promoPercent > 0 ? (subtotal * promoPercent) / 100 : 0;
+    appliedPromotion?.promoAmount != null
+      ? Number(appliedPromotion.promoAmount)
+      : 0;
+  const discountAmount = promoPercent > 0 ? (subtotal * promoPercent) / 100 : 0;
   const total = Math.max(0, subtotal - discountAmount);
-  const currency = items[0]?.currency || 'BDT';
+  const currency = items[0]?.currency || 'USD';
   const displayTotal = total.toFixed(2);
   const displaySubtotal = subtotal.toFixed(2);
   const displayDiscount = discountAmount.toFixed(2);
@@ -93,7 +94,10 @@ const HomeFourScreen = ({ onBack }) => {
         Toast.show({
           type: 'success',
           text1: `${match.promoCode} applied`,
-          text2: match.promoAmount != null ? `${match.promoAmount}% off` : 'Discount applied',
+          text2:
+            match.promoAmount != null
+              ? `${match.promoAmount}% off`
+              : 'Discount applied',
         });
       } else {
         setAppliedPromotion(null);
@@ -294,7 +298,10 @@ const HomeFourScreen = ({ onBack }) => {
             </Text>
           ) : (
             <TouchableOpacity
-              style={[styles.applyBtn, applyingPromo && styles.applyBtnDisabled]}
+              style={[
+                styles.applyBtn,
+                applyingPromo && styles.applyBtnDisabled,
+              ]}
               onPress={handleApplyPromo}
               disabled={applyingPromo}
             >

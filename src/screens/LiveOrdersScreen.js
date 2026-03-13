@@ -3,54 +3,79 @@ import {
   StyleSheet,
   View,
   Text,
+  Image,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import { getRestaurantOrders, updateRestaurantOrderStatus } from '../services/orderService';
+import {
+  getRestaurantOrders,
+  updateRestaurantOrderStatus,
+} from '../services/orderService';
 
-const TAB_STATUS = { New: 'pending', Accepted: 'completed', 'In Progress': 'preparing' };
+const TAB_STATUS = {
+  New: 'pending',
+  Accepted: 'completed',
+  'In Progress': 'preparing',
+};
 
 function formatItems(items) {
   if (!Array.isArray(items) || items.length === 0) return 'No items';
-  return items.map((i) => `${i.itemName || 'Item'} x ${i.quantity || 1}`).join(', ');
+  return items
+    .map(i => `${i.itemName || 'Item'} x ${i.quantity || 1}`)
+    .join(', ');
 }
 
 function statusToLabel(status) {
   const s = String(status || '').toLowerCase();
   switch (s) {
-    case 'pending': return 'Pending';
-    case 'confirmed': return 'Accepted';
-    case 'cancelled': return 'Rejected';
-    case 'preparing': return 'Preparing';
-    case 'completed': return 'Completed';
-    default: return status || 'Pending';
+    case 'pending':
+      return 'Pending';
+    case 'confirmed':
+      return 'Accepted';
+    case 'cancelled':
+      return 'Rejected';
+    case 'preparing':
+      return 'Preparing';
+    case 'completed':
+      return 'Completed';
+    default:
+      return status || 'Pending';
   }
 }
 
 function statusColor(status) {
   const s = String(status || '').toLowerCase();
   switch (s) {
-    case 'completed': return '#22c55e';
-    case 'cancelled': return '#F04438';
+    case 'completed':
+      return '#22c55e';
+    case 'cancelled':
+      return '#F04438';
     case 'confirmed':
-    case 'preparing': return '#FDB022';
-    default: return '#666';
+    case 'preparing':
+      return '#FDB022';
+    default:
+      return '#666';
   }
 }
 
 export default function LiveOrdersScreen() {
   const navigation = useNavigation();
-  const user = useSelector((s) => s?.app?.user);
+  const user = useSelector(s => s?.app?.user);
   const role = String(user?.role || '').toLowerCase();
-  const canAcceptReject = ['owner', 'admin', 'superadmin', 'super_admin'].includes(role);
+  const canAcceptReject = [
+    'owner',
+    'admin',
+    'superadmin',
+    'super_admin',
+  ].includes(role);
   const [activeTab, setActiveTab] = useState('New');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,7 +93,10 @@ export default function LiveOrdersScreen() {
       else setLoading(true);
       try {
         const status = TAB_STATUS[activeTab];
-        const res = await getRestaurantOrders(user.token, { status, limit: 50 });
+        const res = await getRestaurantOrders(user.token, {
+          status,
+          limit: 50,
+        });
         setOrders(res?.orders || []);
       } catch (e) {
         setOrders([]);
@@ -90,7 +118,7 @@ export default function LiveOrdersScreen() {
     loadOrders();
   }, [activeTab]);
 
-  const handleReject = (order) => {
+  const handleReject = order => {
     Alert.alert('Reject order', 'Cancel this order?', [
       { text: 'No', style: 'cancel' },
       {
@@ -98,8 +126,12 @@ export default function LiveOrdersScreen() {
         onPress: async () => {
           setUpdatingId(order.id);
           try {
-            await updateRestaurantOrderStatus(user.token, order.id, 'cancelled');
-            setOrders((prev) => prev.filter((o) => o.id !== order.id));
+            await updateRestaurantOrderStatus(
+              user.token,
+              order.id,
+              'cancelled',
+            );
+            setOrders(prev => prev.filter(o => o.id !== order.id));
           } catch (e) {
             Alert.alert('Error', e?.message || 'Failed to reject');
           } finally {
@@ -110,11 +142,11 @@ export default function LiveOrdersScreen() {
     ]);
   };
 
-  const handleAccept = async (order) => {
+  const handleAccept = async order => {
     setUpdatingId(order.id);
     try {
       await updateRestaurantOrderStatus(user.token, order.id, 'completed');
-      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setOrders(prev => prev.filter(o => o.id !== order.id));
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to accept');
     } finally {
@@ -138,7 +170,10 @@ export default function LiveOrdersScreen() {
       <StatusBar barStyle="dark-content" />
       <SafeAreaView style={styles.headerContainer}>
         <View style={styles.topRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
             <Icon name="chevron-left" size={20} color="white" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
@@ -151,13 +186,23 @@ export default function LiveOrdersScreen() {
         </View>
 
         <View style={styles.tabBar}>
-          {['New', 'Accepted', 'In Progress'].map((tab) => (
+          {['New', 'Accepted', 'In Progress'].map(tab => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
-              style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
+              style={[
+                styles.tabItem,
+                activeTab === tab && styles.activeTabItem,
+              ]}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab && styles.activeTabText,
+                ]}
+              >
+                {tab}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -172,7 +217,11 @@ export default function LiveOrdersScreen() {
           style={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => loadOrders(true)} colors={['#FDB022']} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadOrders(true)}
+              colors={['#FDB022']}
+            />
           }
         >
           {orders.length === 0 ? (
@@ -180,37 +229,74 @@ export default function LiveOrdersScreen() {
               <Text style={styles.emptyText}>No orders in this tab</Text>
             </View>
           ) : (
-            orders.map((order) => {
-              const customerName = order.user?.name || order.user?.email || 'Customer';
+            orders.map(order => {
+              const customerName =
+                order.user?.name || order.user?.email || 'Customer';
               const isUpdating = updatingId === order.id;
-              const isPending = String(order.status || '').toLowerCase() === 'pending';
+              const isPending =
+                String(order.status || '').toLowerCase() === 'pending';
               return (
                 <View key={order.id} style={styles.orderCard}>
                   <View style={styles.cardHeader}>
                     <View style={styles.userInfo}>
                       <View style={styles.userIconBg}>
-                        <Icon name="account-outline" size={20} color="#FDB022" />
+                        {(() => {
+                          const photo = order.user?.photos?.[0];
+                          const uri =
+                            typeof photo === 'string'
+                              ? photo
+                              : photo?.src ?? null;
+                          return uri ? (
+                            <Image
+                              source={{ uri }}
+                              style={styles.userAvatar}
+                            />
+                          ) : (
+                            <Icon
+                              name="account-outline"
+                              size={20}
+                              color="#FDB022"
+                            />
+                          );
+                        })()}
                       </View>
                       <Text style={styles.userName}>{customerName}</Text>
-                      <View style={[styles.statusBadge, { backgroundColor: statusColor(order.status) }]}>
-                        <Text style={styles.statusBadgeText}>{statusToLabel(order.status)}</Text>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          { backgroundColor: statusColor(order.status) },
+                        ]}
+                      >
+                        <Text style={styles.statusBadgeText}>
+                          {statusToLabel(order.status)}
+                        </Text>
                       </View>
                     </View>
                     <Text style={styles.priceText}>
-                      {order.currency || ''} {Number(order.totalAmount || 0).toFixed(2)}
+                      USD{Number(order.totalAmount || 0).toFixed(2)}
                     </Text>
                   </View>
 
                   <View style={styles.detailsContainer}>
                     <Text style={styles.detailLabel}>
-                      Order ID : <Text style={styles.detailValue}>#{String(order.id).slice(0, 12)}</Text>
+                      Order ID :{' '}
+                      <Text style={styles.detailValue}>
+                        #{String(order.id).slice(0, 12)}
+                      </Text>
                     </Text>
                     <Text style={styles.detailLabel}>
                       Payment : <Text style={styles.detailValue}>Paid</Text>
                     </Text>
                     <View style={styles.itemsRow}>
-                      <Icon name="shopping-outline" size={14} color="#666" style={{ marginRight: 5 }} />
-                      <Text style={styles.itemsText} numberOfLines={2}>{formatItems(order.items)}</Text>
+                      <Icon
+                        name="shopping-outline"
+                        size={14}
+                        color="#666"
+                        style={{ marginRight: 5 }}
+                      />
+                      <Text style={styles.itemsText} numberOfLines={2}>
+                        {formatItems(order.items)}
+                      </Text>
                     </View>
                   </View>
 
@@ -261,7 +347,12 @@ export default function LiveOrdersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F4F7' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 120 },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 120,
+  },
   helperText: { fontSize: 16, color: '#666' },
   emptyText: { fontSize: 14, color: '#98A2B3' },
   headerContainer: { backgroundColor: 'white' },
@@ -321,11 +412,30 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 16, color: '#667085', fontWeight: '500' },
   activeTabText: { color: 'white', fontWeight: 'bold' },
   listContainer: { padding: 15 },
-  orderCard: { backgroundColor: 'white', borderRadius: 12, padding: 15, marginBottom: 15 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  orderCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   userInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   userIconBg: { marginRight: 10 },
-  userName: { fontSize: 18, fontWeight: 'bold', color: '#1A1C1E', marginRight: 8 },
+  userAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1A1C1E',
+    marginRight: 8,
+  },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   statusBadgeText: { color: 'white', fontSize: 11, fontWeight: '600' },
   priceText: { fontSize: 18, fontWeight: 'bold', color: '#1A1C1E' },
@@ -334,7 +444,11 @@ const styles = StyleSheet.create({
   detailValue: { color: '#1A1C1E', fontWeight: '500' },
   itemsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   itemsText: { fontSize: 13, color: '#667085', flex: 1 },
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
   actionButton: {
     flex: 1,
     height: 40,

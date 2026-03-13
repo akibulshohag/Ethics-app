@@ -79,7 +79,8 @@ export const createPromotion = async (data) => {
 
 /**
  * Upload promotion with thumbnail (required) and optional video. Same pattern as post upload.
- * data: { userId, title, description?, promoAmount, promoCode, startDate, expireDate, menuItemIds?, thumbnailUri, thumbnailType?, thumbnailName?, videoUri?, videoType?, videoName?, duration? }
+ * data: { userId, title, description?, promoAmount, promoCode, startDate, expireDate, menuItemIds?, thumbnailUri, thumbnailType?, thumbnailName?, videoUri?, videoType?, videoName?, duration?, token? }
+ * Pass token when calling (e.g. from Redux) so auth is guaranteed; otherwise getAuthHeaders() is used.
  */
 export const uploadPromotion = async (data) => {
   if (!data?.userId) {
@@ -122,7 +123,10 @@ export const uploadPromotion = async (data) => {
   if (data.duration !== undefined && data.duration != null && !Number.isNaN(Number(data.duration))) {
     formData.append('duration', String(Math.floor(Number(data.duration))));
   }
-  const headers = getAuthHeaders();
+  const headers = data.token ? { Authorization: `Bearer ${data.token}` } : getAuthHeaders();
+  if (!headers.Authorization) {
+    throw new Error('You must be logged in to create a promotion.');
+  }
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000);
@@ -143,10 +147,17 @@ export const uploadPromotion = async (data) => {
     }
     return resData;
   } catch (err) {
-    const msg =
-      err.name === 'AbortError'
-        ? 'Upload timed out. Try again.'
+    const isNetworkFailure =
+      err.name === 'AbortError' ||
+      (err.message && (err.message === 'Network request failed' || err.message.includes('Network Error')));
+    const msg = err.name === 'AbortError'
+      ? 'Upload timed out. Try again.'
+      : isNetworkFailure
+        ? 'Network request failed. Check your internet connection and try again.'
         : err.message || 'Failed to upload promotion';
+    if (__DEV__) {
+      console.warn('[uploadPromotion]', err.message || err, err);
+    }
     throw new Error(msg);
   }
 };

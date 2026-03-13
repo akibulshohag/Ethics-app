@@ -91,7 +91,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '',
-    currency: 'BDT',
+    currency: 'USD',
   });
   const [sponsoredVideoFile, setSponsoredVideoFile] = useState(null);
   const [sponsoredThumbnailFile, setSponsoredThumbnailFile] = useState(null);
@@ -114,7 +114,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'BDT',
+    currency: 'USD',
   });
   const [featuredVideoFile, setFeaturedVideoFile] = useState(null);
   const [featuredThumbnailFile, setFeaturedThumbnailFile] = useState(null);
@@ -142,7 +142,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'BDT',
+    currency: 'USD',
   });
   const [vendorSponsoredForm, setVendorSponsoredForm] = useState({
     userId: '',
@@ -154,20 +154,31 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'BDT',
+    currency: 'USD',
   });
-  const [selectedVendorFeaturedUser, setSelectedVendorFeaturedUser] = useState(null);
-  const [vendorFeaturedSearchQuery, setVendorFeaturedSearchQuery] = useState('');
-  const [vendorFeaturedSearchResults, setVendorFeaturedSearchResults] = useState([]);
-  const [vendorFeaturedSearchLoading, setVendorFeaturedSearchLoading] = useState(false);
+  const [selectedVendorFeaturedUser, setSelectedVendorFeaturedUser] =
+    useState(null);
+  const [vendorFeaturedSearchQuery, setVendorFeaturedSearchQuery] =
+    useState('');
+  const [vendorFeaturedSearchResults, setVendorFeaturedSearchResults] =
+    useState([]);
+  const [vendorFeaturedSearchLoading, setVendorFeaturedSearchLoading] =
+    useState(false);
   const [vendorFeaturedVideoFile, setVendorFeaturedVideoFile] = useState(null);
-  const [vendorFeaturedThumbnailFile, setVendorFeaturedThumbnailFile] = useState(null);
-  const [selectedVendorSponsoredUser, setSelectedVendorSponsoredUser] = useState(null);
-  const [vendorSponsoredSearchQuery, setVendorSponsoredSearchQuery] = useState('');
-  const [vendorSponsoredSearchResults, setVendorSponsoredSearchResults] = useState([]);
-  const [vendorSponsoredSearchLoading, setVendorSponsoredSearchLoading] = useState(false);
-  const [vendorSponsoredVideoFile, setVendorSponsoredVideoFile] = useState(null);
-  const [vendorSponsoredThumbnailFile, setVendorSponsoredThumbnailFile] = useState(null);
+  const [vendorFeaturedThumbnailFile, setVendorFeaturedThumbnailFile] =
+    useState(null);
+  const [selectedVendorSponsoredUser, setSelectedVendorSponsoredUser] =
+    useState(null);
+  const [vendorSponsoredSearchQuery, setVendorSponsoredSearchQuery] =
+    useState('');
+  const [vendorSponsoredSearchResults, setVendorSponsoredSearchResults] =
+    useState([]);
+  const [vendorSponsoredSearchLoading, setVendorSponsoredSearchLoading] =
+    useState(false);
+  const [vendorSponsoredVideoFile, setVendorSponsoredVideoFile] =
+    useState(null);
+  const [vendorSponsoredThumbnailFile, setVendorSponsoredThumbnailFile] =
+    useState(null);
   const vendorFeaturedSearchTimeoutRef = useRef(null);
   const vendorSponsoredSearchTimeoutRef = useRef(null);
 
@@ -228,7 +239,7 @@ const AdminScreen = () => {
     }
   }, [user?.token]);
 
-  const searchVendorUsersForFeatured = useCallback(async (query) => {
+  const searchVendorUsersForFeatured = useCallback(async query => {
     setVendorFeaturedSearchLoading(true);
     try {
       const res = await getUsers({
@@ -239,9 +250,7 @@ const AdminScreen = () => {
       const list = res?.data || [];
       // Only show users with role owner
       setVendorFeaturedSearchResults(
-        list.filter(
-          (u) => (u?.role || '').toLowerCase() === 'owner',
-        ),
+        list.filter(u => (u?.role || '').toLowerCase() === 'owner'),
       );
     } catch (e) {
       setVendorFeaturedSearchResults([]);
@@ -250,7 +259,7 @@ const AdminScreen = () => {
     }
   }, []);
 
-  const searchVendorUsersForSponsored = useCallback(async (query) => {
+  const searchVendorUsersForSponsored = useCallback(async query => {
     setVendorSponsoredSearchLoading(true);
     try {
       const res = await getUsers({
@@ -261,9 +270,7 @@ const AdminScreen = () => {
       const list = res?.data || [];
       // Only show users with role owner
       setVendorSponsoredSearchResults(
-        list.filter(
-          (u) => (u?.role || '').toLowerCase() === 'owner',
-        ),
+        list.filter(u => (u?.role || '').toLowerCase() === 'owner'),
       );
     } catch (e) {
       setVendorSponsoredSearchResults([]);
@@ -480,7 +487,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '',
-      currency: 'BDT',
+      currency: 'USD',
     });
     setSponsoredVideoFile(null);
     setSponsoredThumbnailFile(null);
@@ -504,7 +511,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'BDT',
+      currency: 'USD',
     });
     setFeaturedVideoFile(null);
     setFeaturedThumbnailFile(null);
@@ -526,7 +533,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'BDT',
+      currency: 'USD',
     });
     setSelectedVendorFeaturedUser(null);
     setVendorFeaturedSearchQuery('');
@@ -547,7 +554,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'BDT',
+      currency: 'USD',
     });
     setSelectedVendorSponsoredUser(null);
     setVendorSponsoredSearchQuery('');
@@ -658,7 +665,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid),
-        currency: currency || 'BDT',
+        currency: currency || 'USD',
       };
       if (isAdmin) body.ownerId = ownerId;
       await createSponsored(user.token, body);
@@ -838,7 +845,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'BDT',
+        currency: currency || 'USD',
       };
       if (isAdmin) body.ownerId = ownerId;
       await createFeatured(user.token, body);
@@ -933,7 +940,9 @@ const AdminScreen = () => {
       await createVendorFeatured(user.token, {
         userId: vendorFeaturedForm.userId,
         videoId: finalVideoId,
-        areaName: (areaName || '').trim() || (selectedVendorFeaturedUser.address || '').trim(),
+        areaName:
+          (areaName || '').trim() ||
+          (selectedVendorFeaturedUser.address || '').trim(),
         latitude:
           latitude !== '' && latitude != null
             ? parseFloat(latitude)
@@ -946,7 +955,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'BDT',
+        currency: currency || 'USD',
       });
       setModalOpen(false);
       loadVendorFeatured();
@@ -1022,7 +1031,9 @@ const AdminScreen = () => {
       await createVendorSponsored(user.token, {
         userId: vendorSponsoredForm.userId,
         videoId: finalVideoId,
-        areaName: (areaName || '').trim() || (selectedVendorSponsoredUser.address || '').trim(),
+        areaName:
+          (areaName || '').trim() ||
+          (selectedVendorSponsoredUser.address || '').trim(),
         latitude:
           latitude !== '' && latitude != null
             ? parseFloat(latitude)
@@ -1035,7 +1046,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'BDT',
+        currency: currency || 'USD',
       });
       setModalOpen(false);
       loadVendorSponsored();
@@ -1708,10 +1719,7 @@ const AdminScreen = () => {
                 </Text>
                 {selectedVendorFeaturedUser ? (
                   <View style={styles.selectedOwnerBox}>
-                    <Text
-                      style={styles.selectedOwnerName}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.selectedOwnerName} numberOfLines={1}>
                       {selectedVendorFeaturedUser.nickname ||
                         selectedVendorFeaturedUser.name ||
                         selectedVendorFeaturedUser.email}
@@ -1896,8 +1904,8 @@ const AdminScreen = () => {
                     </Text>
                   ) : (
                     <Text style={styles.hintText}>
-                      Selected owner has no address/location saved. Update
-                      owner profile first.
+                      Selected owner has no address/location saved. Update owner
+                      profile first.
                     </Text>
                   )}
                 </View>
@@ -1950,7 +1958,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setVendorFeaturedForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
+                  placeholder="USD"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -1964,10 +1972,7 @@ const AdminScreen = () => {
                 </Text>
                 {selectedVendorSponsoredUser ? (
                   <View style={styles.selectedOwnerBox}>
-                    <Text
-                      style={styles.selectedOwnerName}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.selectedOwnerName} numberOfLines={1}>
                       {selectedVendorSponsoredUser.nickname ||
                         selectedVendorSponsoredUser.name ||
                         selectedVendorSponsoredUser.email}
@@ -2135,7 +2140,8 @@ const AdminScreen = () => {
                 >
                   <Text style={styles.addBtnText}>
                     {vendorSponsoredThumbnailFile
-                      ? vendorSponsoredThumbnailFile.fileName || 'Image selected'
+                      ? vendorSponsoredThumbnailFile.fileName ||
+                        'Image selected'
                       : 'Pick thumbnail'}
                   </Text>
                 </TouchableOpacity>
@@ -2152,8 +2158,8 @@ const AdminScreen = () => {
                     </Text>
                   ) : (
                     <Text style={styles.hintText}>
-                      Selected owner has no address/location saved. Update
-                      owner profile first.
+                      Selected owner has no address/location saved. Update owner
+                      profile first.
                     </Text>
                   )}
                 </View>
@@ -2206,7 +2212,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setVendorSponsoredForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
+                  placeholder="USD"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2480,7 +2486,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setFeaturedForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
+                  placeholder="USD"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2756,7 +2762,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setSponsoredForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
+                  placeholder="USD"
                   placeholderTextColor="#999"
                 />
               </ScrollView>

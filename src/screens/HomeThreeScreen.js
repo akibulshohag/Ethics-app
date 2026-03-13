@@ -143,7 +143,7 @@ const HomeThreeScreen = ({ onBack }) => {
           itemName: menuItem?.itemName || 'Item',
           price: menuItem?.price ?? 0,
           quantity,
-          currency: 'BDT',
+          currency: 'USD',
           imageUrl: menuItem?.imageUrl,
         };
       });
@@ -173,7 +173,7 @@ const HomeThreeScreen = ({ onBack }) => {
             itemName: menuItem?.itemName || 'Item',
             price: menuItem?.price ?? 0,
             quantity,
-            currency: 'BDT',
+            currency: 'USD',
             imageUrl: menuItem?.imageUrl,
           };
         });
@@ -185,7 +185,7 @@ const HomeThreeScreen = ({ onBack }) => {
         itemName: 'Tandoori Chicken',
         price: 12.99,
         quantity: staticQuantities[idx] ?? 0,
-        currency: 'BDT',
+        currency: 'USD',
       }));
   };
 
@@ -212,9 +212,7 @@ const HomeThreeScreen = ({ onBack }) => {
           <View style={styles.resTitleRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.resTitle}>{resTitle}</Text>
-              <Text style={styles.resSubTitle}>
-                {resLocation || '—'}
-              </Text>
+              <Text style={styles.resSubTitle}>{resLocation || '—'}</Text>
             </View>
 
             {/* Right side container to stack badge and text */}

@@ -15,43 +15,78 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import { getRestaurantOrderById, updateRestaurantOrderStatus } from '../services/orderService';
+import {
+  getRestaurantOrderById,
+  updateRestaurantOrderStatus,
+} from '../services/orderService';
 
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${d.getHours() >= 12 ? 'pm' : 'am'}, ${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getFullYear()}`;
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${
+    d.getHours() >= 12 ? 'pm' : 'am'
+  }, ${d.getDate()} ${
+    [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ][d.getMonth()]
+  } ${d.getFullYear()}`;
 }
 
-const statusToLabel = (status) => {
+const statusToLabel = status => {
   const s = String(status || '').toLowerCase();
   switch (s) {
-    case 'pending': return 'Pending';
-    case 'confirmed': return 'Accepted';
-    case 'cancelled': return 'Rejected';
-    case 'preparing': return 'Preparing';
-    case 'completed': return 'Completed';
-    default: return status || 'Pending';
+    case 'pending':
+      return 'Pending';
+    case 'confirmed':
+      return 'Accepted';
+    case 'cancelled':
+      return 'Rejected';
+    case 'preparing':
+      return 'Preparing';
+    case 'completed':
+      return 'Completed';
+    default:
+      return status || 'Pending';
   }
 };
 
-const statusColor = (status) => {
+const statusColor = status => {
   switch (String(status || '').toLowerCase()) {
-    case 'completed': return '#22c55e';
-    case 'cancelled': return '#F04438';
+    case 'completed':
+      return '#22c55e';
+    case 'cancelled':
+      return '#F04438';
     case 'confirmed':
-    case 'preparing': return '#FDB022';
-    default: return '#666';
+    case 'preparing':
+      return '#FDB022';
+    default:
+      return '#666';
   }
 };
 
 export default function OrderDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const user = useSelector((s) => s?.app?.user);
+  const user = useSelector(s => s?.app?.user);
   const role = String(user?.role || '').toLowerCase();
-  const canAcceptReject = ['owner', 'admin', 'superadmin', 'super_admin'].includes(role);
+  const canAcceptReject = [
+    'owner',
+    'admin',
+    'superadmin',
+    'super_admin',
+  ].includes(role);
   const { orderId, order: orderParam } = route.params || {};
   const [order, setOrder] = useState(orderParam || null);
   const [loading, setLoading] = useState(!orderParam && !!orderId);
@@ -68,7 +103,7 @@ export default function OrderDetailsScreen() {
     }
     let cancelled = false;
     getRestaurantOrderById(user.token, orderId)
-      .then((data) => {
+      .then(data => {
         if (!cancelled) setOrder(data);
       })
       .catch(() => {
@@ -77,7 +112,9 @@ export default function OrderDetailsScreen() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [orderId, orderParam, user?.token]);
 
   const handleCall = () => {
@@ -109,7 +146,11 @@ export default function OrderDetailsScreen() {
         onPress: async () => {
           setUpdating(true);
           try {
-            await updateRestaurantOrderStatus(user.token, order.id, 'cancelled');
+            await updateRestaurantOrderStatus(
+              user.token,
+              order.id,
+              'cancelled',
+            );
             navigation.goBack();
           } catch (e) {
             Alert.alert('Error', e?.message || 'Failed to reject');
@@ -125,7 +166,7 @@ export default function OrderDetailsScreen() {
     setUpdating(true);
     try {
       await updateRestaurantOrderStatus(user.token, order.id, 'completed');
-      setOrder((prev) => (prev ? { ...prev, status: 'completed' } : prev));
+      setOrder(prev => (prev ? { ...prev, status: 'completed' } : prev));
       navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to accept');
@@ -162,33 +203,50 @@ export default function OrderDetailsScreen() {
 
   const customerName = order.user?.name || order.user?.email || 'Customer';
   const phone = order.user?.phone || order.user?.phoneNumber || '';
-  const avatarUri = order.user?.photos?.[0] || 'https://i.pravatar.cc/150?u=user';
+  const avatarUri =
+    order.user?.photos?.[0] || 'https://i.pravatar.cc/150?u=user';
   const items = order.items || [];
   const totalAmount = Number(order.totalAmount || 0);
-  const currency = order.currency || 'BDT';
+  const currency = order.currency || 'USD';
   const displayOrderId = order.id ? `#${String(order.id).slice(0, 12)}` : '—';
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backIconButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backIconButton}
+          onPress={() => navigation.goBack()}
+        >
           <Icon name="chevron-left" size={26} color="#1A1C1E" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Details</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.card}>
           <View style={styles.customerHeader}>
             <Text style={styles.customerLabel}>Customer</Text>
             <View style={styles.customerInfoRow}>
-              <Image source={{ uri: avatarUri }} style={styles.customerAvatar} />
+              <Image
+                source={{ uri: avatarUri }}
+                style={styles.customerAvatar}
+              />
               <View style={styles.customerDetails}>
                 <View style={styles.customerNameRow}>
                   <Text style={styles.customerName}>{customerName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusColor(order.status) }]}>
-                    <Text style={styles.statusBadgeText}>{statusToLabel(order.status)}</Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: statusColor(order.status) },
+                    ]}
+                  >
+                    <Text style={styles.statusBadgeText}>
+                      {statusToLabel(order.status)}
+                    </Text>
                   </View>
                 </View>
                 {phone ? (
@@ -202,7 +260,10 @@ export default function OrderDetailsScreen() {
                 <TouchableOpacity style={styles.iconCircle} onPress={openChat}>
                   <Icon name="message-text" size={18} color="white" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.iconCircle} onPress={handleCall}>
+                <TouchableOpacity
+                  style={styles.iconCircle}
+                  onPress={handleCall}
+                >
                   <Icon name="phone" size={18} color="white" />
                 </TouchableOpacity>
               </View>
@@ -211,8 +272,12 @@ export default function OrderDetailsScreen() {
 
           <View style={styles.addressSection}>
             <Text style={styles.sectionLabel}>Delivery Address</Text>
-            <Text style={styles.addressText}>{order.deliveryAddress || '—'}</Text>
-            <Text style={[styles.sectionLabel, { marginTop: 15 }]}>Delivery Time</Text>
+            <Text style={styles.addressText}>
+              {order.deliveryAddress || '—'}
+            </Text>
+            <Text style={[styles.sectionLabel, { marginTop: 15 }]}>
+              Delivery Time
+            </Text>
             <View style={styles.timeRow}>
               <Icon name="truck-delivery-outline" size={20} color="#1A1C1E" />
               <Text style={styles.timeText}>{formatDate(order.createdAt)}</Text>
@@ -228,7 +293,9 @@ export default function OrderDetailsScreen() {
               return (
                 <View key={item.id || idx} style={styles.itemRow}>
                   <View style={styles.itemMain}>
-                    <Text style={styles.itemName}>{item.itemName || 'Item'}</Text>
+                    <Text style={styles.itemName}>
+                      {item.itemName || 'Item'}
+                    </Text>
                     <View style={styles.qtyRow}>
                       <View style={styles.qtyBox}>
                         <Text style={styles.qtyText}>{item.quantity || 1}</Text>
@@ -265,7 +332,9 @@ export default function OrderDetailsScreen() {
           <View style={styles.billingDivider} />
           <View style={styles.billingRow}>
             <Text style={styles.billingLabel}>Payment</Text>
-            <Text style={[styles.billingValue, { fontWeight: '700' }]}>Paid</Text>
+            <Text style={[styles.billingValue, { fontWeight: '700' }]}>
+              Paid
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -277,7 +346,11 @@ export default function OrderDetailsScreen() {
             onPress={handleReject}
             disabled={updating || order.status === 'cancelled'}
           >
-            {updating ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.footerBtnText}>Reject</Text>}
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Reject</Text>
+            )}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.footerBtn, styles.acceptBtn]}
@@ -298,11 +371,26 @@ const styles = StyleSheet.create({
   helperText: { fontSize: 16, color: '#666' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20 },
   backIconButton: { padding: 4 },
-  headerTitle: { fontSize: 20, fontWeight: '700', marginLeft: 15, color: '#1A1C1E' },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginLeft: 15,
+    color: '#1A1C1E',
+  },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
-  card: { backgroundColor: 'white', borderRadius: 16, marginBottom: 15, overflow: 'hidden' },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginBottom: 15,
+    overflow: 'hidden',
+  },
   customerHeader: { backgroundColor: '#FDB022', padding: 20 },
-  customerLabel: { color: '#424242', fontSize: 18, fontWeight: '600', marginBottom: 10 },
+  customerLabel: {
+    color: '#424242',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
   customerInfoRow: { flexDirection: 'row', alignItems: 'center' },
   customerAvatar: {
     width: 70,
@@ -312,7 +400,12 @@ const styles = StyleSheet.create({
     borderColor: '#1A1C1E',
   },
   customerDetails: { marginLeft: 15, flex: 1 },
-  customerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  customerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   customerName: { color: 'white', fontSize: 22, fontWeight: 'bold' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   statusBadgeText: { color: 'white', fontSize: 12, fontWeight: '600' },
@@ -335,7 +428,11 @@ const styles = StyleSheet.create({
   timeText: { marginLeft: 10, color: '#1A1C1E', fontWeight: '500' },
   itemPadding: { padding: 20 },
   orderIdText: { fontSize: 16, fontWeight: '600', marginBottom: 15 },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
   itemMain: { flex: 1 },
   itemName: { fontSize: 16, fontWeight: '700', color: '#1A1C1E' },
   itemSubtext: { fontSize: 12, color: '#98A2B3', marginTop: 2 },
@@ -350,10 +447,18 @@ const styles = StyleSheet.create({
   qtyText: { color: '#1A1C1E', fontSize: 14, fontWeight: 'bold' },
   priceCalc: { color: '#1A1C1E', fontSize: 14, fontWeight: '600' },
   itemTotal: { fontSize: 16, fontWeight: '700', color: '#1A1C1E' },
-  billingRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15 },
+  billingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 15,
+  },
   billingLabel: { fontSize: 16, color: '#1A1C1E', fontWeight: '500' },
   billingValue: { fontSize: 16, color: '#1A1C1E', fontWeight: '600' },
-  billingDivider: { height: 1, backgroundColor: '#F2F4F7', marginHorizontal: 15 },
+  billingDivider: {
+    height: 1,
+    backgroundColor: '#F2F4F7',
+    marginHorizontal: 15,
+  },
   footer: {
     position: 'absolute',
     bottom: 0,

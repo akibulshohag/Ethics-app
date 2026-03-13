@@ -14,7 +14,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, SHADOWS } from '../constants/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
-const DEFAULT_IMAGE = 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
+const DEFAULT_IMAGE =
+  'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
 
 const CartDetailsScreen = () => {
   const navigation = useNavigation();
@@ -26,7 +27,7 @@ const CartDetailsScreen = () => {
     (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
     0,
   );
-  const currency = items[0]?.currency || 'BDT';
+  const currency = items[0]?.currency || 'USD';
 
   const onCheckout = () => {
     if (!items.length || !ownerId) return;
@@ -47,13 +48,21 @@ const CartDetailsScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {items.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name="cart-outline" size={64} color={COLORS.gray400} />
             <Text style={styles.emptyText}>Your cart is empty</Text>
-            <Text style={styles.emptySubtext}>Add items from a restaurant to see them here.</Text>
-            <TouchableOpacity style={styles.backToShopBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.emptySubtext}>
+              Add items from a restaurant to see them here.
+            </Text>
+            <TouchableOpacity
+              style={styles.backToShopBtn}
+              onPress={() => navigation.goBack()}
+            >
               <Text style={styles.backToShopText}>Go back</Text>
             </TouchableOpacity>
           </View>
@@ -74,12 +83,12 @@ const CartDetailsScreen = () => {
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.itemName}</Text>
                       <Text style={styles.itemMeta}>
-                        {item.currency || 'BDT'} {price.toFixed(2)} × {qty}
+                        {item.currency || 'USD'} {price.toFixed(2)} × {qty}
                       </Text>
                     </View>
                     <View style={styles.itemPriceColumn}>
                       <Text style={styles.itemPrice}>
-                        {item.currency || 'BDT'} {lineTotal.toFixed(2)}
+                        {item.currency || 'USD'} {lineTotal.toFixed(2)}
                       </Text>
                     </View>
                   </View>
@@ -105,7 +114,9 @@ const CartDetailsScreen = () => {
           <View style={styles.footerRow}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalPrice}>{currency} {total.toFixed(2)}</Text>
+              <Text style={styles.totalPrice}>
+                {currency} {total.toFixed(2)}
+              </Text>
             </View>
             <TouchableOpacity style={styles.checkoutBtn} onPress={onCheckout}>
               <Text style={styles.checkoutBtnText}>Checkout</Text>
@@ -116,7 +127,6 @@ const CartDetailsScreen = () => {
     </SafeAreaView>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
@@ -505,6 +515,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
 
 export default CartDetailsScreen;
