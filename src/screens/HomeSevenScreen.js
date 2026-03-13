@@ -139,7 +139,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
             {/* Login Card */}
             <View style={styles.loginCard}>
               <View style={styles.cardHeader}>
-                <Text style={styles.headerTitle}>Diner log in</Text>
+                <Text style={styles.headerTitle}>Log in</Text>
               </View>
 
               <View style={styles.cardBody}>
