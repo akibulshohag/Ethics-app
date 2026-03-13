@@ -112,7 +112,8 @@ const mapVideoApiToModal = (v = {}) => {
     id: v.id,
     title: v.title || 'Untitled',
     videoUrl: v.videoUrl,
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+    thumbnail:
+      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
     durationSeconds: v.duration ?? 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? 0,
@@ -143,7 +144,11 @@ const mapShortApiToModal = (s = {}) => {
     id: s.id,
     title: s.title || 'Short',
     videoUrl: s.videoUrl,
-    thumbnail: s.thumbnailUrl || s.coverUrl || s.videoUrl || 'https://via.placeholder.com/600',
+    thumbnail:
+      s.thumbnailUrl ||
+      s.coverUrl ||
+      s.videoUrl ||
+      'https://via.placeholder.com/600',
     durationSeconds: s.duration ?? 0,
     likeCount: s.likeCount ?? s._count?.likes ?? 0,
     dislikeCount: s.dislikeCount ?? 0,
@@ -164,12 +169,16 @@ const mapShortApiToModal = (s = {}) => {
 const mapPostToCard = (post, user) => {
   const u = post.user || user || {};
   const channelName = u.nickname || u.name || 'Unknown';
-  const avatar =
+  const avatarRaw =
     u.photos?.[0] ||
     (Array.isArray(u.photos) && u.photos[0]) ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       channelName,
     )}&background=111&color=fff`;
+  const channelAvatar =
+    typeof avatarRaw === 'string'
+      ? avatarRaw
+      : (avatarRaw?.src ?? avatarRaw?.uri) || `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=111&color=fff`;
   const duration =
     post.mediaType === 'video' && post.duration != null
       ? `${Math.floor(post.duration / 60)}:${String(
@@ -181,7 +190,7 @@ const mapPostToCard = (post, user) => {
     postId: post.id,
     title: post.title || 'Untitled',
     channelName,
-    channelAvatar: avatar,
+    channelAvatar,
     publishedAt: formatTimeAgo(post.publishedAt || post.createdAt),
     thumbnail:
       post.thumbnailUrl || post.mediaUrl || 'https://via.placeholder.com/300',
@@ -393,6 +402,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     useState(false);
   const [createPromotionModalVisible, setCreatePromotionModalVisible] =
     useState(false);
+  const [promotionSubTab, setPromotionSubTab] = useState('my'); // 'my' | 'other'
+  const [promotionDetailModalVisible, setPromotionDetailModalVisible] =
+    useState(false);
+  const [selectedPromotion, setSelectedPromotion] = useState(null);
+  const [promotionVideoPaused, setPromotionVideoPaused] = useState(true);
+  const promotionVideoRef = useRef(null);
   const [menuItems, setMenuItems] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
 
@@ -590,8 +605,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (activeTab === 'Promotions' && profileUserId) {
-      if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross();
-      else loadPromotions();
+      loadPromotions(); // always load own promotions (My Promotions)
+      if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross(); // Other Promotions
     }
   }, [
     activeTab,
@@ -727,11 +742,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           mv = mapShortApiToModal(res);
           setModalVideo(mv);
         } else {
-          const res = await getVideoById(
-            item.id,
-            currentUser?.id,
-            viewerRole,
-          );
+          const res = await getVideoById(item.id, currentUser?.id, viewerRole);
           mv = mapVideoApiToModal(res);
           setModalVideo(mv);
         }
@@ -743,6 +754,23 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 isSubscribed: p?.isSubscribed ?? false,
                 subscriberCount: p?.subscriberCount ?? 0,
               });
+              const profileAvatar =
+                p?.channelAvatar ||
+                (p?.photos?.[0] && (typeof p.photos[0] === 'string' ? p.photos[0] : p.photos[0]?.src));
+              if (profileAvatar) {
+                setModalVideo(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        channelAvatar:
+                          typeof profileAvatar === 'string'
+                            ? profileAvatar
+                            : profileAvatar?.src ?? prev.channelAvatar,
+                        channelName: p?.channelName || p?.nickname || prev.channelName,
+                      }
+                    : prev,
+                );
+              }
             })
             .catch(() => {});
         }
@@ -825,7 +853,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     });
     try {
       if (modalContentType === 'short') {
-        const res = await shortsService.toggleLike(modalVideo.id, currentUser.id);
+        const res = await shortsService.toggleLike(
+          modalVideo.id,
+          currentUser.id,
+        );
         if (res)
           setModalVideo(prev =>
             prev
@@ -854,11 +885,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           );
       }
     } catch (_) {}
-  }, [
-    modalVideo?.id,
-    modalContentType,
-    currentUser?.id,
-  ]);
+  }, [modalVideo?.id, modalContentType, currentUser?.id]);
 
   const handleModalDislike = useCallback(async () => {
     if (requireLogin()) return;
@@ -914,11 +941,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           );
       }
     } catch (_) {}
-  }, [
-    modalVideo?.id,
-    modalContentType,
-    currentUser?.id,
-  ]);
+  }, [modalVideo?.id, modalContentType, currentUser?.id]);
 
   const handleModalShare = useCallback(async () => {
     if (!modalVideo?.id) return;
@@ -935,7 +958,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         title: modalVideo?.title || 'Video',
       });
     } catch (_) {}
-  }, [modalVideo?.id, modalVideo?.title, modalVideo?.videoUrl, modalContentType]);
+  }, [
+    modalVideo?.id,
+    modalVideo?.title,
+    modalVideo?.videoUrl,
+    modalContentType,
+  ]);
 
   const handleSubscribe = useCallback(async () => {
     if (requireLogin()) return;
@@ -962,11 +990,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     } finally {
       setSubLoading(false);
     }
-  }, [
-    modalVideo?.userId,
-    currentUser?.id,
-    channelSub.isSubscribed,
-  ]);
+  }, [modalVideo?.userId, currentUser?.id, channelSub.isSubscribed]);
 
   const openEditProfile = () => {
     setEditName(profile?.name ?? currentUser?.name ?? '');
@@ -1075,11 +1099,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         if (!coords && addressStr) {
           coords = await geocodeAddress(addressStr + ', United Kingdom');
         }
-        if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) {
+        if (
+          !coords ||
+          !Number.isFinite(coords.lat) ||
+          !Number.isFinite(coords.lng)
+        ) {
           const fallback = getFallbackCoordsForUKArea(addressStr);
           if (fallback) coords = fallback;
         }
-        if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+        if (
+          coords &&
+          Number.isFinite(coords.lat) &&
+          Number.isFinite(coords.lng)
+        ) {
           latitude = coords.lat;
           longitude = coords.lng;
         }
@@ -1292,6 +1324,47 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </ScrollView>
       </View>
 
+      {/* Promotions sub-tabs: My Promotions | Other Promotions (owner sees vendor promos, vendor sees owner promos) */}
+      {activeTab === 'Promotions' ? (
+        <View style={styles.promotionSubTabRow}>
+          <TouchableOpacity
+            style={[
+              styles.promotionSubTabBtn,
+              promotionSubTab === 'my' && styles.promotionSubTabBtnActive,
+            ]}
+            onPress={() => setPromotionSubTab('my')}
+          >
+            <Text
+              style={[
+                styles.promotionSubTabText,
+                promotionSubTab === 'my' && styles.promotionSubTabTextActive,
+              ]}
+            >
+              My Promotions
+            </Text>
+          </TouchableOpacity>
+          {isOwnProfile && isOwnerOrVendor ? (
+            <TouchableOpacity
+              style={[
+                styles.promotionSubTabBtn,
+                promotionSubTab === 'other' && styles.promotionSubTabBtnActive,
+              ]}
+              onPress={() => setPromotionSubTab('other')}
+            >
+              <Text
+                style={[
+                  styles.promotionSubTabText,
+                  promotionSubTab === 'other' &&
+                    styles.promotionSubTabTextActive,
+                ]}
+              >
+                Other Promotions
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
       {/* Section Header */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
@@ -1303,6 +1376,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             ? 'Notifications'
             : activeTab === 'Menus'
             ? 'Menus'
+            : activeTab === 'Promotions'
+            ? promotionSubTab === 'other'
+              ? 'Other Promotions'
+              : 'My Promotions'
             : activeTab}
         </Text>
         {activeTab === 'Menus' && isOwnProfile && isOwnerOrVendor ? (
@@ -1315,7 +1392,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
-        ) : activeTab === 'Promotions' && isOwnProfile && isOwnerOrVendor ? (
+        ) : activeTab === 'Promotions' &&
+          promotionSubTab === 'my' &&
+          isOwnProfile &&
+          isOwnerOrVendor ? (
           <TouchableOpacity
             onPress={() => setCreatePromotionModalVisible(true)}
           >
@@ -1345,8 +1425,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         return posts;
       case 'Promotions': {
         const list =
-          isOwnProfile && isOwnerOrVendor ? nearbyPromotionsCross : promotions;
+          promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
+            ? nearbyPromotionsCross
+            : promotions;
         return list.map(p => ({
+          ...p,
           id: p.id,
           title: p.title,
           image: p.thumbnailUrl || p.videoUrl,
@@ -1355,10 +1438,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               ? `${p.promoCode || ''} • ${p.promoAmount}% off`
               : p.promoCode || '',
           views: formatCount(p.viewCount),
-          promoCode: p.promoCode,
-          promoAmount: p.promoAmount,
-          startDate: p.startDate,
-          expireDate: p.expireDate,
         }));
       }
       case 'Grid':
@@ -1382,9 +1461,33 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Posts') {
       const postId = item.postId || item.id;
+      // Posts API does not return user.photos; use profile (channel) avatar first so owner photo shows
+      const profileAvatarUri =
+        profile?.channelAvatar && String(profile.channelAvatar).trim()
+          ? safeImageUri(profile.channelAvatar)
+          : null;
+      const profilePhotoUri =
+        profile?.photos?.[0] != null
+          ? safeImageUri(
+              typeof profile.photos[0] === 'string'
+                ? profile.photos[0]
+                : profile.photos[0]?.src,
+            )
+          : null;
+      const postOwnerAvatar =
+        (profileAvatarUri && !profileAvatarUri.includes('ui-avatars.com')
+          ? profileAvatarUri
+          : null) ||
+        (profilePhotoUri && !profilePhotoUri.includes('via.placeholder')
+          ? profilePhotoUri
+          : null) ||
+        item.channelAvatar;
       return (
         <BusinessVideoCard
-          video={item}
+          video={{
+            ...item,
+            channelAvatar: postOwnerAvatar || item.channelAvatar,
+          }}
           postId={postId}
           onPress={undefined}
           onLike={currentUser?.id ? () => handlePostLike(postId) : undefined}
@@ -1406,6 +1509,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             image: item.image
               ? safeImageUri(item.image)
               : 'https://via.placeholder.com/300',
+          }}
+          onPress={() => {
+            setSelectedPromotion(item);
+            setPromotionVideoPaused(true);
+            setPromotionDetailModalVisible(true);
           }}
         />
       );
@@ -1472,10 +1580,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             title: item.title || 'Video',
             views: item.views || formatCount(item.viewCount),
             location:
-              item.location ||
-              profile?.address ||
-              currentUser?.address ||
-              '',
+              item.location || profile?.address || currentUser?.address || '',
             distance: item.distance || '',
           }}
           onPress={() => openVideoModal(item)}
@@ -1547,15 +1652,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       ) : null}
       {activeTab === 'Promotions' &&
-      (isOwnProfile && isOwnerOrVendor
+      (promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
         ? nearbyPromotionsCrossLoading
         : promotionsLoading) &&
-      (isOwnProfile && isOwnerOrVendor
+      (promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
         ? nearbyPromotionsCross.length
         : promotions.length) === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
-          <Text style={styles.loadingText}>Loading promotions...</Text>
+          <Text style={styles.loadingText}>
+            {promotionSubTab === 'other'
+              ? 'Loading other promotions...'
+              : 'Loading promotions...'}
+          </Text>
         </View>
       ) : null}
       {activeTab === 'Menus' && menuLoading && menuItems.length === 0 ? (
@@ -1614,12 +1723,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           ) : activeTab === 'Promotions' && profileUserId ? (
             <RefreshControl
               refreshing={
-                isOwnProfile && isOwnerOrVendor
+                promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
                   ? nearbyPromotionsCrossRefreshing
                   : promotionsRefreshing
               }
               onRefresh={() =>
-                isOwnProfile && isOwnerOrVendor
+                promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
                   ? loadNearbyPromotionsCross(true)
                   : loadPromotions(true)
               }
@@ -1662,6 +1771,173 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         }}
         userId={currentUser?.id}
       />
+
+      {/* Promotion detail modal: video/image + full details */}
+      <Modal
+        visible={promotionDetailModalVisible && !!selectedPromotion}
+        animationType="slide"
+        onRequestClose={() => {
+          setPromotionDetailModalVisible(false);
+          setSelectedPromotion(null);
+          setPromotionVideoPaused(true);
+        }}
+      >
+        <SafeAreaView
+          style={styles.promotionDetailModalContainer}
+          edges={['top']}
+        >
+          <View style={styles.promotionDetailModalHeader}>
+            <TouchableOpacity
+              style={styles.promotionDetailCloseBtn}
+              onPress={() => {
+                setPromotionDetailModalVisible(false);
+                setSelectedPromotion(null);
+                setPromotionVideoPaused(true);
+              }}
+            >
+              <MaterialCommunityIcons name="close" size={24} color="#333" />
+            </TouchableOpacity>
+            <Text style={styles.promotionDetailModalTitle} numberOfLines={1}>
+              {selectedPromotion?.title || 'Promotion'}
+            </Text>
+            <View style={styles.promotionDetailCloseBtn} />
+          </View>
+          <ScrollView
+            style={styles.promotionDetailScroll}
+            showsVerticalScrollIndicator={false}
+          >
+            {selectedPromotion?.videoUrl ? (
+              <View style={styles.promotionDetailMediaWrap}>
+                <Video
+                  ref={promotionVideoRef}
+                  source={{ uri: String(selectedPromotion.videoUrl).trim() }}
+                  style={styles.promotionDetailVideo}
+                  resizeMode="contain"
+                  paused={promotionVideoPaused}
+                  repeat={false}
+                  controls={false}
+                  onError={() => {}}
+                />
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={() => setPromotionVideoPaused(p => !p)}
+                >
+                  <View style={styles.promotionDetailPlayOverlay}>
+                    <MaterialCommunityIcons
+                      name={
+                        promotionVideoPaused
+                          ? 'play-circle-outline'
+                          : 'pause-circle-outline'
+                      }
+                      size={72}
+                      color="rgba(255,255,255,0.9)"
+                    />
+                  </View>
+                </Pressable>
+              </View>
+            ) : (
+              <Image
+                source={{
+                  uri: safeImageUri(
+                    selectedPromotion?.thumbnailUrl ||
+                      selectedPromotion?.image ||
+                      'https://via.placeholder.com/600',
+                  ),
+                }}
+                style={styles.promotionDetailImage}
+                resizeMode="cover"
+              />
+            )}
+            <View style={styles.promotionDetailBody}>
+              <Text style={styles.promotionDetailTitle}>
+                {selectedPromotion?.title || '—'}
+              </Text>
+              {selectedPromotion?.description ? (
+                <Text style={styles.promotionDetailDescription}>
+                  {selectedPromotion.description}
+                </Text>
+              ) : null}
+              <View style={styles.promotionDetailMetaRow}>
+                <MaterialCommunityIcons
+                  name="eye-outline"
+                  size={18}
+                  color="#666"
+                />
+                <Text style={styles.promotionDetailMetaText}>
+                  {formatCount(selectedPromotion?.viewCount ?? 0)} views
+                </Text>
+              </View>
+              {selectedPromotion?.promoCode ? (
+                <View style={styles.promotionDetailPromoRow}>
+                  <Text style={styles.promotionDetailPromoLabel}>
+                    Promo Code
+                  </Text>
+                  <Text style={styles.promotionDetailPromoCode}>
+                    {selectedPromotion.promoCode}
+                  </Text>
+                </View>
+              ) : null}
+              {selectedPromotion?.promoAmount != null ? (
+                <Text style={styles.promotionDetailOffer}>
+                  Get {selectedPromotion.promoAmount}% OFF
+                </Text>
+              ) : null}
+              {selectedPromotion?.startDate ? (
+                <Text style={styles.promotionDetailDate}>
+                  Start:{' '}
+                  {new Date(selectedPromotion.startDate).toLocaleDateString()}
+                </Text>
+              ) : null}
+              {selectedPromotion?.expireDate ? (
+                <Text style={styles.promotionDetailDate}>
+                  Expires:{' '}
+                  {new Date(selectedPromotion.expireDate).toLocaleDateString()}
+                </Text>
+              ) : null}
+              {selectedPromotion?.user?.nickname ||
+              selectedPromotion?.user?.name ? (
+                <Text style={styles.promotionDetailBusiness}>
+                  {selectedPromotion.user.nickname ||
+                    selectedPromotion.user.name}
+                </Text>
+              ) : null}
+              {selectedPromotion?.user?.address ? (
+                <Text style={styles.promotionDetailAddress} numberOfLines={2}>
+                  {selectedPromotion.user.address}
+                </Text>
+              ) : null}
+              {/* {selectedPromotion?.userId && currentUser?.id ? (
+                <TouchableOpacity
+                  style={styles.promotionDetailOrderBtn}
+                  onPress={() => {
+                    setPromotionDetailModalVisible(false);
+                    setSelectedPromotion(null);
+                    navigation?.navigate('Home1', {
+                      screen: 'HomeThreeScreen',
+                      params: {
+                        ownerId: selectedPromotion.userId,
+                        ownerName:
+                          selectedPromotion?.user?.nickname ||
+                          selectedPromotion?.user?.name ||
+                          '',
+                        title:
+                          selectedPromotion?.user?.nickname ||
+                          selectedPromotion?.user?.name ||
+                          '',
+                        location: selectedPromotion?.user?.address || '',
+                      },
+                    });
+                  }}
+                >
+                  <Text style={styles.promotionDetailOrderBtnText}>
+                    Order Now
+                  </Text>
+                </TouchableOpacity>
+              ) : null} */}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       <Modal
         visible={editProfileVisible}
@@ -1740,20 +2016,36 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   style={styles.useLocationBtn}
                   onPress={async () => {
                     getCurrentPositionSafe(
-                      async (position) => {
+                      async position => {
                         const lat = position?.coords?.latitude;
                         const lng = position?.coords?.longitude;
-                        if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+                        if (
+                          lat == null ||
+                          lng == null ||
+                          !Number.isFinite(lat) ||
+                          !Number.isFinite(lng)
+                        )
+                          return;
                         const addr = await reverseGeocode(lat, lng);
-                        setEditAddress(addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+                        setEditAddress(
+                          addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                        );
                         setEditLatitude(lat);
                         setEditLongitude(lng);
                       },
-                      () => Alert.alert('Location', 'Could not get your location. Check permissions or enter address manually.'),
+                      () =>
+                        Alert.alert(
+                          'Location',
+                          'Could not get your location. Check permissions or enter address manually.',
+                        ),
                     );
                   }}
                 >
-                  <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#fff" />
+                  <MaterialCommunityIcons
+                    name="crosshairs-gps"
+                    size={22}
+                    color="#fff"
+                  />
                   <Text style={styles.useLocationBtnText}>Use my location</Text>
                 </TouchableOpacity>
               </View>
@@ -1852,10 +2144,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 color="#fff"
               />
             </TouchableOpacity>
-            <Text
-              style={styles.videoModalHeaderTitle}
-              numberOfLines={1}
-            >
+            <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
               {modalVideo?.title || 'Video'}
             </Text>
             <View style={styles.videoModalHeaderBtn} />
@@ -1925,9 +2214,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                       ...p,
                       currentTime: data?.currentTime ?? p.currentTime,
                       duration:
-                        data?.seekableDuration ||
-                        data?.duration ||
-                        p.duration,
+                        data?.seekableDuration || data?.duration || p.duration,
                     }));
                   }}
                   onError={() =>
@@ -2010,9 +2297,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 onPress={handleModalLike}
               >
                 <MaterialCommunityIcons
-                  name={
-                    modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'
-                  }
+                  name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
                   size={22}
                   color={modalVideo?.isLiked ? '#FF7F0B' : '#222'}
                 />
@@ -2026,9 +2311,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               >
                 <MaterialCommunityIcons
                   name={
-                    modalVideo?.isDisliked
-                      ? 'thumb-down'
-                      : 'thumb-down-outline'
+                    modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
                   }
                   size={22}
                   color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
@@ -2085,7 +2368,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <View style={styles.channelRow}>
               <View style={styles.channelLeft}>
                 <Image
-                  source={{ uri: modalVideo?.channelAvatar }}
+                  source={{
+                    uri: safeImageUri(
+                      modalVideo?.channelAvatar ||
+                        (modalVideo?.userId === profileUserId &&
+                          (profile?.channelAvatar ||
+                            (profile?.photos?.[0]
+                              ? typeof profile.photos[0] === 'string'
+                                ? profile.photos[0]
+                                : profile.photos[0]?.src
+                              : null))),
+                    ),
+                  }}
                   style={styles.channelAvatar}
                 />
                 <View style={{ flex: 1 }}>
@@ -2133,10 +2427,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   onPress={() => {
                     if (requireLogin()) return;
                     if (!modalVideo?.userId) return;
+                    const modalAvatar =
+                      modalVideo.channelAvatar ||
+                      (modalVideo.userId === profileUserId &&
+                        (profile?.channelAvatar ||
+                          (profile?.photos?.[0]
+                            ? typeof profile.photos[0] === 'string'
+                              ? profile.photos[0]
+                              : profile.photos[0]?.src
+                            : null)));
                     navigation.navigate('ChatScreen', {
                       partnerId: modalVideo.userId,
                       partnerName: modalVideo.channelName || 'Channel',
-                      partnerAvatar: modalVideo.channelAvatar,
+                      partnerAvatar: modalAvatar,
                     });
                   }}
                 >
@@ -2202,10 +2505,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 prev
                   ? {
                       ...prev,
-                      commentCount: Math.max(
-                        0,
-                        (prev.commentCount ?? 0) - dec,
-                      ),
+                      commentCount: Math.max(0, (prev.commentCount ?? 0) - dec),
                     }
                   : prev,
               );
@@ -2489,6 +2789,31 @@ const styles = StyleSheet.create({
   activeTabText: {
     color: '#FF7F0B',
   },
+  promotionSubTabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  promotionSubTabBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  promotionSubTabBtnActive: {
+    backgroundColor: '#FF7F0B',
+  },
+  promotionSubTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  promotionSubTabTextActive: {
+    color: '#fff',
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2718,6 +3043,131 @@ const styles = StyleSheet.create({
   menuRowBody: { flex: 1, marginLeft: 12 },
   menuRowName: { fontSize: 16, fontWeight: '600', color: '#212121' },
   menuRowPrice: { fontSize: 14, color: '#666', marginTop: 2 },
+  promotionDetailModalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  promotionDetailModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  promotionDetailCloseBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  promotionDetailModalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  promotionDetailScroll: {
+    flex: 1,
+  },
+  promotionDetailMediaWrap: {
+    width: '100%',
+    height: (width * 9) / 16,
+    backgroundColor: '#000',
+    position: 'relative',
+  },
+  promotionDetailVideo: {
+    width: '100%',
+    height: '100%',
+  },
+  promotionDetailPlayOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  promotionDetailImage: {
+    width: '100%',
+    height: (width * 9) / 16,
+    backgroundColor: '#eee',
+  },
+  promotionDetailBody: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  promotionDetailTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#212121',
+    marginBottom: 10,
+  },
+  promotionDetailDescription: {
+    fontSize: 15,
+    color: '#555',
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  promotionDetailMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  promotionDetailMetaText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  promotionDetailPromoRow: {
+    marginBottom: 10,
+  },
+  promotionDetailPromoLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 4,
+  },
+  promotionDetailPromoCode: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FF7F0B',
+    letterSpacing: 1,
+  },
+  promotionDetailOffer: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 8,
+  },
+  promotionDetailDate: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 4,
+  },
+  promotionDetailBusiness: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  promotionDetailAddress: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
+  promotionDetailOrderBtn: {
+    backgroundColor: '#FF7F0B',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  promotionDetailOrderBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   previewBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.92)',

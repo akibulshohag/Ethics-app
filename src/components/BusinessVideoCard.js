@@ -1,6 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+const getInitials = (name) => {
+  if (!name || typeof name !== 'string') return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
+  return name.slice(0, 2).toUpperCase();
+};
 
 const BusinessVideoCard = ({
   video,
@@ -11,6 +18,10 @@ const BusinessVideoCard = ({
   onCommentPress,
   onShare,
 }) => {
+  const [avatarError, setAvatarError] = useState(false);
+  const avatarUri = video.channelAvatar && String(video.channelAvatar).trim() ? video.channelAvatar : null;
+  const showAvatarFallback = avatarError || !avatarUri;
+
   const wrap = (callback, content) =>
     callback ? (
       <TouchableOpacity
@@ -33,7 +44,17 @@ const BusinessVideoCard = ({
       {/* 1. Header (Avatar, Name, Time, Menu) */}
       <View style={styles.headerContainer}>
         <View style={styles.headerLeft}>
-          <Image source={{ uri: video.channelAvatar }} style={styles.avatar} />
+          {showAvatarFallback ? (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Text style={styles.avatarInitials}>{getInitials(video.channelName)}</Text>
+            </View>
+          ) : (
+            <Image
+              source={{ uri: avatarUri }}
+              style={styles.avatar}
+              onError={() => setAvatarError(true)}
+            />
+          )}
           <View style={styles.headerTextContainer}>
             <Text style={styles.channelName}>{video.channelName}</Text>
             <Text style={styles.timeAgo}>{video.publishedAt}</Text>
@@ -139,6 +160,15 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     marginRight: 12,
     backgroundColor: '#222', // Match dark avatar placeholder style
+  },
+  avatarFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitials: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '600',
   },
   headerTextContainer: {
     justifyContent: 'center',

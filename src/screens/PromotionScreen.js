@@ -824,7 +824,10 @@ const PromotionScreen = ({ onBack }) => {
 
       {/* Header Bar */}
       <View style={styles.topNav}>
-        <TouchableOpacity style={styles.backBtn}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => (onBack ? onBack() : navigation.goBack())}
+        >
           <Icon
             name="play"
             size={12}

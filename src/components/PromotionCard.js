@@ -2,11 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const PromotionCard = ({ item }) => {
-  console.log('item', item);
-
+const PromotionCard = ({ item, onPress }) => {
   return (
-    <TouchableOpacity style={styles.container} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={styles.container}
+      activeOpacity={0.8}
+      onPress={onPress}
+    >
       <View style={styles.imageContainer}>
         <Image source={{ uri: item.image }} style={styles.thumbnail} />
         {/* Dark overlay on the right half of the image */}
