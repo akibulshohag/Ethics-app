@@ -411,8 +411,10 @@ const HomeVersion = () => {
         } else {
           setLocationLoading(false);
         }
-        // Save to user profile (with address from reverse geocode so address is not null)
-        if (currentUser?.id && currentUser?.token) {
+        // Save to user profile only for non-owners. Owners (restaurant/shop) must use Edit Profile
+        // to set their shop address; "select location" here is only for browsing nearby, not their business location.
+        const isOwner = (currentUser?.role || '').toLowerCase() === 'owner';
+        if (currentUser?.id && currentUser?.token && !isOwner) {
           try {
             const address = await reverseGeocode(lat, lng);
             const response = await fetch(

@@ -6,13 +6,13 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   TextInput,
   Dimensions,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
@@ -25,12 +25,18 @@ const HomeThreeScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const route = useRoute();
   const ownerId = route.params?.ownerId;
-  const resTitle = route.params?.title || 'Restaurant';
+  const resTitle =
+    route.params?.ownerName || route.params?.title || 'Restaurant';
   const resLocation = route.params?.location || '';
   const singleMenuItem = route.params?.singleMenuItem;
+  const promotionMenuItems = route.params?.promotionMenuItems;
 
   const [menuItems, setMenuItems] = useState([]);
-  const [menuLoading, setMenuLoading] = useState(!!ownerId && !singleMenuItem);
+  const [menuLoading, setMenuLoading] = useState(
+    !!ownerId &&
+      !singleMenuItem &&
+      !(Array.isArray(promotionMenuItems) && promotionMenuItems.length > 0),
+  );
   const [selectedItems, setSelectedItems] = useState({});
   const [staticQuantities, setStaticQuantities] = useState({
     0: 1,
@@ -39,6 +45,16 @@ const HomeThreeScreen = ({ onBack }) => {
   });
 
   useEffect(() => {
+    if (Array.isArray(promotionMenuItems) && promotionMenuItems.length > 0) {
+      setMenuItems(promotionMenuItems);
+      setMenuLoading(false);
+      const initial = {};
+      promotionMenuItems.forEach((m, idx) => {
+        if (m?.id) initial[m.id] = idx === 0 ? 1 : 0;
+      });
+      setSelectedItems(initial);
+      return;
+    }
     if (singleMenuItem && singleMenuItem.id) {
       setMenuItems([singleMenuItem]);
       setMenuLoading(false);
@@ -52,13 +68,13 @@ const HomeThreeScreen = ({ onBack }) => {
       .then(({ menu }) => setMenuItems(menu || []))
       .catch(() => setMenuItems([]))
       .finally(() => setMenuLoading(false));
-  }, [ownerId, singleMenuItem?.id]);
+  }, [ownerId, singleMenuItem?.id, promotionMenuItems]);
 
   // Filter Bar Component
   const FilterBar = () => (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false} 
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
       style={styles.filterContainer}
       contentContainerStyle={styles.filterContent}
     >
@@ -193,23 +209,25 @@ const HomeThreeScreen = ({ onBack }) => {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.resInfoSection}>
-    <View style={styles.resTitleRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.resTitle}>Tandoori Planet</Text>
-        <Text style={styles.resSubTitle}>42 min - Birmingham, UK</Text>
-      </View>
+          <View style={styles.resTitleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.resTitle}>{resTitle}</Text>
+              <Text style={styles.resSubTitle}>
+                {resLocation || '—'}
+              </Text>
+            </View>
 
-      {/* Right side container to stack badge and text */}
-      <View style={styles.ratingContainer}>
-        <View style={styles.ratingBadge}>
-          <Text style={styles.ratingText}>4.5</Text>
-          <Icon name="star" size={14} color="#FFF" />
+            {/* Right side container to stack badge and text */}
+            <View style={styles.ratingContainer}>
+              <View style={styles.ratingBadge}>
+                <Text style={styles.ratingText}>4.5</Text>
+                <Icon name="star" size={14} color="#FFF" />
+              </View>
+              <Text style={styles.ratingCount}>12k rating</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
         </View>
-        <Text style={styles.ratingCount}>12k rating</Text>
-      </View>
-    </View>
-    <View style={styles.divider} />
-  </View>
 
         <FilterBar />
 
@@ -408,7 +426,12 @@ const styles = StyleSheet.create({
     marginRight: 4,
     fontSize: 14,
   },
-  ratingCount: { fontSize: 12, color: '#999', textAlign: 'right', marginTop: 2 },
+  ratingCount: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 2,
+  },
   divider: {
     height: 4,
     backgroundColor: '#F0F4F7',
@@ -545,6 +568,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   menuBtnText: { color: '#FFF', fontWeight: 'bold', marginLeft: 5 },
-}); 
+});
 
 export default HomeThreeScreen;

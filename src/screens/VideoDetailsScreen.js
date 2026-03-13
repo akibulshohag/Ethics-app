@@ -785,47 +785,60 @@ const VideoDetailsScreen = () => {
           />
         </View>
 
-        {/* Order Now only for owner (restaurant); no modal – go to login or menu screen */}
+        {/* Order / Message only when viewer is not the owner */}
         {(currentVideo?.creatorRole === 'owner' ||
           currentVideo?.user?.role === 'owner' ||
           currentVideo?.userId ||
           currentVideo?.user?.id) && (
           <View style={styles.ctaButtonsRow}>
-            <TouchableOpacity
-              style={styles.ctaButton}
-              onPress={() => {
-                if (!user?.id) {
-                  navigation.navigate('Login');
-                  return;
-                }
-                const role = (user?.role || '').toLowerCase();
-                if (role !== 'user') {
-                  Alert.alert(
-                    'Order',
-                    'Only diners can place orders from this restaurant. Sign in as a diner to order.',
-                  );
-                  return;
-                }
-                const ownerId = currentVideo?.userId || currentVideo?.user?.id;
-                if (ownerId) {
-                  try {
-                    navigation.getParent()?.navigate('Home1', {
-                      screen: 'HomeThreeScreen',
-                      params: {
-                        ownerId,
-                        title: currentVideo.title,
-                        location: currentVideo.creatorAddress || '',
-                      },
-                    });
-                  } catch (_) {
+            {/* Hide Order Now if logged-in user owns this video */}
+            {!(
+              user?.id &&
+              currentVideo?.userId &&
+              currentVideo.userId === user.id
+            ) && (
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => {
+                  if (!user?.id) {
                     navigation.navigate('Login');
+                    return;
                   }
-                }
-              }}
-            >
-              <Text style={styles.ctaButtonText}>Order Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+                  const role = (user?.role || '').toLowerCase();
+                  if (role !== 'user') {
+                    Alert.alert(
+                      'Order',
+                      'Only diners can place orders from this restaurant. Sign in as a diner to order.',
+                    );
+                    return;
+                  }
+                  const ownerId =
+                    currentVideo?.userId || currentVideo?.user?.id;
+                  if (ownerId) {
+                    try {
+                      navigation.getParent()?.navigate('Home1', {
+                        screen: 'HomeThreeScreen',
+                        params: {
+                          ownerId,
+                          ownerName:
+                            currentVideo?.user?.nickname ||
+                            currentVideo?.user?.name ||
+                            currentVideo?.channelName ||
+                            '',
+                          title: currentVideo.title,
+                          location: currentVideo.creatorAddress || '',
+                        },
+                      });
+                    } catch (_) {
+                      navigation.navigate('Login');
+                    }
+                  }
+                }}
+              >
+                <Text style={styles.ctaButtonText}>Order Now</Text>
+              </TouchableOpacity>
+            )}
+            {/* <TouchableOpacity
               style={styles.ctaButton}
               onPress={() => {
                 // Visit Website - open creator website if available, else channel
@@ -849,22 +862,29 @@ const VideoDetailsScreen = () => {
               }}
             >
               <Text style={styles.ctaButtonText}>Visit Website</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.ctaButton}
-              onPress={() => {
-                // Message Now - open chat with channel / restaurant owner
-                if (currentVideo.userId) {
-                  navigation.navigate('ChatScreen', {
-                    partnerId: currentVideo.userId,
-                    partnerName: currentVideo.channelName || 'Channel',
-                    partnerAvatar: currentVideo.channelAvatar,
-                  });
-                }
-              }}
-            >
-              <Text style={styles.ctaButtonText}>Message Now</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
+            {/* Hide Message Now if logged-in user owns this video */}
+            {!(
+              user?.id &&
+              currentVideo?.userId &&
+              currentVideo.userId === user.id
+            ) && (
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => {
+                  // Message Now - open chat with channel / restaurant owner
+                  if (currentVideo.userId) {
+                    navigation.navigate('ChatScreen', {
+                      partnerId: currentVideo.userId,
+                      partnerName: currentVideo.channelName || 'Channel',
+                      partnerAvatar: currentVideo.channelAvatar,
+                    });
+                  }
+                }}
+              >
+                <Text style={styles.ctaButtonText}>Message Now</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -962,7 +982,7 @@ const VideoDetailsScreen = () => {
           )}
 
         {/* Creator location map */}
-        {currentVideo.creatorLatitude != null &&
+        {/* {currentVideo.creatorLatitude != null &&
           currentVideo.creatorLongitude != null && (
             <View style={styles.creatorLocationSection}>
               <Text style={styles.creatorLocationTitle}>Creator location</Text>
@@ -985,7 +1005,7 @@ const VideoDetailsScreen = () => {
                 resizeMode="cover"
               />
             </View>
-          )}
+          )} */}
 
         {/* Comments Preview */}
         <TouchableOpacity

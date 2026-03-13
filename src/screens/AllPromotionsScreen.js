@@ -12,25 +12,30 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { getNearbyPromotions } from '../services/promotionService';
 import { safeImageUri } from '../utils/helper';
 
-const PromotionsScreen = () => {
+const UK_DEFAULT_LAT = 51.5074;
+const UK_DEFAULT_LNG = -0.1278;
+const DEFAULT_THUMB =
+  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+
+const AllPromotionsScreen = () => {
   const navigation = useNavigation();
   const currentUser = useSelector(state => state.app?.user);
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const lat = currentUser?.latitude ?? 23.8103;
-  const lng = currentUser?.longitude ?? 90.4125;
+  const lat = currentUser?.latitude ?? UK_DEFAULT_LAT;
+  const lng = currentUser?.longitude ?? UK_DEFAULT_LNG;
 
   const loadPromotions = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getNearbyPromotions(lat, lng, 50, 1, 50);
+      const res = await getNearbyPromotions(lat, lng, 500, 1, 100);
       setPromotions(res?.promotions ?? []);
     } catch (e) {
       setPromotions([]);
@@ -39,119 +44,33 @@ const PromotionsScreen = () => {
     }
   }, [lat, lng]);
 
-  useEffect(() => {
-    loadPromotions();
-  }, [loadPromotions]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadPromotions();
     setRefreshing(false);
   }, [loadPromotions]);
 
-  const handlePromoPress = promotion => {
-    if (promotion && promotion.id) {
-      navigation.navigate('PromotionDetail', { promotion });
-    }
-  };
-
-  // Static placeholders when no API data (same design, no layout change)
-  const STATIC_CARDS = [
-    { name: 'Tandoori Planet' },
-    { name: 'Streetly balty' },
-    { name: 'Bangal hub' },
-    { name: 'Indian Grill' },
-    { name: 'Streetly balty' },
-    { name: 'Tandoori Planet' },
-  ];
-
-  const PromotionCard = ({ promotion, isStatic }) => {
-    if (isStatic) {
-      return (
-        <View style={styles.promoCard}>
-          <View style={styles.cardOrangeHeader}>
-            <Text style={styles.cardHeaderText} numberOfLines={1}>
-              {promotion.name}
-            </Text>
-          </View>
-          <View style={styles.imageContainer}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-              }}
-              style={styles.foodImage}
-            />
-          </View>
-          <View style={styles.cardFooter}>
-            <Text style={styles.getFlatText}>
-              Get Flat <Text style={styles.highlightText}>30% OFF</Text>
-            </Text>
-            <Text style={styles.uptoText}>UPTO $3</Text>
-          </View>
-        </View>
-      );
-    }
-    const name =
-      promotion?.title ||
-      promotion?.user?.nickname ||
-      promotion?.user?.name ||
-      'Offer';
-    const imageUri =
-      promotion?.thumbnailUrl ||
-      promotion?.videoUrl ||
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
-    const offerText =
-      promotion?.promoAmount != null
-        ? `Get Flat ${promotion.promoAmount}% OFF`
-        : 'Special Offer';
-    const codeText = promotion?.promoCode ? `Code: ${promotion.promoCode}` : '';
-
-    return (
-      <TouchableOpacity
-        style={styles.promoCard}
-        onPress={() => handlePromoPress(promotion)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.cardOrangeHeader}>
-          <Text style={styles.cardHeaderText} numberOfLines={1}>
-            {name}
-          </Text>
-        </View>
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: safeImageUri(imageUri) }}
-            style={styles.foodImage}
-          />
-        </View>
-        <View style={styles.cardFooter}>
-          <Text style={styles.getFlatText}>
-            {offerText}
-            {promotion?.promoCode ? (
-              <Text style={styles.highlightText}> • {promotion.promoCode}</Text>
-            ) : null}
-          </Text>
-          {codeText ? <Text style={styles.uptoText}>{codeText}</Text> : null}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+  useEffect(() => {
+    loadPromotions();
+  }, [loadPromotions]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#2C3E50" />
 
+      {/* Same header as PromotionDetailScreen – OFFERS & PROMOTIONS */}
       <View style={styles.headerBackground}>
         <View style={styles.topNav}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
           >
             <Icon name="chevron-left" size={16} color="#000" />
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
           <Icon name="dots-vertical" size={24} color="#FFF" />
         </View>
-
         <View style={styles.titleContainer}>
           <Text style={styles.mainTitle}>OFFERS &</Text>
           <View style={styles.orangePill}>
@@ -163,8 +82,9 @@ const PromotionsScreen = () => {
       <View style={styles.orangeDivider} />
 
       <ScrollView
+        style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -174,19 +94,61 @@ const PromotionsScreen = () => {
           />
         }
       >
-        <View style={styles.promoGrid}>
-          {promotions.length > 0
-            ? promotions.map((p, idx) => (
-                <PromotionCard
+        {loading && promotions.length === 0 ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color="#F5A623" />
+            <Text style={styles.loadingText}>Loading promotions...</Text>
+          </View>
+        ) : promotions.length === 0 ? (
+          <Text style={styles.emptyHint}>No promotions found.</Text>
+        ) : (
+          <View style={styles.promoGrid}>
+            {promotions.map((p, idx) => {
+              const title =
+                p.title || p.user?.nickname || p.user?.name || 'Promo';
+              const offerText =
+                p.promoAmount != null
+                  ? `Get Flat ${p.promoAmount}% OFF`
+                  : 'Special Offer';
+              const codeText = p.promoCode ? p.promoCode : '';
+              const thumb =
+                p.thumbnailUrl || p.thumbnail?.src || DEFAULT_THUMB;
+              return (
+                <TouchableOpacity
                   key={p.id || idx}
-                  promotion={p}
-                  isStatic={false}
-                />
-              ))
-            : STATIC_CARDS.map((s, idx) => (
-                <PromotionCard key={`static-${idx}`} promotion={s} isStatic />
-              ))}
-        </View>
+                  style={styles.promoCard}
+                  onPress={() =>
+                    navigation.navigate('PromotionFullDetail', { promotion: p })
+                  }
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.cardOrangeHeader}>
+                    <Text style={styles.cardHeaderText} numberOfLines={1}>
+                      {title}
+                    </Text>
+                  </View>
+                  <View style={styles.imageContainer}>
+                    <Image
+                      source={{ uri: safeImageUri(thumb) }}
+                      style={styles.foodImage}
+                    />
+                  </View>
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.getFlatText}>
+                      {offerText}
+                      {codeText ? (
+                        <Text style={styles.highlightText}> • {codeText}</Text>
+                      ) : null}
+                    </Text>
+                    <Text style={styles.uptoText}>
+                      {p.user?.nickname || p.user?.name || ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -236,10 +198,17 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 35,
     borderBottomRightRadius: 35,
   },
-  scrollArea: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24 },
+
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 24 },
   loadingWrap: { paddingVertical: 40, alignItems: 'center' },
   loadingText: { marginTop: 8, fontSize: 14, color: '#666' },
-  emptyText: { fontSize: 14, color: '#888', textAlign: 'center' },
+  emptyHint: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 24,
+  },
   promoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -269,4 +238,4 @@ const styles = StyleSheet.create({
   uptoText: { fontSize: 11, color: '#666' },
 });
 
-export default PromotionsScreen;
+export default AllPromotionsScreen;

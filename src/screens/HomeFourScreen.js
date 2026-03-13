@@ -5,17 +5,18 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   TextInput,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Toast from 'react-native-toast-message';
 import { createRestaurantOrder } from '../services/orderService';
+import { getPromotionsByUser } from '../services/promotionService';
 
 const HomeFourScreen = ({ onBack }) => {
   const navigation = useNavigation();
@@ -29,6 +30,10 @@ const HomeFourScreen = ({ onBack }) => {
   );
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [placing, setPlacing] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [appliedPromotion, setAppliedPromotion] = useState(null);
+  const [promoApplyError, setPromoApplyError] = useState('');
+  const [applyingPromo, setApplyingPromo] = useState(false);
 
   const updateItemQty = (index, delta) => {
     setItems(prev =>
@@ -44,10 +49,69 @@ const HomeFourScreen = ({ onBack }) => {
     (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
     0,
   );
-  const total = subtotal;
+  const promoPercent =
+    appliedPromotion?.promoAmount != null ? Number(appliedPromotion.promoAmount) : 0;
+  const discountAmount =
+    promoPercent > 0 ? (subtotal * promoPercent) / 100 : 0;
+  const total = Math.max(0, subtotal - discountAmount);
   const currency = items[0]?.currency || 'BDT';
   const displayTotal = total.toFixed(2);
   const displaySubtotal = subtotal.toFixed(2);
+  const displayDiscount = discountAmount.toFixed(2);
+
+  const handleApplyPromo = async () => {
+    const code = (promoCodeInput || '').trim();
+    if (!code) {
+      setPromoApplyError('Enter a promo code');
+      return;
+    }
+    if (!ownerId) {
+      setPromoApplyError('Restaurant not set');
+      return;
+    }
+    setApplyingPromo(true);
+    setPromoApplyError('');
+    try {
+      const res = await getPromotionsByUser(ownerId, 1, 50);
+      const list = res?.promotions ?? [];
+      const now = new Date();
+      const match = list.find(p => {
+        const pCode = (p.promoCode || '').trim().toUpperCase();
+        if (pCode !== code.toUpperCase()) return false;
+        const start = p.startDate ? new Date(p.startDate) : null;
+        const end = p.expireDate ? new Date(p.expireDate) : null;
+        if (start && start > now) return false;
+        if (end && end < now) return false;
+        return true;
+      });
+      if (match) {
+        setAppliedPromotion({
+          id: match.id,
+          promoCode: match.promoCode,
+          promoAmount: match.promoAmount,
+        });
+        Toast.show({
+          type: 'success',
+          text1: `${match.promoCode} applied`,
+          text2: match.promoAmount != null ? `${match.promoAmount}% off` : 'Discount applied',
+        });
+      } else {
+        setAppliedPromotion(null);
+        setPromoApplyError('Invalid or expired promo code');
+      }
+    } catch (e) {
+      setAppliedPromotion(null);
+      setPromoApplyError('Could not verify promo code');
+    } finally {
+      setApplyingPromo(false);
+    }
+  };
+
+  const removePromo = () => {
+    setAppliedPromotion(null);
+    setPromoCodeInput('');
+    setPromoApplyError('');
+  };
   const restaurantName = ownerName || 'Restaurant';
   const deliveryAddress =
     user?.address || deliveryNotes?.trim() || 'Add address';
@@ -72,6 +136,10 @@ const HomeFourScreen = ({ onBack }) => {
           quantity: i.quantity || 1,
         })),
         deliveryAddress: deliveryNotes.trim() || user?.address || undefined,
+        ...(appliedPromotion?.promoCode && {
+          promoCode: appliedPromotion.promoCode,
+          promotionId: appliedPromotion.id,
+        }),
       });
       Toast.show({ type: 'success', text1: 'Order placed successfully' });
       navigation.navigate('HomeFiveScreen');
@@ -200,12 +268,47 @@ const HomeFourScreen = ({ onBack }) => {
               placeholder="Promo code"
               placeholderTextColor="#999"
               style={styles.promoInput}
+              value={promoCodeInput}
+              onChangeText={v => {
+                setPromoCodeInput(v);
+                setPromoApplyError('');
+              }}
+              editable={!appliedPromotion}
+              autoCapitalize="characters"
             />
+            {appliedPromotion ? (
+              <TouchableOpacity
+                onPress={removePromo}
+                style={styles.removePromoBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close-circle" size={22} color="#F5A623" />
+              </TouchableOpacity>
+            ) : null}
           </View>
-          <TouchableOpacity style={styles.applyBtn}>
-            <Text style={styles.applyText}>Apply</Text>
-          </TouchableOpacity>
+          {appliedPromotion ? (
+            <Text style={styles.appliedPromoText}>
+              {appliedPromotion.promoAmount != null
+                ? `${appliedPromotion.promoAmount}% off`
+                : 'Applied'}
+            </Text>
+          ) : (
+            <TouchableOpacity
+              style={[styles.applyBtn, applyingPromo && styles.applyBtnDisabled]}
+              onPress={handleApplyPromo}
+              disabled={applyingPromo}
+            >
+              {applyingPromo ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <Text style={styles.applyText}>Apply</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
+        {promoApplyError ? (
+          <Text style={styles.promoErrorText}>{promoApplyError}</Text>
+        ) : null}
 
         <View style={styles.infoRow}>
           <View style={styles.infoLeft}>
@@ -243,6 +346,19 @@ const HomeFourScreen = ({ onBack }) => {
               {currency} {displaySubtotal}
             </Text>
           </View>
+          {appliedPromotion && discountAmount > 0 ? (
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>
+                Promo ({appliedPromotion.promoCode})
+                {appliedPromotion.promoAmount != null
+                  ? ` ${appliedPromotion.promoAmount}% off`
+                  : ''}
+              </Text>
+              <Text style={styles.billValueDiscount}>
+                -{currency} {displayDiscount}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.billRow}>
             <Text style={styles.billLabel}>taxes and charges</Text>
             <Text style={styles.billValue}>—</Text>
@@ -381,15 +497,38 @@ const styles = StyleSheet.create({
   },
   promoInputWrapper: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFF',
     borderRadius: 8,
     height: 45,
     paddingHorizontal: 15,
-    justifyContent: 'center',
   },
-  promoInput: { fontSize: 14, color: '#333' },
-  applyBtn: { paddingHorizontal: 25 },
-  applyText: { color: '#F5A623', fontWeight: 'bold', fontSize: 16 },
+  promoInput: { flex: 1, fontSize: 14, color: '#333', padding: 0 },
+  removePromoBtn: { marginLeft: 8 },
+  appliedPromoText: {
+    marginLeft: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0d8a0d',
+  },
+  applyBtn: {
+    paddingHorizontal: 25,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#E8F5E9',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  applyBtnDisabled: { opacity: 0.7 },
+  applyText: { color: '#2E7D32', fontWeight: 'bold', fontSize: 16 },
+  promoErrorText: {
+    fontSize: 13,
+    color: '#c62828',
+    marginTop: -18,
+    marginBottom: 8,
+  },
+  billValueDiscount: { color: '#2E7D32', fontSize: 14, fontWeight: '600' },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -18,7 +18,7 @@ import {
   geocodeAddress,
   getPlaceSuggestions,
   getCoordsFromPlaceId,
-  getFallbackCoordsForBDArea,
+  getFallbackCoordsForUKArea,
 } from '../utils/geolocation';
 import logo from '../assets/logo.png';
 
@@ -40,7 +40,7 @@ const LandingScreen = () => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(async () => {
       setSuggestionsLoading(true);
-      const list = await getPlaceSuggestions(trimmed);
+      const list = await getPlaceSuggestions(trimmed, { region: 'uk' });
       setAddressSuggestions(list || []);
       setSuggestionsLoading(false);
       debounceTimerRef.current = null;
@@ -64,8 +64,8 @@ const LandingScreen = () => {
     try {
       let coords = placeId ? await getCoordsFromPlaceId(placeId) : null;
       if (!coords) coords = await geocodeAddress(description);
-      if (!coords) coords = await geocodeAddress(description + ', Bangladesh');
-      if (!coords) coords = getFallbackCoordsForBDArea(description);
+      if (!coords) coords = await geocodeAddress(description + ', United Kingdom');
+      if (!coords) coords = getFallbackCoordsForUKArea(description);
       if (coords) {
         goToResults(coords, description);
       } else {
@@ -75,7 +75,7 @@ const LandingScreen = () => {
         );
       }
     } catch (_) {
-      const fallback = getFallbackCoordsForBDArea(description);
+      const fallback = getFallbackCoordsForUKArea(description);
       if (fallback) {
         goToResults(fallback, description);
       } else {
@@ -96,8 +96,8 @@ const LandingScreen = () => {
           if (parts.length >= 2) coords = await geocodeAddress(parts.slice(-2).join(', '));
           if (!coords && parts.length >= 1) coords = await geocodeAddress(parts[parts.length - 1]);
         }
-        if (!coords) coords = await geocodeAddress(trimmed + ', Bangladesh');
-        if (!coords) coords = getFallbackCoordsForBDArea(trimmed);
+        if (!coords) coords = await geocodeAddress(trimmed + ', United Kingdom');
+        if (!coords) coords = getFallbackCoordsForUKArea(trimmed);
         if (coords) {
           goToResults(coords, trimmed);
         } else {
@@ -107,7 +107,7 @@ const LandingScreen = () => {
           );
         }
       } catch (_) {
-        const fallback = getFallbackCoordsForBDArea(trimmed);
+        const fallback = getFallbackCoordsForUKArea(trimmed);
         if (fallback) {
           goToResults(fallback, trimmed);
         } else {
@@ -154,7 +154,7 @@ const LandingScreen = () => {
           <Icon name="magnify" size={22} color="#999" style={styles.landingSearchIcon} />
           <TextInput
             style={styles.landingSearchInput}
-            placeholder="Search Your address"
+            placeholder="Search address (UK / England)"
             placeholderTextColor="#999"
             value={addressText}
             onChangeText={setAddressText}
@@ -206,7 +206,7 @@ const LandingScreen = () => {
               <View style={styles.suggestionItem}>
                 <Icon name="map-marker-outline" size={18} color="#999" />
                 <Text style={styles.suggestionHint}>
-                  No areas found. Type full address (e.g. Mirpur 10, Dhaka) or tap the location icon.
+                  No areas found. Type full address (e.g. Abbots Langley, London) or tap the location icon.
                 </Text>
               </View>
             )}

@@ -64,6 +64,12 @@ import {
 import { getMenuByUserId } from '../../services/menuService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
+import {
+  geocodeAddress,
+  getCurrentPositionSafe,
+  reverseGeocode,
+  getFallbackCoordsForUKArea,
+} from '../../utils/geolocation';
 import CreatePromotionModal from '../../components/CreatePromotionModal';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -363,6 +369,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [editChannelAbout, setEditChannelAbout] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editLatitude, setEditLatitude] = useState(null);
+  const [editLongitude, setEditLongitude] = useState(null);
   const [editSocialLinks, setEditSocialLinks] = useState([]);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -762,6 +770,37 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setSaveVisible(false);
   }, []);
 
+  const openVideoDetails = useCallback(
+    item => {
+      if (!item?.id) return;
+      const itemType = String(item.type || item._type || '').toLowerCase();
+      if (itemType === 'short') {
+        // Open shorts player inside Shorts tab stack
+        try {
+          navigation?.navigate('Shorts', {
+            screen: 'ShortsVideoScreen',
+            params: { shortId: item.id },
+          });
+        } catch (_) {
+          navigation?.getParent()?.navigate('Shorts', {
+            screen: 'ShortsVideoScreen',
+            params: { shortId: item.id },
+          });
+        }
+        return;
+      }
+      // Open video details via Root stack (BusinessProfileViewScreen is a Tab screen)
+      try {
+        navigation?.getParent()?.navigate('VideoDetailsScreen', {
+          videoId: item.id,
+        });
+      } catch (_) {
+        navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
+      }
+    },
+    [navigation],
+  );
+
   const modalDisplayTime = modalIsSliding
     ? modalSlidingValue
     : modalProgress.currentTime;
@@ -939,6 +978,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     );
     setEditPhone(currentUser?.phone ?? profile?.phone ?? '');
     setEditAddress(profile?.address ?? currentUser?.address ?? '');
+    setEditLatitude(null);
+    setEditLongitude(null);
     const links = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
     const linkMap = Array.isArray(links)
       ? links.reduce((acc, l) => ({ ...acc, [l.type]: l.url || '' }), {})
@@ -1018,12 +1059,39 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           url: (l.url || '').trim(),
         }))
         .filter(l => l.url);
+      const addressStr = editAddress.trim() || undefined;
+      let latitude = undefined;
+      let longitude = undefined;
+      if (
+        editLatitude != null &&
+        editLongitude != null &&
+        Number.isFinite(editLatitude) &&
+        Number.isFinite(editLongitude)
+      ) {
+        latitude = editLatitude;
+        longitude = editLongitude;
+      } else if (addressStr) {
+        let coords = await geocodeAddress(addressStr);
+        if (!coords && addressStr) {
+          coords = await geocodeAddress(addressStr + ', United Kingdom');
+        }
+        if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) {
+          const fallback = getFallbackCoordsForUKArea(addressStr);
+          if (fallback) coords = fallback;
+        }
+        if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+          latitude = coords.lat;
+          longitude = coords.lng;
+        }
+      }
       await updateChannelProfile(profileUserId, {
         name: editName.trim() || undefined,
         nickname: editNickname.trim() || undefined,
         channelAbout: editChannelAbout.trim() || undefined,
         phone: editPhone.trim() || undefined,
-        address: editAddress.trim() || undefined,
+        address: addressStr,
+        ...(latitude != null && { latitude }),
+        ...(longitude != null && { longitude }),
         socialLinks: socialLinks.length ? socialLinks : undefined,
       });
       await loadProfile();
@@ -1035,7 +1103,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             nickname: editNickname.trim() || currentUser.nickname,
             channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
             phone: editPhone.trim() || currentUser.phone,
-            address: editAddress.trim() || currentUser.address,
+            address: addressStr || currentUser.address,
+            ...(latitude != null && { latitude }),
+            ...(longitude != null && { longitude }),
             socialLinks: socialLinks.length
               ? socialLinks
               : currentUser.socialLinks,
@@ -1401,6 +1471,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             thumbnail: item.thumbnail || item.thumbnailUrl,
             title: item.title || 'Video',
             views: item.views || formatCount(item.viewCount),
+            location:
+              item.location ||
+              profile?.address ||
+              currentUser?.address ||
+              '',
+            distance: item.distance || '',
           }}
           onPress={() => openVideoModal(item)}
         />
@@ -1648,13 +1724,39 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 keyboardType="phone-pad"
               />
               <Text style={styles.editLabel}>Address</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editAddress}
-                onChangeText={setEditAddress}
-                placeholder="Address"
-                placeholderTextColor="#999"
-              />
+              <View style={styles.editAddressRow}>
+                <TextInput
+                  style={[styles.editInput, styles.editAddressInput]}
+                  value={editAddress}
+                  onChangeText={v => {
+                    setEditAddress(v);
+                    setEditLatitude(null);
+                    setEditLongitude(null);
+                  }}
+                  placeholder="Address or use location below"
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity
+                  style={styles.useLocationBtn}
+                  onPress={async () => {
+                    getCurrentPositionSafe(
+                      async (position) => {
+                        const lat = position?.coords?.latitude;
+                        const lng = position?.coords?.longitude;
+                        if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+                        const addr = await reverseGeocode(lat, lng);
+                        setEditAddress(addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+                        setEditLatitude(lat);
+                        setEditLongitude(lng);
+                      },
+                      () => Alert.alert('Location', 'Could not get your location. Check permissions or enter address manually.'),
+                    );
+                  }}
+                >
+                  <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#fff" />
+                  <Text style={styles.useLocationBtnText}>Use my location</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Social links
               </Text>
@@ -2507,6 +2609,28 @@ const styles = StyleSheet.create({
   editInputMultiline: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  editAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editAddressInput: {
+    flex: 1,
+  },
+  useLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  useLocationBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   editSaveBtn: {
     marginHorizontal: 16,

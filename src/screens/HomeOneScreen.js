@@ -127,8 +127,7 @@ const HomeOneScreen = () => {
   const [resIsSliding, setResIsSliding] = useState(false);
   const [resSlidingValue, setResSlidingValue] = useState(0);
 
-  const galleryUserId =
-    selectedItem?.userId || selectedItem?.user?.id;
+  const galleryUserId = selectedItem?.userId || selectedItem?.user?.id;
 
   useEffect(() => {
     if (!showGalleryModal) {
@@ -145,9 +144,7 @@ const HomeOneScreen = () => {
     setGalleryError(null);
     getGallery(galleryUserId)
       .then(data => setGalleryImages(data?.photos || []))
-      .catch(err =>
-        setGalleryError(err?.message || 'Failed to load gallery'),
-      )
+      .catch(err => setGalleryError(err?.message || 'Failed to load gallery'))
       .finally(() => setGalleryLoading(false));
   }, [showGalleryModal, galleryUserId]);
 
@@ -300,12 +297,19 @@ const HomeOneScreen = () => {
     if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
       loadFeaturedAndFeed();
     }
-  }, [selectedLocation?.lat, selectedLocation?.lng, searchDebounced, loadFeaturedAndFeed]);
+  }, [
+    selectedLocation?.lat,
+    selectedLocation?.lng,
+    searchDebounced,
+    loadFeaturedAndFeed,
+  ]);
 
   useEffect(() => {
     loadContinueWatching();
   }, [loadContinueWatching]);
 
+  // Selected location is for feed only (nearby videos/shorts). Never updates user profile here:
+  // owners keep their shop address from Edit Profile; other users' profile is not updated on home.
   const useMyLocation = () => {
     setLocationLoading(true);
     getCurrentPositionSafe(
@@ -445,12 +449,12 @@ const HomeOneScreen = () => {
     <View style={styles.mainContainer}>
       <View style={styles.header}>
         <View style={styles.navRow}>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             onPress={() => navigation.navigate('LandingScreen')}
             style={styles.navBtn}
           >
             <Text style={styles.navBtnText}>{'<'} Home</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <View style={styles.headerLogoContainer}>
             <Image
               source={logo}
@@ -458,7 +462,10 @@ const HomeOneScreen = () => {
               resizeMode="contain"
             />
           </View>
-          <TouchableOpacity style={[styles.navBtn]}>
+          <TouchableOpacity
+            style={[styles.navBtn]}
+            onPress={() => navigation.navigate('HomeSevenScreen')}
+          >
             <Text style={styles.navBtnText}>Login {'>'}</Text>
           </TouchableOpacity>
         </View>
@@ -789,6 +796,10 @@ const HomeOneScreen = () => {
                       if (ownerId) {
                         navigation.navigate('HomeThreeScreen', {
                           ownerId,
+                          ownerName:
+                            selectedItem?.user?.nickname ||
+                            selectedItem?.user?.name ||
+                            '',
                           title: selectedItem?.title,
                           location:
                             selectedItem?.location ||
@@ -841,7 +852,10 @@ const HomeOneScreen = () => {
               disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
             >
               <Text style={styles.resMainTitle}>
-                {selectedItem?.title.slice(0, 20)}...
+                {selectedItem?.user?.nickname ||
+                  selectedItem?.user?.name ||
+                  selectedItem?.title ||
+                  '—'}
               </Text>
             </TouchableOpacity>
             <Text style={styles.resSubLoc}>{selectedItem?.location}</Text>
@@ -873,6 +887,10 @@ const HomeOneScreen = () => {
                   if (ownerId) {
                     navigation.navigate('HomeThreeScreen', {
                       ownerId,
+                      ownerName:
+                        selectedItem?.user?.nickname ||
+                        selectedItem?.user?.name ||
+                        '',
                       title: selectedItem?.title,
                       location:
                         selectedItem?.location ||
@@ -1193,7 +1211,9 @@ const HomeOneScreen = () => {
             ) : (
               <FlatList
                 data={galleryImages}
-                keyExtractor={item => item?.id || item?.src || String(Math.random())}
+                keyExtractor={item =>
+                  item?.id || item?.src || String(Math.random())
+                }
                 numColumns={2}
                 contentContainerStyle={styles.galleryGridContent}
                 renderItem={({ item }) => {
@@ -1355,8 +1375,8 @@ const styles = StyleSheet.create({
   headerLogo: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
   headerLogoContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
   },
   logoImage: {
     width: 100,

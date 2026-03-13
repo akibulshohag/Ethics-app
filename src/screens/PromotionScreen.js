@@ -58,27 +58,48 @@ import { getSocialIcon } from '../constants/socialLinks';
 
 const { width } = Dimensions.get('window');
 
-const VideoSection = ({ title, showPlus = false }) => (
+const VideoSection = ({
+  title,
+  items = [],
+  loading = false,
+  onItemPress,
+  rightAccessory,
+}) => (
   <View style={styles.sectionContainer}>
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      {showPlus && <Icon name="plus" size={24} color="#000" />}
+      {rightAccessory || null}
     </View>
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       style={styles.horizontalScroll}
     >
-      {[1, 2, 3].map(item => (
-        <View key={item} style={styles.videoThumbnailContainer}>
-          <Image
-            source={{
-              uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-            }}
-            style={styles.videoThumbnail}
-          />
+      {loading ? (
+        <View style={[styles.videoThumbnailContainer, { width: 105 }]}>
+          <ActivityIndicator size="small" color="#F5A623" />
         </View>
-      ))}
+      ) : items.length === 0 ? (
+        <View style={[styles.videoThumbnailContainer, { width: 220 }]}>
+          <Text style={{ color: '#888', fontSize: 13 }}>
+            No items yet.
+          </Text>
+        </View>
+      ) : (
+        items.slice(0, 12).map((item, idx) => (
+          <TouchableOpacity
+            key={item.id || idx}
+            style={styles.videoThumbnailContainer}
+            activeOpacity={0.8}
+            onPress={() => onItemPress && onItemPress(item)}
+          >
+            <Image
+              source={{ uri: item.thumbnailUri }}
+              style={styles.videoThumbnail}
+            />
+          </TouchableOpacity>
+        ))
+      )}
     </ScrollView>
   </View>
 );
@@ -95,6 +116,79 @@ const PromotionScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.app?.user);
+
+  const formatCount = n => {
+    const num = Number(n || 0);
+    if (!Number.isFinite(num) || num <= 0) return '0';
+    if (num >= 1000000)
+      return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+    if (num >= 1000)
+      return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    return String(Math.floor(num));
+  };
+
+  const mapVideoApiToModal = (v = {}) => {
+    const u = v.user || {};
+    const channelName = u.nickname || u.name || 'Unknown';
+    const channelAvatar =
+      u.photos?.[0] ||
+      (Array.isArray(u.photos) && u.photos[0]) ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        channelName,
+      )}&background=111&color=fff`;
+    return {
+      id: v.id,
+      title: v.title || 'Untitled',
+      videoUrl: v.videoUrl,
+      thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+      durationSeconds: v.duration ?? 0,
+      likeCount: v.likeCount ?? v._count?.likes ?? 0,
+      dislikeCount: v.dislikeCount ?? 0,
+      commentCount: v.commentCount ?? v._count?.comments ?? 0,
+      shareCount: v.shareCount ?? 0,
+      isLiked: v.isLiked ?? false,
+      isDisliked: v.isDisliked ?? false,
+      userId: v.userId,
+      channelName,
+      channelAvatar:
+        typeof channelAvatar === 'string'
+          ? channelAvatar
+          : channelAvatar?.src ?? channelAvatar,
+      socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
+    };
+  };
+
+  const mapShortApiToModal = (s = {}) => {
+    const u = s.user || {};
+    const channelName = u.nickname || u.name || 'Unknown';
+    const channelAvatar =
+      u.photos?.[0] ||
+      (Array.isArray(u.photos) && u.photos[0]) ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        channelName,
+      )}&background=111&color=fff`;
+    return {
+      id: s.id,
+      title: s.title || 'Short',
+      videoUrl: s.videoUrl,
+      thumbnail:
+        s.thumbnailUrl || s.coverUrl || s.videoUrl || 'https://via.placeholder.com/600',
+      durationSeconds: s.duration ?? 0,
+      likeCount: s.likeCount ?? s._count?.likes ?? 0,
+      dislikeCount: s.dislikeCount ?? 0,
+      commentCount: s.commentCount ?? s._count?.comments ?? 0,
+      shareCount: s.shareCount ?? 0,
+      isLiked: s.isLiked ?? false,
+      isDisliked: s.isDisliked ?? false,
+      userId: s.userId,
+      channelName,
+      channelAvatar:
+        typeof channelAvatar === 'string'
+          ? channelAvatar
+          : channelAvatar?.src ?? channelAvatar,
+      socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
+    };
+  };
 
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -666,6 +760,42 @@ const PromotionScreen = ({ onBack }) => {
     return 'https://via.placeholder.com/200';
   };
 
+  const openVideoDetails = useCallback(
+    item => {
+      if (!item?.id) return;
+      if (item.type === 'short') {
+        // Open shorts player inside Shorts tab stack
+        navigation.getParent()?.navigate('Shorts', {
+          screen: 'ShortsVideoScreen',
+          params: { shortId: item.id },
+        });
+        return;
+      }
+      // Open video details via Root stack
+      try {
+        navigation.getParent()?.getParent()?.navigate('VideoDetailsScreen', {
+          videoId: item.id,
+        });
+      } catch (_) {
+        navigation.navigate('VideoDetailsScreen', { videoId: item.id });
+      }
+    },
+    [navigation],
+  );
+
+  const mostLikedThumbs = mostLikedItems.map(it => ({
+    ...it,
+    thumbnailUri: getThumbnailForItem(it),
+  }));
+  const savedThumbs = savedItems.map(it => ({
+    ...it,
+    thumbnailUri: getThumbnailForItem(it),
+  }));
+  const myVideoThumbs = myVideos.map(it => ({
+    ...it,
+    thumbnailUri: getThumbnailForItem(it),
+  }));
+
   const handleMessagePress = () => {
     navigation.navigate('MessageList');
   };
@@ -780,7 +910,10 @@ const PromotionScreen = ({ onBack }) => {
               <TouchableOpacity style={styles.iconIconButton}>
                 <Icon name="camera-outline" size={24} color="#333" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.iconIconButton}>
+              <TouchableOpacity
+                style={styles.iconIconButton}
+                onPress={handleMessagePress}
+              >
                 <Icon name="message-outline" size={24} color="#333" />
               </TouchableOpacity>
             </View>
@@ -796,43 +929,415 @@ const PromotionScreen = ({ onBack }) => {
         </View>
 
         {/* Dynamic Video Sections */}
-        <VideoSection title="Most Liked Videos" />
+        <VideoSection
+          title="Most Liked Videos"
+          items={mostLikedThumbs}
+          loading={mostLikedLoading}
+          onItemPress={openVideoModal}
+        />
 
         {/* Promotions Grid */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Promotions</Text>
-          <View style={styles.promoWrapper}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Promotions</Text>
             <TouchableOpacity
-              style={[styles.promoButton, { backgroundColor: '#F9A825' }]}
+              onPress={() => navigation.navigate('AllPromotions')}
+              activeOpacity={0.8}
             >
-              <Text style={styles.promoButtonText}>Tandoori Planet</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.promoButton, { backgroundColor: '#2C3E50' }]}
-            >
-              <Text style={styles.promoButtonText}>Streetly balty</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.promoButton, { backgroundColor: '#2C3E50' }]}
-            >
-              <Text style={styles.promoButtonText}>Bangal hub</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.promoButton, { backgroundColor: '#F9A825' }]}
-            >
-              <Text style={styles.promoButtonText}>Indian Grill</Text>
+              <Icon name="chevron-right" size={26} color="#222" />
             </TouchableOpacity>
           </View>
+          {promotionsLoading && nearbyPromotions.length === 0 ? (
+            <ActivityIndicator size="small" color="#F5A623" />
+          ) : nearbyPromotions.length === 0 ? (
+            <Text style={{ color: '#888', fontSize: 13 }}>
+              No promotions near you right now.
+            </Text>
+          ) : (
+            <View style={styles.promoWrapper}>
+              {nearbyPromotions.slice(0, 8).map((p, idx) => (
+                <TouchableOpacity
+                  key={p.id || idx}
+                  style={[
+                    styles.promoButton,
+                    { backgroundColor: idx % 2 === 0 ? '#F9A825' : '#2C3E50' },
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    navigation.navigate('PromotionFullDetail', { promotion: p })
+                  }
+                >
+                  <Text style={styles.promoButtonText} numberOfLines={1}>
+                    {p.title || p.user?.nickname || p.user?.name || 'Promo'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
-        <VideoSection title="Saved Videos" />
-        <VideoSection title="My Videos" showPlus={true} />
+        <VideoSection
+          title="Saved Videos"
+          items={savedThumbs}
+          loading={savedLoading}
+          onItemPress={openVideoModal}
+        />
+        <VideoSection
+          title="My Videos"
+          items={myVideoThumbs}
+          loading={myVideosLoading}
+          onItemPress={openVideoModal}
+          rightAccessory={<Icon name="plus" size={24} color="#000" />}
+        />
 
         {/* Scroll Indicator */}
         <View style={styles.bottomArrowContainer}>
           <Icon name="chevron-down" size={45} color="#333" />
         </View>
       </ScrollView>
+
+      {/* Video quick-view modal (same as UserViewsScreen) */}
+      <Modal
+        visible={videoModalVisible}
+        animationType="slide"
+        onRequestClose={closeVideoModal}
+      >
+        <SafeAreaView style={styles.videoModalContainer} edges={['top']}>
+          <View style={styles.videoModalHeader}>
+            <TouchableOpacity
+              onPress={closeVideoModal}
+              style={styles.videoModalHeaderBtn}
+            >
+              <Icon name="chevron-down" size={30} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
+              {modalVideo?.title || 'Video'}
+            </Text>
+            <View style={styles.videoModalHeaderBtn} />
+          </View>
+
+          <View style={styles.videoPlayerWrap}>
+            {videoModalLoading ? (
+              <View style={styles.videoLoadingOverlay}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.videoLoadingText}>Loading…</Text>
+              </View>
+            ) : videoModalError ? (
+              <View style={styles.videoErrorOverlay}>
+                <Icon name="alert-circle-outline" size={44} color="#fff" />
+                <Text style={styles.videoErrorText}>{videoModalError}</Text>
+                <TouchableOpacity
+                  style={styles.videoRetryBtn}
+                  onPress={() =>
+                    activeVideoItem && openVideoModal(activeVideoItem)
+                  }
+                >
+                  <Icon name="refresh" size={18} color="#fff" />
+                  <Text style={styles.videoRetryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : modalVideo?.videoUrl ? (
+              <>
+                <Video
+                  ref={modalVideoRef}
+                  source={{ uri: String(modalVideo.videoUrl).trim() }}
+                  poster={modalVideo.thumbnail}
+                  posterResizeMode="cover"
+                  style={styles.videoPlayer}
+                  resizeMode="contain"
+                  paused={modalPaused}
+                  repeat={false}
+                  controls={false}
+                  playInBackground={false}
+                  playWhenInactive={false}
+                  ignoreSilentSwitch="ignore"
+                  onLoad={data => {
+                    setModalProgress(p => ({
+                      ...p,
+                      duration: data?.duration || 0,
+                    }));
+                    setModalPaused(false);
+                  }}
+                  onProgress={data => {
+                    if (seekingRef.current) return;
+                    const now = Date.now();
+                    if (now - progressUpdateRef.current < 500) return;
+                    progressUpdateRef.current = now;
+                    setModalProgress(p => ({
+                      ...p,
+                      currentTime: data?.currentTime ?? p.currentTime,
+                      duration:
+                        data?.seekableDuration || data?.duration || p.duration,
+                    }));
+                  }}
+                  onError={() =>
+                    setVideoModalError(
+                      'Failed to play video. The video format may not be supported or the URL is inaccessible.',
+                    )
+                  }
+                />
+                <Pressable
+                  style={styles.videoTapOverlay}
+                  onPress={() => setModalPaused(p => !p)}
+                >
+                  <Icon
+                    name={
+                      modalPaused
+                        ? 'play-circle-outline'
+                        : 'pause-circle-outline'
+                    }
+                    size={74}
+                    color="rgba(255,255,255,0.9)"
+                  />
+                </Pressable>
+
+                <View style={styles.videoSliderRow}>
+                  <Slider
+                    style={styles.videoSlider}
+                    value={modalDisplayTime}
+                    minimumValue={0}
+                    maximumValue={Math.max(0.1, modalProgress.duration)}
+                    minimumTrackTintColor="#fff"
+                    maximumTrackTintColor="rgba(255,255,255,0.35)"
+                    thumbTintColor="#fff"
+                    onSlidingStart={() => {
+                      setModalIsSliding(true);
+                      setModalSlidingValue(modalProgress.currentTime);
+                    }}
+                    onValueChange={val => setModalSlidingValue(val)}
+                    onSlidingComplete={val => {
+                      if (
+                        !modalVideoRef.current ||
+                        modalProgress.duration <= 0
+                      ) {
+                        setModalIsSliding(false);
+                        return;
+                      }
+                      const clamped = Math.max(
+                        0,
+                        Math.min(val, modalProgress.duration),
+                      );
+                      seekingRef.current = true;
+                      modalVideoRef.current.seek(clamped);
+                      setModalProgress(p => ({ ...p, currentTime: clamped }));
+                      progressUpdateRef.current = Date.now();
+                      setTimeout(() => {
+                        seekingRef.current = false;
+                      }, 300);
+                      setModalIsSliding(false);
+                    }}
+                  />
+                  <Text style={styles.videoTimeText}>
+                    {formatTime(modalDisplayTime)} /{' '}
+                    {formatTime(modalProgress.duration)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.videoErrorOverlay}>
+                <Text style={styles.videoErrorText}>Video not available</Text>
+              </View>
+            )}
+          </View>
+
+          <ScrollView
+            style={styles.videoModalBody}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.videoActionsRow}>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={handleModalLike}
+              >
+                <Icon
+                  name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+                  size={22}
+                  color={modalVideo?.isLiked ? '#FF7F0B' : '#222'}
+                />
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.likeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={handleModalDislike}
+              >
+                <Icon
+                  name={
+                    modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
+                  }
+                  size={22}
+                  color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
+                />
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.dislikeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={() => {
+                  if (requireLogin()) return;
+                  setVideoCommentsVisible(true);
+                }}
+              >
+                <Icon name="comment-text-outline" size={22} color="#222" />
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.commentCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={handleModalShare}
+              >
+                <Icon name="share-outline" size={22} color="#222" />
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.shareCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={() => {
+                  if (requireLogin()) return;
+                  setSaveVisible(true);
+                }}
+              >
+                <Icon name="bookmark-outline" size={22} color="#222" />
+                <Text style={styles.videoActionText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.channelRow}>
+              <View style={styles.channelLeft}>
+                <Image
+                  source={{ uri: modalVideo?.channelAvatar }}
+                  style={styles.channelAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.channelName} numberOfLines={1}>
+                    {modalVideo?.channelName || 'Channel'}
+                  </Text>
+                  <Text style={styles.channelSubText}>
+                    {formatCount(channelSub.subscriberCount ?? 0)} subscribers
+                  </Text>
+                </View>
+              </View>
+              {modalVideo?.userId &&
+              currentUser?.id &&
+              String(modalVideo.userId) === String(currentUser.id) ? null : (
+                <TouchableOpacity
+                  style={[
+                    styles.subscribeBtn,
+                    channelSub.isSubscribed && styles.subscribedBtn,
+                  ]}
+                  onPress={handleSubscribe}
+                  disabled={subLoading || !modalVideo?.userId}
+                >
+                  {subLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.subscribeText,
+                        channelSub.isSubscribed && styles.subscribedText,
+                      ]}
+                    >
+                      {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.contactRow}>
+              {modalVideo?.userId &&
+              currentUser?.id &&
+              String(modalVideo.userId) === String(currentUser.id) ? null : (
+                <TouchableOpacity
+                  style={styles.messageBtn}
+                  onPress={() => {
+                    if (requireLogin()) return;
+                    if (!modalVideo?.userId) return;
+                    navigation.navigate('ChatScreen', {
+                      partnerId: modalVideo.userId,
+                      partnerName: modalVideo.channelName || 'Channel',
+                      partnerAvatar: modalVideo.channelAvatar,
+                    });
+                  }}
+                >
+                  <Icon name="message-text-outline" size={18} color="#fff" />
+                  <Text style={styles.messageBtnText}>Message</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.socialRow}>
+                {(modalVideo?.socialLinks || [])
+                  .filter(l => (l?.url || '').trim())
+                  .slice(0, 6)
+                  .map((l, idx) => (
+                    <TouchableOpacity
+                      key={`${l.type}-${idx}`}
+                      style={styles.socialBtn}
+                      onPress={() => {
+                        const url = (l.url || '').trim();
+                        if (!url) return;
+                        Linking.openURL(
+                          url.startsWith('http') ? url : `https://${url}`,
+                        );
+                      }}
+                    >
+                      <Icon
+                        name={getSocialIcon((l.type || '').toLowerCase())}
+                        size={20}
+                        color="#FF7F0B"
+                      />
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            </View>
+          </ScrollView>
+
+          <CommentsModal
+            visible={videoCommentsVisible}
+            onClose={() => setVideoCommentsVisible(false)}
+            contentType={modalContentType}
+            contentId={modalVideo?.id}
+            videoId={modalVideo?.id}
+            video={modalVideo}
+            user={currentUser}
+            onCommentAdded={() => {
+              if (!modalVideo?.id) return;
+              setModalVideo(prev =>
+                prev
+                  ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 }
+                  : prev,
+              );
+            }}
+            onCommentDeleted={(wasTopLevel, deletedCount) => {
+              const dec = deletedCount || (wasTopLevel ? 1 : 0) || 0;
+              if (dec <= 0) return;
+              setModalVideo(prev =>
+                prev
+                  ? {
+                      ...prev,
+                      commentCount: Math.max(
+                        0,
+                        (prev.commentCount ?? 0) - dec,
+                      ),
+                    }
+                  : prev,
+              );
+            }}
+          />
+
+          <SaveModal
+            visible={saveVisible}
+            onClose={() => setSaveVisible(false)}
+            contentType={modalContentType}
+            contentId={modalVideo?.id}
+          />
+        </SafeAreaView>
+      </Modal>
+
       {/* Edit Profile Modal */}
       <Modal
         visible={editProfileVisible}
@@ -1221,6 +1726,129 @@ const styles = StyleSheet.create({
     bottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  videoSlider: { flex: 1, height: 28, marginRight: 8 },
+  videoTimeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  videoLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  videoLoadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  videoErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+  },
+  videoErrorText: {
+    color: '#fff',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  videoRetryBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  videoRetryText: { color: '#fff', fontWeight: '700' },
+  videoModalBody: { flex: 1, backgroundColor: '#fff' },
+  videoActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  videoActionBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minWidth: 60,
+  },
+  videoActionText: { fontSize: 12, color: '#222', fontWeight: '600' },
+  channelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  channelLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    paddingRight: 10,
+  },
+  channelAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#111',
+  },
+  channelName: { fontSize: 14, fontWeight: '800', color: '#111' },
+  channelSubText: { fontSize: 12, color: '#666', marginTop: 2 },
+  subscribeBtn: {
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  subscribedBtn: { backgroundColor: '#f2f2f2' },
+  subscribeText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  subscribedText: { color: '#333' },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  messageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#111',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  messageBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flex: 1,
+    paddingLeft: 10,
+    flexWrap: 'wrap',
+  },
+  socialBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF4EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

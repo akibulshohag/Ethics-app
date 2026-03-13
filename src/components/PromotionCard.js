@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const PromotionCard = ({ item }) => {
+  console.log('item', item);
+
   return (
     <TouchableOpacity style={styles.container} activeOpacity={0.8}>
       <View style={styles.imageContainer}>
@@ -10,10 +12,14 @@ const PromotionCard = ({ item }) => {
         {/* Dark overlay on the right half of the image */}
         <View style={styles.rightOverlay}>
           <Text style={styles.viewCount}>{item.views}</Text>
-          <MaterialCommunityIcons name="play-circle-outline" size={20} color="#fff" />
+          <MaterialCommunityIcons
+            name="play-circle-outline"
+            size={20}
+            color="#fff"
+          />
         </View>
       </View>
-      
+
       <View style={styles.textContainer}>
         <Text style={styles.title} numberOfLines={2}>
           {item.title}

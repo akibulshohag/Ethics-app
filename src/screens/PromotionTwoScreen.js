@@ -65,6 +65,7 @@ const PromoDetailsScreen = () => {
           screen: 'HomeThreeScreen',
           params: {
             ownerId,
+            ownerName: restaurantName,
             title: orderTitle,
             location,
             singleMenuItem: hasData ? menuItem : undefined,

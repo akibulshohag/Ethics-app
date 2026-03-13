@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,13 +6,30 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
-  Dimensions
+  Dimensions,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const { width, height } = Dimensions.get('window');
 
 const HomeFiveScreen = ({ onHomePress }) => {
+  const navigation = useNavigation();
+
+  const goHome = () => {
+    if (onHomePress) {
+      onHomePress();
+    } else {
+      navigation.navigate('HomeOneScreen');
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(goHome, 10000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#F5A623" />
@@ -22,9 +39,13 @@ const HomeFiveScreen = ({ onHomePress }) => {
         <Text style={styles.successText}>Order successfully placed</Text>
 
         {/* Center Card */}
-        <View style={styles.thanksCard}>
+        <TouchableOpacity
+          style={styles.thanksCard}
+          activeOpacity={0.9}
+          onPress={goHome}
+        >
           <Text style={styles.thanksText}>Thanks for Ordering</Text>
-        </View>
+        </TouchableOpacity>
 
         {/* Rating Section */}
         <View style={styles.ratingSection}>

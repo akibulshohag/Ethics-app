@@ -46,6 +46,9 @@ const COUNTRY_REGION = {
   us: 'us',
 };
 
+// UK postcode pattern (e.g. WD5 0AB, SW1A 1AA, M1 1AA) to bias geocoding to UK
+const UK_POSTCODE_REGEX = /[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}/i;
+
 export async function geocodeAddress(address) {
   if (!address || !String(address).trim()) return null;
   try {
@@ -60,19 +63,80 @@ export async function geocodeAddress(address) {
     if (!region && (lower.includes('dhaka') || lower.includes('mirpur') || lower.includes('chittagong') || lower.includes('sylhet'))) {
       region = 'bd';
     }
+    if (!region && UK_POSTCODE_REGEX.test(raw)) {
+      region = 'uk';
+    }
     const regionParam = region ? `&region=${COUNTRY_REGION[region]}` : '';
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${key}${regionParam}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const loc = data?.results?.[0]?.geometry?.location;
+    let url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${key}${regionParam}`;
+    let res = await fetch(url);
+    let data = await res.json();
+    let loc = data?.results?.[0]?.geometry?.location;
     if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
       return { lat: loc.lat, lng: loc.lng };
+    }
+    // Retry with ", United Kingdom" when address has UK postcode but first attempt failed (e.g. no region hint)
+    if (!region && UK_POSTCODE_REGEX.test(raw)) {
+      const withUK = `${raw}, United Kingdom`;
+      url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(withUK)}&key=${key}&region=gb`;
+      res = await fetch(url);
+      data = await res.json();
+      loc = data?.results?.[0]?.geometry?.location;
+      if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) {
+        return { lat: loc.lat, lng: loc.lng };
+      }
     }
     return null;
   } catch (e) {
     return null;
   }
 }
+
+/**
+ * Common UK / England areas – shown first when user types on landing (app is UK-focused).
+ */
+const UK_AREAS = [
+  'London', 'London EC1', 'London WC1', 'London SW1', 'London W1', 'London E1', 'London N1', 'London SE1',
+  'Abbots Langley, Hertfordshire', 'Watford, Hertfordshire', 'Hertfordshire', 'WD5 0AB', 'Langley Road, Abbots Langley',
+  'Manchester', 'Birmingham', 'Leeds', 'Liverpool', 'Bristol', 'Sheffield', 'Newcastle', 'Nottingham', 'Southampton',
+  'Reading', 'Brighton', 'Oxford', 'Cambridge', 'Cardiff', 'Edinburgh', 'Glasgow', 'Belfast',
+  'Croydon', 'Slough', 'Luton', 'Milton Keynes', 'Northampton', 'Leicester', 'Coventry', 'Wolverhampton',
+];
+
+/** Default UK map center (England). */
+const UK_DEFAULT_COORDS = { lat: 51.5074, lng: -0.1278 };
+/** Approximate coords for UK areas (e.g. Abbots Langley WD5, London). */
+const UK_AREA_COORDS = {
+  'Abbots Langley': { lat: 51.705643, lng: -0.417062 },
+  'WD5 0AB': { lat: 51.705643, lng: -0.417062 },
+  'Watford': { lat: 51.6563, lng: -0.3962 },
+  'Hertfordshire': { lat: 51.8098, lng: -0.2377 },
+  'London': { lat: 51.5074, lng: -0.1278 },
+  'Manchester': { lat: 53.4808, lng: -2.2426 },
+  'Birmingham': { lat: 52.4862, lng: -1.8904 },
+  'Leeds': { lat: 53.8008, lng: -1.5491 },
+  'Liverpool': { lat: 53.4084, lng: -2.9916 },
+  'Bristol': { lat: 51.4545, lng: -2.5879 },
+  'Sheffield': { lat: 53.3811, lng: -1.4701 },
+  'Newcastle': { lat: 54.9783, lng: -1.6178 },
+  'Nottingham': { lat: 52.9548, lng: -1.1581 },
+  'Southampton': { lat: 50.9097, lng: -1.4044 },
+  'Reading': { lat: 51.4543, lng: -0.9781 },
+  'Brighton': { lat: 50.8225, lng: -0.1372 },
+  'Oxford': { lat: 51.7520, lng: -1.2577 },
+  'Cambridge': { lat: 52.2053, lng: 0.1218 },
+  'Cardiff': { lat: 51.4816, lng: -3.1791 },
+  'Edinburgh': { lat: 55.9533, lng: -3.1883 },
+  'Glasgow': { lat: 55.8642, lng: -4.2518 },
+  'Belfast': { lat: 54.5973, lng: -5.9301 },
+  'Croydon': { lat: 51.3724, lng: -0.1092 },
+  'Slough': { lat: 51.5105, lng: -0.5954 },
+  'Luton': { lat: 51.8797, lng: -0.4176 },
+  'Milton Keynes': { lat: 52.0406, lng: -0.7594 },
+  'Northampton': { lat: 52.2405, lng: -0.9027 },
+  'Leicester': { lat: 52.6369, lng: -1.1398 },
+  'Coventry': { lat: 52.4068, lng: -1.5197 },
+  'Wolverhampton': { lat: 52.5862, lng: -2.1289 },
+};
 
 /**
  * Common Bangladesh areas (Dhaka and others) – shown first when user types (Pathao-style).
@@ -101,6 +165,49 @@ const BD_AREA_COORDS = {
 };
 
 /**
+ * Return fallback coords for a UK/England area (e.g. Abbots Langley, London, WD5).
+ * @param {string} areaDescription - e.g. "Abbots Langley, Hertfordshire" or "6 Langley Rd, WD5 0AB"
+ * @returns {{ lat: number, lng: number } | null}
+ */
+export function getFallbackCoordsForUKArea(areaDescription) {
+  if (!areaDescription || !String(areaDescription).trim()) return null;
+  const trimmed = String(areaDescription).trim();
+  if (UK_AREA_COORDS[trimmed]) return UK_AREA_COORDS[trimmed];
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('abbots langley') || lower.includes('wd5') || lower.includes('langley rd')) return UK_AREA_COORDS['Abbots Langley'];
+  if (lower.includes('watford')) return UK_AREA_COORDS['Watford'];
+  if (lower.includes('hertfordshire')) return UK_AREA_COORDS['Hertfordshire'];
+  if (lower.includes('london')) return UK_AREA_COORDS['London'];
+  if (lower.includes('manchester')) return UK_AREA_COORDS['Manchester'];
+  if (lower.includes('birmingham')) return UK_AREA_COORDS['Birmingham'];
+  if (lower.includes('leeds')) return UK_AREA_COORDS['Leeds'];
+  if (lower.includes('liverpool')) return UK_AREA_COORDS['Liverpool'];
+  if (lower.includes('bristol')) return UK_AREA_COORDS['Bristol'];
+  if (lower.includes('sheffield')) return UK_AREA_COORDS['Sheffield'];
+  if (lower.includes('newcastle')) return UK_AREA_COORDS['Newcastle'];
+  if (lower.includes('nottingham')) return UK_AREA_COORDS['Nottingham'];
+  if (lower.includes('southampton')) return UK_AREA_COORDS['Southampton'];
+  if (lower.includes('reading')) return UK_AREA_COORDS['Reading'];
+  if (lower.includes('brighton')) return UK_AREA_COORDS['Brighton'];
+  if (lower.includes('oxford')) return UK_AREA_COORDS['Oxford'];
+  if (lower.includes('cambridge')) return UK_AREA_COORDS['Cambridge'];
+  if (lower.includes('cardiff')) return UK_AREA_COORDS['Cardiff'];
+  if (lower.includes('edinburgh')) return UK_AREA_COORDS['Edinburgh'];
+  if (lower.includes('glasgow')) return UK_AREA_COORDS['Glasgow'];
+  if (lower.includes('belfast')) return UK_AREA_COORDS['Belfast'];
+  if (lower.includes('croydon')) return UK_AREA_COORDS['Croydon'];
+  if (lower.includes('slough')) return UK_AREA_COORDS['Slough'];
+  if (lower.includes('luton')) return UK_AREA_COORDS['Luton'];
+  if (lower.includes('milton keynes')) return UK_AREA_COORDS['Milton Keynes'];
+  if (lower.includes('northampton')) return UK_AREA_COORDS['Northampton'];
+  if (lower.includes('leicester')) return UK_AREA_COORDS['Leicester'];
+  if (lower.includes('coventry')) return UK_AREA_COORDS['Coventry'];
+  if (lower.includes('wolverhampton')) return UK_AREA_COORDS['Wolverhampton'];
+  if (UK_POSTCODE_REGEX.test(trimmed)) return UK_DEFAULT_COORDS;
+  return null;
+}
+
+/**
  * Return fallback coords for a BD area so we can always show HomeOneScreen with area-wise data.
  * @param {string} areaDescription - e.g. "Mirpur 10, Dhaka"
  * @returns {{ lat: number, lng: number } | null}
@@ -125,16 +232,21 @@ export function getFallbackCoordsForBDArea(areaDescription) {
 }
 
 /**
- * Get address/place suggestions as user types. Shows areas first (e.g. "Mirpur 10"), then on select that address is used.
- * Order: (1) Local BD areas list, (2) New Places API, (3) Legacy Autocomplete, (4) Geocoding single result.
+ * Get address/place suggestions as user types.
+ * @param {string} input - search text
+ * @param {{ region: 'uk'|'bd' }} [options] - 'uk' for UK/England (default), 'bd' for Bangladesh
+ * Order: (1) Local areas list (UK or BD), (2) New Places API, (3) Legacy Autocomplete, (4) Geocoding.
  */
-export async function getPlaceSuggestions(input) {
+export async function getPlaceSuggestions(input, options = {}) {
   if (!input || !String(input).trim()) return [];
   const trimmed = String(input).trim();
   const lower = trimmed.toLowerCase();
+  const region = options.region || 'uk';
+  const isUK = region === 'uk';
 
-  // 1) Local areas – show immediately when user types (e.g. "mirpur 10" → Mirpur 10, Mirpur 1, ...)
-  const localMatches = BD_AREAS.filter(area => area.toLowerCase().includes(lower));
+  // 1) Local areas – UK or BD
+  const localAreas = isUK ? UK_AREAS : BD_AREAS;
+  const localMatches = localAreas.filter(area => area.toLowerCase().includes(lower));
   if (localMatches.length > 0) {
     return localMatches.map(description => ({ description, place_id: '' }));
   }
@@ -144,13 +256,17 @@ export async function getPlaceSuggestions(input) {
     const key = config?.googleMapsApiKey;
     if (!key || !key.trim()) return [];
 
-    // 2) New Places API (v1)
-    const newSuggestions = await getPlaceSuggestionsNewApi(key, trimmed);
+    // 2) New Places API (v1) – biased to UK or BD
+    const newSuggestions = await getPlaceSuggestionsNewApi(key, trimmed, {
+      region,
+      center: isUK ? UK_DEFAULT_COORDS : { lat: 23.8103, lng: 90.4125 },
+    });
     if (newSuggestions.length > 0) return newSuggestions;
 
     // 3) Legacy Place Autocomplete
+    const legacyRegion = isUK ? 'gb' : 'bd';
     const encoded = encodeURIComponent(trimmed);
-    const legacyUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encoded}&key=${key}&region=bd`;
+    const legacyUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encoded}&key=${key}&region=${legacyRegion}`;
     const legacyRes = await fetch(legacyUrl);
     const legacyData = await legacyRes.json();
     const predictions = (legacyData?.predictions || []).map(p => ({
@@ -159,21 +275,30 @@ export async function getPlaceSuggestions(input) {
     })).filter(p => p.description && p.place_id);
     if (predictions.length > 0) return predictions;
 
-    // 4) Geocoding – one suggestion
-    const fallback = await geocodeAddressWithFormatted(trimmed);
+    // 4) Geocoding – one suggestion (with country hint for UK)
+    let fallback = await geocodeAddressWithFormatted(trimmed, isUK ? 'gb' : null);
+    if (!fallback && isUK) fallback = await geocodeAddressWithFormatted(trimmed + ', United Kingdom', 'gb');
     if (fallback) return [fallback];
     return [];
   } catch (e) {
-    const fallback = await geocodeAddressWithFormatted(trimmed);
+    let fallback = await geocodeAddressWithFormatted(trimmed, isUK ? 'gb' : null);
+    if (!fallback && isUK) fallback = await geocodeAddressWithFormatted(trimmed + ', United Kingdom', 'gb');
     if (fallback) return [fallback];
     return [];
   }
 }
 
 /**
- * New Places API (v1) autocomplete – POST, returns place predictions (areas/addresses first).
+ * New Places API (v1) autocomplete – POST, returns place predictions.
+ * @param {string} key - Google API key
+ * @param {string} input - search text
+ * @param {{ region: 'uk'|'bd', center: { lat: number, lng: number } }} [options] - region and map center for bias
  */
-async function getPlaceSuggestionsNewApi(key, input) {
+async function getPlaceSuggestionsNewApi(key, input, options = {}) {
+  const region = options.region || 'uk';
+  const isUK = region === 'uk';
+  const center = options.center || (isUK ? UK_DEFAULT_COORDS : { lat: 23.8103, lng: 90.4125 });
+  const regionCodes = isUK ? ['gb'] : ['bd'];
   try {
     const res = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
       method: 'POST',
@@ -183,10 +308,10 @@ async function getPlaceSuggestionsNewApi(key, input) {
       },
       body: JSON.stringify({
         input,
-        includedRegionCodes: ['bd'],
+        includedRegionCodes: regionCodes,
         locationBias: {
           circle: {
-            center: { latitude: 23.8103, longitude: 90.4125 },
+            center: { latitude: center.lat, longitude: center.lng },
             radius: 50000,
           },
         },
@@ -208,16 +333,19 @@ async function getPlaceSuggestionsNewApi(key, input) {
 
 /**
  * Geocode and return one suggestion object for autocomplete fallback.
+ * @param {string} address - address to geocode
+ * @param {string|null} [region] - optional region code e.g. 'gb' for UK
  * @returns {Promise<{ description: string, place_id: string } | null>}
  */
-async function geocodeAddressWithFormatted(address) {
+async function geocodeAddressWithFormatted(address, region = null) {
   if (!address || !String(address).trim()) return null;
   try {
     const { config } = require('../../config');
     const key = config?.googleMapsApiKey;
     if (!key || !key.trim()) return null;
     const encoded = encodeURIComponent(String(address).trim());
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${key}`;
+    const regionParam = region ? `&region=${region}` : '';
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${key}${regionParam}`;
     const res = await fetch(url);
     const data = await res.json();
     const first = data?.results?.[0];
