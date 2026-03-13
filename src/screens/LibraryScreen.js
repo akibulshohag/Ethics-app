@@ -296,7 +296,13 @@ const LibraryScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               dispatch(appSetUser(null));
-              await AsyncStorage.clear();
+              // Clear storage but keep location so re-login can skip LandingScreen within 24h
+              const KEEP_KEYS = ['USER_LOCATION_SELECTION'];
+              const allKeys = await AsyncStorage.getAllKeys();
+              const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+              if (toRemove.length > 0) {
+                await AsyncStorage.multiRemove(toRemove);
+              }
               const parent = navigation.getParent();
               const root = parent?.getParent?.();
               if (root) {

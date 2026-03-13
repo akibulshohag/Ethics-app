@@ -69,10 +69,15 @@ const ProfileScreen = () => {
                 // Clear user data from Redux
                 dispatch(appSetUser(null));
 
-                // Clear AsyncStorage data
-                await AsyncStorage.clear();
+                // Clear AsyncStorage but NEVER remove location (so after re-login, 24h skip Landing still works)
+                const KEEP_KEYS = ['USER_LOCATION_SELECTION', DARK_MODE_KEY];
+                const allKeys = await AsyncStorage.getAllKeys();
+                const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+                if (toRemove.length > 0) {
+                  await AsyncStorage.multiRemove(toRemove);
+                }
 
-                // Reset to Home1 tab with HameSevenScreen (no back stack)
+                // Reset to Home1 tab with HomeSevenScreen (no back stack)
                 navigation.reset({
                   index: 0,
                   routes: [
@@ -87,7 +92,7 @@ const ProfileScreen = () => {
                               index: 1,
                               routes: [
                                 { name: 'LandingScreen' },
-                                { name: 'HameSevenScreen' },
+                                { name: 'HomeSevenScreen' },
                               ],
                             },
                           },

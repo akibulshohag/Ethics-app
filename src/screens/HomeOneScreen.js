@@ -19,14 +19,18 @@ import {
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
-import {
-  useNavigation,
-  useRoute,
-  useFocusEffect,
-} from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector, useDispatch } from 'react-redux';
-import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getCurrentPositionSafe,
+  reverseGeocode,
+  geocodeAddress,
+  getPlaceSuggestions,
+  getCoordsFromPlaceId,
+  getFallbackCoordsForUKArea,
+} from '../utils/geolocation';
 import { appSetUser } from '../redux/actions/appSlice';
 import { getFeatured } from '../services/featuredService';
 import { getSponsored } from '../services/sponsoredService';
@@ -101,11 +105,21 @@ const mapToDisplayItem = (v, type) => {
   };
 };
 
+const LOCATION_KEY = 'USER_LOCATION_SELECTION';
+const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 const HomeOneScreen = () => {
   const [isVideoDetail, setIsVideoDetail] = useState(false);
   const [isRestaurantDetail, setIsRestaurantDetail] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
+  const [locationInput, setLocationInput] = useState('');
+  const [locationModalLoading, setLocationModalLoading] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [locationSuggestionsLoading, setLocationSuggestionsLoading] =
+    useState(false);
+  const locationDebounceRef = useRef(null);
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [galleryImages, setGalleryImages] = useState([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -144,6 +158,62 @@ const HomeOneScreen = () => {
   const [resSlidingValue, setResSlidingValue] = useState(0);
 
   const galleryUserId = selectedItem?.userId || selectedItem?.user?.id;
+
+  const saveLocationSelection = useCallback(async (coords, label) => {
+    try {
+      await AsyncStorage.setItem(
+        LOCATION_KEY,
+        JSON.stringify({
+          userId: userRef.current?.id || null,
+          coords,
+          addressText: label || '',
+          savedAt: Date.now(),
+        }),
+      );
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, []);
+
+  // Debounced address suggestions in the location modal
+  useEffect(() => {
+    if (!locationModalVisible) {
+      setLocationSuggestions([]);
+      setLocationSuggestionsLoading(false);
+      if (locationDebounceRef.current) {
+        clearTimeout(locationDebounceRef.current);
+        locationDebounceRef.current = null;
+      }
+      return;
+    }
+    const trimmed = locationInput.trim();
+    if (!trimmed) {
+      setLocationSuggestions([]);
+      setLocationSuggestionsLoading(false);
+      return;
+    }
+    if (locationDebounceRef.current) {
+      clearTimeout(locationDebounceRef.current);
+    }
+    locationDebounceRef.current = setTimeout(async () => {
+      setLocationSuggestionsLoading(true);
+      try {
+        const list = await getPlaceSuggestions(trimmed, { region: 'uk' });
+        setLocationSuggestions(list || []);
+      } catch (e) {
+        setLocationSuggestions([]);
+      } finally {
+        setLocationSuggestionsLoading(false);
+        locationDebounceRef.current = null;
+      }
+    }, 280);
+    return () => {
+      if (locationDebounceRef.current) {
+        clearTimeout(locationDebounceRef.current);
+        locationDebounceRef.current = null;
+      }
+    };
+  }, [locationInput, locationModalVisible]);
 
   useEffect(() => {
     if (!showGalleryModal) {
@@ -195,8 +265,46 @@ const HomeOneScreen = () => {
         });
         return;
       }
+      // If we don't yet have a location, try to restore a recent one from storage before sending user to Landing
       if (selectedLocation?.lat == null && selectedLocation?.lng == null) {
-        navigation.replace('LandingScreen');
+        let cancelled = false;
+        const restoreLocation = async () => {
+          try {
+            const raw = await AsyncStorage.getItem(LOCATION_KEY);
+            if (!raw) {
+              if (!cancelled) navigation.replace('LandingScreen');
+              return;
+            }
+            const saved = JSON.parse(raw);
+            const sameUser =
+              !saved?.userId || !userRef.current?.id
+                ? true
+                : saved.userId === userRef.current.id;
+            const fresh =
+              saved?.savedAt && Date.now() - saved.savedAt <= LOCATION_TTL_MS;
+            if (
+              saved?.coords?.lat != null &&
+              saved?.coords?.lng != null &&
+              sameUser &&
+              fresh
+            ) {
+              if (cancelled) return;
+              setSelectedLocation(saved.coords);
+              setAddressText(saved.addressText || '');
+              // Trigger feed load once state is set
+              loadFeaturedAndFeed();
+              loadContinueWatching();
+            } else if (!cancelled) {
+              navigation.replace('LandingScreen');
+            }
+          } catch (e) {
+            if (!cancelled) navigation.replace('LandingScreen');
+          }
+        };
+        restoreLocation();
+        return () => {
+          cancelled = true;
+        };
       }
       // Refresh feed when returning to home so shorts cards show updated view counts
       if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
@@ -671,11 +779,20 @@ const HomeOneScreen = () => {
         ) : null}
 
         <View style={styles.locationSection}>
-          <View style={styles.homeDropdown}>
+          <TouchableOpacity
+            style={styles.homeDropdown}
+            activeOpacity={0.8}
+            onPress={() => {
+              setLocationInput(addressText || '');
+              setLocationModalVisible(true);
+            }}
+          >
             <Icon name="map-marker-radius" size={24} color="#FFF" />
-            <Text style={styles.homeText}>Home</Text>
+            <Text style={styles.homeText} numberOfLines={1}>
+              {addressText || 'Set your address'}
+            </Text>
             <Icon name="chevron-down" size={24} color="#FFF" />
-          </View>
+          </TouchableOpacity>
           <Text style={styles.addressSubtext} numberOfLines={2}>
             {addressText || 'Set your address on home'}
           </Text>
@@ -1430,6 +1547,231 @@ const HomeOneScreen = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={locationModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!locationModalLoading) setLocationModalVisible(false);
+        }}
+      >
+        <View style={styles.locationModalOverlay}>
+          <View style={styles.locationModalContent}>
+            <Text style={styles.locationModalTitle}>Choose your area</Text>
+            <TextInput
+              style={styles.locationModalInput}
+              value={locationInput}
+              onChangeText={setLocationInput}
+              placeholder="Type address (e.g. area, city)"
+              placeholderTextColor="#999"
+              editable={!locationModalLoading}
+              returnKeyType="done"
+              onSubmitEditing={async () => {
+                // submit typed address directly (same as tapping suggestion-less confirm)
+                const trimmed = locationInput.trim();
+                if (!trimmed) return;
+                setLocationModalLoading(true);
+                try {
+                  let coords = await geocodeAddress(trimmed);
+                  if (!coords)
+                    coords = await geocodeAddress(`${trimmed}, United Kingdom`);
+                  if (!coords) coords = getFallbackCoordsForUKArea(trimmed);
+                  if (!coords) {
+                    Alert.alert(
+                      'Address',
+                      'Could not find that address. Please refine it or use your location.',
+                    );
+                    setLocationModalLoading(false);
+                    return;
+                  }
+                  setSelectedLocation(coords);
+                  setAddressText(trimmed);
+                  await saveLocationSelection(coords, trimmed);
+                  setLocationModalVisible(false);
+                  loadFeaturedAndFeed();
+                  loadContinueWatching();
+                } catch (e) {
+                  Alert.alert(
+                    'Address',
+                    'Could not find that address. Please try again.',
+                  );
+                } finally {
+                  setLocationModalLoading(false);
+                }
+              }}
+            />
+            {locationInput.trim().length > 0 && (
+              <View style={styles.locationSuggestionsBox}>
+                {locationSuggestionsLoading ? (
+                  <View style={styles.locationSuggestionItem}>
+                    <ActivityIndicator size="small" color="#F5A623" />
+                    <Text style={styles.locationSuggestionText}>
+                      Searching areas...
+                    </Text>
+                  </View>
+                ) : locationSuggestions.length > 0 ? (
+                  <ScrollView
+                    style={{ maxHeight: 200 }}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {locationSuggestions.slice(0, 8).map((item, idx) => (
+                      <TouchableOpacity
+                        key={item.place_id || `loc-${idx}`}
+                        style={styles.locationSuggestionItem}
+                        activeOpacity={0.7}
+                        onPress={async () => {
+                          if (locationModalLoading) return;
+                          setLocationInput(item.description);
+                          setLocationSuggestions([]);
+                          setLocationModalLoading(true);
+                          try {
+                            let coords = item.place_id
+                              ? await getCoordsFromPlaceId(item.place_id)
+                              : null;
+                            if (!coords)
+                              coords = await geocodeAddress(item.description);
+                            if (!coords)
+                              coords = await geocodeAddress(
+                                `${item.description}, United Kingdom`,
+                              );
+                            if (!coords)
+                              coords = getFallbackCoordsForUKArea(
+                                item.description,
+                              );
+                            if (!coords) {
+                              Alert.alert(
+                                'Address',
+                                'Could not get location for this address. Try "Use my location".',
+                              );
+                              setLocationModalLoading(false);
+                              return;
+                            }
+                            setSelectedLocation(coords);
+                            setAddressText(item.description);
+                            await saveLocationSelection(
+                              coords,
+                              item.description,
+                            );
+                            setLocationModalVisible(false);
+                            loadFeaturedAndFeed();
+                            loadContinueWatching();
+                          } catch (e) {
+                            Alert.alert(
+                              'Address',
+                              'Something went wrong. Try again or use your location.',
+                            );
+                          } finally {
+                            setLocationModalLoading(false);
+                          }
+                        }}
+                      >
+                        <Icon
+                          name="map-marker-outline"
+                          size={18}
+                          color="#666"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text
+                          style={styles.locationSuggestionText}
+                          numberOfLines={2}
+                        >
+                          {item.description}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.locationSuggestionItem}>
+                    <Icon
+                      name="map-marker-outline"
+                      size={18}
+                      color="#999"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.locationSuggestionHint}>
+                      No areas found. Type full address or tap "Use my location".
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+            <View style={styles.locationModalButtons}>
+              <TouchableOpacity
+                style={styles.locationUseMyBtn}
+                disabled={locationModalLoading}
+                onPress={() => {
+                  setLocationModalLoading(true);
+                  getCurrentPositionSafe(
+                    async pos => {
+                      try {
+                        const lat = pos?.coords?.latitude;
+                        const lng = pos?.coords?.longitude;
+                        if (
+                          lat == null ||
+                          lng == null ||
+                          !Number.isFinite(lat) ||
+                          !Number.isFinite(lng)
+                        ) {
+                          setLocationModalLoading(false);
+                          return;
+                        }
+                        const addr = await reverseGeocode(lat, lng);
+                        const label =
+                          addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                        const coords = { lat, lng };
+                        setLocationInput(label);
+                        setSelectedLocation(coords);
+                        setAddressText(label);
+                        await saveLocationSelection(coords, label);
+                        setLocationModalVisible(false);
+                        loadFeaturedAndFeed();
+                        loadContinueWatching();
+                      } catch (e) {
+                        Alert.alert(
+                          'Location',
+                          'Could not get your location. Check permissions.',
+                        );
+                      } finally {
+                        setLocationModalLoading(false);
+                      }
+                    },
+                    err => {
+                      setLocationModalLoading(false);
+                      Alert.alert(
+                        'Location',
+                        err || 'Could not get your location.',
+                      );
+                    },
+                  );
+                }}
+              >
+                {locationModalLoading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <Icon
+                      name="crosshairs-gps"
+                      size={20}
+                      color="#FFF"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.locationUseMyText}>Use my location</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationCancelBtn}
+                onPress={() => {
+                  if (!locationModalLoading) setLocationModalVisible(false);
+                }}
+              >
+                <Text style={styles.locationCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -2037,6 +2379,89 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: '#666',
+  },
+  locationModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  locationModalContent: {
+    width: '100%',
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 20,
+  },
+  locationModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+    color: '#111827',
+  },
+  locationModalInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    marginBottom: 16,
+  },
+  locationSuggestionsBox: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: '#FFF',
+    overflow: 'hidden',
+  },
+  locationSuggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  locationSuggestionText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#111827',
+  },
+  locationSuggestionHint: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  locationModalButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  locationUseMyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  locationUseMyText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  locationCancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  locationCancelText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
   },
   galleryGridContent: {
     padding: 8,

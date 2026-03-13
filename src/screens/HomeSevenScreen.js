@@ -20,8 +20,12 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { config } from '../../config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
+
+const LOCATION_KEY = 'USER_LOCATION_SELECTION';
+const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const navigation = useNavigation();
@@ -85,11 +89,56 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       dispatch(appSetUser(userData));
 
       try {
-        // After login, always redirect to LandingScreen (clear login from stack)
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'LandingScreen' }],
-        });
+        // After login: if we have a saved location from storage (same user, within 24h), go to HomeOneScreen; else LandingScreen
+        let targetRoute = { name: 'LandingScreen' };
+        try {
+          const raw = await AsyncStorage.getItem(LOCATION_KEY);
+          if (raw && typeof raw === 'string') {
+            const saved = JSON.parse(raw);
+            if (saved && typeof saved === 'object') {
+              const coords =
+                saved.coords && typeof saved.coords === 'object'
+                  ? saved.coords
+                  : { lat: saved.lat, lng: saved.lng };
+              const lat = coords?.lat != null ? Number(coords.lat) : null;
+              const lng = coords?.lng != null ? Number(coords.lng) : null;
+              const sameUser =
+                saved.userId == null || saved.userId === userData.id;
+              const savedAt =
+                saved.savedAt != null ? Number(saved.savedAt) : null;
+              const fresh =
+                savedAt == null || Date.now() - savedAt <= LOCATION_TTL_MS;
+              const hasCoords =
+                lat != null &&
+                lng != null &&
+                Number.isFinite(lat) &&
+                Number.isFinite(lng);
+              if (sameUser && fresh && hasCoords) {
+                targetRoute = {
+                  name: 'HomeOneScreen',
+                  params: {
+                    selectedLocation: { lat, lng },
+                    addressText: saved.addressText || '',
+                  },
+                };
+              }
+            }
+          }
+        } catch (e) {
+          // ignore storage/parse errors, fall back to LandingScreen
+        }
+
+        // Run reset on next tick so Redux/store has updated and stack is ready
+        setTimeout(() => {
+          try {
+            navigation.reset({
+              index: 0,
+              routes: [targetRoute],
+            });
+          } catch (navErr) {
+            navigation.reset({ index: 0, routes: [{ name: 'LandingScreen' }] });
+          }
+        }, 0);
       } catch (_) {}
     } catch (error) {
       console.error('Login error:', error);

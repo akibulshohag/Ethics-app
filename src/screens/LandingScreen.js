@@ -11,6 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
   getCurrentPositionSafe,
@@ -22,13 +24,44 @@ import {
 } from '../utils/geolocation';
 import logo from '../assets/logo.png';
 
+const LOCATION_KEY = 'USER_LOCATION_SELECTION';
+const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 const LandingScreen = () => {
   const navigation = useNavigation();
+  const user = useSelector(state => state.app?.user);
   const [addressText, setAddressText] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const debounceTimerRef = useRef(null);
+
+  // If user already has a recent saved location, skip Landing and go straight to HomeOne
+  useEffect(() => {
+    let cancelled = false;
+    const checkSavedLocation = async () => {
+      try {
+        if (!user?.id) return;
+        const raw = await AsyncStorage.getItem(LOCATION_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved || saved.userId !== user.id) return;
+        if (!saved.savedAt || Date.now() - saved.savedAt > LOCATION_TTL_MS) return;
+        if (!saved.coords?.lat || !saved.coords?.lng) return;
+        if (cancelled) return;
+        navigation.replace('HomeOneScreen', {
+          selectedLocation: saved.coords,
+          addressText: saved.addressText || '',
+        });
+      } catch (e) {
+        // ignore storage errors and show Landing normally
+      }
+    };
+    checkSavedLocation();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, navigation]);
 
   useEffect(() => {
     const trimmed = addressText.trim();
@@ -50,7 +83,20 @@ const LandingScreen = () => {
     };
   }, [addressText]);
 
-  const goToResults = (selectedLocation, addressLabel) => {
+  const goToResults = async (selectedLocation, addressLabel) => {
+    try {
+      await AsyncStorage.setItem(
+        LOCATION_KEY,
+        JSON.stringify({
+          userId: user?.id || null,
+          coords: selectedLocation,
+          addressText: addressLabel || addressText,
+          savedAt: Date.now(),
+        }),
+      );
+    } catch (e) {
+      // non-blocking; still navigate even if storage fails
+    }
     navigation.replace('HomeOneScreen', {
       selectedLocation,
       addressText: addressLabel || addressText,
@@ -67,7 +113,7 @@ const LandingScreen = () => {
       if (!coords) coords = await geocodeAddress(description + ', United Kingdom');
       if (!coords) coords = getFallbackCoordsForUKArea(description);
       if (coords) {
-        goToResults(coords, description);
+        await goToResults(coords, description);
       } else {
         Alert.alert(
           'Address',
@@ -99,7 +145,7 @@ const LandingScreen = () => {
         if (!coords) coords = await geocodeAddress(trimmed + ', United Kingdom');
         if (!coords) coords = getFallbackCoordsForUKArea(trimmed);
         if (coords) {
-          goToResults(coords, trimmed);
+          await goToResults(coords, trimmed);
         } else {
           Alert.alert(
             'Address',
@@ -130,7 +176,7 @@ const LandingScreen = () => {
         const coords = { lat, lng };
         const addr = await reverseGeocode(lat, lng);
         setAddressText(addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        goToResults(coords, addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        await goToResults(coords, addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
         setLocationLoading(false);
       },
       err => {
