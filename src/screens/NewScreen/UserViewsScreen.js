@@ -118,7 +118,7 @@ const mapVideoToCard = (v, profile) => {
   const name =
     profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
   const avatar = safeImageUri(
-    profile?.photos?.[0]?.src || profile?.photos?.[0],
+    profile?.channelAvatar || profile?.photos?.[0]?.src || profile?.photos?.[0],
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       name,
     )}&background=111&color=fff`,
@@ -142,12 +142,14 @@ const mapVideoToCard = (v, profile) => {
 const mapVideoApiToModal = (v = {}) => {
   const u = v.user || {};
   const channelName = u.nickname || u.name || 'Unknown';
-  const channelAvatar =
-    u.photos?.[0] ||
-    (Array.isArray(u.photos) && u.photos[0]) ||
+  const rawAvatar =
+    u.photos?.[0] ?? (Array.isArray(u.photos) && u.photos[0]);
+  const channelAvatar = safeImageUri(
+    rawAvatar?.src ?? rawAvatar,
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       channelName,
-    )}&background=111&color=fff`;
+    )}&background=111&color=fff`,
+  );
   return {
     id: v.id,
     title: v.title || 'Untitled',
@@ -171,7 +173,7 @@ const mapPostToCard = (p, profile) => {
   const name =
     profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
   const avatar = safeImageUri(
-    profile?.photos?.[0]?.src || profile?.photos?.[0],
+    profile?.channelAvatar || profile?.photos?.[0]?.src || profile?.photos?.[0],
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       name,
     )}&background=111&color=fff`,
@@ -1033,7 +1035,12 @@ const UserViewsScreen = ({ navigation }) => {
 
             <View style={styles.channelRow}>
               <View style={styles.channelLeft}>
-                <Image source={{ uri: modalVideo?.channelAvatar }} style={styles.channelAvatar} />
+                <Image
+                  source={{
+                    uri: safeImageUri(modalVideo?.channelAvatar),
+                  }}
+                  style={styles.channelAvatar}
+                />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.channelName} numberOfLines={1}>
                     {modalVideo?.channelName || 'Channel'}

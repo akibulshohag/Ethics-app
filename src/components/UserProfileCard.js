@@ -40,7 +40,7 @@ const UserProfileCard = ({
       ? String(profile.nickname)
       : name;
   const avatarUri = safeImageUri(
-    profile?.photos?.[0]?.src || profile?.photos?.[0],
+    profile?.channelAvatar || profile?.photos?.[0]?.src || profile?.photos?.[0],
     '',
   );
   const followers = formatCount(
