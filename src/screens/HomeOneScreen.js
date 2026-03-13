@@ -15,6 +15,7 @@ import {
   Linking,
   Modal,
   FlatList,
+  Share,
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -39,6 +40,13 @@ import logo from '../assets/logo.png';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
+
+const formatCount = n => {
+  if (n == null || n < 0) return '0';
+  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(n);
+};
 
 const viewerRole = user =>
   (user?.role && String(user.role).toLowerCase()) || 'user';
@@ -79,9 +87,11 @@ const mapToDisplayItem = (v, type) => {
       )}&background=111&color=fff`,
     views: viewsStr,
     viewCount,
-    likeCount: v.likeCount ?? 0,
-    dislikeCount: v.dislikeCount ?? 0,
-    commentCount: v.commentCount ?? 0,
+    likeCount: v.likeCount ?? v._count?.likes ?? 0,
+    dislikeCount: v.dislikeCount ?? v._count?.dislikes ?? 0,
+    commentCount: v.commentCount ?? v._count?.comments ?? 0,
+    shareCount: v.shareCount ?? 0,
+    isLiked: v.isLiked ?? false,
     creatorAddress: u.address ?? undefined,
     creatorLatitude: u.latitude ?? undefined,
     creatorLongitude: u.longitude ?? undefined,
@@ -182,11 +192,18 @@ const HomeOneScreen = () => {
       if (selectedLocation?.lat == null && selectedLocation?.lng == null) {
         navigation.replace('LandingScreen');
       }
+      // Refresh feed when returning to home so shorts cards show updated view counts
+      if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
+        loadFeaturedAndFeed();
+        loadContinueWatching();
+      }
     }, [
       route.params,
       navigation,
       selectedLocation?.lat,
       selectedLocation?.lng,
+      loadFeaturedAndFeed,
+      loadContinueWatching,
     ]),
   );
 
@@ -346,6 +363,25 @@ const HomeOneScreen = () => {
     }
   };
 
+  useEffect(() => {
+    if (
+      !isVideoDetail ||
+      selectedItem?.type !== 'short' ||
+      !selectedItem?.id
+    )
+      return;
+    shortsService
+      .recordView(selectedItem.id, user?.id || null)
+      .then(() => {
+        setSelectedItem(prev => {
+          if (!prev) return prev;
+          const newCount = (prev.viewCount ?? 0) + 1;
+          return { ...prev, viewCount: newCount };
+        });
+      })
+      .catch(() => {});
+  }, [isVideoDetail, selectedItem?.id, selectedItem?.type, user?.id]);
+
   const openRestaurantDetail = item => {
     setSelectedItem(item);
     setVideoPaused(true);
@@ -375,6 +411,47 @@ const HomeOneScreen = () => {
       openRestaurantDetail(item);
     }
   };
+
+  const handleShortLike = useCallback(
+    async item => {
+      if (!user?.id || item?.type !== 'short' || !item?.id) return;
+      try {
+        await shortsService.toggleLike(item.id, user.id);
+        setSelectedItem(prev => {
+          if (!prev || prev.id !== item.id) return prev;
+          const newLiked = !prev.isLiked;
+          const delta = newLiked ? 1 : -1;
+          const newCount = Math.max(0, (prev.likeCount ?? 0) + delta);
+          return {
+            ...prev,
+            isLiked: newLiked,
+            likeCount: newCount,
+          };
+        });
+      } catch (e) {}
+    },
+    [user?.id],
+  );
+
+  const handleShortShare = useCallback(
+    async item => {
+      if (!item?.id) return;
+      const message = `${item.title || item.description || 'Short'}\neatix://shorts/${item.id}`;
+      try {
+        await Share.share({ message, title: item.title || 'Share Short' });
+        setSelectedItem(prev => {
+          if (!prev || prev.id !== item.id) return prev;
+          const newCount = (prev.shareCount ?? 0) + 1;
+          return { ...prev, shareCount: newCount };
+        });
+      } catch (e) {
+        if (e?.message !== 'User did not share') {
+          Alert.alert('Share', 'Share failed');
+        }
+      }
+    },
+    [],
+  );
 
   const featuredItem = (() => {
     if (!featuredVideo?.video) return null;
@@ -715,20 +792,42 @@ const HomeOneScreen = () => {
               <View style={styles.iconCircle}>
                 <Icon name="account-circle" size={30} color="#FFF" />
               </View>
-              <Text style={styles.actionText}>100k</Text>
+              <Text style={styles.actionText}>
+                {formatCount(selectedItem?.viewCount ?? 0)}
+              </Text>
             </View>
-            <View style={styles.actionItem}>
-              <Icon name="heart" size={32} color="#FF4D4D" />
-              <Text style={styles.actionText}>100ksss</Text>
-            </View>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() =>
+                selectedItem?.type === 'short' && handleShortLike(selectedItem)
+              }
+            >
+              <Icon
+                name={selectedItem?.isLiked ? 'heart' : 'heart-outline'}
+                size={32}
+                color={selectedItem?.isLiked ? '#FF4D4D' : '#FFF'}
+              />
+              <Text style={styles.actionText}>
+                {formatCount(selectedItem?.likeCount ?? 0)}
+              </Text>
+            </TouchableOpacity>
             <View style={styles.actionItem}>
               <Icon name="comment-text" size={32} color="#FFF" />
-              <Text style={styles.actionText}>Com</Text>
+              <Text style={styles.actionText}>
+                {formatCount(selectedItem?.commentCount ?? 0)}
+              </Text>
             </View>
-            <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() =>
+                selectedItem?.type === 'short' && handleShortShare(selectedItem)
+              }
+            >
               <Icon name="share" size={32} color="#FFF" />
-              <Text style={styles.actionText}>Share</Text>
-            </View>
+              <Text style={styles.actionText}>
+                {formatCount(selectedItem?.shareCount ?? 0)}
+              </Text>
+            </TouchableOpacity>
           </View>
           {!videoLoading && !videoError && (
             <TouchableOpacity

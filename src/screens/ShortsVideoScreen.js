@@ -17,12 +17,11 @@ import {
   Share,
 } from 'react-native';
 import Video from 'react-native-video';
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
 import CreateVideoModal from '../components/CreateVideoModal';
@@ -79,7 +78,11 @@ const MOCK_VIDEOS = [
     commentsDisplay: '2.4K',
     shares: '2.2K',
     sharesDisplay: '2.2K',
+    viewsDisplay: '100k',
     isLiked: false,
+    creatorRole: 'owner',
+    userId: 'u1',
+    location: 'Near you',
   },
   {
     id: '2',
@@ -100,7 +103,11 @@ const MOCK_VIDEOS = [
     commentsDisplay: '8K',
     shares: '15K',
     sharesDisplay: '15K',
+    viewsDisplay: '125K',
     isLiked: false,
+    creatorRole: 'owner',
+    userId: 'u2',
+    location: 'Near you',
   },
   {
     id: '3',
@@ -121,7 +128,11 @@ const MOCK_VIDEOS = [
     commentsDisplay: '500',
     shares: '3K',
     sharesDisplay: '3K',
+    viewsDisplay: '50K',
     isLiked: false,
+    creatorRole: 'user',
+    userId: 'u3',
+    location: 'Near you',
   },
 ];
 
@@ -130,6 +141,7 @@ const VideoItem = ({
   isActive,
   index,
   screenHeight,
+  onBack,
   onOpenComments,
   onOpenSettings,
   onOpenCreate,
@@ -138,6 +150,7 @@ const VideoItem = ({
   onSubscribe,
   onShare,
   isSubscribed,
+  currentUser,
   navigation,
 }) => {
   const [paused, setPaused] = useState(!isActive);
@@ -172,8 +185,8 @@ const VideoItem = ({
         />
       ) : (
         <View style={[styles.video, styles.videoPlaceholder]}>
-          <Ionicons
-            name="videocam-off-outline"
+          <Icon
+            name="video-off-outline"
             size={64}
             color="rgba(255,255,255,0.5)"
           />
@@ -189,106 +202,135 @@ const VideoItem = ({
       >
         {paused && (
           <View style={styles.pauseIconContainer}>
-            <Ionicons name="play" size={50} color="rgba(255,255,255,0.6)" />
+            <Icon
+              name="play-circle-outline"
+              size={72}
+              color="rgba(255,255,255,0.9)"
+            />
           </View>
         )}
       </TouchableOpacity>
 
-      {/* Gradient Overlay - ZIndex 5 */}
+      {/* Gradient Overlay - ZIndex 5 (same as HomeOneScreen renderVideoDetail feel) */}
       <LinearGradient
         colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
         style={styles.gradient}
         pointerEvents="none"
       />
 
-      {/* Top Right Icons - ZIndex 10 */}
+      {/* Top bar: Back left, Search + Camera right (exact HomeOneScreen) - ZIndex 10 */}
       <View
-        style={[styles.topRightIcons, { top: insets.top + 10 }]}
+        style={[styles.topBar, { top: insets.top + 8 }]}
         pointerEvents="box-none"
       >
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="search-outline" size={26} color="white" />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={onBack}
+          activeOpacity={0.8}
+        >
+          <Icon name="chevron-left" size={24} color="#FFF" />
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} onPress={onOpenCreate}>
-          <Ionicons name="camera-outline" size={26} color="white" />
-        </TouchableOpacity>
+        <View style={styles.videoHeaderIcons}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Icon name="magnify" size={26} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={onOpenCreate}>
+            <Icon name="camera-outline" size={26} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={onOpenSettings}>
+            <Icon name="dots-vertical" size={26} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Right Side Action Bar - ZIndex 10 */}
+      {/* Right Side Action Bar - exact HomeOneScreen: eye (views), heart (like), comment, share; position & size match - ZIndex 10 */}
       <View
-        style={[styles.rightSideBar, { bottom: 100 }]}
+        style={[styles.rightSideBar, { bottom: screenHeight * 0.25 }]}
         pointerEvents="box-none"
       >
-        {/* <TouchableOpacity style={styles.actionItem}>
-                    <Ionicons name="flag-outline" size={28} color="white" style={styles.shadow} />
-                </TouchableOpacity> */}
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={() =>
+            item.user?.id &&
+            navigation.navigate('UserViewsScreen', { userId: item.user.id })
+          }
+        >
+          <Icon
+            name="eye-outline"
+            size={28}
+            color="#FFF"
+            style={styles.shadow}
+          />
+          <Text style={styles.actionText}>{item.viewsDisplay ?? '0'}</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionItem}
           onPress={() => onLike?.(item)}
         >
-          <Ionicons
-            name={item.isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-            size={30}
-            color="white"
+          <Icon
+            name={item.isLiked ? 'heart' : 'heart-outline'}
+            size={28}
+            color={item.isLiked ? '#FF4D4D' : '#FFF'}
             style={styles.shadow}
           />
           <Text style={styles.actionText}>{item.likesDisplay}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.actionItem}
-          onPress={() => onDislike?.(item)}
-        >
-          <Ionicons
-            name={item.isDisliked ? 'thumbs-down' : 'thumbs-down-outline'}
-            size={30}
-            color="white"
-            style={styles.shadow}
-          />
-          <Text style={styles.actionText}>
-            {item.dislikesDisplay ?? item.dislikes ?? '0'}
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={styles.actionItem} onPress={onOpenComments}>
-          <Ionicons
-            name="chatbubble-ellipses-outline"
+          <Icon
+            name="comment-text-outline"
             size={28}
-            color="white"
+            color="#FFF"
             style={styles.shadow}
           />
           <Text style={styles.actionText}>{item.commentsDisplay}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem} onPress={() => onShare?.(item)}>
-          <FontAwesome
-            name="share"
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={() => onShare?.(item)}
+        >
+          <Icon
+            name="share-outline"
             size={28}
-            color="white"
+            color="#FFF"
             style={styles.shadow}
           />
           <Text style={styles.actionText}>{item.sharesDisplay}</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionItem} onPress={onOpenSettings}>
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={28}
-            color="white"
-            style={styles.shadow}
-          />
-        </TouchableOpacity>
       </View>
 
-      {/* Bottom Info Section - ZIndex 10 */}
+      {/* Bottom section - same as HomeOneScreen: @user, description, Original Sound + Order Now, chevron - ZIndex 10 */}
       <View
-        style={[styles.bottomInfo, { bottom: 20 }]}
+        style={[
+          styles.videoFooter,
+          { position: 'absolute', left: 15, right: 80, bottom: 20, zIndex: 10 },
+        ]}
         pointerEvents="box-none"
       >
-        {/* Description */}
-        <View style={styles.descriptionContainer}>
-          <Text style={styles.descriptionText}>{item.description}</Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            const ownerId = item.user?.id ?? item.userId ?? null;
+            if (ownerId) {
+              navigation.navigate('UserViewsScreen', { userId: ownerId });
+            }
+          }}
+          disabled={!(item.user?.id || item.userId)}
+        >
+          <Text style={styles.videoUser}>
+            @
+            {(item.user?.username || item.description || 'short')
+              .toLowerCase()
+              .replace(/\s+/g, '')}
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.videoDesc} numberOfLines={2}>
+          {item.description || 'Description'}
+        </Text>
+        {(item.hashtags || []).length > 0 && (
           <Text style={styles.hashtagsText}>
             {(item.hashtags || []).map((tag, idx) => (
               <Text key={idx} style={styles.hashtag}>
@@ -296,39 +338,53 @@ const VideoItem = ({
               </Text>
             ))}
           </Text>
+        )}
+        <TouchableOpacity activeOpacity={0.7}>
+          <Text style={styles.translationText}>See translation</Text>
+        </TouchableOpacity>
+        <View style={styles.footerRow}>
+          <View style={styles.audioRow}>
+            <Icon name="music" size={18} color="#FFF" />
+            <Text style={styles.audioText}>Original Sound</Text>
+            <Text style={[styles.audioText, { marginLeft: 12 }]}>Mute</Text>
+          </View>
+          {(item.creatorRole === 'owner' || item.user?.id || item.userId) &&
+            (!currentUser?.token ? (
+              <TouchableOpacity
+                style={styles.resOrderBtn}
+                onPress={() => {
+                  const ownerId = item.user?.id ?? item.userId ?? null;
+                  navigation.navigate('HomeSevenScreen', {
+                    returnToOrder: true,
+                    ownerUserId: ownerId,
+                  });
+                }}
+              >
+                <Text style={styles.resOrderText}>Login</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.resOrderBtn}
+                onPress={() => {
+                  const ownerId = item.user?.id ?? item.userId ?? null;
+                  if (ownerId) {
+                    navigation.navigate('HomeThreeScreen', {
+                      ownerId,
+                      ownerName: item.user?.username || '',
+                      title: item.description || item.user?.username || '',
+                      location: item.location || '',
+                    });
+                  } else {
+                    navigation.navigate('HomeThreeScreen');
+                  }
+                }}
+              >
+                <Text style={styles.resOrderText}>Order Now</Text>
+              </TouchableOpacity>
+            ))}
         </View>
-
-        {/* User Row */}
-        <View style={styles.userRow}>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('ChannelProfileScreen', {
-                channelUserId: item.user?.id,
-              })
-            }
-          >
-            <Image source={{ uri: item.user.avatar }} style={styles.avatar} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate('ChannelProfileScreen', {
-                channelUserId: item.user?.id,
-              })
-            }
-          >
-            <Text style={styles.username}>{item.user.username}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.subscribeButton,
-              isSubscribed && styles.subscribedButton,
-            ]}
-            onPress={() => onSubscribe?.(item)}
-          >
-            <Text style={styles.subscribeText}>
-              {isSubscribed ? 'Subscribed' : 'Subscribe'}
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.bottomArrow}>
+          <Icon name="chevron-down" size={40} color="#FFF" />
         </View>
       </View>
     </View>
@@ -340,6 +396,7 @@ const mapShortToItem = s => {
   const dislikesCount = s.dislikeCount ?? 0;
   const commentsCount = s._count?.comments ?? s.commentCount ?? 0;
   const sharesCount = s.shareCount ?? 0;
+  const viewCount = s.viewCount ?? s._count?.views ?? 0;
   const user = s.user || {};
   const avatar =
     user.avatar ||
@@ -367,8 +424,15 @@ const mapShortToItem = s => {
     commentsDisplay: formatCount(commentsCount),
     _commentCount: commentsCount,
     sharesDisplay: formatCount(sharesCount),
+    _shareCount: sharesCount,
+    viewsDisplay: formatCount(viewCount),
+    _viewCount: viewCount,
     isLiked: s.isLiked ?? false,
     isDisliked: s.isDisliked ?? false,
+    creatorRole:
+      user.role != null ? String(user.role).toLowerCase() : undefined,
+    userId: s.userId || user.id,
+    location: user.address || 'Near you',
   };
 };
 
@@ -409,7 +473,9 @@ const ShortsVideoScreen = ({ navigation }) => {
       initialShortId &&
       !hasAppliedInitialShort.current
     ) {
-      const idx = videos.findIndex(v => String(v.id) === String(initialShortId));
+      const idx = videos.findIndex(
+        v => String(v.id) === String(initialShortId),
+      );
       if (idx > 0) {
         const clicked = videos[idx];
         const rest = videos.filter((_, i) => i !== idx);
@@ -501,7 +567,8 @@ const ShortsVideoScreen = ({ navigation }) => {
       return;
     }
     if (user.id === channelUserId) return; // can't subscribe to self
-    const currentlySubscribed = subscriptionMap[channelUserId] ?? item.user?.isSubscribed;
+    const currentlySubscribed =
+      subscriptionMap[channelUserId] ?? item.user?.isSubscribed;
     try {
       if (currentlySubscribed) {
         await unsubscribeFromChannel(user.id, channelUserId);
@@ -525,9 +592,23 @@ const ShortsVideoScreen = ({ navigation }) => {
     const short = item || activeItem;
     if (!short?.id) return;
     const shareUrl = `eatix://shorts/${short.id}`;
-    const message = `${short.description || short.user?.username || 'Short'}\n${shareUrl}`;
+    const message = `${
+      short.description || short.user?.username || 'Short'
+    }\n${shareUrl}`;
     try {
       await Share.share({ message, title: short.description || 'Share Short' });
+      setVideos(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(v => {
+          if (v.id !== short.id) return v;
+          const newCount = (v._shareCount ?? 0) + 1;
+          return {
+            ...v,
+            _shareCount: newCount,
+            sharesDisplay: formatCount(newCount),
+          };
+        });
+      });
     } catch (e) {
       if (e?.message !== 'User did not share') {
         Toast.show({ type: 'error', text1: 'Share failed' });
@@ -581,10 +662,18 @@ const ShortsVideoScreen = ({ navigation }) => {
   useEffect(() => {
     const active = displayVideos[activeVideoIndex];
     const channelUserId = active?.user?.id;
-    if (!channelUserId || !user?.id || subscriptionMap[channelUserId] !== undefined) return;
+    if (
+      !channelUserId ||
+      !user?.id ||
+      subscriptionMap[channelUserId] !== undefined
+    )
+      return;
     getChannelProfile(channelUserId, user.id)
       .then(data => {
-        setSubscriptionMap(prev => ({ ...prev, [channelUserId]: data?.isSubscribed ?? false }));
+        setSubscriptionMap(prev => ({
+          ...prev,
+          [channelUserId]: data?.isSubscribed ?? false,
+        }));
       })
       .catch(() => {});
   }, [activeVideoIndex, displayVideos, user?.id]);
@@ -594,7 +683,23 @@ const ShortsVideoScreen = ({ navigation }) => {
       const { index, item } = viewableItems[0];
       setActiveVideoIndex(index);
       if (item?.id) {
-        shortsService.recordView(item.id, user?.id || null).catch(() => {});
+        shortsService
+          .recordView(item.id, user?.id || null)
+          .then(() => {
+            setVideos(prev => {
+              if (prev.length === 0) return prev;
+              return prev.map(v => {
+                if (v.id !== item.id) return v;
+                const newCount = (v._viewCount ?? 0) + 1;
+                return {
+                  ...v,
+                  _viewCount: newCount,
+                  viewsDisplay: formatCount(newCount),
+                };
+              });
+            });
+          })
+          .catch(() => {});
       }
     }
   }).current;
@@ -623,6 +728,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               isActive={activeVideoIndex === index}
               index={index}
               screenHeight={screenHeight}
+              onBack={() => navigation.goBack()}
               onOpenComments={() => {
                 if (!user?.id) {
                   navigation.navigate('Login');
@@ -636,7 +742,12 @@ const ShortsVideoScreen = ({ navigation }) => {
               onDislike={handleDislike}
               onSubscribe={handleSubscribe}
               onShare={handleShare}
-              isSubscribed={subscriptionMap[item.user?.id] ?? item.user?.isSubscribed ?? false}
+              isSubscribed={
+                subscriptionMap[item.user?.id] ??
+                item.user?.isSubscribed ??
+                false
+              }
+              currentUser={user}
               navigation={navigation}
             />
           )}
@@ -806,23 +917,45 @@ const styles = StyleSheet.create({
     height: 300,
     zIndex: 5,
   },
-  topRightIcons: {
+  topBar: {
     position: 'absolute',
-    right: 15,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 12,
     zIndex: 10,
   },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  backText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  topRightIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  videoHeaderIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   iconButton: {
-    marginLeft: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.8,
-    shadowRadius: 2,
+    marginLeft: 16,
+    padding: 4,
   },
   rightSideBar: {
     position: 'absolute',
-    right: 10,
+    right: 15,
     alignItems: 'center',
     zIndex: 10,
   },
@@ -830,8 +963,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'center',
   },
+  iconCircle: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   actionText: {
-    color: 'white',
+    color: '#FFF',
     fontSize: 12,
     fontWeight: '600',
     marginTop: 5,
@@ -844,69 +986,78 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
   },
-  bottomInfo: {
-    position: 'absolute',
-    left: 15,
-    right: 80,
-    justifyContent: 'flex-end',
-    zIndex: 10,
+  videoFooter: {
+    paddingVertical: 8,
   },
-  descriptionContainer: {
-    marginBottom: 15,
-  },
-  descriptionText: {
-    color: 'white',
-    fontSize: 14,
-    lineHeight: 20,
+  videoUser: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
-    marginBottom: 5,
+  },
+  videoDesc: {
+    color: '#FFF',
+    fontSize: 15,
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  audioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  audioText: {
+    color: '#FFF',
+    fontSize: 13,
+    marginLeft: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 6,
   },
   hashtagsText: {
-    color: 'white',
+    color: '#FFF',
     fontSize: 14,
     lineHeight: 20,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 6,
   },
   hashtag: {
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFF',
   },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'white',
-    marginRight: 10,
-  },
-  username: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginRight: 10,
+  translationText: {
+    color: '#FFF',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+    marginBottom: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    textShadowRadius: 6,
   },
-  subscribeButton: {
-    backgroundColor: '#cc0000',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
+  resOrderBtn: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  subscribedButton: {
-    backgroundColor: '#666',
-  },
-  subscribeText: {
-    color: 'white',
+  resOrderText: {
+    color: '#FFF',
     fontWeight: 'bold',
-    fontSize: 13,
+  },
+  bottomArrow: {
+    alignItems: 'center',
+    marginTop: 12,
   },
   reportOverlay: {
     flex: 1,

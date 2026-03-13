@@ -9,9 +9,11 @@ import {
   FlatList,
   ActivityIndicator,
   useWindowDimensions,
+  Share,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import Video from 'react-native-video';
 import { shortsService } from '../../services/shortsService';
 
@@ -24,19 +26,32 @@ const formatCount = (n) => {
   return String(n);
 };
 
-const normalizeShort = (s) => ({
-  id: s.id || String(Math.random()),
-  videoUrl: s.videoUrl || s.mediaUrl || '',
-  title: s.title || 'Short',
-  user: s.user?.nickname || s.user?.name || (typeof s.user === 'string' ? s.user : '') || 'user',
-  userId: s.user?.id ?? s.userId,
-  desc: s.description || s.title || s.desc || 'Description',
-  likes: formatCount(s.likeCount ?? s.viewCount ?? s.likes) || '0',
-  comments: formatCount(s.commentCount ?? s.comments) || 'Com',
-  shares: formatCount(s.shareCount ?? s.shares) || 'Share',
-  hashtags: s.hashtags || '#shorts',
-  audio: s.audio || 'Original Sound',
-});
+const normalizeShort = (s) => {
+  const viewCount = s.viewCount ?? s._count?.views ?? 0;
+  const likeCount = s.likeCount ?? s._count?.likes ?? 0;
+  const commentCount = s.commentCount ?? s._count?.comments ?? 0;
+  const shareCount = s.shareCount ?? 0;
+  return {
+    id: s.id || String(Math.random()),
+    videoUrl: s.videoUrl || s.mediaUrl || '',
+    title: s.title || 'Short',
+    user: s.user?.nickname || s.user?.name || (typeof s.user === 'string' ? s.user : '') || 'user',
+    userId: s.user?.id ?? s.userId,
+    userObj: s.user,
+    desc: s.description || s.title || s.desc || 'Description',
+    viewCount,
+    views: formatCount(viewCount) || '0',
+    likeCount,
+    likes: formatCount(likeCount) || '0',
+    isLiked: s.isLiked ?? false,
+    commentCount,
+    comments: formatCount(commentCount) || '0',
+    shareCount,
+    shares: formatCount(shareCount) || '0',
+    hashtags: s.hashtags || '#shorts',
+    audio: s.audio || 'Original Sound',
+  };
+};
 
 const DUMMY_VIDEOS = [
   {
@@ -86,6 +101,7 @@ const DUMMY_VIDEOS = [
 const ProductShortsVideo = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const user = useSelector((state) => state?.app?.user);
   const initialItem = route.params?.item;
 
   const { width, height } = useWindowDimensions();
@@ -94,7 +110,7 @@ const ProductShortsVideo = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const currentShortId = initialItem?.id;
-  const ownerId = initialItem?.user?.id ?? initialItem?.userId;
+  const ownerId = initialItem?.user?.id ?? initialItem?.userId ?? initialItem?.userObj?.id ?? initialItem?.userId;
 
   useEffect(() => {
     let cancelled = false;
@@ -165,17 +181,76 @@ const ProductShortsVideo = () => {
     return () => { cancelled = true; };
   }, [currentShortId, ownerId, !!initialItem]);
 
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems && viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index);
+      const { index, item } = viewableItems[0];
+      setCurrentIndex(index);
+      if (item?.id) {
+        shortsService
+          .recordView(item.id, userRef.current?.id || null)
+          .then(() => {
+            setVideos((prev) => {
+              if (prev.length === 0) return prev;
+              return prev.map((v) => {
+                if (v.id !== item.id) return v;
+                const newCount = (v.viewCount ?? 0) + 1;
+                return { ...v, viewCount: newCount, views: formatCount(newCount) };
+              });
+            });
+          })
+          .catch(() => {});
+      }
     }
-  });
+  }).current;
+
+  const handleLike = async (item) => {
+    if (!user?.id || !item?.id) {
+      navigation.navigate('Login');
+      return;
+    }
+    try {
+      await shortsService.toggleLike(item.id, user.id);
+      setVideos((prev) =>
+        prev.map((v) => {
+          if (v.id !== item.id) return v;
+          const newLiked = !v.isLiked;
+          const delta = newLiked ? 1 : -1;
+          const newCount = Math.max(0, (v.likeCount ?? 0) + delta);
+          return { ...v, isLiked: newLiked, likeCount: newCount, likes: formatCount(newCount) };
+        })
+      );
+    } catch (_) {}
+  };
+
+  const handleShare = async (item) => {
+    if (!item?.id) return;
+    const message = `${item.title || item.desc || 'Short'}\neatix://shorts/${item.id}`;
+    try {
+      await Share.share({ message, title: item.title || 'Share Short' });
+      setVideos((prev) =>
+        prev.map((v) => {
+          if (v.id !== item.id) return v;
+          const newCount = (v.shareCount ?? 0) + 1;
+          return { ...v, shareCount: newCount, shares: formatCount(newCount) };
+        })
+      );
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        // ignore
+      }
+    }
+  };
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
   });
 
-  const VideoItem = ({ item, index, currentIndex }) => {
+  const VideoItem = ({ item, index, currentIndex, onLike, onShare }) => {
     const isCurrentlyViewable = currentIndex === index;
     const [isPausedLocally, setIsPausedLocally] = useState(false);
 
@@ -244,33 +319,37 @@ const ProductShortsVideo = () => {
 
           <View style={styles.rightActions}>
             <View style={styles.actionItem}>
-              <Icon name="eye" size={20} color="#FFF" />
-              <Text style={styles.actionText}>{item.likes || '100k'}</Text>
+              <Icon name="eye-outline" size={24} color="#FFF" />
+              <Text style={styles.actionText}>{item.views ?? '0'}</Text>
             </View>
+            <TouchableOpacity style={styles.actionItem} onPress={() => onLike?.(item)}>
+              <Icon
+                name={item.isLiked ? 'heart' : 'heart-outline'}
+                size={24}
+                color={item.isLiked ? '#FF4D4D' : '#FFF'}
+              />
+              <Text style={styles.actionText}>{item.likes ?? '0'}</Text>
+            </TouchableOpacity>
             <View style={styles.actionItem}>
-              <Icon name="heart" size={20} color="#FF4D4D" />
-              <Text style={styles.actionText}>{item.likes || '100k'}</Text>
+              <Icon name="comment-text-outline" size={24} color="#FFF" />
+              <Text style={styles.actionText}>{item.comments ?? '0'}</Text>
             </View>
-            <View style={styles.actionItem}>
-              <Icon name="comment-text" size={20} color="#FFF" />
-              <Text style={styles.actionText}>{item.comments || 'Com'}</Text>
-            </View>
-            <View style={styles.actionItem}>
-              <Icon name="share" size={20} color="#FFF" />
-              <Text style={styles.actionText}>{item.shares || 'Share'}</Text>
-            </View>
+            <TouchableOpacity style={styles.actionItem} onPress={() => onShare?.(item)}>
+              <Icon name="share-outline" size={24} color="#FFF" />
+              <Text style={styles.actionText}>{item.shares ?? '0'}</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.videoFooter}>
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => {
-                const ownerId = item?.user?.id ?? item?.userId ?? null;
+                const ownerId = item?.userObj?.id ?? item?.userId ?? null;
                 if (ownerId) {
                   navigation.navigate('UserViewsScreen', { userId: ownerId });
                 }
               }}
-              disabled={!(item?.user?.id || item?.userId)}
+              disabled={!(item?.userObj?.id || item?.userId)}
             >
               <Text style={styles.videoUser}>
                 @{item.user || item.title?.toLowerCase().replace(' ', '')}
@@ -300,7 +379,7 @@ const ProductShortsVideo = () => {
               <TouchableOpacity
                 style={styles.orderNowBtn}
                 onPress={() => {
-                  const itemOwnerId = item?.userId ?? item?.user?.id ?? null;
+                  const itemOwnerId = item?.userId ?? item?.userObj?.id ?? null;
                   if (itemOwnerId) {
                     navigation.navigate('HomeThreeScreen', {
                       ownerId: itemOwnerId,
@@ -331,7 +410,13 @@ const ProductShortsVideo = () => {
   });
 
   const renderItem = ({ item, index }) => (
-    <VideoItem item={item} index={index} currentIndex={currentIndex} />
+    <VideoItem
+      item={item}
+      index={index}
+      currentIndex={currentIndex}
+      onLike={handleLike}
+      onShare={handleShare}
+    />
   );
 
   if (loading && videos.length === 0) {
@@ -357,7 +442,7 @@ const ProductShortsVideo = () => {
         snapToAlignment="start"
         snapToInterval={height}
         decelerationRate="fast"
-        onViewableItemsChanged={onViewableItemsChanged.current}
+        onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig.current}
         getItemLayout={getItemLayout}
         initialNumToRender={2}
