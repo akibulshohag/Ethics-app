@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
-  Platform,
   ActivityIndicator,
   Alert,
   Modal,
@@ -19,7 +18,7 @@ import {
 import Video from 'react-native-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import CommentsModal from '../components/CommentsModal';
@@ -36,6 +35,7 @@ import {
 import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import Toast from 'react-native-toast-message';
+import { navigationRef } from '../utils/helper';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -149,6 +149,8 @@ const VideoItem = ({
   onDislike,
   onSubscribe,
   onShare,
+  onOrderNow,
+  onLoginPress,
   isSubscribed,
   currentUser,
   navigation,
@@ -354,10 +356,7 @@ const VideoItem = ({
                 style={styles.resOrderBtn}
                 onPress={() => {
                   const ownerId = item.user?.id ?? item.userId ?? null;
-                  navigation.navigate('HomeSevenScreen', {
-                    returnToOrder: true,
-                    ownerUserId: ownerId,
-                  });
+                  onLoginPress?.({ returnToOrder: true, ownerUserId: ownerId });
                 }}
               >
                 <Text style={styles.resOrderText}>Login</Text>
@@ -368,14 +367,14 @@ const VideoItem = ({
                 onPress={() => {
                   const ownerId = item.user?.id ?? item.userId ?? null;
                   if (ownerId) {
-                    navigation.navigate('HomeThreeScreen', {
+                    onOrderNow?.({
                       ownerId,
                       ownerName: item.user?.username || '',
                       title: item.description || item.user?.username || '',
                       location: item.location || '',
                     });
                   } else {
-                    navigation.navigate('HomeThreeScreen');
+                    onOrderNow?.({});
                   }
                 }}
               >
@@ -443,8 +442,29 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
   const hasAppliedInitialShort = useRef(false);
   const [commentsVisible, setCommentsVisible] = useState(false);
+
+  // HomeThreeScreen/HomeSevenScreen live in Home1 stack (tab). Use root ref so navigation works from any nested stack.
+  const navigateToHomeScreen = (screenName, params) => {
+    const payload = params != null ? { screen: screenName, params } : { screen: screenName };
+    if (navigationRef.current?.isReady?.()) {
+      navigationRef.current.navigate('Root', { screen: 'Home1', params: payload });
+    } else {
+      const tab = navigation.getParent?.();
+      if (tab?.navigate) tab.navigate('Home1', payload);
+      else navigation.getParent?.()?.getParent?.()?.navigate?.('Root', { screen: 'Home1', params: payload });
+    }
+  };
+
+  // When user navigates away, pause all shorts so they don't keep playing in background
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsScreenFocused(true);
+      return () => setIsScreenFocused(false);
+    }, []),
+  );
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
@@ -452,8 +472,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
   const [subscriptionMap, setSubscriptionMap] = useState({});
 
-  const tabHeight = Platform.OS === 'ios' ? 82 : 68;
-  const screenHeight = windowHeight - tabHeight;
+  const screenHeight = windowHeight;
   const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
 
   useEffect(() => {
@@ -513,7 +532,7 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   const handleLike = async item => {
     if (!user?.id) {
-      navigation.navigate('Login');
+      navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     try {
@@ -537,7 +556,7 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   const handleDislike = async item => {
     if (!user?.id) {
-      navigation.navigate('Login');
+      navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     try {
@@ -563,7 +582,7 @@ const ShortsVideoScreen = ({ navigation }) => {
     const channelUserId = item.user?.id;
     if (!channelUserId) return;
     if (!user?.id) {
-      navigation.navigate('Login');
+      navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     if (user.id === channelUserId) return; // can't subscribe to self
@@ -586,7 +605,7 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   const handleShare = async item => {
     if (!user?.id) {
-      navigation.navigate('Login');
+      navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     const short = item || activeItem;
@@ -620,7 +639,7 @@ const ShortsVideoScreen = ({ navigation }) => {
     if (!user?.id || !activeItem?.id) {
       Toast.show({ type: 'info', text1: 'Please log in to save' });
       setSettingsVisible(false);
-      navigation.navigate('Login');
+      navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     try {
@@ -634,7 +653,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   const openReportModal = () => {
     setSettingsVisible(false);
     if (!user?.id) {
-      navigation.navigate('Login');
+      navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     setTimeout(() => setReportVisible(true), 100);
@@ -725,13 +744,13 @@ const ShortsVideoScreen = ({ navigation }) => {
           renderItem={({ item, index }) => (
             <VideoItem
               item={item}
-              isActive={activeVideoIndex === index}
+              isActive={isScreenFocused && activeVideoIndex === index}
               index={index}
               screenHeight={screenHeight}
               onBack={() => navigation.goBack()}
               onOpenComments={() => {
                 if (!user?.id) {
-                  navigation.navigate('Login');
+                  navigateToHomeScreen('HomeSevenScreen');
                   return;
                 }
                 setCommentsVisible(true);
@@ -742,6 +761,8 @@ const ShortsVideoScreen = ({ navigation }) => {
               onDislike={handleDislike}
               onSubscribe={handleSubscribe}
               onShare={handleShare}
+              onOrderNow={(params) => navigateToHomeScreen('HomeThreeScreen', params)}
+              onLoginPress={(params) => navigateToHomeScreen('HomeSevenScreen', params)}
               isSubscribed={
                 subscriptionMap[item.user?.id] ??
                 item.user?.isSubscribed ??
@@ -791,7 +812,7 @@ const ShortsVideoScreen = ({ navigation }) => {
         onSaveToPlaylist={() => {
           if (!user?.id) {
             setSettingsVisible(false);
-            navigation.navigate('Login');
+            navigateToHomeScreen('HomeSevenScreen');
             return;
           }
           setSaveModalVisible(true);

@@ -22,6 +22,7 @@ import {
   getCoordsFromPlaceId,
   getFallbackCoordsForUKArea,
 } from '../utils/geolocation';
+import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
 
 const LOCATION_KEY = 'USER_LOCATION_SELECTION';
@@ -36,21 +37,35 @@ const LandingScreen = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const debounceTimerRef = useRef(null);
 
-  // If user already has a recent saved location, skip Landing and go straight to HomeOne
+  // If we have a recent saved location for this user (or guest), skip Landing and go straight to HomeOne.
+  // Different user on same device must select location (saved.userId !== current user).
   useEffect(() => {
     let cancelled = false;
     const checkSavedLocation = async () => {
       try {
-        if (!user?.id) return;
         const raw = await AsyncStorage.getItem(LOCATION_KEY);
         if (!raw) return;
         const saved = JSON.parse(raw);
-        if (!saved || saved.userId !== user.id) return;
-        if (!saved.savedAt || Date.now() - saved.savedAt > LOCATION_TTL_MS) return;
-        if (!saved.coords?.lat || !saved.coords?.lng) return;
+        if (!saved || typeof saved !== 'object') return;
+        const coords = saved.coords && typeof saved.coords === 'object'
+          ? saved.coords
+          : { lat: saved.lat, lng: saved.lng };
+        const lat = coords?.lat != null ? Number(coords.lat) : null;
+        const lng = coords?.lng != null ? Number(coords.lng) : null;
+        const hasCoords = lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
+        if (!hasCoords) return;
+        const savedAt = saved.savedAt != null ? Number(saved.savedAt) : null;
+        const fresh = savedAt == null || (Date.now() - savedAt <= LOCATION_TTL_MS);
+        if (!fresh) return;
+        // Only use saved location if same user (or guest: no userId in saved, or no one logged in)
+        const sameUser =
+          saved.userId == null ||
+          user?.id == null ||
+          String(saved.userId) === String(user.id);
+        if (!sameUser) return;
         if (cancelled) return;
         navigation.replace('HomeOneScreen', {
-          selectedLocation: saved.coords,
+          selectedLocation: { lat, lng },
           addressText: saved.addressText || '',
         });
       } catch (e) {
@@ -61,7 +76,7 @@ const LandingScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, navigation]);
+  }, [navigation, user?.id]);
 
   useEffect(() => {
     const trimmed = addressText.trim();
@@ -94,6 +109,13 @@ const LandingScreen = () => {
           savedAt: Date.now(),
         }),
       );
+      if (user?.id && selectedLocation?.lat != null && selectedLocation?.lng != null) {
+        saveLastLocationToBackend({
+          lat: selectedLocation.lat,
+          lng: selectedLocation.lng,
+          addressText: addressLabel || addressText || '',
+        }).catch(() => {});
+      }
     } catch (e) {
       // non-blocking; still navigate even if storage fails
     }

@@ -12,21 +12,26 @@ import {
   Share,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  useFocusEffect,
+} from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Video from 'react-native-video';
 import { shortsService } from '../../services/shortsService';
+import CommentsModal from '../../components/CommentsModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const formatCount = (n) => {
+const formatCount = n => {
   if (n == null || n < 0) return '0';
   if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
   return String(n);
 };
 
-const normalizeShort = (s) => {
+const normalizeShort = s => {
   const viewCount = s.viewCount ?? s._count?.views ?? 0;
   const likeCount = s.likeCount ?? s._count?.likes ?? 0;
   const commentCount = s.commentCount ?? s._count?.comments ?? 0;
@@ -35,7 +40,11 @@ const normalizeShort = (s) => {
     id: s.id || String(Math.random()),
     videoUrl: s.videoUrl || s.mediaUrl || '',
     title: s.title || 'Short',
-    user: s.user?.nickname || s.user?.name || (typeof s.user === 'string' ? s.user : '') || 'user',
+    user:
+      s.user?.nickname ||
+      s.user?.name ||
+      (typeof s.user === 'string' ? s.user : '') ||
+      'user',
     userId: s.user?.id ?? s.userId,
     userObj: s.user,
     desc: s.description || s.title || s.desc || 'Description',
@@ -101,16 +110,29 @@ const DUMMY_VIDEOS = [
 const ProductShortsVideo = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const user = useSelector((state) => state?.app?.user);
+  const user = useSelector(state => state?.app?.user);
   const initialItem = route.params?.item;
 
   const { width, height } = useWindowDimensions();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+  const [commentsVisible, setCommentsVisible] = useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsScreenFocused(true);
+      return () => setIsScreenFocused(false);
+    }, []),
+  );
 
   const currentShortId = initialItem?.id;
-  const ownerId = initialItem?.user?.id ?? initialItem?.userId ?? initialItem?.userObj?.id ?? initialItem?.userId;
+  const ownerId =
+    initialItem?.user?.id ??
+    initialItem?.userId ??
+    initialItem?.userObj?.id ??
+    initialItem?.userId;
 
   useEffect(() => {
     let cancelled = false;
@@ -120,14 +142,23 @@ const ProductShortsVideo = () => {
       try {
         const currentNormalized = initialItem
           ? normalizeShort({
-            ...initialItem,
-            user: initialItem.user ?? { id: ownerId, nickname: initialItem.title?.toLowerCase().replace(/\s+/g, '') },
-          })
+              ...initialItem,
+              user: initialItem.user ?? {
+                id: ownerId,
+                nickname: initialItem.title?.toLowerCase().replace(/\s+/g, ''),
+              },
+            })
           : null;
 
         if (!ownerId && !initialItem) {
-          const res = await shortsService.getShorts({ page: 1, limit: 30 });
-          const list = (res?.shorts || []).filter((s) => s.videoUrl && String(s.videoUrl).trim());
+          const res = await shortsService.getShorts({
+            page: 1,
+            limit: 30,
+            viewerRole: user?.role || 'user',
+          });
+          const list = (res?.shorts || []).filter(
+            s => s.videoUrl && String(s.videoUrl).trim(),
+          );
           if (!cancelled) setVideos(list.map(normalizeShort));
           return;
         }
@@ -135,40 +166,69 @@ const ProductShortsVideo = () => {
         if (ownerId && currentNormalized) {
           const [userRes, feedRes] = await Promise.all([
             shortsService.getUserShorts(ownerId, 1, 30),
-            shortsService.getShorts({ page: 1, limit: 30 }),
+            shortsService.getShorts({
+              page: 1,
+              limit: 30,
+              viewerRole: user?.role || 'user',
+            }),
           ]);
-          const sameUserRaw = (userRes?.shorts || []).filter((s) => s.videoUrl && String(s.videoUrl).trim());
+          const sameUserRaw = (userRes?.shorts || []).filter(
+            s => s.videoUrl && String(s.videoUrl).trim(),
+          );
           const sameUserOther = sameUserRaw
-            .filter((s) => String(s.id) !== String(currentShortId))
+            .filter(s => String(s.id) !== String(currentShortId))
             .map(normalizeShort);
-          const feedRaw = (feedRes?.shorts || []).filter((s) => s.videoUrl && String(s.videoUrl).trim());
-          const seen = new Set([currentShortId, ...sameUserOther.map((v) => v.id)]);
+          const feedRaw = (feedRes?.shorts || []).filter(
+            s => s.videoUrl && String(s.videoUrl).trim(),
+          );
+          const seen = new Set([
+            currentShortId,
+            ...sameUserOther.map(v => v.id),
+          ]);
           const others = feedRaw
-            .filter((s) => !seen.has(String(s.id)))
+            .filter(s => !seen.has(String(s.id)))
             .map(normalizeShort);
-          if (!cancelled) setVideos([currentNormalized, ...sameUserOther, ...others]);
+          if (!cancelled)
+            setVideos([currentNormalized, ...sameUserOther, ...others]);
           return;
         }
 
         if (currentNormalized) {
-          const res = await shortsService.getShorts({ page: 1, limit: 30 });
-          const list = (res?.shorts || []).filter((s) => s.videoUrl && String(s.videoUrl).trim());
+          const res = await shortsService.getShorts({
+            page: 1,
+            limit: 30,
+            viewerRole: user?.role || 'user',
+          });
+          const list = (res?.shorts || []).filter(
+            s => s.videoUrl && String(s.videoUrl).trim(),
+          );
           const others = list
-            .filter((s) => String(s.id) !== String(currentShortId))
+            .filter(s => String(s.id) !== String(currentShortId))
             .map(normalizeShort);
           if (!cancelled) setVideos([currentNormalized, ...others]);
           return;
         }
 
-        const res = await shortsService.getShorts({ page: 1, limit: 30 });
-        const list = (res?.shorts || []).filter((s) => s.videoUrl && String(s.videoUrl).trim());
+        const res = await shortsService.getShorts({
+          page: 1,
+          limit: 30,
+          viewerRole: user?.role || 'user',
+        });
+        const list = (res?.shorts || []).filter(
+          s => s.videoUrl && String(s.videoUrl).trim(),
+        );
         if (!cancelled) setVideos(list.map(normalizeShort));
       } catch (_) {
         if (!cancelled && initialItem) {
-          setVideos([normalizeShort({
-            ...initialItem,
-            user: initialItem.user ?? { id: ownerId, nickname: initialItem.title?.toLowerCase().replace(/\s+/g, '') },
-          })]);
+          setVideos([
+            normalizeShort({
+              ...initialItem,
+              user: initialItem.user ?? {
+                id: ownerId,
+                nickname: initialItem.title?.toLowerCase().replace(/\s+/g, ''),
+              },
+            }),
+          ]);
         } else if (!cancelled) {
           setVideos(DUMMY_VIDEOS);
         }
@@ -178,8 +238,10 @@ const ProductShortsVideo = () => {
     };
 
     run();
-    return () => { cancelled = true; };
-  }, [currentShortId, ownerId, !!initialItem]);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentShortId, ownerId, !!initialItem, user?.role]);
 
   const userRef = useRef(user);
   useEffect(() => {
@@ -194,12 +256,16 @@ const ProductShortsVideo = () => {
         shortsService
           .recordView(item.id, userRef.current?.id || null)
           .then(() => {
-            setVideos((prev) => {
+            setVideos(prev => {
               if (prev.length === 0) return prev;
-              return prev.map((v) => {
+              return prev.map(v => {
                 if (v.id !== item.id) return v;
                 const newCount = (v.viewCount ?? 0) + 1;
-                return { ...v, viewCount: newCount, views: formatCount(newCount) };
+                return {
+                  ...v,
+                  viewCount: newCount,
+                  views: formatCount(newCount),
+                };
               });
             });
           })
@@ -208,36 +274,43 @@ const ProductShortsVideo = () => {
     }
   }).current;
 
-  const handleLike = async (item) => {
+  const handleLike = async item => {
     if (!user?.id || !item?.id) {
-      navigation.navigate('Login');
+      navigation.navigate('HomeSevenScreen');
       return;
     }
     try {
       await shortsService.toggleLike(item.id, user.id);
-      setVideos((prev) =>
-        prev.map((v) => {
+      setVideos(prev =>
+        prev.map(v => {
           if (v.id !== item.id) return v;
           const newLiked = !v.isLiked;
           const delta = newLiked ? 1 : -1;
           const newCount = Math.max(0, (v.likeCount ?? 0) + delta);
-          return { ...v, isLiked: newLiked, likeCount: newCount, likes: formatCount(newCount) };
-        })
+          return {
+            ...v,
+            isLiked: newLiked,
+            likeCount: newCount,
+            likes: formatCount(newCount),
+          };
+        }),
       );
     } catch (_) {}
   };
 
-  const handleShare = async (item) => {
+  const handleShare = async item => {
     if (!item?.id) return;
-    const message = `${item.title || item.desc || 'Short'}\neatix://shorts/${item.id}`;
+    const message = `${item.title || item.desc || 'Short'}\neatix://shorts/${
+      item.id
+    }`;
     try {
       await Share.share({ message, title: item.title || 'Share Short' });
-      setVideos((prev) =>
-        prev.map((v) => {
+      setVideos(prev =>
+        prev.map(v => {
           if (v.id !== item.id) return v;
           const newCount = (v.shareCount ?? 0) + 1;
           return { ...v, shareCount: newCount, shares: formatCount(newCount) };
-        })
+        }),
       );
     } catch (e) {
       if (e?.message !== 'User did not share') {
@@ -250,7 +323,15 @@ const ProductShortsVideo = () => {
     itemVisiblePercentThreshold: 50,
   });
 
-  const VideoItem = ({ item, index, currentIndex, onLike, onShare }) => {
+  const VideoItem = ({
+    item,
+    index,
+    currentIndex,
+    onLike,
+    onShare,
+    onOpenComments,
+    isScreenFocused: focused,
+  }) => {
     const isCurrentlyViewable = currentIndex === index;
     const [isPausedLocally, setIsPausedLocally] = useState(false);
 
@@ -268,7 +349,7 @@ const ProductShortsVideo = () => {
       }
     };
 
-    const isPaused = !isCurrentlyViewable || isPausedLocally;
+    const isPaused = !focused || !isCurrentlyViewable || isPausedLocally;
 
     return (
       <View style={[styles.videoContainer, { height: height }]}>
@@ -322,7 +403,10 @@ const ProductShortsVideo = () => {
               <Icon name="eye-outline" size={24} color="#FFF" />
               <Text style={styles.actionText}>{item.views ?? '0'}</Text>
             </View>
-            <TouchableOpacity style={styles.actionItem} onPress={() => onLike?.(item)}>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => onLike?.(item)}
+            >
               <Icon
                 name={item.isLiked ? 'heart' : 'heart-outline'}
                 size={24}
@@ -330,11 +414,23 @@ const ProductShortsVideo = () => {
               />
               <Text style={styles.actionText}>{item.likes ?? '0'}</Text>
             </TouchableOpacity>
-            <View style={styles.actionItem}>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => {
+                if (!user?.id) {
+                  navigation.navigate('HomeSevenScreen');
+                  return;
+                }
+                onOpenComments?.();
+              }}
+            >
               <Icon name="comment-text-outline" size={24} color="#FFF" />
               <Text style={styles.actionText}>{item.comments ?? '0'}</Text>
-            </View>
-            <TouchableOpacity style={styles.actionItem} onPress={() => onShare?.(item)}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => onShare?.(item)}
+            >
               <Icon name="share-outline" size={24} color="#FFF" />
               <Text style={styles.actionText}>{item.shares ?? '0'}</Text>
             </TouchableOpacity>
@@ -376,23 +472,32 @@ const ProductShortsVideo = () => {
                 />
                 <Text style={styles.audioText}>Mute</Text>
               </View>
-              <TouchableOpacity
-                style={styles.orderNowBtn}
-                onPress={() => {
-                  const itemOwnerId = item?.userId ?? item?.userObj?.id ?? null;
-                  if (itemOwnerId) {
-                    navigation.navigate('HomeThreeScreen', {
-                      ownerId: itemOwnerId,
-                      title: item?.title,
-                      location: item?.location || item?.creatorAddress || '',
-                    });
-                  } else {
-                    navigation.navigate('HomeThreeScreen');
-                  }
-                }}
-              >
-                <Text style={styles.orderNowText}>Order Now</Text>
-              </TouchableOpacity>
+              {!user?.id ? (
+                <TouchableOpacity
+                  style={styles.orderNowBtn}
+                  onPress={() => navigation.navigate('HomeSevenScreen')}
+                >
+                  <Text style={styles.orderNowText}>Login</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.orderNowBtn}
+                  onPress={() => {
+                    const itemOwnerId = item?.userId ?? item?.userObj?.id ?? null;
+                    if (itemOwnerId) {
+                      navigation.navigate('HomeThreeScreen', {
+                        ownerId: itemOwnerId,
+                        title: item?.title,
+                        location: item?.location || item?.creatorAddress || '',
+                      });
+                    } else {
+                      navigation.navigate('HomeThreeScreen');
+                    }
+                  }}
+                >
+                  <Text style={styles.orderNowText}>Order Now</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={styles.bottomArrow}>
               <Icon name="chevron-down" size={40} color="#FFF" />
@@ -409,6 +514,42 @@ const ProductShortsVideo = () => {
     index,
   });
 
+  const handleOpenComments = () => setCommentsVisible(true);
+
+  const listData = videos.length > 0 ? videos : DUMMY_VIDEOS;
+  const currentShortForComments = listData[currentIndex];
+
+  const handleCommentAdded = () => {
+    if (!currentShortForComments?.id) return;
+    setVideos(prev =>
+      prev.map(v => {
+        if (String(v.id) !== String(currentShortForComments.id)) return v;
+        const newCount = (v.commentCount ?? 0) + 1;
+        return {
+          ...v,
+          commentCount: newCount,
+          comments: formatCount(newCount),
+        };
+      }),
+    );
+  };
+
+  const handleCommentDeleted = (_wasTopLevel, deletedCount) => {
+    const dec = deletedCount || 1;
+    if (!currentShortForComments?.id) return;
+    setVideos(prev =>
+      prev.map(v => {
+        if (String(v.id) !== String(currentShortForComments.id)) return v;
+        const newCount = Math.max(0, (v.commentCount ?? 0) - dec);
+        return {
+          ...v,
+          commentCount: newCount,
+          comments: formatCount(newCount),
+        };
+      }),
+    );
+  };
+
   const renderItem = ({ item, index }) => (
     <VideoItem
       item={item}
@@ -416,6 +557,8 @@ const ProductShortsVideo = () => {
       currentIndex={currentIndex}
       onLike={handleLike}
       onShare={handleShare}
+      onOpenComments={handleOpenComments}
+      isScreenFocused={isScreenFocused}
     />
   );
 
@@ -428,14 +571,24 @@ const ProductShortsVideo = () => {
     );
   }
 
-  const listData = videos.length > 0 ? videos : DUMMY_VIDEOS;
-
   return (
     <View style={styles.container}>
       <StatusBar hidden />
+      <CommentsModal
+        visible={commentsVisible}
+        onClose={() => setCommentsVisible(false)}
+        contentType="short"
+        contentId={currentShortForComments?.id}
+        video={{
+          commentCount: currentShortForComments?.commentCount ?? 0,
+        }}
+        user={user}
+        onCommentAdded={handleCommentAdded}
+        onCommentDeleted={handleCommentDeleted}
+      />
       <FlatList
         data={listData}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={renderItem}
         pagingEnabled
         showsVerticalScrollIndicator={false}

@@ -91,7 +91,7 @@ const ProfileScreen = () => {
                             state: {
                               index: 1,
                               routes: [
-                                { name: 'LandingScreen' },
+                                { name: 'HomeOneScreen' },
                                 { name: 'HomeSevenScreen' },
                               ],
                             },

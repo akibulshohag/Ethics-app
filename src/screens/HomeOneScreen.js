@@ -41,6 +41,7 @@ import {
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import { getGallery, getChannelProfile } from '../services/channelService';
+import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
 import { safeImageUri } from '../utils/helper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -161,15 +162,23 @@ const HomeOneScreen = () => {
 
   const saveLocationSelection = useCallback(async (coords, label) => {
     try {
+      const uid = userRef.current?.id || null;
       await AsyncStorage.setItem(
         LOCATION_KEY,
         JSON.stringify({
-          userId: userRef.current?.id || null,
+          userId: uid,
           coords,
           addressText: label || '',
           savedAt: Date.now(),
         }),
       );
+      if (uid && coords?.lat != null && coords?.lng != null) {
+        saveLastLocationToBackend({
+          lat: coords.lat,
+          lng: coords.lng,
+          addressText: label || '',
+        }).catch(() => {});
+      }
     } catch (e) {
       // ignore storage errors
     }
@@ -244,6 +253,7 @@ const HomeOneScreen = () => {
 
   useFocusEffect(
     React.useCallback(() => {
+      const stopPlaybackOnBlur = () => setVideoPaused(true);
       const params = route.params || {};
       const showRestaurant = params.showRestaurantDetail;
       const restaurantItem = params.restaurantItem;
@@ -254,7 +264,7 @@ const HomeOneScreen = () => {
           showRestaurantDetail: undefined,
           restaurantItem: undefined,
         });
-        return;
+        return stopPlaybackOnBlur;
       }
       if (params.selectedLocation != null) {
         setSelectedLocation(params.selectedLocation);
@@ -263,23 +273,23 @@ const HomeOneScreen = () => {
           selectedLocation: undefined,
           addressText: undefined,
         });
-        return;
+        return stopPlaybackOnBlur;
       }
-      // If we don't yet have a location, try to restore a recent one from storage before sending user to Landing
+      // If we don't yet have a location, try to restore from storage. Never redirect to LandingScreen; stay on HomeOneScreen and open location modal if none.
       if (selectedLocation?.lat == null && selectedLocation?.lng == null) {
         let cancelled = false;
         const restoreLocation = async () => {
           try {
             const raw = await AsyncStorage.getItem(LOCATION_KEY);
             if (!raw) {
-              if (!cancelled) navigation.replace('LandingScreen');
+              if (!cancelled) setLocationModalVisible(true);
               return;
             }
             const saved = JSON.parse(raw);
             const sameUser =
-              !saved?.userId || !userRef.current?.id
+              saved?.userId == null || !userRef.current?.id
                 ? true
-                : saved.userId === userRef.current.id;
+                : String(saved.userId) === String(userRef.current.id);
             const fresh =
               saved?.savedAt && Date.now() - saved.savedAt <= LOCATION_TTL_MS;
             if (
@@ -291,19 +301,19 @@ const HomeOneScreen = () => {
               if (cancelled) return;
               setSelectedLocation(saved.coords);
               setAddressText(saved.addressText || '');
-              // Trigger feed load once state is set
               loadFeaturedAndFeed();
               loadContinueWatching();
             } else if (!cancelled) {
-              navigation.replace('LandingScreen');
+              setLocationModalVisible(true);
             }
           } catch (e) {
-            if (!cancelled) navigation.replace('LandingScreen');
+            if (!cancelled) setLocationModalVisible(true);
           }
         };
         restoreLocation();
         return () => {
           cancelled = true;
+          stopPlaybackOnBlur();
         };
       }
       // Refresh feed when returning to home so shorts cards show updated view counts
@@ -311,6 +321,7 @@ const HomeOneScreen = () => {
         loadFeaturedAndFeed();
         loadContinueWatching();
       }
+      return stopPlaybackOnBlur;
     }, [
       route.params,
       navigation,

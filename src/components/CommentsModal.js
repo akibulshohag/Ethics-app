@@ -29,6 +29,7 @@ import {
   togglePostCommentDislike,
   deletePostComment,
 } from '../services/postService';
+import { safeImageUri } from '../utils/helper';
 
 const { height } = Dimensions.get('window');
 
@@ -64,11 +65,14 @@ const mapApiCommentToDisplay = (c, currentUser) => {
   const displayName = isCurrentUser
     ? (currentUser.nickname || currentUser.name || u.nickname || u.name || 'Unknown')
     : (u.nickname || u.name || 'Unknown');
-  const avatar =
+  const rawAvatar =
     (isCurrentUser && (currentUser.photos?.[0] || (Array.isArray(currentUser.photos) && currentUser.photos[0])))
     || u.photos?.[0]
-    || (Array.isArray(u.photos) && u.photos[0])
-    || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=111&color=fff`;
+    || (Array.isArray(u.photos) && u.photos[0]);
+  const avatar = safeImageUri(
+    rawAvatar?.src ?? rawAvatar,
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=111&color=fff`,
+  );
   const repliesList = (c.replies || []).map(r => mapApiCommentToDisplay(r, currentUser));
   return {
     id: c.id,
@@ -194,9 +198,11 @@ const CommentItem = ({
 
   const replyCount = item.repliesList?.length || 0;
 
+  const avatarUri =
+    typeof item.user.avatar === 'string' ? item.user.avatar : safeImageUri(item.user.avatar);
   return (
     <View style={styles.commentItem}>
-      <Image source={{ uri: item.user.avatar }} style={styles.commentAvatar} />
+      <Image source={{ uri: avatarUri }} style={styles.commentAvatar} />
       <View style={styles.commentContent}>
         <View style={styles.commentHeader}>
           <Text style={styles.commentUser}>
@@ -378,12 +384,13 @@ const CommentsModal = ({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const userAvatar =
-    user?.photos?.[0] ||
-    (Array.isArray(user?.photos) && user?.photos[0]) ||
+  const rawUserPhoto = user?.photos?.[0] ?? (Array.isArray(user?.photos) && user?.photos[0]);
+  const userAvatar = safeImageUri(
+    rawUserPhoto?.src ?? rawUserPhoto,
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       user?.nickname || user?.name || 'User',
-    )}&background=111&color=fff`;
+    )}&background=111&color=fff`,
+  );
 
   const loadComments = useCallback(
     async (reset = false) => {

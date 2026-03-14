@@ -6,4 +6,5 @@ export const BottomTabLessScreens = [
   'CreateShortsScreen',
   'UploadVideoScreen',
   'ProductShortsVideo',
+  'ShortsVideoScreen',
 ];

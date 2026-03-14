@@ -296,7 +296,7 @@ const LibraryScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               dispatch(appSetUser(null));
-              // Clear storage but keep location so re-login can skip LandingScreen within 24h
+              // Clear storage but keep location so re-login can go to HomeOneScreen with saved location
               const KEEP_KEYS = ['USER_LOCATION_SELECTION'];
               const allKeys = await AsyncStorage.getAllKeys();
               const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
@@ -319,7 +319,7 @@ const LibraryScreen = ({ navigation }) => {
                             state: {
                               index: 1,
                               routes: [
-                                { name: 'LandingScreen' },
+                                { name: 'HomeOneScreen' },
                                 { name: 'HomeSevenScreen' },
                               ],
                             },

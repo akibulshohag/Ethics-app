@@ -82,6 +82,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         photos: data.user.photos ?? [],
         channelAbout: data.user.channelAbout,
         socialLinks: data.user.socialLinks,
+        savedLastLocation: data.user.savedLastLocation,
         rememberMe: rememberMe,
         token: data.token,
       };
@@ -89,43 +90,64 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       dispatch(appSetUser(userData));
 
       try {
-        // After login: if we have a saved location from storage (same user, within 24h), go to HomeOneScreen; else LandingScreen
-        let targetRoute = { name: 'LandingScreen' };
-        try {
-          const raw = await AsyncStorage.getItem(LOCATION_KEY);
-          if (raw && typeof raw === 'string') {
-            const saved = JSON.parse(raw);
-            if (saved && typeof saved === 'object') {
-              const coords =
-                saved.coords && typeof saved.coords === 'object'
-                  ? saved.coords
-                  : { lat: saved.lat, lng: saved.lng };
-              const lat = coords?.lat != null ? Number(coords.lat) : null;
-              const lng = coords?.lng != null ? Number(coords.lng) : null;
-              const sameUser =
-                saved.userId == null || saved.userId === userData.id;
-              const savedAt =
-                saved.savedAt != null ? Number(saved.savedAt) : null;
-              const fresh =
-                savedAt == null || Date.now() - savedAt <= LOCATION_TTL_MS;
-              const hasCoords =
-                lat != null &&
-                lng != null &&
-                Number.isFinite(lat) &&
-                Number.isFinite(lng);
-              if (sameUser && fresh && hasCoords) {
-                targetRoute = {
-                  name: 'HomeOneScreen',
-                  params: {
-                    selectedLocation: { lat, lng },
-                    addressText: saved.addressText || '',
-                  },
-                };
+        // After login: go to HomeOneScreen. Prefer backend savedLastLocation; else AsyncStorage (same user, within TTL).
+        let targetRoute = { name: 'HomeOneScreen' };
+        const backendLoc = data.user?.savedLastLocation;
+        const hasBackendLoc =
+          backendLoc &&
+          typeof backendLoc === 'object' &&
+          backendLoc.lat != null &&
+          backendLoc.lng != null &&
+          Number.isFinite(Number(backendLoc.lat)) &&
+          Number.isFinite(Number(backendLoc.lng));
+        if (hasBackendLoc) {
+          targetRoute = {
+            name: 'HomeOneScreen',
+            params: {
+              selectedLocation: {
+                lat: Number(backendLoc.lat),
+                lng: Number(backendLoc.lng),
+              },
+              addressText: backendLoc.addressText || '',
+            },
+          };
+        } else {
+          try {
+            const raw = await AsyncStorage.getItem(LOCATION_KEY);
+            if (raw && typeof raw === 'string') {
+              const saved = JSON.parse(raw);
+              if (saved && typeof saved === 'object') {
+                const coords =
+                  saved.coords && typeof saved.coords === 'object'
+                    ? saved.coords
+                    : { lat: saved.lat, lng: saved.lng };
+                const lat = coords?.lat != null ? Number(coords.lat) : null;
+                const lng = coords?.lng != null ? Number(coords.lng) : null;
+                const sameUser =
+                  saved.userId == null || saved.userId === userData.id;
+                const savedAt =
+                  saved.savedAt != null ? Number(saved.savedAt) : null;
+                const fresh =
+                  savedAt == null || Date.now() - savedAt <= LOCATION_TTL_MS;
+                const hasCoords =
+                  lat != null &&
+                  lng != null &&
+                  Number.isFinite(lat) &&
+                  Number.isFinite(lng);
+                if (sameUser && fresh && hasCoords) {
+                  targetRoute = {
+                    name: 'HomeOneScreen',
+                    params: {
+                      selectedLocation: { lat, lng },
+                      addressText: saved.addressText || '',
+                    },
+                  };
+                }
               }
             }
+          } catch (e) {
+            // ignore storage/parse errors; still go to HomeOneScreen
           }
-        } catch (e) {
-          // ignore storage/parse errors, fall back to LandingScreen
         }
 
         // Run reset on next tick so Redux/store has updated and stack is ready
@@ -136,7 +158,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
               routes: [targetRoute],
             });
           } catch (navErr) {
-            navigation.reset({ index: 0, routes: [{ name: 'LandingScreen' }] });
+            navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
           }
         }, 0);
       } catch (_) {}

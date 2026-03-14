@@ -11,6 +11,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   getFocusedRouteNameFromRoute,
   useNavigation,
+  useNavigationState,
 } from '@react-navigation/native';
 import HomeNavigation from './HomeNavigation';
 import LibraryNavigation from './LibraryStack';
@@ -42,6 +43,7 @@ const libraryTabIcon = require('../assets/Group.png');
 
 /** Hide tab bar for these screens (LandingScreen, ProductShortsVideo, etc.) */
 const getTabBarStyle = route => {
+  if (route?.name === 'Shorts') return { display: 'none' };
   const routeName = getFocusedRouteNameFromRoute(route) ?? '';
   const name = routeName || (route?.name === 'Home1' ? 'LandingScreen' : '');
   return BottomTabLessScreens.includes(name) ? { display: 'none' } : undefined;
@@ -65,6 +67,10 @@ const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
   const user = useSelector(state => state.app?.user);
   const navigation = useNavigation();
+  const currentTabName = useNavigationState(
+    state => state?.routes?.[state?.index]?.name ?? 'Home1',
+  );
+  const isShortsFullScreen = currentTabName === 'Shorts';
   const role = (user?.role || '').toLowerCase();
   const isOwner = role === 'owner';
   const isVendor = role === 'vendor';
@@ -85,8 +91,23 @@ const BottomNaivgation = () => {
 
   const Tab = createBottomTabNavigator();
 
+  /** If not logged in, prevent opening Create/Library and go to HomeSevenScreen (login) inside Home1 tab */
+  const redirectToHomeThreeIfGuest = (e) => {
+    if (!user?.id) {
+      e.preventDefault();
+      const rootNav = navigation.getParent?.() ?? navigation;
+      rootNav.navigate('Root', {
+        screen: 'Home1',
+        params: { screen: 'HomeSevenScreen' },
+      });
+    }
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: isShortsFullScreen ? '#000' : undefined }}
+      edges={isShortsFullScreen ? [] : ['bottom']}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -182,14 +203,26 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Shorts"
             component={ShortsNavigation}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="play-box-multiple-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
+            options={({ route }) => {
+              const hidden = getTabBarStyle(route);
+              const defaultVisibleStyle = {
+                backgroundColor: COLORS.white,
+                borderTopWidth: 1,
+                borderTopColor: COLORS.gray200,
+                height: tabHeight,
+                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+                paddingTop: 8,
+              };
+              return {
+                tabBarIcon: ({ focused, color }) => (
+                  <Icon
+                    name="play-box-multiple-outline"
+                    size={28}
+                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                  />
+                ),
+                tabBarStyle: hidden ?? defaultVisibleStyle,
+              };
             }}
           />
 
@@ -226,8 +259,11 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Create"
             component={CreateVideoModalScreen}
+            listeners={{
+              tabPress: redirectToHomeThreeIfGuest,
+            }}
             options={{
-              tabBarIcon: ({ focused }) => (
+              tabBarIcon: () => (
                 <View style={styles.fabContainer}>
                   <Icon name="plus" size={30} color={COLORS.white} />
                 </View>
@@ -326,7 +362,7 @@ const BottomNaivgation = () => {
             name="Library"
             component={LibraryNavigation}
             listeners={{
-              tabPress: e => requireLogin(e, 'LibraryScreen'),
+              tabPress: redirectToHomeThreeIfGuest,
             }}
             options={({ route }) => ({
               tabBarStyle: {
