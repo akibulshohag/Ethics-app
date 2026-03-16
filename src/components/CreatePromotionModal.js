@@ -76,6 +76,19 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     );
   };
 
+  const allMenuIds = menuItems.map(i => i.id).filter(Boolean);
+  const allSelected =
+    allMenuIds.length > 0 &&
+    allMenuIds.every(id => selectedMenuIds.includes(id));
+
+  const toggleSelectAllMenu = () => {
+    setSelectedMenuIds(prev => {
+      if (allMenuIds.length === 0) return prev;
+      const isAllSelected = allMenuIds.every(id => prev.includes(id));
+      return isAllSelected ? [] : allMenuIds;
+    });
+  };
+
   const pickThumbnail = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, res => {
       if (res.didCancel) return;
@@ -419,6 +432,21 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
               </Text>
             ) : (
               <View style={styles.menuList}>
+                <TouchableOpacity
+                  style={[styles.menuRow, styles.selectAllRow]}
+                  onPress={toggleSelectAllMenu}
+                  disabled={uploading}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons
+                    name={allSelected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                    size={24}
+                    color={allSelected ? '#FF7F0B' : '#999'}
+                  />
+                  <Text style={styles.menuItemName} numberOfLines={1}>
+                    {allSelected ? 'Unselect all' : 'Select all'}
+                  </Text>
+                </TouchableOpacity>
                 {menuItems.map(item => {
                   const checked = selectedMenuIds.includes(item.id);
                   return (
@@ -557,6 +585,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+  },
+  selectAllRow: {
+    borderBottomColor: '#e6e6e6',
   },
   menuItemName: { flex: 1, fontSize: 15, color: '#333', marginLeft: 10 },
   menuItemPrice: { fontSize: 14, color: '#666', fontWeight: '500' },

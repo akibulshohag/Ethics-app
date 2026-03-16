@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import { useSelector } from 'react-redux';
 import { safeImageUri } from '../utils/helper';
+import { getConversations } from '../services/chatService';
 
 const formatCount = n => {
   if (n == null || n < 0) return '0';
@@ -31,6 +33,9 @@ const BusinessProfileCard = ({
   coverUploading,
 }) => {
   const navigation = useNavigation();
+  const token = useSelector(s => s?.app?.user?.token);
+  const [msgCount, setMsgCount] = useState(0);
+  const [msgLoading, setMsgLoading] = useState(false);
   const coverUri = profile?.coverUrl || profile?.coverImage || DEFAULT_COVER;
   const channelName =
     profile?.channelName || profile?.nickname || profile?.name || '—';
@@ -50,6 +55,29 @@ const BusinessProfileCard = ({
           activeOpacity: 0.9,
         }
       : {};
+
+  useEffect(() => {
+    let mounted = true;
+    const loadCount = async () => {
+      if (!isOwnProfile || !token) {
+        if (mounted) setMsgCount(0);
+        return;
+      }
+      try {
+        if (mounted) setMsgLoading(true);
+        const list = await getConversations(token);
+        if (mounted) setMsgCount(Array.isArray(list) ? list.length : 0);
+      } catch {
+        if (mounted) setMsgCount(0);
+      } finally {
+        if (mounted) setMsgLoading(false);
+      }
+    };
+    loadCount();
+    return () => {
+      mounted = false;
+    };
+  }, [isOwnProfile, token]);
 
   return (
     <View style={styles.cardContainer}>
@@ -192,10 +220,16 @@ const BusinessProfileCard = ({
                   </Text>
                   <Text style={styles.statLabelMain}>Following</Text>
                 </TouchableOpacity>
-                <View style={styles.statColumn}>
-                  <Text style={styles.statValMain}>—</Text>
+                <TouchableOpacity
+                  style={styles.statColumn}
+                  onPress={() => navigation.navigate('MessageList')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.statValMain}>
+                    {msgLoading ? '…' : formatCount(msgCount)}
+                  </Text>
                   <Text style={styles.statLabelMain}>MSG</Text>
-                </View>
+                </TouchableOpacity>
               </View>
               <View style={styles.statusWhiteBox}>
                 <Text style={styles.statusBodyText} numberOfLines={3}>
