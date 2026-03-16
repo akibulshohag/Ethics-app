@@ -164,18 +164,34 @@ const BusinessProfileCard = ({
 
             <View style={styles.bottomBlock}>
               <View style={styles.statsOpaqueBar}>
-                <View style={styles.statColumn}>
+                <TouchableOpacity
+                  style={styles.statColumn}
+                  onPress={() =>
+                    navigation.navigate('FollowersListScreen', {
+                      profileId: profile?.id,
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.statValMain}>
                     {formatCount(followerCount)}
                   </Text>
                   <Text style={styles.statLabelMain}>Followers</Text>
-                </View>
-                <View style={styles.statColumn}>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.statColumn}
+                  onPress={() =>
+                    navigation.navigate('FollowingListScreen', {
+                      profileId: profile?.id,
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
                   <Text style={styles.statValMain}>
                     {formatCount(followingCount)}
                   </Text>
                   <Text style={styles.statLabelMain}>Following</Text>
-                </View>
+                </TouchableOpacity>
                 <View style={styles.statColumn}>
                   <Text style={styles.statValMain}>—</Text>
                   <Text style={styles.statLabelMain}>MSG</Text>

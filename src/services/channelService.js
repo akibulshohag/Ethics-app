@@ -38,6 +38,54 @@ export const getChannelProfile = async (channelUserId, currentUserId) => {
 };
 
 /**
+ * List followers (subscribers) for a given channel/user.
+ * GET /users/:channelUserId/followers?currentUserId=&page=&limit=
+ */
+export const getChannelFollowers = async (
+  channelUserId,
+  currentUserId,
+  page = 1,
+  limit = 50,
+) => {
+  try {
+    const params = { page, limit };
+    if (currentUserId) params.currentUserId = currentUserId;
+    const response = await axios.get(`${API_URL}/${channelUserId}/followers`, {
+      params,
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching channel followers:', error);
+    throw error;
+  }
+};
+
+/**
+ * List channels this user is following.
+ * GET /users/:userId/following?currentUserId=&page=&limit=
+ */
+export const getChannelFollowing = async (
+  userId,
+  currentUserId,
+  page = 1,
+  limit = 50,
+) => {
+  try {
+    const params = { page, limit };
+    if (currentUserId) params.currentUserId = currentUserId;
+    const response = await axios.get(`${API_URL}/${userId}/following`, {
+      params,
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching channel following:', error);
+    throw error;
+  }
+};
+
+/**
  * Subscribe to a channel
  */
 export const subscribeToChannel = async (subscriberId, channelUserId) => {
@@ -102,6 +150,7 @@ export const getSubscribedFeed = async (userId, page = 1, limit = 30) => {
     throw error;
   }
 };
+
 
 /**
  * Update channel profile (nickname, channelAbout, socialLinks, etc.) - only for own channel

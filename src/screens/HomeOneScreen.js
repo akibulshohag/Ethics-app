@@ -19,7 +19,11 @@ import {
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  useFocusEffect,
+} from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector, useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1701,7 +1705,8 @@ const HomeOneScreen = () => {
                       style={{ marginRight: 8 }}
                     />
                     <Text style={styles.locationSuggestionHint}>
-                      No areas found. Type full address or tap "Use my location".
+                      No areas found. Type full address or tap "Use my
+                      location".
                     </Text>
                   </View>
                 )}
@@ -1767,7 +1772,9 @@ const HomeOneScreen = () => {
                       color="#FFF"
                       style={{ marginRight: 6 }}
                     />
-                    <Text style={styles.locationUseMyText}>Use my location</Text>
+                    <Text style={styles.locationUseMyText}>
+                      Use my location
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
