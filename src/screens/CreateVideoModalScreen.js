@@ -1,15 +1,18 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import CreateVideoModal from '../components/CreateVideoModal';
 
 /**
  * CreateVideoModalScreen - Shows CreateVideoModal when Create tab is pressed.
  * Options: Create Short, Upload Video, Go Live
+ * When opened from BusinessProfileViewScreen (+), params can include returnTo: { tab, screen }.
  */
 const CreateVideoModalScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const [modalVisible, setModalVisible] = useState(true);
+  const returnTo = route.params?.returnTo;
 
   useFocusEffect(
     useCallback(() => {
@@ -20,7 +23,16 @@ const CreateVideoModalScreen = () => {
 
   const handleClose = () => {
     setModalVisible(false);
-    navigation.navigate('Home');
+    // Always navigate on the tab navigator itself.
+    // From BusinessProfileViewScreen (+) we pass returnTo = { tab: 'Home1', screen: 'BusinessProfileViewScreen' }.
+    if (returnTo?.tab && returnTo?.screen) {
+      navigation.navigate(returnTo.tab, {
+        screen: returnTo.screen,
+      });
+    } else {
+      // If opened from bottom Create tab, return to Home1 tab -> HomeOneScreen
+      navigation.navigate('Home1', { screen: 'HomeOneScreen' });
+    }
   };
 
   const handleCreateShort = () => {

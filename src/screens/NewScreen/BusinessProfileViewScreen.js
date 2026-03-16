@@ -1393,10 +1393,21 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <TouchableOpacity
             onPress={() => navigation?.navigate('MenuManageScreen')}
           >
-            <MaterialCommunityIcons name="plus" size={24} color="#333" />
-          </TouchableOpacity>
+          <MaterialCommunityIcons name="plus" size={24} color="#333" />
+        </TouchableOpacity>
         ) : activeTab === 'Posts' && profileUserId === currentUser?.id ? (
           <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
+            <MaterialCommunityIcons name="plus" size={24} color="#333" />
+          </TouchableOpacity>
+        ) : activeTab === 'Video' && profileUserId === currentUser?.id ? (
+          <TouchableOpacity
+            onPress={() => {
+              // Open Create tab and tell it to return to this screen when closed
+              navigation.navigate('Create', {
+                returnTo: { tab: 'Home1', screen: 'BusinessProfileViewScreen' },
+              });
+            }}
+          >
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Promotions' &&
@@ -1573,7 +1584,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 size={18}
                 color="#fff"
               />
-            </View>
+        </View>
           ) : null}
         </TouchableOpacity>
       );

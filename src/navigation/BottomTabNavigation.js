@@ -66,10 +66,10 @@ function OrdersTabWrapper(props) {
 const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
   const user = useSelector(state => state.app?.user);
-  const navigation = useNavigation();
-  const currentTabName = useNavigationState(
-    state => state?.routes?.[state?.index]?.name ?? 'Home1',
-  );
+  const navigation = useNavigation(); // Root stack navigation
+  const tabState = useNavigationState(state => state); // Bottom tab state
+  const currentTabName =
+    tabState?.routes?.[tabState?.index || 0]?.name ?? 'Home1';
   const isShortsFullScreen = currentTabName === 'Shorts';
   const role = (user?.role || '').toLowerCase();
   const isOwner = role === 'owner';
@@ -92,7 +92,7 @@ const BottomNaivgation = () => {
   const Tab = createBottomTabNavigator();
 
   /** If not logged in, prevent opening Create/Library and go to HomeSevenScreen (login) inside Home1 tab */
-  const redirectToHomeThreeIfGuest = (e) => {
+  const redirectToHomeThreeIfGuest = e => {
     if (!user?.id) {
       e.preventDefault();
       const rootNav = navigation.getParent?.() ?? navigation;
@@ -101,6 +101,33 @@ const BottomNaivgation = () => {
         params: { screen: 'HomeSevenScreen' },
       });
     }
+  };
+
+  /** Get { tab, screen } for the currently focused tab so Create can return here on close */
+  const getReturnToFromState = () => {
+    const state = tabState;
+    if (!state?.routes?.length) {
+      return { tab: 'Home1', screen: 'LandingScreen' };
+    }
+    const currentRoute = state.routes[state.index || 0];
+    const tabName = currentRoute?.name;
+    if (!tabName || tabName === 'Create') return { tab: 'Home1', screen: 'HomeOneScreen' };
+    const screenName = getFocusedRouteNameFromRoute(currentRoute);
+    const defaults = { Home1: 'LandingScreen', Library: 'LibraryScreen' };
+    return {
+      tab: tabName,
+      screen: screenName || defaults[tabName] || 'HomeOneScreen',
+    };
+  };
+
+  const onCreateTabPress = (e, tabNavigation) => {
+    if (!user?.id) {
+      redirectToHomeThreeIfGuest(e);
+      return;
+    }
+    e.preventDefault();
+    const returnTo = getReturnToFromState();
+    tabNavigation.navigate('Create', { returnTo });
   };
 
   return (
@@ -259,9 +286,9 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Create"
             component={CreateVideoModalScreen}
-            listeners={{
-              tabPress: redirectToHomeThreeIfGuest,
-            }}
+            listeners={({ navigation: tabNavigation }) => ({
+              tabPress: e => onCreateTabPress(e, tabNavigation),
+            })}
             options={{
               tabBarIcon: () => (
                 <View style={styles.fabContainer}>
