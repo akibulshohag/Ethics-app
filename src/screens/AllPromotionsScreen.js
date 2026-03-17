@@ -104,8 +104,7 @@ const AllPromotionsScreen = () => {
         ) : (
           <View style={styles.promoGrid}>
             {promotions.map((p, idx) => {
-              const title =
-                p.title || p.user?.nickname || p.user?.name || 'Promo';
+              const ownerName = p.user?.nickname || p.user?.name || '—';
               const offerText =
                 p.promoAmount != null
                   ? `Get Flat ${p.promoAmount}% OFF`
@@ -124,7 +123,7 @@ const AllPromotionsScreen = () => {
                 >
                   <View style={styles.cardOrangeHeader}>
                     <Text style={styles.cardHeaderText} numberOfLines={1}>
-                      {title}
+                      {ownerName}
                     </Text>
                   </View>
                   <View style={styles.imageContainer}>
@@ -139,9 +138,6 @@ const AllPromotionsScreen = () => {
                       {codeText ? (
                         <Text style={styles.highlightText}> • {codeText}</Text>
                       ) : null}
-                    </Text>
-                    <Text style={styles.uptoText}>
-                      {p.user?.nickname || p.user?.name || ''}
                     </Text>
                   </View>
                 </TouchableOpacity>

@@ -83,3 +83,59 @@ export const getRestaurantEarnings = async (token) => {
   }
   return res.json();
 };
+
+// =========================
+// Order reviews (per order)
+// =========================
+
+export const getRestaurantOrderReview = async (token, orderId) => {
+  const res = await fetch(`${API_URL}/${orderId}/review`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error('Failed to load review');
+  }
+  return res.json();
+};
+
+export const upsertRestaurantOrderReview = async (token, orderId, body) => {
+  const res = await fetch(`${API_URL}/${orderId}/review`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to submit review');
+  }
+  return res.json();
+};
+
+export const deleteRestaurantOrderReview = async (token, orderId) => {
+  const res = await fetch(`${API_URL}/${orderId}/review`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to delete review');
+  }
+  return res.json();
+};
+
+// Admin
+export const listRestaurantOrderReviews = async (token, params = {}) => {
+  const q = new URLSearchParams();
+  if (params.page != null) q.set('page', String(params.page));
+  if (params.perPage != null) q.set('perPage', String(params.perPage));
+  const url = q.toString() ? `${API_URL}/reviews?${q}` : `${API_URL}/reviews`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to load order reviews');
+  return res.json();
+};

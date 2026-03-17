@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,14 +7,22 @@ import {
   StatusBar,
   TouchableOpacity,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useSelector } from 'react-redux';
+import { upsertMyAppRating } from '../services/appRatingService';
 
 const { width, height } = Dimensions.get('window');
 
 const HomeFiveScreen = ({ onHomePress }) => {
   const navigation = useNavigation();
+  const currentUser = useSelector(state => state.app?.user);
+  const token = currentUser?.token;
+  const [rating, setRating] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
   const goHome = () => {
     if (onHomePress) {
@@ -24,11 +32,26 @@ const HomeFiveScreen = ({ onHomePress }) => {
     }
   };
 
-  useEffect(() => {
-    const timer = setTimeout(goHome, 10000);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const submitAndGoHome = async () => {
+    if (!token) {
+      Alert.alert('Login required', 'Please login to submit a rating.');
+      goHome();
+      return;
+    }
+    if (!rating) {
+      Alert.alert('Rate the app', 'Please select a star rating first.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await upsertMyAppRating(token, { rating });
+      goHome();
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to submit rating');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -42,9 +65,17 @@ const HomeFiveScreen = ({ onHomePress }) => {
         <TouchableOpacity
           style={styles.thanksCard}
           activeOpacity={0.9}
-          onPress={goHome}
+          onPress={submitAndGoHome}
+          disabled={submitting}
         >
-          <Text style={styles.thanksText}>Thanks for Ordering</Text>
+          {submitting ? (
+            <View style={styles.submittingRow}>
+              <ActivityIndicator size="small" color="#F5A623" />
+              <Text style={styles.thanksTextMuted}>Submitting…</Text>
+            </View>
+          ) : (
+            <Text style={styles.thanksText}>Thanks for Ordering</Text>
+          )}
         </TouchableOpacity>
 
         {/* Rating Section */}
@@ -52,9 +83,14 @@ const HomeFiveScreen = ({ onHomePress }) => {
           <Text style={styles.rateText}>Help us and rate</Text>
           <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity key={star}>
+              <TouchableOpacity
+                key={star}
+                onPress={() => setRating(star)}
+                disabled={submitting}
+                activeOpacity={0.8}
+              >
                 <Icon 
-                  name="star-outline" 
+                  name={star <= rating ? 'star' : 'star-outline'} 
                   size={45} 
                   color="#FFF" 
                   style={styles.starIcon} 
@@ -111,6 +147,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  thanksTextMuted: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  submittingRow: { flexDirection: 'row', alignItems: 'center' },
   ratingSection: {
     marginTop: 40,
     alignItems: 'center',

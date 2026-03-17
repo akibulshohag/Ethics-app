@@ -187,7 +187,7 @@ const HomeThreeScreen = ({ onBack }) => {
 
       <TouchableOpacity style={styles.filterChip}>
         <Icon name="tune" size={18} color="#444" />
-        <Text style={styles.filterText}>Sweets</Text>
+        <Text style={styles.filterText}>Desserts</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.filterChip}>

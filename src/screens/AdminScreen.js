@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
 import {
   getRoles,
   createRole,
@@ -48,7 +49,17 @@ import {
   createVendorSponsored,
   deleteVendorSponsored,
 } from '../services/vendorSponsoredService';
-import { getRestaurantOrders } from '../services/orderService';
+import {
+  listAppRatings,
+  deleteAppRatingById,
+  updateAppRatingById,
+} from '../services/appRatingService';
+import {
+  getRestaurantOrders,
+  listRestaurantOrderReviews,
+  upsertRestaurantOrderReview,
+  deleteRestaurantOrderReview,
+} from '../services/orderService';
 import { uploadVideo } from '../services/videoService';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
@@ -56,6 +67,7 @@ import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 const SIDEBAR_WIDTH = 140;
 
 const AdminScreen = () => {
+  const dispatch = useDispatch();
   const { user } = useSelector(s => s.app) || {};
   const roleNorm = String(user?.role || '').toLowerCase();
   const isAdminUser =
@@ -64,7 +76,7 @@ const AdminScreen = () => {
     roleNorm === 'super_admin' ||
     roleNorm === 'super-admin';
   const isOwnerUser = roleNorm === 'owner';
-  const [menu, setMenu] = useState('roles'); // 'roles' | 'users' | 'sponsored' | 'featured'
+  const [menu, setMenu] = useState('roles'); // 'roles' | 'users' | 'sponsored' | 'featured' | 'appRatings'
   const [roles, setRoles] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -130,6 +142,14 @@ const AdminScreen = () => {
   const [myFeaturedProfileLoading, setMyFeaturedProfileLoading] =
     useState(false);
   const [ordersList, setOrdersList] = useState([]);
+  const [appRatings, setAppRatings] = useState([]);
+  const [editingAppRating, setEditingAppRating] = useState(null);
+  const [appRatingValue, setAppRatingValue] = useState(0);
+  const [appRatingComment, setAppRatingComment] = useState('');
+  const [orderReviews, setOrderReviews] = useState([]);
+  const [editingOrderReview, setEditingOrderReview] = useState(null);
+  const [orderReviewValue, setOrderReviewValue] = useState(0);
+  const [orderReviewComment, setOrderReviewComment] = useState('');
   const [vendorFeaturedList, setVendorFeaturedList] = useState([]);
   const [vendorSponsoredList, setVendorSponsoredList] = useState([]);
   const [vendorFeaturedForm, setVendorFeaturedForm] = useState({
@@ -299,6 +319,29 @@ const AdminScreen = () => {
     }
   }, [user?.token]);
 
+  const loadAppRatings = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await listAppRatings(user.token, { page: 1, perPage: 200 });
+      setAppRatings(res?.items || []);
+    } catch (e) {
+      setAppRatings([]);
+    }
+  }, [user?.token]);
+
+  const loadOrderReviews = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await listRestaurantOrderReviews(user.token, {
+        page: 1,
+        perPage: 200,
+      });
+      setOrderReviews(res?.items || []);
+    } catch (e) {
+      setOrderReviews([]);
+    }
+  }, [user?.token]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (menu === 'roles') await loadRoles();
@@ -308,6 +351,8 @@ const AdminScreen = () => {
     else if (menu === 'orders') await loadOrders();
     else if (menu === 'vendorFeatured') await loadVendorFeatured();
     else if (menu === 'vendorSponsored') await loadVendorSponsored();
+    else if (menu === 'appRatings') await loadAppRatings();
+    else if (menu === 'orderReviews') await loadOrderReviews();
     setRefreshing(false);
   }, [
     menu,
@@ -318,6 +363,8 @@ const AdminScreen = () => {
     loadOrders,
     loadVendorFeatured,
     loadVendorSponsored,
+    loadAppRatings,
+    loadOrderReviews,
   ]);
 
   const searchOwners = useCallback(async query => {
@@ -1100,6 +1147,8 @@ const AdminScreen = () => {
     else if (menu === 'orders') loadOrders();
     else if (menu === 'vendorFeatured') loadVendorFeatured();
     else if (menu === 'vendorSponsored') loadVendorSponsored();
+    else if (menu === 'appRatings') loadAppRatings();
+    else if (menu === 'orderReviews') loadOrderReviews();
   }, [
     menu,
     loadRoles,
@@ -1109,7 +1158,119 @@ const AdminScreen = () => {
     loadOrders,
     loadVendorFeatured,
     loadVendorSponsored,
+    loadAppRatings,
+    loadOrderReviews,
   ]);
+
+  const openEditAppRating = (r) => {
+    setEditingAppRating(r);
+    setAppRatingValue(Number(r?.rating) || 0);
+    setAppRatingComment(r?.comment || '');
+    setModalOpen('appRating');
+  };
+
+  const openEditOrderReview = (r) => {
+    setEditingOrderReview(r);
+    setOrderReviewValue(Number(r?.rating) || 0);
+    setOrderReviewComment(r?.comment || '');
+    setModalOpen('orderReview');
+  };
+
+  const handleDeleteOrderReview = (r) => {
+    if (!user?.token || !r?.orderId) return;
+    Alert.alert('Delete', 'Delete this order review?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteRestaurantOrderReview(user.token, r.orderId);
+            loadOrderReviews();
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to delete review');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleUpdateOrderReview = async () => {
+    if (!user?.token || !editingOrderReview?.orderId) return;
+    if (!orderReviewValue || orderReviewValue < 1) {
+      Alert.alert('Rating required', 'Please select a star rating first.');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      await upsertRestaurantOrderReview(user.token, editingOrderReview.orderId, {
+        rating: orderReviewValue,
+        comment: orderReviewComment,
+      });
+      setModalOpen(false);
+      setEditingOrderReview(null);
+      loadOrderReviews();
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to update review');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteAppRating = (r) => {
+    if (!user?.token) return;
+    Alert.alert('Delete rating', 'Delete this app rating?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAppRatingById(user.token, r.id);
+            loadAppRatings();
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Failed to delete');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleUpdateAppRating = async () => {
+    if (!user?.token || !editingAppRating?.id) return;
+    if (!appRatingValue) {
+      Alert.alert('Error', 'Select a rating');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      await updateAppRatingById(user.token, editingAppRating.id, {
+        rating: appRatingValue,
+        comment: appRatingComment || undefined,
+      });
+      setModalOpen(false);
+      setEditingAppRating(null);
+      loadAppRatings();
+      Alert.alert('Success', 'Rating updated');
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to update');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          dispatch(appSetUser(null));
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     if (modalOpen) loadRoleOptions();
@@ -1424,6 +1585,62 @@ const AdminScreen = () => {
               Vendor Sponsored
             </Text>
           </TouchableOpacity>
+
+          {isAdminUser && (
+            <TouchableOpacity
+              style={[
+                styles.sideItem,
+                menu === 'appRatings' && styles.sideItemActive,
+              ]}
+              onPress={() => setMenu('appRatings')}
+            >
+              <Icon
+                name="star"
+                size={24}
+                color={
+                  menu === 'appRatings'
+                    ? COLORS.primaryOrange
+                    : COLORS.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.sideText,
+                  menu === 'appRatings' && styles.sideTextActive,
+                ]}
+              >
+                App Ratings
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {isAdminUser && (
+            <TouchableOpacity
+              style={[
+                styles.sideItem,
+                menu === 'orderReviews' && styles.sideItemActive,
+              ]}
+              onPress={() => setMenu('orderReviews')}
+            >
+              <Icon
+                name="comment-text-outline"
+                size={24}
+                color={
+                  menu === 'orderReviews'
+                    ? COLORS.primaryOrange
+                    : COLORS.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.sideText,
+                  menu === 'orderReviews' && styles.sideTextActive,
+                ]}
+              >
+                Order Reviews
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.main}>
@@ -1441,9 +1658,21 @@ const AdminScreen = () => {
                 ? 'Vendor Featured'
                 : menu === 'vendorSponsored'
                 ? 'Vendor Sponsored'
+                : menu === 'appRatings'
+                ? 'App Ratings'
+                : menu === 'orderReviews'
+                ? 'Order Reviews'
                 : 'Featured'}
             </Text>
-            {menu !== 'orders' && (
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <Icon name="logout" size={20} color={COLORS.white} />
+              <Text style={styles.logoutBtnText}>Logout</Text>
+            </TouchableOpacity>
+            {menu !== 'orders' && menu !== 'appRatings' && menu !== 'orderReviews' && (
               <TouchableOpacity
                 style={styles.addBtn}
                 onPress={
@@ -1482,6 +1711,78 @@ const AdminScreen = () => {
                 color={COLORS.primaryOrange}
                 style={{ marginTop: 40 }}
               />
+            ) : menu === 'orderReviews' ? (
+              orderReviews.map(r => (
+                <View key={r.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>
+                      #{String(r.orderId || '').slice(0, 8)} ·{' '}
+                      {r.user?.nickname || r.user?.name || r.user?.email || 'User'} ·{' '}
+                      {r.rating}★
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={2}>
+                      {r.comment ? r.comment : '—'}
+                      {'  '}•{'  '}
+                      {r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => openEditOrderReview(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="pencil"
+                      size={22}
+                      color={COLORS.primaryOrange}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteOrderReview(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="delete-outline"
+                      size={22}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : menu === 'appRatings' ? (
+              appRatings.map(r => (
+                <View key={r.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>
+                      {r.user?.nickname || r.user?.name || r.user?.email || 'User'} · {r.rating}★
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={2}>
+                      {r.comment ? r.comment : '—'}
+                      {'  '}•{'  '}
+                      {r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => openEditAppRating(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="pencil"
+                      size={22}
+                      color={COLORS.primaryOrange}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteAppRating(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="delete-outline"
+                      size={22}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))
             ) : menu === 'sponsored' ? (
               sponsoredList.map(s => (
                 <View key={s.id} style={styles.row}>
@@ -1697,6 +1998,10 @@ const AdminScreen = () => {
                 ? editingRole
                   ? 'Edit Role'
                   : 'New Role'
+                : modalOpen === 'appRating'
+                ? 'Edit App Rating'
+                : modalOpen === 'orderReview'
+                ? 'Edit Order Review'
                 : modalOpen === 'sponsored'
                 ? 'New Sponsored Campaign'
                 : modalOpen === 'featured'
@@ -1709,7 +2014,65 @@ const AdminScreen = () => {
                 ? 'Edit User'
                 : 'New User'}
             </Text>
-            {modalOpen === 'vendorFeatured' ? (
+            {modalOpen === 'appRating' ? (
+              <>
+                <Text style={styles.label}>Rating</Text>
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => setAppRatingValue(s)}
+                      style={{ padding: 4 }}
+                      disabled={submitLoading}
+                    >
+                      <Icon
+                        name={s <= appRatingValue ? 'star' : 'star-outline'}
+                        size={32}
+                        color={COLORS.primaryOrange}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.label}>Comment (optional)</Text>
+                <TextInput
+                  style={[styles.input, { height: 90 }]}
+                  value={appRatingComment}
+                  onChangeText={setAppRatingComment}
+                  placeholder="Write a comment..."
+                  placeholderTextColor="#999"
+                  multiline
+                />
+              </>
+            ) : modalOpen === 'orderReview' ? (
+              <>
+                <Text style={styles.label}>Rating</Text>
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => setOrderReviewValue(s)}
+                      style={{ padding: 4 }}
+                      disabled={submitLoading}
+                    >
+                      <Icon
+                        name={s <= orderReviewValue ? 'star' : 'star-outline'}
+                        size={32}
+                        color={COLORS.primaryOrange}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.label}>Comment (optional)</Text>
+                <TextInput
+                  style={[styles.input, { height: 90 }]}
+                  value={orderReviewComment}
+                  onChangeText={setOrderReviewComment}
+                  placeholder="Write a comment..."
+                  placeholderTextColor="#999"
+                  multiline
+                />
+              </>
+            ) : modalOpen === 'vendorFeatured' ? (
               <ScrollView
                 style={{ maxHeight: 520 }}
                 showsVerticalScrollIndicator={false}
@@ -2856,7 +3219,11 @@ const AdminScreen = () => {
               <TouchableOpacity
                 style={styles.saveBtn}
                 onPress={
-                  modalOpen === 'role'
+                  modalOpen === 'appRating'
+                    ? handleUpdateAppRating
+                    : modalOpen === 'orderReview'
+                    ? handleUpdateOrderReview
+                    : modalOpen === 'role'
                     ? handleSaveRole
                     : modalOpen === 'sponsored'
                     ? handleCreateSponsored
@@ -2929,6 +3296,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addBtnText: { color: COLORS.white, fontWeight: '600', fontSize: FONTS.sm },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray700,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    marginRight: SPACING.md,
+    gap: 6,
+  },
+  logoutBtnText: { color: COLORS.white, fontWeight: '600', fontSize: FONTS.xs },
   list: { flex: 1, padding: SPACING.lg },
   row: {
     flexDirection: 'row',

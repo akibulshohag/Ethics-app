@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, SHADOWS } from '../constants/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { safeImageUri } from '../utils/helper';
 
 const DEFAULT_IMAGE =
   'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
@@ -21,20 +22,48 @@ const CartDetailsScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { ownerId, items: paramItems = [] } = route.params || {};
-  const items = Array.isArray(paramItems) ? paramItems : [];
+  const [items, setItems] = useState(Array.isArray(paramItems) ? paramItems : []);
 
-  const total = items.reduce(
-    (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
-    0,
-  );
-  const currency = items[0]?.currency || 'GBP';
+  const { total, currency } = useMemo(() => {
+    const t = (items || []).reduce(
+      (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
+      0,
+    );
+    return {
+      total: t,
+      currency: items?.[0]?.currency || 'GBP',
+    };
+  }, [items]);
 
   const onCheckout = () => {
     if (!items.length || !ownerId) return;
-    navigation.navigate('HomeFourScreen', {
-      ownerId,
-      items,
-      ownerName: route.params?.ownerName || 'Restaurant',
+    const rootNav = navigation.getParent?.() ?? navigation;
+    rootNav.navigate('Root', {
+      screen: 'Home1',
+      params: {
+        screen: 'HomeFourScreen',
+        params: {
+          ownerId,
+          items,
+          ownerName: route.params?.ownerName || 'Restaurant',
+        },
+      },
+    });
+  };
+
+  const changeQty = (key, delta) => {
+    setItems(prev => {
+      const next = (prev || []).map(i => ({ ...i }));
+      const idx = next.findIndex(i => (i.menuItemId || i.id) === key);
+      if (idx === -1) return prev;
+      const cur = next[idx]?.quantity || 1;
+      const newQty = Math.max(0, cur + delta);
+      if (newQty === 0) {
+        next.splice(idx, 1);
+        return next;
+      }
+      next[idx].quantity = newQty;
+      return next;
     });
   };
 
@@ -74,17 +103,39 @@ const CartDetailsScreen = () => {
                 const qty = item.quantity || 1;
                 const price = Number(item.price) || 0;
                 const lineTotal = price * qty;
+                const key = item.menuItemId || item.id || String(index);
                 return (
-                  <View key={item.menuItemId || index} style={styles.cartItem}>
+                  <View key={key} style={styles.cartItem}>
                     <Image
-                      source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+                      source={{
+                        uri: safeImageUri(item.imageUrl, DEFAULT_IMAGE),
+                      }}
                       style={styles.itemImage}
                     />
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.itemName}</Text>
-                      <Text style={styles.itemMeta}>
-                        {item.currency || 'GBP'} {price.toFixed(2)} × {qty}
-                      </Text>
+                      <View style={styles.qtyRow}>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => changeQty(key, -1)}
+                          activeOpacity={0.8}
+                        >
+                          <Icon name="minus" size={18} color={COLORS.textPrimary} />
+                        </TouchableOpacity>
+                        <View style={styles.qtyPill}>
+                          <Text style={styles.qtyText}>{qty}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => changeQty(key, +1)}
+                          activeOpacity={0.8}
+                        >
+                          <Icon name="plus" size={18} color={COLORS.textPrimary} />
+                        </TouchableOpacity>
+                        <Text style={styles.itemMeta}>
+                          {item.currency || 'GBP'} {price.toFixed(2)}
+                        </Text>
+                      </View>
                     </View>
                     <View style={styles.itemPriceColumn}>
                       <Text style={styles.itemPrice}>
@@ -314,6 +365,38 @@ const styles = StyleSheet.create({
   itemMeta: {
     fontSize: 13,
     color: COLORS.gray500,
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  qtyBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  qtyPill: {
+    minWidth: 34,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    paddingHorizontal: 10,
+  },
+  qtyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
   },
   quantityWrapper: {
     flexDirection: 'row',

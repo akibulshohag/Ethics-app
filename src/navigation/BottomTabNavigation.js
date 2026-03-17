@@ -30,6 +30,7 @@ import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
+import OrderListScreen from '../screens/OrderListScreen';
 import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
 import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
@@ -384,6 +385,32 @@ const BottomNaivgation = () => {
               }}
             />
           )}
+
+          <Tab.Screen
+            name="Orders"
+            component={OrdersTabWrapper}
+            listeners={{
+              tabPress: redirectToHomeThreeIfGuest,
+            }}
+            options={({ route }) => ({
+              tabBarStyle: {
+                backgroundColor: COLORS.white,
+                borderTopWidth: 1,
+                borderTopColor: COLORS.gray200,
+                height: tabHeight,
+                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+                paddingTop: 8,
+                ...getTabBarStyle(route),
+              },
+              tabBarIcon: ({ focused }) => (
+                <Icon
+                  name="cart-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            })}
+          />
 
           <Tab.Screen
             name="Library"

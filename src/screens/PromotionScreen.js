@@ -81,9 +81,7 @@ const VideoSection = ({
         </View>
       ) : items.length === 0 ? (
         <View style={[styles.videoThumbnailContainer, { width: 220 }]}>
-          <Text style={{ color: '#888', fontSize: 13 }}>
-            No items yet.
-          </Text>
+          <Text style={{ color: '#888', fontSize: 13 }}>No items yet.</Text>
         </View>
       ) : (
         items.slice(0, 12).map((item, idx) => (
@@ -122,8 +120,7 @@ const PromotionScreen = ({ onBack }) => {
     if (!Number.isFinite(num) || num <= 0) return '0';
     if (num >= 1000000)
       return `${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
-    if (num >= 1000)
-      return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     return String(Math.floor(num));
   };
 
@@ -140,7 +137,8 @@ const PromotionScreen = ({ onBack }) => {
       id: v.id,
       title: v.title || 'Untitled',
       videoUrl: v.videoUrl,
-      thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+      thumbnail:
+        v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
       durationSeconds: v.duration ?? 0,
       likeCount: v.likeCount ?? v._count?.likes ?? 0,
       dislikeCount: v.dislikeCount ?? 0,
@@ -172,7 +170,10 @@ const PromotionScreen = ({ onBack }) => {
       title: s.title || 'Short',
       videoUrl: s.videoUrl,
       thumbnail:
-        s.thumbnailUrl || s.coverUrl || s.videoUrl || 'https://via.placeholder.com/600',
+        s.thumbnailUrl ||
+        s.coverUrl ||
+        s.videoUrl ||
+        'https://via.placeholder.com/600',
       durationSeconds: s.duration ?? 0,
       likeCount: s.likeCount ?? s._count?.likes ?? 0,
       dislikeCount: s.dislikeCount ?? 0,
@@ -970,8 +971,8 @@ const PromotionScreen = ({ onBack }) => {
                     navigation.navigate('PromotionFullDetail', { promotion: p })
                   }
                 >
-                  <Text style={styles.promoButtonText} numberOfLines={1}>
-                    {p.title || p.user?.nickname || p.user?.name || 'Promo'}
+                  <Text style={styles.promoButtonSubText} numberOfLines={1}>
+                    {p.user?.nickname || p.user?.name || '—'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1322,10 +1323,7 @@ const PromotionScreen = ({ onBack }) => {
                 prev
                   ? {
                       ...prev,
-                      commentCount: Math.max(
-                        0,
-                        (prev.commentCount ?? 0) - dec,
-                      ),
+                      commentCount: Math.max(0, (prev.commentCount ?? 0) - dec),
                     }
                   : prev,
               );
@@ -1584,6 +1582,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   promoButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  promoButtonSubText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    marginTop: 4,
+  },
 
   bottomArrowContainer: {
     alignItems: 'center',

@@ -5,13 +5,13 @@ import {
   Text,
   Image,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   Linking,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -19,6 +19,7 @@ import {
   getRestaurantOrderById,
   updateRestaurantOrderStatus,
 } from '../services/orderService';
+import { safeImageUri } from '../utils/helper';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -203,8 +204,10 @@ export default function OrderDetailsScreen() {
 
   const customerName = order.user?.name || order.user?.email || 'Customer';
   const phone = order.user?.phone || order.user?.phoneNumber || '';
-  const avatarUri =
-    order.user?.photos?.[0] || 'https://i.pravatar.cc/150?u=user';
+  const avatarUri = safeImageUri(
+    order.user?.photos?.[0],
+    'https://i.pravatar.cc/150?u=user',
+  );
   const items = order.items || [];
   const totalAmount = Number(order.totalAmount || 0);
   const currency = order.currency || 'GBP';

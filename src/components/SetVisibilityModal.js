@@ -74,11 +74,11 @@ const SetVisibilityModal = ({ visible, onClose, initialValue, onApply }) => {
             description="Anyone can search for and view"
             value="Public"
           />
-          <VisibilityOption
+          {/* <VisibilityOption
             title="Unlisted"
             description="Anyone with the link can view"
             value="Unlisted"
-          />
+          /> */}
           <VisibilityOption
             title="Private"
             description="Only people who choose can view"
