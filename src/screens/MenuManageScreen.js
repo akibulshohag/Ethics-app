@@ -13,6 +13,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -20,9 +21,13 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import {
   getMenuItems,
   getMenuFiles,
+  getMenuCategories,
   createMenuItem,
   updateMenuItem,
   deleteMenuItem,
+  createMenuCategory,
+  updateMenuCategory,
+  deleteMenuCategory,
   uploadMenuItemImage,
   uploadMenuFile,
 } from '../services/menuService';
@@ -32,6 +37,7 @@ const MenuManageScreen = () => {
   const navigation = useNavigation();
   const { user } = useSelector(s => s.app) || {};
   const [list, setList] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [menuFiles, setMenuFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -41,22 +47,31 @@ const MenuManageScreen = () => {
   const [price, setPrice] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [itemImageAsset, setItemImageAsset] = useState(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
   const [fileUploadLoading, setFileUploadLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [addSuccessInModal, setAddSuccessInModal] = useState(false);
+  // Category form (add/edit)
+  const [categoryFormVisible, setCategoryFormVisible] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [categoryName, setCategoryName] = useState('');
+  const [categorySaveLoading, setCategorySaveLoading] = useState(false);
 
   const loadMenu = useCallback(async () => {
     if (!user?.token) return;
     try {
-      const [itemsRes, filesRes] = await Promise.all([
+      const [itemsRes, filesRes, categoriesRes] = await Promise.all([
         getMenuItems(user.token),
         getMenuFiles(user.token),
+        getMenuCategories(user.token),
       ]);
       setList(itemsRes?.menu || []);
       setMenuFiles(filesRes?.files || []);
+      setCategories(categoriesRes?.categories || []);
     } catch (e) {
       setList([]);
+      setCategories([]);
       setMenuFiles([]);
     } finally {
       setLoading(false);
@@ -133,6 +148,7 @@ const MenuManageScreen = () => {
     setPrice('');
     setImageUrl('');
     setItemImageAsset(null);
+    setSelectedCategoryId(categories.length > 0 ? categories[0].id : '');
     setAddSuccessInModal(false);
     setFormVisible(true);
   };
@@ -143,6 +159,7 @@ const MenuManageScreen = () => {
     setPrice(String(item.price ?? ''));
     setImageUrl(item.imageUrl || '');
     setItemImageAsset(null);
+    setSelectedCategoryId(item.categoryId || item.category?.id || (categories.length > 0 ? categories[0].id : ''));
     setAddSuccessInModal(false);
     setFormVisible(true);
   };
@@ -178,21 +195,19 @@ const MenuManageScreen = () => {
     }
     setSubmitLoading(true);
     try {
+      const payload = {
+        itemName: name,
+        price: numPrice,
+        imageUrl: imageUrl || undefined,
+        ...(selectedCategoryId ? { categoryId: selectedCategoryId } : {}),
+      };
       if (editingId) {
-        await updateMenuItem(user.token, editingId, {
-          itemName: name,
-          price: numPrice,
-          imageUrl: imageUrl || undefined,
-        });
+        await updateMenuItem(user.token, editingId, payload);
         Alert.alert('Success', 'Menu item updated');
         closeForm();
         loadMenu();
       } else {
-        await createMenuItem(user.token, {
-          itemName: name,
-          price: numPrice,
-          imageUrl: imageUrl || undefined,
-        });
+        await createMenuItem(user.token, payload);
         setAddSuccessInModal(true);
         loadMenu();
       }
@@ -202,6 +217,91 @@ const MenuManageScreen = () => {
       setSubmitLoading(false);
     }
   };
+
+  const openAddCategory = () => {
+    setEditingCategoryId(null);
+    setCategoryName('');
+    setCategoryFormVisible(true);
+  };
+
+  const openEditCategory = (cat) => {
+    setEditingCategoryId(cat.id);
+    setCategoryName(cat.name || '');
+    setCategoryFormVisible(true);
+  };
+
+  const closeCategoryForm = () => {
+    setCategoryFormVisible(false);
+    setEditingCategoryId(null);
+    setCategoryName('');
+  };
+
+  const handleSaveCategory = async () => {
+    const name = (categoryName || '').trim();
+    if (!name) {
+      Alert.alert('Error', 'Category name is required');
+      return;
+    }
+    setCategorySaveLoading(true);
+    try {
+      if (editingCategoryId) {
+        await updateMenuCategory(user.token, editingCategoryId, { name });
+        Alert.alert('Success', 'Category updated');
+      } else {
+        await createMenuCategory(user.token, { name });
+        Alert.alert('Success', 'Category created');
+      }
+      closeCategoryForm();
+      loadMenu();
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to save category');
+    } finally {
+      setCategorySaveLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = (cat) => {
+    const count = cat.itemCount ?? list.filter((i) => i.categoryId === cat.id).length;
+    Alert.alert(
+      'Delete category',
+      count > 0
+        ? `"${cat.name}" has ${count} item(s). They will become uncategorized. Delete anyway?`
+        : `Delete "${cat.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteMenuCategory(user.token, cat.id);
+              loadMenu();
+            } catch (e) {
+              Alert.alert('Error', e.message || 'Failed to delete category');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Group menu items by category for section list (category order, then uncategorized)
+  const menuSections = React.useMemo(() => {
+    const uncategorized = list.filter((i) => !i.categoryId && !i.category?.id);
+    const byCategory = categories.map((cat) => ({
+      id: cat.id,
+      title: cat.name,
+      data: list.filter((i) => (i.categoryId || i.category?.id) === cat.id),
+    }));
+    const sections = [];
+    byCategory.forEach((s) => {
+      if (s.data.length > 0) sections.push({ id: s.id, title: s.title, data: s.data });
+    });
+    if (uncategorized.length > 0) {
+      sections.push({ id: 'uncategorized', title: 'Uncategorized', data: uncategorized });
+    }
+    return sections;
+  }, [list, categories]);
 
   const handleDelete = (item) => {
     Alert.alert('Delete item', `Delete "${item.itemName}"?`, [
@@ -226,22 +326,26 @@ const MenuManageScreen = () => {
 
   if (!user?.token) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.helperText}>Please log in to manage menu.</Text>
-      </View>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.centered}>
+          <Text style={styles.helperText}>Please log in to manage menu.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (!isOwnerOrVendor) {
     return (
-      <View style={styles.centered}>
-        <Text style={styles.helperText}>Menu is for restaurant owners and vendors only.</Text>
-      </View>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.centered}>
+          <Text style={styles.helperText}>Menu is for restaurant owners and vendors only.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
@@ -260,9 +364,35 @@ const MenuManageScreen = () => {
           />
         }
       >
-        {/* 1. Menu file (PDF/image) upload first */}
-        <Text style={styles.sectionTitle}>1. Menu file (PDF or image)</Text>
-        <Text style={styles.sectionHint}>Upload your menu as image first, then add items below.</Text>
+        {/* 1. Menu categories: create first, then assign to items */}
+        <Text style={styles.sectionTitle}>1. Menu categories</Text>
+        <Text style={styles.sectionHint}>Create categories (e.g. Main Course, Breads), then assign them when adding menu items.</Text>
+        <TouchableOpacity style={styles.addCategoryButton} onPress={openAddCategory}>
+          <Icon name="plus" size={20} color={COLORS.white} />
+          <Text style={styles.addCategoryButtonText}>Add category</Text>
+        </TouchableOpacity>
+        {categories.length > 0 ? (
+          categories.map((cat) => (
+            <View key={cat.id} style={styles.categoryCard}>
+              <Text style={styles.categoryCardName}>{cat.name}</Text>
+              <Text style={styles.categoryCardCount}>{cat.itemCount ?? list.filter((i) => i.categoryId === cat.id).length} items</Text>
+              <View style={styles.categoryCardActions}>
+                <TouchableOpacity onPress={() => openEditCategory(cat)} style={styles.iconBtn}>
+                  <Icon name="pencil" size={20} color={COLORS.primaryOrange} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDeleteCategory(cat)} style={styles.iconBtn}>
+                  <Icon name="delete-outline" size={20} color={COLORS.error} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.emptyCategoryText}>No categories yet. Add one above, then add menu items and assign a category.</Text>
+        )}
+
+        {/* 2. Menu file (PDF/image) upload */}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>2. Menu file (PDF or image)</Text>
+        <Text style={styles.sectionHint}>Upload your menu as image (optional).</Text>
         <TouchableOpacity
           style={[styles.uploadFileButton, fileUploadLoading && styles.buttonDisabled]}
           onPress={pickAndUploadMenuFile}
@@ -281,8 +411,8 @@ const MenuManageScreen = () => {
           <Text style={styles.uploadedCount}>{menuFiles.length} file(s) uploaded</Text>
         )}
 
-        {/* 2. Menu items */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>2. Menu items</Text>
+        {/* 3. Menu items */}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>3. Menu items</Text>
         <TouchableOpacity style={styles.addButton} onPress={openAdd}>
           <Icon name="plus" size={22} color={COLORS.white} />
           <Text style={styles.addButtonText}>Add menu item</Text>
@@ -293,25 +423,30 @@ const MenuManageScreen = () => {
         ) : list.length === 0 ? (
           <Text style={styles.emptyText}>No menu items yet. Tap "Add menu item" to add.</Text>
         ) : (
-          list.map((item) => (
-            <View key={item.id} style={styles.card}>
-              <View style={styles.cardLeft}>
-                {item.imageUrl ? (
-                  <Image source={{ uri: item.imageUrl }} style={styles.cardThumb} />
-                ) : null}
-                <View style={styles.cardTextWrap}>
-                  <Text style={styles.cardTitle}>{item.itemName}</Text>
-                  <Text style={styles.cardPrice}>${Number(item.price).toFixed(2)}</Text>
+          menuSections.map((section) => (
+            <View key={section.id} style={styles.menuSection}>
+              <Text style={styles.menuSectionTitle}>{section.title}</Text>
+              {section.data.map((item) => (
+                <View key={item.id} style={styles.card}>
+                  <View style={styles.cardLeft}>
+                    {item.imageUrl ? (
+                      <Image source={{ uri: item.imageUrl }} style={styles.cardThumb} />
+                    ) : null}
+                    <View style={styles.cardTextWrap}>
+                      <Text style={styles.cardTitle}>{item.itemName}</Text>
+                      <Text style={styles.cardPrice}>${Number(item.price).toFixed(2)}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity onPress={() => openEdit(item)} style={styles.iconBtn}>
+                      <Icon name="pencil" size={22} color={COLORS.primaryOrange} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDelete(item)} style={styles.iconBtn}>
+                      <Icon name="delete-outline" size={22} color={COLORS.error} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity onPress={() => openEdit(item)} style={styles.iconBtn}>
-                  <Icon name="pencil" size={22} color={COLORS.primaryOrange} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDelete(item)} style={styles.iconBtn}>
-                  <Icon name="delete-outline" size={22} color={COLORS.error} />
-                </TouchableOpacity>
-              </View>
+              ))}
             </View>
           ))
         )}
@@ -343,6 +478,24 @@ const MenuManageScreen = () => {
               </View>
             ) : (
               <>
+                <Text style={styles.inputLabel}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPicker}>
+                  <TouchableOpacity
+                    style={[styles.categoryChip, !selectedCategoryId && styles.categoryChipActive]}
+                    onPress={() => setSelectedCategoryId('')}
+                  >
+                    <Text style={[styles.categoryChipText, !selectedCategoryId && styles.categoryChipTextActive]}>None</Text>
+                  </TouchableOpacity>
+                  {categories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[styles.categoryChip, selectedCategoryId === cat.id && styles.categoryChipActive]}
+                      onPress={() => setSelectedCategoryId(cat.id)}
+                    >
+                      <Text style={[styles.categoryChipText, selectedCategoryId === cat.id && styles.categoryChipTextActive]} numberOfLines={1}>{cat.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
                 <TextInput
                   style={styles.input}
                   value={itemName}
@@ -405,7 +558,39 @@ const MenuManageScreen = () => {
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+
+      {/* Category add/edit modal */}
+      <Modal visible={categoryFormVisible} transparent animationType="fade" onRequestClose={closeCategoryForm}>
+        <Pressable style={styles.formOverlay} onPress={closeCategoryForm}>
+          <Pressable style={styles.formBox} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.formTitle}>{editingCategoryId ? 'Edit category' : 'New category'}</Text>
+            <TextInput
+              style={styles.input}
+              value={categoryName}
+              onChangeText={setCategoryName}
+              placeholder="Category name (e.g. Main Course)"
+              placeholderTextColor="#999"
+            />
+            <View style={styles.formActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={closeCategoryForm}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={handleSaveCategory}
+                disabled={categorySaveLoading}
+              >
+                {categorySaveLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.saveBtnText}>{editingCategoryId ? 'Update' : 'Save'}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </SafeAreaView>
   );
 };
 
@@ -439,6 +624,40 @@ const styles = StyleSheet.create({
   uploadFileButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 15 },
   uploadedCount: { fontSize: 12, color: COLORS.gray600, marginTop: 8 },
   buttonDisabled: { opacity: 0.7 },
+  addCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primaryOrange,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.md,
+    gap: 8,
+    marginBottom: 12,
+  },
+  addCategoryButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 15 },
+  categoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray50,
+    padding: SPACING.md,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: 8,
+  },
+  categoryCardName: { flex: 1, fontSize: 16, fontWeight: '600', color: COLORS.textPrimary },
+  categoryCardCount: { fontSize: 13, color: COLORS.gray600, marginRight: 8 },
+  categoryCardActions: { flexDirection: 'row', gap: 8 },
+  emptyCategoryText: { fontSize: 13, color: COLORS.gray600, marginBottom: 8 },
+  categoryPicker: { marginBottom: 12, maxHeight: 44 },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.gray100,
+    marginRight: 8,
+  },
+  categoryChipActive: { backgroundColor: COLORS.primaryOrange },
+  categoryChipText: { fontSize: 14, color: COLORS.gray700 },
+  categoryChipTextActive: { color: COLORS.white, fontWeight: '600' },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -451,6 +670,14 @@ const styles = StyleSheet.create({
   },
   addButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 16 },
   emptyText: { fontSize: 14, color: COLORS.gray600, textAlign: 'center', marginTop: 24 },
+  menuSection: { marginBottom: 20 },
+  menuSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 10,
+    paddingLeft: 2,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',

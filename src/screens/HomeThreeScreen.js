@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,6 +11,8 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -32,6 +34,7 @@ const HomeThreeScreen = ({ onBack }) => {
   const promotionMenuItems = route.params?.promotionMenuItems;
 
   const [menuItems, setMenuItems] = useState([]);
+  const [menuCategoriesFromApi, setMenuCategoriesFromApi] = useState([]);
   const [menuLoading, setMenuLoading] = useState(
     !!ownerId &&
       !singleMenuItem &&
@@ -43,11 +46,103 @@ const HomeThreeScreen = ({ onBack }) => {
     1: 1,
     2: 1,
   });
+  const [menuModalVisible, setMenuModalVisible] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+
+  // Dynamic categories: from API (owner-created) with item counts; or single "All" when none
+  const menuCategories = useMemo(() => {
+    if (
+      Array.isArray(menuCategoriesFromApi) &&
+      menuCategoriesFromApi.length > 0
+    ) {
+      return menuCategoriesFromApi.map(c => ({
+        id: c.id,
+        label: c.name || c.label || c.id,
+        count:
+          c.itemCount ??
+          menuItems.filter(it => (it.categoryId || it.category?.id) === c.id)
+            .length,
+      }));
+    }
+    // No categories from API: show single "All" / "Most Ordered" with full count
+    return [{ id: 'all', label: 'Most Ordered', count: menuItems.length }];
+  }, [menuCategoriesFromApi, menuItems]);
+
+  // Default selected category when categories load (first category or "all")
+  useEffect(() => {
+    if (menuCategories.length > 0 && selectedCategoryId === null) {
+      setSelectedCategoryId(menuCategories[0].id);
+    }
+  }, [menuCategories.length]);
+
+  // Menu items to display: filter by selected category when using API categories
+  const displayedMenuItems = useMemo(() => {
+    if (!selectedCategoryId || selectedCategoryId === 'all') return menuItems;
+    return menuItems.filter(
+      it => (it.categoryId || it.category?.id) === selectedCategoryId,
+    );
+  }, [menuItems, selectedCategoryId]);
+
+  // Sections for modal: all categories with their items, then uncategorized
+  const menuSectionsForModal = useMemo(() => {
+    const uncategorized = menuItems.filter(
+      i => !i.categoryId && !i.category?.id,
+    );
+    const sections = [];
+    if (
+      Array.isArray(menuCategoriesFromApi) &&
+      menuCategoriesFromApi.length > 0
+    ) {
+      menuCategoriesFromApi.forEach(cat => {
+        const data = menuItems.filter(
+          i => (i.categoryId || i.category?.id) === cat.id,
+        );
+        if (data.length > 0) {
+          sections.push({ id: cat.id, title: cat.name, data });
+        }
+      });
+    }
+    if (uncategorized.length > 0) {
+      sections.push({
+        id: 'uncategorized',
+        title: 'Uncategorized',
+        data: uncategorized,
+      });
+    }
+    if (sections.length === 0 && menuItems.length > 0) {
+      sections.push({ id: 'all', title: 'Most Ordered', data: menuItems });
+    }
+    return sections;
+  }, [menuItems, menuCategoriesFromApi]);
+
+  // Category options for modal first screen: All + each section (or just one if single "Most Ordered")
+  const menuModalCategoryOptions = useMemo(() => {
+    if (menuItems.length === 0) return [];
+    if (
+      menuSectionsForModal.length === 1 &&
+      menuSectionsForModal[0].id === 'all'
+    ) {
+      return [{ id: 'all', title: 'Most Ordered', count: menuItems.length }];
+    }
+    const options = [{ id: 'all', title: 'All', count: menuItems.length }];
+    menuSectionsForModal.forEach(s => {
+      options.push({ id: s.id, title: s.title, count: s.data.length });
+    });
+    return options;
+  }, [menuSectionsForModal, menuItems.length]);
 
   useEffect(() => {
     if (Array.isArray(promotionMenuItems) && promotionMenuItems.length > 0) {
       setMenuItems(promotionMenuItems);
       setMenuLoading(false);
+      // Still fetch owner categories so the category modal/filter works for promotions
+      if (ownerId) {
+        getMenuByUserId(ownerId)
+          .then(({ categories }) => setMenuCategoriesFromApi(categories || []))
+          .catch(() => setMenuCategoriesFromApi([]));
+      } else {
+        setMenuCategoriesFromApi([]);
+      }
       const initial = {};
       promotionMenuItems.forEach((m, idx) => {
         if (m?.id) initial[m.id] = idx === 0 ? 1 : 0;
@@ -65,8 +160,14 @@ const HomeThreeScreen = ({ onBack }) => {
     setMenuLoading(true);
     setSelectedItems({});
     getMenuByUserId(ownerId)
-      .then(({ menu }) => setMenuItems(menu || []))
-      .catch(() => setMenuItems([]))
+      .then(({ menu, categories }) => {
+        setMenuItems(menu || []);
+        setMenuCategoriesFromApi(categories || []);
+      })
+      .catch(() => {
+        setMenuItems([]);
+        setMenuCategoriesFromApi([]);
+      })
       .finally(() => setMenuLoading(false));
   }, [ownerId, singleMenuItem?.id, promotionMenuItems]);
 
@@ -143,7 +244,7 @@ const HomeThreeScreen = ({ onBack }) => {
           itemName: menuItem?.itemName || 'Item',
           price: menuItem?.price ?? 0,
           quantity,
-          currency: 'USD',
+          currency: 'GBP',
           imageUrl: menuItem?.imageUrl,
         };
       });
@@ -173,7 +274,7 @@ const HomeThreeScreen = ({ onBack }) => {
             itemName: menuItem?.itemName || 'Item',
             price: menuItem?.price ?? 0,
             quantity,
-            currency: 'USD',
+            currency: 'GBP',
             imageUrl: menuItem?.imageUrl,
           };
         });
@@ -185,7 +286,7 @@ const HomeThreeScreen = ({ onBack }) => {
         itemName: 'Tandoori Chicken',
         price: 12.99,
         quantity: staticQuantities[idx] ?? 0,
-        currency: 'USD',
+        currency: 'GBP',
       }));
   };
 
@@ -236,15 +337,20 @@ const HomeThreeScreen = ({ onBack }) => {
           </View>
         ) : hasDynamicMenu ? (
           <>
-            <Text style={styles.sectionHeading}>Most Ordered</Text>
-            {menuItems.map(item => {
+            <Text style={styles.sectionHeading}>
+              {selectedCategoryId && selectedCategoryId !== 'all'
+                ? menuCategories.find(c => c.id === selectedCategoryId)
+                    ?.label || 'Menu'
+                : 'Most Ordered'}
+            </Text>
+            {displayedMenuItems.map(item => {
               const qty = selectedItems[item.id] || 0;
               return (
                 <View key={item.id} style={styles.menuItemCard}>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemTitle}>{item.itemName}</Text>
                     <Text style={styles.itemPrice}>
-                      ${Number(item.price || 0).toFixed(2)}
+                      £{Number(item.price || 0).toFixed(2)}
                     </Text>
                     {item.description ? (
                       <Text style={styles.itemDesc} numberOfLines={3}>
@@ -368,19 +474,80 @@ const HomeThreeScreen = ({ onBack }) => {
           </View>
         </TouchableOpacity>
         <View style={styles.searchRow}>
-          <View style={styles.bottomSearch}>
+          {/* <View style={styles.bottomSearch}>
             <Icon name="magnify" size={22} color="#999" />
             <TextInput
               placeholder={"Search 'prawns curry'"}
               style={styles.bottomInput}
             />
-          </View>
-          <TouchableOpacity style={styles.menuBtn}>
+          </View> */}
+          <TouchableOpacity
+            style={styles.menuBtn}
+            onPress={() => setMenuModalVisible(true)}
+          >
             <Icon name="magnify" size={20} color="#FFF" />
             <Text style={styles.menuBtnText}>Menu</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Menu modal: category list only – tap one to filter main screen and close */}
+      <Modal
+        visible={menuModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMenuModalVisible(false)}
+      >
+        <Pressable
+          style={styles.menuModalOverlay}
+          onPress={() => setMenuModalVisible(false)}
+        >
+          <Pressable
+            style={styles.menuModalSheet}
+            onPress={e => e.stopPropagation()}
+          >
+            <View style={styles.menuModalHandle} />
+            <ScrollView
+              style={styles.menuModalScroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.menuModalScrollContent}
+            >
+              {menuModalCategoryOptions.length === 0 ||
+              menuItems.length === 0 ? (
+                <Text style={styles.menuModalEmpty}>No menu items yet.</Text>
+              ) : (
+                <>
+                  {menuModalCategoryOptions.map(opt => (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={styles.menuModalRow}
+                      onPress={() => {
+                        setSelectedCategoryId(opt.id);
+                        setMenuModalVisible(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.menuModalRowLabel} numberOfLines={1}>
+                        {opt.title}
+                      </Text>
+                      <Text style={styles.menuModalRowCount}>{opt.count}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+            </ScrollView>
+            <View style={styles.menuModalFooter}>
+              <TouchableOpacity
+                style={styles.menuModalCloseBtn}
+                onPress={() => setMenuModalVisible(false)}
+              >
+                <Icon name="close" size={20} color="#FFF" />
+                <Text style={styles.menuModalCloseText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -541,7 +708,7 @@ const styles = StyleSheet.create({
   },
   searchRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   bottomSearch: {
@@ -566,6 +733,156 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   menuBtnText: { color: '#FFF', fontWeight: 'bold', marginLeft: 5 },
+  // Menu modal (bottom sheet)
+  menuModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  menuModalSheet: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '88%',
+    minHeight: 280,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  menuModalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#DDD',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  menuModalScroll: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  menuModalScrollContent: { paddingBottom: 16 },
+  menuModalSection: { marginBottom: 16 },
+  menuModalSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
+    paddingLeft: 4,
+  },
+  menuModalItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  menuModalItemThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#EEE',
+  },
+  menuModalItemInfo: { flex: 1, marginLeft: 12 },
+  menuModalItemName: { fontSize: 15, fontWeight: '600', color: '#222' },
+  menuModalItemPrice: { fontSize: 14, color: '#666', marginTop: 2 },
+  menuModalStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5A623',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  menuModalStepperBtn: { paddingHorizontal: 6 },
+  menuModalStepperVal: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  menuModalEmpty: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  menuModalBackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+    backgroundColor: '#F8F8F8',
+  },
+  menuModalBackText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 4,
+  },
+  menuModalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EEE',
+  },
+  menuModalRowSelected: {
+    backgroundColor: 'rgba(233, 30, 99, 0.08)',
+  },
+  menuModalRowLabel: {
+    fontSize: 16,
+    color: '#444',
+    flex: 1,
+  },
+  menuModalRowLabelSelected: {
+    color: '#E91E63',
+    fontWeight: '600',
+  },
+  menuModalRowCount: {
+    fontSize: 15,
+    color: '#666',
+    marginLeft: 8,
+  },
+  menuModalRowCountSelected: {
+    color: '#E91E63',
+    fontWeight: '600',
+  },
+  menuModalRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  menuModalFooter: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    alignItems: 'flex-end',
+  },
+  menuModalCloseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#424242',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  menuModalCloseText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });
 
 export default HomeThreeScreen;

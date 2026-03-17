@@ -13,6 +13,8 @@ import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewS
 import FollowersListScreen from '../screens/NewScreen/FollowersListScreen';
 import FollowingListScreen from '../screens/NewScreen/FollowingListScreen';
 import PromotionScreen from '../screens/PromotionScreen';
+import PromotionFullDetailScreen from '../screens/PromotionFullDetailScreen';
+import AllPromotionsScreen from '../screens/AllPromotionsScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 
@@ -69,6 +71,14 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="PromotionScreen"
         component={PromotionScreen}
+      />
+      <HomeOneStack.Screen
+        name="PromotionFullDetail"
+        component={PromotionFullDetailScreen}
+      />
+      <HomeOneStack.Screen
+        name="AllPromotions"
+        component={AllPromotionsScreen}
       />
       <HomeOneStack.Screen
         name="CartDetailsScreen"

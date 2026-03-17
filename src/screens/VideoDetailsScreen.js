@@ -48,6 +48,7 @@ import {
 } from '../services/downloadService';
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
+import { safeImageUri } from '../utils/helper';
 
 const { width } = Dimensions.get('window');
 
@@ -110,12 +111,18 @@ const mapVideoApiToDisplay = v => {
   const shareCount = v.shareCount ?? 0;
   const pubAt = v.publishedAt || v.createdAt;
   const channelName = user.nickname || user.name || 'Unknown';
-  const channelAvatar =
+  const channelAvatarRaw =
     user.photos?.[0] ||
     (Array.isArray(user.photos) && user.photos[0]) ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      channelName,
-    )}&background=111&color=fff`;
+    null;
+  const channelAvatar =
+    typeof channelAvatarRaw === 'string' && channelAvatarRaw.trim()
+      ? channelAvatarRaw.trim()
+      : channelAvatarRaw && typeof channelAvatarRaw === 'object' && (channelAvatarRaw.src || channelAvatarRaw.uri)
+        ? (channelAvatarRaw.src || channelAvatarRaw.uri)
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            channelName,
+          )}&background=111&color=fff`;
   return {
     id: v.id,
     title: v.title || 'Untitled',
@@ -578,8 +585,24 @@ const VideoDetailsScreen = () => {
             <Video
               ref={videoRef}
               key={`video-${videoId}-${retryCount}`}
-              source={{ uri: videoPlaybackUri || currentVideo.videoUrl }}
-              poster={currentVideo.thumbnail}
+              source={{
+                uri: (() => {
+                  const raw = videoPlaybackUri || currentVideo.videoUrl;
+                  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+                  if (
+                    raw &&
+                    typeof raw === 'object' &&
+                    (raw.uri || raw.src)
+                  )
+                    return String(raw.uri || raw.src).trim();
+                  return '';
+                })(),
+              }}
+              poster={
+                typeof currentVideo.thumbnail === 'string'
+                  ? currentVideo.thumbnail
+                  : safeImageUri(currentVideo.thumbnail)
+              }
               posterResizeMode="cover"
               style={styles.videoPlayerContent}
               resizeMode="contain"
@@ -630,7 +653,12 @@ const VideoDetailsScreen = () => {
           </>
         ) : (
           <Image
-            source={{ uri: currentVideo.thumbnail }}
+            source={{
+              uri: safeImageUri(
+                currentVideo.thumbnail,
+                'https://via.placeholder.com/300',
+              ),
+            }}
             style={styles.videoThumbnail}
           />
         )}
@@ -901,7 +929,14 @@ const VideoDetailsScreen = () => {
             activeOpacity={0.7}
           >
             <Image
-              source={{ uri: currentVideo.channelAvatar }}
+              source={{
+                uri: safeImageUri(
+                  currentVideo.channelAvatar,
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    currentVideo.channelName || 'User',
+                  )}&background=111&color=fff`,
+                ),
+              }}
               style={styles.channelAvatar}
             />
             <View>
@@ -1038,12 +1073,13 @@ const VideoDetailsScreen = () => {
           <View style={styles.addCommentRow}>
             <Image
               source={{
-                uri:
-                  user?.photos?.[0] ||
-                  (Array.isArray(user?.photos) && user?.photos[0]) ||
+                uri: safeImageUri(
+                  user?.photos?.[0] ??
+                    (Array.isArray(user?.photos) ? user?.photos[0] : null),
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(
                     user?.nickname || user?.name || 'User',
                   )}&background=111&color=fff`,
+                ),
               }}
               style={styles.userAvatarSmall}
             />

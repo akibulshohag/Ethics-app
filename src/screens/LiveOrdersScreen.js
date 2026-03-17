@@ -247,10 +247,7 @@ export default function LiveOrdersScreen() {
                               ? photo
                               : photo?.src ?? null;
                           return uri ? (
-                            <Image
-                              source={{ uri }}
-                              style={styles.userAvatar}
-                            />
+                            <Image source={{ uri }} style={styles.userAvatar} />
                           ) : (
                             <Icon
                               name="account-outline"
@@ -273,7 +270,7 @@ export default function LiveOrdersScreen() {
                       </View>
                     </View>
                     <Text style={styles.priceText}>
-                      USD{Number(order.totalAmount || 0).toFixed(2)}
+                      £{Number(order.totalAmount || 0).toFixed(2)}
                     </Text>
                   </View>
 

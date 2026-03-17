@@ -42,6 +42,9 @@ import {
   getVideos,
   getVideoWatchHistory,
   getVideoById,
+  toggleLike as toggleVideoLike,
+  toggleDislike as toggleVideoDislike,
+  recordShare as recordVideoShare,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import { getGallery, getChannelProfile } from '../services/channelService';
@@ -49,6 +52,9 @@ import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
 import { safeImageUri } from '../utils/helper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import SaveModal from '../components/SaveModal';
+import CommentsModal from '../components/CommentsModal';
+import { downloadVideo } from '../services/downloadService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -161,6 +167,9 @@ const HomeOneScreen = () => {
   });
   const [resIsSliding, setResIsSliding] = useState(false);
   const [resSlidingValue, setResSlidingValue] = useState(0);
+  const [resSaveVisible, setResSaveVisible] = useState(false);
+  const [resCommentsVisible, setResCommentsVisible] = useState(false);
+  const [resDownloadPct, setResDownloadPct] = useState(null);
 
   const galleryUserId = selectedItem?.userId || selectedItem?.user?.id;
 
@@ -622,6 +631,115 @@ const HomeOneScreen = () => {
     }
   }, []);
 
+  const handleRestaurantLike = useCallback(async () => {
+    if (!user?.id || !selectedItem?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    // Restaurant detail is a "video" item
+    try {
+      await toggleVideoLike(selectedItem.id, user.id);
+      setSelectedItem(prev => {
+        if (!prev || prev.id !== selectedItem.id) return prev;
+        const newLiked = !prev.isLiked;
+        const delta = newLiked ? 1 : -1;
+        const newCount = Math.max(0, (prev.likeCount ?? 0) + delta);
+        return { ...prev, isLiked: newLiked, likeCount: newCount };
+      });
+    } catch {}
+  }, [navigation, selectedItem?.id, user?.id]);
+
+  const handleRestaurantDislike = useCallback(async () => {
+    if (!user?.id || !selectedItem?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    try {
+      await toggleVideoDislike(selectedItem.id, user.id);
+      setSelectedItem(prev => {
+        if (!prev || prev.id !== selectedItem.id) return prev;
+        const newDisliked = !prev.isDisliked;
+        const delta = newDisliked ? 1 : -1;
+        const newCount = Math.max(0, (prev.dislikeCount ?? 0) + delta);
+        return { ...prev, isDisliked: newDisliked, dislikeCount: newCount };
+      });
+    } catch {}
+  }, [navigation, selectedItem?.id, user?.id]);
+
+  const handleRestaurantShare = useCallback(async () => {
+    if (!selectedItem?.id) return;
+    const message = `${selectedItem?.title || 'Video'}\neatix://video/${
+      selectedItem.id
+    }`;
+    try {
+      await Share.share({ message, title: selectedItem?.title || 'Share' });
+      recordVideoShare(selectedItem.id);
+      setSelectedItem(prev => {
+        if (!prev || prev.id !== selectedItem.id) return prev;
+        const newCount = (prev.shareCount ?? 0) + 1;
+        return { ...prev, shareCount: newCount };
+      });
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        Alert.alert('Share', 'Share failed');
+      }
+    }
+  }, [selectedItem?.id]);
+
+  const handleRestaurantChat = useCallback(() => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    const partnerId = selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+    if (!partnerId) return;
+    navigation.navigate('DetailedChatScreen', {
+      partnerId,
+      partnerName:
+        selectedItem?.user?.nickname ||
+        selectedItem?.user?.name ||
+        selectedItem?.title ||
+        'User',
+      partnerAvatar:
+        selectedItem?.user?.channelAvatar ||
+        selectedItem?.user?.avatar ||
+        selectedItem?.user?.profileImage,
+    });
+  }, [navigation, selectedItem?.user?.id, selectedItem?.userId, user?.id]);
+
+  const handleRestaurantDownload = useCallback(async () => {
+    if (!selectedItem?.id || !selectedItem?.videoUrl) return;
+    try {
+      setResDownloadPct(0);
+      await downloadVideo(
+        {
+          id: selectedItem.id,
+          title: selectedItem.title,
+          videoUrl: selectedItem.videoUrl,
+          thumbnail: selectedItem.img,
+          channelName:
+            selectedItem?.user?.nickname ||
+            selectedItem?.user?.name ||
+            selectedItem?.title,
+        },
+        pct => setResDownloadPct(pct),
+      );
+      setResDownloadPct(null);
+      Alert.alert('Downloaded', 'Saved for offline in Library > Downloads.');
+    } catch (e) {
+      setResDownloadPct(null);
+      Alert.alert('Download failed', e?.message || 'Could not download video.');
+    }
+  }, [selectedItem?.id, selectedItem?.videoUrl]);
+
+  const handleRestaurantSave = useCallback(() => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    setResSaveVisible(true);
+  }, [navigation, user?.id]);
+
   const featuredItem = (() => {
     if (!featuredVideo?.video) return null;
     const video = featuredVideo.video;
@@ -815,7 +933,7 @@ const HomeOneScreen = () => {
           <View style={styles.innerSearchBox}>
             <Icon name="magnify" size={20} color="#999" />
             <TextInput
-              placeholder="Search videos & shorts by title..."
+              placeholder="Search"
               placeholderTextColor="#999"
               style={styles.innerInput}
               value={searchQuery}
@@ -1242,7 +1360,10 @@ const HomeOneScreen = () => {
                 source={{
                   uri: String(selectedItem.videoUrl).trim(),
                 }}
-                poster={selectedItem?.img}
+                poster={safeImageUri(
+                  selectedItem?.img,
+                  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                )}
                 posterResizeMode="cover"
                 style={styles.resVideoImg}
                 resizeMode="cover"
@@ -1363,7 +1484,12 @@ const HomeOneScreen = () => {
           ) : (
             <>
               <Image
-                source={{ uri: selectedItem?.img }}
+                source={{
+                  uri: safeImageUri(
+                    selectedItem?.img,
+                    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                  ),
+                }}
                 style={styles.resVideoImg}
               />
               <View style={styles.resPlayOverlay}>
@@ -1419,7 +1545,7 @@ const HomeOneScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-        <Text style={styles.webText}>
+        {/* <Text style={styles.webText}>
           {(
             selectedItem?.user?.socialLinks ||
             selectedItem?.creatorSocialLinks ||
@@ -1431,7 +1557,103 @@ const HomeOneScreen = () => {
                   .replace(/\s+/g, '')}.com`
               : null) ||
             '—'}
-        </Text>
+        </Text> */}
+
+        <View style={styles.resActionsRow}>
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={handleRestaurantLike}
+            activeOpacity={0.7}
+          >
+            <Icon
+              name={selectedItem?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+              size={22}
+              color="#111"
+            />
+            <Text style={styles.resActionText}>
+              {formatCount(selectedItem?.likeCount ?? 0)}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={handleRestaurantDislike}
+            activeOpacity={0.7}
+          >
+            <Icon
+              name={
+                selectedItem?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
+              }
+              size={22}
+              color="#111"
+            />
+            <Text style={styles.resActionText}>
+              {formatCount(selectedItem?.dislikeCount ?? 0)}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={() => {
+              if (!user?.id) {
+                navigation.navigate('HomeSevenScreen');
+                return;
+              }
+              if (!selectedItem?.id) return;
+              setResCommentsVisible(true);
+            }}
+            activeOpacity={0.7}
+            disabled={!selectedItem?.id}
+          >
+            <Icon name="comment-text-outline" size={22} color="#111" />
+            <Text style={styles.resActionText}>
+              {formatCount(selectedItem?.commentCount ?? 0)}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={handleRestaurantChat}
+            activeOpacity={0.7}
+          >
+            <Icon name="chat-outline" size={22} color="#111" />
+            <Text style={styles.resActionText}>Chat</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={handleRestaurantDownload}
+            activeOpacity={0.7}
+            disabled={resDownloadPct != null}
+          >
+            <Icon
+              name={resDownloadPct != null ? 'download' : 'download-outline'}
+              size={22}
+              color="#111"
+            />
+            <Text style={styles.resActionText}>
+              {resDownloadPct != null ? `${resDownloadPct}%` : 'Download'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={handleRestaurantShare}
+            activeOpacity={0.7}
+          >
+            <Icon name="share-outline" size={22} color="#111" />
+            <Text style={styles.resActionText}>Share</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resActionItem}
+            onPress={handleRestaurantSave}
+            activeOpacity={0.7}
+          >
+            <Icon name="bookmark-outline" size={22} color="#111" />
+            <Text style={styles.resActionText}>Save</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.descContainer}>
           <Text style={styles.sectionTitle}>Description</Text>
@@ -1496,6 +1718,41 @@ const HomeOneScreen = () => {
         : isVideoDetail
         ? renderVideoDetail()
         : renderResults()}
+
+      <SaveModal
+        visible={resSaveVisible}
+        onClose={() => setResSaveVisible(false)}
+        contentType="video"
+        contentId={selectedItem?.id}
+      />
+
+      <CommentsModal
+        visible={resCommentsVisible}
+        onClose={() => setResCommentsVisible(false)}
+        contentType="video"
+        contentId={selectedItem?.id}
+        videoId={selectedItem?.id}
+        video={{
+          commentCount: selectedItem?.commentCount ?? 0,
+          topLevelCommentCount: selectedItem?.commentCount ?? 0,
+        }}
+        user={user}
+        onCommentAdded={() => {
+          setSelectedItem(prev => {
+            if (!prev?.id) return prev;
+            const newCount = (prev.commentCount ?? 0) + 1;
+            return { ...prev, commentCount: newCount };
+          });
+        }}
+        onCommentDeleted={(_wasTopLevel, deletedCount) => {
+          setSelectedItem(prev => {
+            if (!prev?.id) return prev;
+            const dec = deletedCount || 1;
+            const newCount = Math.max(0, (prev.commentCount ?? 0) - dec);
+            return { ...prev, commentCount: newCount };
+          });
+        }}
+      />
 
       <Modal
         visible={showGalleryModal}
@@ -2341,6 +2598,24 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 13,
     marginBottom: 20,
+  },
+  resActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    paddingHorizontal: 15,
+    marginBottom: 10,
+  },
+  resActionItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+  },
+  resActionText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#222',
+    fontWeight: '600',
   },
   descContainer: { paddingHorizontal: 15, marginBottom: 20 },
   sectionTitle: {

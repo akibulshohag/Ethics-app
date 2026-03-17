@@ -99,11 +99,11 @@ const CheckoutScreen = () => {
                 <View style={styles.rowLeft}>
                   <Text style={styles.itemName}>{item.itemName}</Text>
                   <Text style={styles.itemMeta}>
-                    {item.currency || 'USD'} {price.toFixed(2)} × {qty}
+                    {item.currency || 'GBP'} {price.toFixed(2)} × {qty}
                   </Text>
                 </View>
                 <Text style={styles.lineTotal}>
-                  {item.currency || 'USD'} {lineTotal.toFixed(2)}
+                  {item.currency || 'GBP'} {lineTotal.toFixed(2)}
                 </Text>
               </View>
             );
@@ -125,7 +125,7 @@ const CheckoutScreen = () => {
 
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>USD {total.toFixed(2)}</Text>
+          <Text style={styles.totalValue}>£ {total.toFixed(2)}</Text>
         </View>
       </ScrollView>
 

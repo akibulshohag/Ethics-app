@@ -207,7 +207,7 @@ export default function OrderDetailsScreen() {
     order.user?.photos?.[0] || 'https://i.pravatar.cc/150?u=user';
   const items = order.items || [];
   const totalAmount = Number(order.totalAmount || 0);
-  const currency = order.currency || 'USD';
+  const currency = order.currency || 'GBP';
   const displayOrderId = order.id ? `#${String(order.id).slice(0, 12)}` : '—';
 
   return (

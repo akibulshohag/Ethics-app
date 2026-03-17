@@ -102,6 +102,8 @@ const FilterButton = ({ label, active, onPress }) => (
   </TouchableOpacity>
 );
 
+const DEFAULT_AVATAR = 'https://ui-avatars.com/api/?name=User&background=111&color=fff';
+
 const ReplyItem = ({
   item,
   onLike,
@@ -110,9 +112,11 @@ const ReplyItem = ({
   isOwnComment,
   canInteract = true,
   canDelete = true,
-}) => (
+}) => {
+  const avatarUri = safeImageUri(item.user?.avatar, DEFAULT_AVATAR);
+  return (
   <View style={styles.replyItem}>
-    <Image source={{ uri: item.user.avatar }} style={styles.replyAvatar} />
+    <Image source={{ uri: avatarUri }} style={styles.replyAvatar} />
     <View style={styles.replyContent}>
       <View style={styles.commentHeader}>
         <Text style={styles.commentUser}>
@@ -163,7 +167,8 @@ const ReplyItem = ({
       </View>
     </View>
   </View>
-);
+  );
+};
 
 const CommentItem = ({
   item,
@@ -198,8 +203,7 @@ const CommentItem = ({
 
   const replyCount = item.repliesList?.length || 0;
 
-  const avatarUri =
-    typeof item.user.avatar === 'string' ? item.user.avatar : safeImageUri(item.user.avatar);
+  const avatarUri = safeImageUri(item.user?.avatar, DEFAULT_AVATAR);
   return (
     <View style={styles.commentItem}>
       <Image source={{ uri: avatarUri }} style={styles.commentAvatar} />
@@ -385,12 +389,13 @@ const CommentsModal = ({
   const [hasMore, setHasMore] = useState(true);
 
   const rawUserPhoto = user?.photos?.[0] ?? (Array.isArray(user?.photos) && user?.photos[0]);
-  const userAvatar = safeImageUri(
+  const userAvatarRaw = safeImageUri(
     rawUserPhoto?.src ?? rawUserPhoto,
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       user?.nickname || user?.name || 'User',
     )}&background=111&color=fff`,
   );
+  const userAvatar = typeof userAvatarRaw === 'string' && userAvatarRaw.length > 0 ? userAvatarRaw : DEFAULT_AVATAR;
 
   const loadComments = useCallback(
     async (reset = false) => {
@@ -639,7 +644,7 @@ const CommentsModal = ({
               </View>
 
               <View style={styles.addCommentContainer}>
-                <Image source={{ uri: userAvatar }} style={styles.userAvatar} />
+                <Image source={{ uri: userAvatar || DEFAULT_AVATAR }} style={styles.userAvatar} />
                 <View style={styles.inputWrapper}>
                   <TextInput
                     placeholder={

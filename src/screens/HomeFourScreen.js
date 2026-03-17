@@ -55,7 +55,8 @@ const HomeFourScreen = ({ onBack }) => {
       : 0;
   const discountAmount = promoPercent > 0 ? (subtotal * promoPercent) / 100 : 0;
   const total = Math.max(0, subtotal - discountAmount);
-  const currency = items[0]?.currency || 'USD';
+  // const currency = items[0]?.currency || '£';
+  const currency = '£';
   const displayTotal = total.toFixed(2);
   const displaySubtotal = subtotal.toFixed(2);
   const displayDiscount = discountAmount.toFixed(2);

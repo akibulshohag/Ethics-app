@@ -5,27 +5,78 @@
 import { Platform, PermissionsAndroid } from 'react-native';
 
 /**
- * Reverse geocode: get address string from lat/lng using Google Geocoding API.
- * Use when user sets location via map or "Use my location" so address is not null.
+ * Build a short address (e.g. "London Ea, London A1") from Google address_components.
+ * Prefers locality/sublocality + postal_code for readable display.
+ */
+function shortAddressFromGoogleResult(result) {
+  if (!result?.address_components?.length) return null;
+  const comp = result.address_components;
+  const get = (type) => comp.find(c => c.types.includes(type))?.long_name || comp.find(c => c.types.includes(type))?.short_name || null;
+  const locality = get('locality') || get('sublocality') || get('sublocality_level_1') || get('administrative_area_level_2');
+  const postal = get('postal_code');
+  const area = get('administrative_area_level_1');
+  if (locality && postal) return `${locality}, ${postal}`;
+  if (locality && area && area !== locality) return `${locality}, ${area}`;
+  if (locality) return locality;
+  if (postal && area) return `${area}, ${postal}`;
+  if (postal) return postal;
+  return null;
+}
+
+/**
+ * Reverse geocode using OpenStreetMap Nominatim (no API key). Fallback when Google fails.
+ */
+async function reverseGeocodeNominatim(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
+    const res = await fetch(url, {
+      headers: {
+        'Accept-Language': 'en',
+        'User-Agent': 'EatixApp/1.0 (React Native)',
+      },
+    });
+    const data = await res.json();
+    const name = data?.display_name || data?.address?.city || data?.address?.town || data?.address?.village || data?.address?.county;
+    if (name && typeof name === 'string') return name.trim();
+    const addr = data?.address;
+    if (addr) {
+      const parts = [addr.city, addr.town, addr.village, addr.county, addr.state, addr.postcode].filter(Boolean);
+      if (parts.length) return parts.join(', ');
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Reverse geocode: get address string from lat/lng (Google first, then Nominatim fallback).
+ * Prefers short format like "London Ea, London A1" when possible.
  * @param {number} lat - Latitude
  * @param {number} lng - Longitude
- * @returns {Promise<string|null>} formatted_address or null
+ * @returns {Promise<string|null>} address string or null
  */
 export async function reverseGeocode(lat, lng) {
   if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   try {
     const { config } = require('../../config');
     const key = config?.googleMapsApiKey;
-    if (!key || !key.trim()) return null;
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data?.status === 'OK' && data?.results?.[0]?.formatted_address) {
-      return data.results[0].formatted_address;
+    if (key && key.trim()) {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data?.status === 'OK' && data?.results?.[0]) {
+        const first = data.results[0];
+        const short = shortAddressFromGoogleResult(first);
+        if (short) return short;
+        if (first.formatted_address) return first.formatted_address;
+      }
     }
-    return null;
+    const nominatim = await reverseGeocodeNominatim(lat, lng);
+    return nominatim;
   } catch (e) {
-    return null;
+    const nominatim = await reverseGeocodeNominatim(lat, lng);
+    return nominatim;
   }
 }
 

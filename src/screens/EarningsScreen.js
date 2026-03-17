@@ -177,7 +177,7 @@ export default function EarningsScreen() {
                 Total Earning
               </Text>
               <Text style={styles.summaryValue}>
-                {data?.currency || 'USD'}{' '}
+                {data?.currency || 'GBP'}{' '}
                 {Number(data?.totalEarning ?? 0).toFixed(2)}
               </Text>
             </View>
@@ -207,7 +207,7 @@ export default function EarningsScreen() {
                     </Text>
                   </View>
                   <Text style={styles.historyAmount}>
-                    {data?.currency || 'USD'}{' '}
+                    {data?.currency || 'GBP'}{' '}
                     {Number(item.amount ?? 0).toFixed(2)}
                   </Text>
                 </View>

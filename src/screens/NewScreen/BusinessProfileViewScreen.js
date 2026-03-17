@@ -21,7 +21,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import BusinessProfileCard from '../../components/BusinessProfileCard';
@@ -412,6 +412,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [promotionVideoPaused, setPromotionVideoPaused] = useState(true);
   const promotionVideoRef = useRef(null);
   const [menuItems, setMenuItems] = useState([]);
+  const [menuCategories, setMenuCategories] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
 
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -626,8 +627,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     try {
       const res = await getMenuByUserId(profileUserId);
       setMenuItems(res?.menu ?? []);
+      setMenuCategories(res?.categories ?? []);
     } catch (e) {
       setMenuItems([]);
+      setMenuCategories([]);
     } finally {
       setMenuLoading(false);
     }
@@ -636,6 +639,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   useEffect(() => {
     if (activeTab === 'Menus' && profileUserId) loadMenu();
   }, [activeTab, profileUserId, loadMenu]);
+
+  // Refetch menu when screen gains focus (e.g. returning from MenuManageScreen) so Menus tab shows updated data
+  useFocusEffect(
+    useCallback(() => {
+      if (activeTab === 'Menus' && profileUserId) loadMenu();
+    }, [activeTab, profileUserId, loadMenu]),
+  );
 
   const handleGalleryUpload = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading)
@@ -1460,13 +1470,61 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       }
       case 'Grid':
         return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
-      case 'Menus':
-        return menuItems.map(m => ({
-          id: m.id,
-          itemName: m.itemName,
-          price: m.price,
-          imageUrl: m.imageUrl,
-        }));
+      case 'Menus': {
+        const result = [];
+        (menuCategories || []).forEach(cat => {
+          const items = menuItems.filter(
+            m => (m.categoryId || m.category?.id) === cat.id,
+          );
+          if (items.length > 0) {
+            result.push({
+              type: 'menuSection',
+              id: `section-${cat.id}`,
+              title: cat.name,
+            });
+            items.forEach(m =>
+              result.push({
+                type: 'menu',
+                id: m.id,
+                itemName: m.itemName,
+                price: m.price,
+                imageUrl: m.imageUrl,
+              }),
+            );
+          }
+        });
+        const uncategorized = menuItems.filter(
+          m => !m.categoryId && !m.category?.id,
+        );
+        if (uncategorized.length > 0) {
+          result.push({
+            type: 'menuSection',
+            id: 'section-uncategorized',
+            title: 'Uncategorized',
+          });
+          uncategorized.forEach(m =>
+            result.push({
+              type: 'menu',
+              id: m.id,
+              itemName: m.itemName,
+              price: m.price,
+              imageUrl: m.imageUrl,
+            }),
+          );
+        }
+        if (result.length === 0 && menuItems.length > 0) {
+          menuItems.forEach(m =>
+            result.push({
+              type: 'menu',
+              id: m.id,
+              itemName: m.itemName,
+              price: m.price,
+              imageUrl: m.imageUrl,
+            }),
+          );
+        }
+        return result;
+      }
       case 'Video':
         return ownerVideos;
       case 'Notification':
@@ -1537,6 +1595,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       );
     }
     if (activeTab === 'Menus') {
+      if (item.type === 'menuSection') {
+        return (
+          <View style={styles.menuSectionHeader}>
+            <Text style={styles.menuSectionHeaderText} numberOfLines={1}>
+              {item.title}
+            </Text>
+          </View>
+        );
+      }
       return (
         <View style={styles.menuRowItem}>
           {item.imageUrl ? (
@@ -3038,6 +3105,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     backgroundColor: '#fff',
+  },
+  menuSectionHeader: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8e8e8',
+  },
+  menuSectionHeaderText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
   },
   menuRowItem: {
     flexDirection: 'row',

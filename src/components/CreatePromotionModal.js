@@ -31,6 +31,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
   const [video, setVideo] = useState(null);
   const [videoDuration, setVideoDuration] = useState(0);
   const [menuItems, setMenuItems] = useState([]);
+  const [menuCategories, setMenuCategories] = useState([]);
   const [selectedMenuIds, setSelectedMenuIds] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -41,10 +42,15 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
       getMenuByUserId(userId)
         .then(res => {
           const menu = res?.menu ?? [];
+          const categories = res?.categories ?? [];
           setMenuItems(Array.isArray(menu) ? menu : []);
+          setMenuCategories(Array.isArray(categories) ? categories : []);
           setSelectedMenuIds([]);
         })
-        .catch(() => setMenuItems([]))
+        .catch(() => {
+          setMenuItems([]);
+          setMenuCategories([]);
+        })
         .finally(() => setMenuLoading(false));
     }
   }, [visible, userId]);
@@ -88,6 +94,37 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
       return isAllSelected ? [] : allMenuIds;
     });
   };
+
+  // Group menu items by category for section-wise display
+  const menuSections = React.useMemo(() => {
+    const uncategorized = menuItems.filter(
+      i => !i.categoryId && !i.category?.id,
+    );
+    const sections = [];
+    (menuCategories || []).forEach(cat => {
+      const items = menuItems.filter(
+        i => (i.categoryId || i.category?.id) === cat.id,
+      );
+      if (items.length > 0) {
+        sections.push({ id: cat.id, title: cat.name, data: items });
+      }
+    });
+    if (uncategorized.length > 0) {
+      sections.push({
+        id: 'uncategorized',
+        title: 'Uncategorized',
+        data: uncategorized,
+      });
+    }
+    if (sections.length === 0 && menuItems.length > 0) {
+      sections.push({
+        id: 'all',
+        title: 'Menu',
+        data: menuItems,
+      });
+    }
+    return sections;
+  }, [menuItems, menuCategories]);
 
   const pickThumbnail = () => {
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, res => {
@@ -165,7 +202,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     if (Number.isNaN(amount) || amount < 0) {
       Alert.alert(
         'Invalid amount',
-        'Please enter a valid promo amount (e.g. 10 for 10% or 10 USD).',
+        'Please enter a valid promo amount (e.g. 10 for 10% or 10 £).',
       );
       return;
     }
@@ -382,7 +419,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
               style={styles.input}
               value={promoAmount}
               onChangeText={setPromoAmount}
-              placeholder="e.g. 10 (for 10% or 10 USD)"
+              placeholder="e.g. 10 (for 10% or 10 )"
               placeholderTextColor="#999"
               keyboardType="decimal-pad"
               editable={!uploading}
@@ -439,7 +476,9 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
                   activeOpacity={0.7}
                 >
                   <MaterialCommunityIcons
-                    name={allSelected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                    name={
+                      allSelected ? 'checkbox-marked' : 'checkbox-blank-outline'
+                    }
                     size={24}
                     color={allSelected ? '#FF7F0B' : '#999'}
                   />
@@ -447,36 +486,45 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
                     {allSelected ? 'Unselect all' : 'Select all'}
                   </Text>
                 </TouchableOpacity>
-                {menuItems.map(item => {
-                  const checked = selectedMenuIds.includes(item.id);
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={styles.menuRow}
-                      onPress={() => toggleMenuId(item.id)}
-                      disabled={uploading}
-                      activeOpacity={0.7}
-                    >
-                      <MaterialCommunityIcons
-                        name={
-                          checked ? 'checkbox-marked' : 'checkbox-blank-outline'
-                        }
-                        size={24}
-                        color={checked ? '#FF7F0B' : '#999'}
-                      />
-                      <Text style={styles.menuItemName} numberOfLines={1}>
-                        {item.itemName || 'Unnamed'}
-                      </Text>
-                      {item.price != null && (
-                        <Text style={styles.menuItemPrice}>
-                          {typeof item.price === 'number'
-                            ? item.price.toFixed(2)
-                            : item.price}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
+                {menuSections.map(section => (
+                  <View key={section.id} style={styles.menuSection}>
+                    <Text style={styles.menuSectionTitle} numberOfLines={1}>
+                      {section.title}
+                    </Text>
+                    {section.data.map(item => {
+                      const checked = selectedMenuIds.includes(item.id);
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.menuRow}
+                          onPress={() => toggleMenuId(item.id)}
+                          disabled={uploading}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialCommunityIcons
+                            name={
+                              checked
+                                ? 'checkbox-marked'
+                                : 'checkbox-blank-outline'
+                            }
+                            size={24}
+                            color={checked ? '#FF7F0B' : '#999'}
+                          />
+                          <Text style={styles.menuItemName} numberOfLines={1}>
+                            {item.itemName || 'Unnamed'}
+                          </Text>
+                          {item.price != null && (
+                            <Text style={styles.menuItemPrice}>
+                              {typeof item.price === 'number'
+                                ? item.price.toFixed(2)
+                                : item.price}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
             )}
           </ScrollView>
@@ -578,6 +626,14 @@ const styles = StyleSheet.create({
   menuLoader: { marginVertical: 12 },
   hint: { fontSize: 13, color: '#888', marginVertical: 8 },
   menuList: { marginTop: 4, marginBottom: 8 },
+  menuSection: { marginTop: 12, marginBottom: 4 },
+  menuSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 6,
+    paddingLeft: 2,
+  },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',

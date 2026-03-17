@@ -109,7 +109,7 @@ const ProductDetailModal = ({
                   <Text style={styles.title}>{firstItem.itemName}</Text>
                   <View style={styles.priceRow}>
                     <Text style={styles.currentPrice}>
-                      USD {Number(firstItem.price).toFixed(2)}
+                      £ {Number(firstItem.price).toFixed(2)}
                     </Text>
                   </View>
                 </View>
@@ -187,8 +187,8 @@ const ProductDetailModal = ({
                 <View style={styles.infoContainer}>
                   <Text style={styles.title}>Bang Bang Chicken Skewers</Text>
                   <View style={styles.priceRow}>
-                    <Text style={styles.currentPrice}>USD 12</Text>
-                    <Text style={styles.originalPrice}>USD 12</Text>
+                    <Text style={styles.currentPrice}>£12</Text>
+                    <Text style={styles.originalPrice}>£12</Text>
                     <Text style={styles.discount}>15% off</Text>
                   </View>
                   <Text style={styles.description}>
@@ -241,7 +241,7 @@ const ProductDetailModal = ({
                         itemName: menuItem?.itemName || 'Item',
                         price: menuItem?.price ?? 0,
                         quantity,
-                        currency: 'USD',
+                        currency: 'GBP',
                         imageUrl: menuItem?.imageUrl,
                       };
                     });

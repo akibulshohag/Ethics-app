@@ -27,7 +27,7 @@ const CartDetailsScreen = () => {
     (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
     0,
   );
-  const currency = items[0]?.currency || 'USD';
+  const currency = items[0]?.currency || 'GBP';
 
   const onCheckout = () => {
     if (!items.length || !ownerId) return;
@@ -83,12 +83,12 @@ const CartDetailsScreen = () => {
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.itemName}</Text>
                       <Text style={styles.itemMeta}>
-                        {item.currency || 'USD'} {price.toFixed(2)} × {qty}
+                        {item.currency || 'GBP'} {price.toFixed(2)} × {qty}
                       </Text>
                     </View>
                     <View style={styles.itemPriceColumn}>
                       <Text style={styles.itemPrice}>
-                        {item.currency || 'USD'} {lineTotal.toFixed(2)}
+                        {item.currency || 'GBP'} {lineTotal.toFixed(2)}
                       </Text>
                     </View>
                   </View>

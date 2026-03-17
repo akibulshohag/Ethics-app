@@ -91,7 +91,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '',
-    currency: 'USD',
+    currency: 'GBP',
   });
   const [sponsoredVideoFile, setSponsoredVideoFile] = useState(null);
   const [sponsoredThumbnailFile, setSponsoredThumbnailFile] = useState(null);
@@ -114,7 +114,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'USD',
+    currency: 'GBP',
   });
   const [featuredVideoFile, setFeaturedVideoFile] = useState(null);
   const [featuredThumbnailFile, setFeaturedThumbnailFile] = useState(null);
@@ -142,7 +142,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'USD',
+    currency: 'GBP',
   });
   const [vendorSponsoredForm, setVendorSponsoredForm] = useState({
     userId: '',
@@ -154,7 +154,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'USD',
+    currency: 'GBP',
   });
   const [selectedVendorFeaturedUser, setSelectedVendorFeaturedUser] =
     useState(null);
@@ -487,7 +487,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '',
-      currency: 'USD',
+      currency: 'GBP',
     });
     setSponsoredVideoFile(null);
     setSponsoredThumbnailFile(null);
@@ -511,7 +511,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'USD',
+      currency: 'GBP',
     });
     setFeaturedVideoFile(null);
     setFeaturedThumbnailFile(null);
@@ -533,7 +533,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'USD',
+      currency: 'GBP',
     });
     setSelectedVendorFeaturedUser(null);
     setVendorFeaturedSearchQuery('');
@@ -554,7 +554,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'USD',
+      currency: 'GBP',
     });
     setSelectedVendorSponsoredUser(null);
     setVendorSponsoredSearchQuery('');
@@ -665,7 +665,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid),
-        currency: currency || 'USD',
+        currency: currency || 'GBP',
       };
       if (isAdmin) body.ownerId = ownerId;
       await createSponsored(user.token, body);
@@ -845,7 +845,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'USD',
+        currency: currency || 'GBP',
       };
       if (isAdmin) body.ownerId = ownerId;
       await createFeatured(user.token, body);
@@ -955,7 +955,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'USD',
+        currency: currency || 'GBP',
       });
       setModalOpen(false);
       loadVendorFeatured();
@@ -1046,7 +1046,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'USD',
+        currency: currency || 'GBP',
       });
       setModalOpen(false);
       loadVendorSponsored();
@@ -1958,7 +1958,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setVendorFeaturedForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="USD"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2212,7 +2212,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setVendorSponsoredForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="USD"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2486,7 +2486,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setFeaturedForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="USD"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2762,7 +2762,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setSponsoredForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="USD"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
