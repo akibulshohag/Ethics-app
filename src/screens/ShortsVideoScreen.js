@@ -21,6 +21,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Slider from '@react-native-community/slider';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
 import CreateVideoModal from '../components/CreateVideoModal';
@@ -160,6 +161,11 @@ const VideoItem = ({
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
   const shortsMuted = useSelector(state => state.app?.shortsMuted);
+  const videoRef = useRef(null);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const lastProgressUpdate = useRef(0);
 
   // Manage play/pause based on active state
   useEffect(() => {
@@ -179,6 +185,7 @@ const VideoItem = ({
     >
       {hasValidVideo ? (
         <Video
+          ref={videoRef}
           source={{ uri: item.videoUrl }}
           style={styles.video}
           resizeMode="cover"
@@ -188,6 +195,19 @@ const VideoItem = ({
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
+          onLoad={data => {
+            const d = Number(data?.duration || 0);
+            setDuration(Number.isFinite(d) ? d : 0);
+          }}
+          onProgress={data => {
+            if (!isActive || paused) return;
+            if (isSeeking) return;
+            const now = Date.now();
+            if (now - lastProgressUpdate.current < 250) return;
+            lastProgressUpdate.current = now;
+            const t = Number(data?.currentTime || 0);
+            setCurrentTime(Number.isFinite(t) ? t : 0);
+          }}
         />
       ) : (
         <View style={[styles.video, styles.videoPlaceholder]}>
@@ -216,6 +236,36 @@ const VideoItem = ({
           </View>
         )}
       </TouchableOpacity>
+
+      {/* YouTube-style progress bar (seek) */}
+      <View
+        style={[
+          styles.progressBarWrap,
+          // Place it slightly below the footer row (no overlap)
+          { bottom: Math.max(6, (insets?.bottom || 0) + 3) },
+        ]}
+        pointerEvents="box-none"
+      >
+        <Slider
+          style={styles.progressSlider}
+          value={Math.min(currentTime, duration || 0)}
+          minimumValue={0}
+          maximumValue={Math.max(0.1, duration || 0)}
+          minimumTrackTintColor="rgba(255,255,255,0.9)"
+          maximumTrackTintColor="rgba(255,255,255,0.35)"
+          thumbTintColor="rgba(255,255,255,0.95)"
+          onSlidingStart={() => setIsSeeking(true)}
+          onValueChange={val => setCurrentTime(val)}
+          onSlidingComplete={val => {
+            const v = Math.max(0, Math.min(Number(val) || 0, duration || 0));
+            try {
+              videoRef.current?.seek?.(v);
+            } catch (_) {}
+            setCurrentTime(v);
+            setIsSeeking(false);
+          }}
+        />
+      </View>
 
       {/* Gradient Overlay - ZIndex 5 (same as HomeOneScreen renderVideoDetail feel) */}
       <LinearGradient
@@ -464,13 +514,21 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   // HomeThreeScreen/HomeSevenScreen live in Home1 stack (tab). Use root ref so navigation works from any nested stack.
   const navigateToHomeScreen = (screenName, params) => {
-    const payload = params != null ? { screen: screenName, params } : { screen: screenName };
+    const payload =
+      params != null ? { screen: screenName, params } : { screen: screenName };
     if (navigationRef.current?.isReady?.()) {
-      navigationRef.current.navigate('Root', { screen: 'Home1', params: payload });
+      navigationRef.current.navigate('Root', {
+        screen: 'Home1',
+        params: payload,
+      });
     } else {
       const tab = navigation.getParent?.();
       if (tab?.navigate) tab.navigate('Home1', payload);
-      else navigation.getParent?.()?.getParent?.()?.navigate?.('Root', { screen: 'Home1', params: payload });
+      else
+        navigation
+          .getParent?.()
+          ?.getParent?.()
+          ?.navigate?.('Root', { screen: 'Home1', params: payload });
     }
   };
 
@@ -777,8 +835,12 @@ const ShortsVideoScreen = ({ navigation }) => {
               onDislike={handleDislike}
               onSubscribe={handleSubscribe}
               onShare={handleShare}
-              onOrderNow={(params) => navigateToHomeScreen('HomeThreeScreen', params)}
-              onLoginPress={(params) => navigateToHomeScreen('HomeSevenScreen', params)}
+              onOrderNow={params =>
+                navigateToHomeScreen('HomeThreeScreen', params)
+              }
+              onLoginPress={params =>
+                navigateToHomeScreen('HomeSevenScreen', params)
+              }
               isSubscribed={
                 subscriptionMap[item.user?.id] ??
                 item.user?.isSubscribed ??
@@ -1025,6 +1087,7 @@ const styles = StyleSheet.create({
   },
   videoFooter: {
     paddingVertical: 8,
+    paddingBottom: 32,
   },
   videoUser: {
     color: '#FFF',
@@ -1055,6 +1118,18 @@ const styles = StyleSheet.create({
   muteToggle: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  progressBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: 10,
+    zIndex: 50,
+    elevation: 50,
+  },
+  progressSlider: {
+    width: '100%',
+    height: 30,
   },
   audioText: {
     color: '#FFF',

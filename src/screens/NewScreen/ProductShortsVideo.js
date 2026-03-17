@@ -22,6 +22,8 @@ import Video from 'react-native-video';
 import { shortsService } from '../../services/shortsService';
 import CommentsModal from '../../components/CommentsModal';
 import { setShortsMuted } from '../../redux/actions/appSlice';
+import Slider from '@react-native-community/slider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -114,6 +116,7 @@ const ProductShortsVideo = () => {
   const user = useSelector(state => state?.app?.user);
   const shortsMuted = useSelector(state => state?.app?.shortsMuted);
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
   const initialItem = route.params?.item;
 
   const { width, height } = useWindowDimensions();
@@ -337,6 +340,11 @@ const ProductShortsVideo = () => {
   }) => {
     const isCurrentlyViewable = currentIndex === index;
     const [isPausedLocally, setIsPausedLocally] = useState(false);
+    const videoRef = useRef(null);
+    const [duration, setDuration] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [isSeeking, setIsSeeking] = useState(false);
+    const lastProgressUpdate = useRef(0);
 
     useEffect(() => {
       if (!isCurrentlyViewable) {
@@ -357,6 +365,7 @@ const ProductShortsVideo = () => {
     return (
       <View style={[styles.videoContainer, { height: height }]}>
         <Video
+          ref={videoRef}
           source={{ uri: item.videoUrl }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
@@ -367,7 +376,50 @@ const ProductShortsVideo = () => {
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
           controls={false}
+          onLoad={data => {
+            const d = Number(data?.duration || 0);
+            setDuration(Number.isFinite(d) ? d : 0);
+          }}
+          onProgress={data => {
+            if (!isCurrentlyViewable || isPaused) return;
+            if (isSeeking) return;
+            const now = Date.now();
+            if (now - lastProgressUpdate.current < 250) return;
+            lastProgressUpdate.current = now;
+            const t = Number(data?.currentTime || 0);
+            setCurrentTime(Number.isFinite(t) ? t : 0);
+          }}
         />
+
+        {/* YouTube-style progress bar (seek) */}
+        <View
+          style={[
+            styles.progressBarWrap,
+            // Place it slightly below the footer row (no overlap)
+            { bottom: Math.max(6, (insets?.bottom || 0) + 4) },
+          ]}
+          pointerEvents="box-none"
+        >
+          <Slider
+            style={styles.progressSlider}
+            value={Math.min(currentTime, duration || 0)}
+            minimumValue={0}
+            maximumValue={Math.max(0.1, duration || 0)}
+            minimumTrackTintColor="rgba(255,255,255,0.9)"
+            maximumTrackTintColor="rgba(255,255,255,0.35)"
+            thumbTintColor="rgba(255,255,255,0.95)"
+            onSlidingStart={() => setIsSeeking(true)}
+            onValueChange={val => setCurrentTime(val)}
+            onSlidingComplete={val => {
+              const v = Math.max(0, Math.min(Number(val) || 0, duration || 0));
+              try {
+                videoRef.current?.seek?.(v);
+              } catch (_) {}
+              setCurrentTime(v);
+              setIsSeeking(false);
+            }}
+          />
+        </View>
 
         <TouchableOpacity
           activeOpacity={1}
@@ -494,7 +546,8 @@ const ProductShortsVideo = () => {
                 <TouchableOpacity
                   style={styles.orderNowBtn}
                   onPress={() => {
-                    const itemOwnerId = item?.userId ?? item?.userObj?.id ?? null;
+                    const itemOwnerId =
+                      item?.userId ?? item?.userObj?.id ?? null;
                     if (itemOwnerId) {
                       navigation.navigate('HomeThreeScreen', {
                         ownerId: itemOwnerId,
@@ -642,6 +695,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 20,
     zIndex: 10,
+    marginTop: -10,
   },
   videoHeader: {
     flexDirection: 'row',
@@ -668,7 +722,8 @@ const styles = StyleSheet.create({
   },
   actionItem: { alignItems: 'center', marginBottom: 20 },
   actionText: { color: '#FFF', fontSize: 12, marginTop: 5, fontWeight: '600' },
-  videoFooter: { padding: 20, paddingBottom: 20 },
+  // Extra bottom padding so progress bar doesn't overlap footer row
+  videoFooter: { padding: 20, paddingBottom: 16 },
   videoUser: {
     color: '#FFF',
     fontSize: 14,
@@ -692,9 +747,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: -20,
   },
   audioRow: { flexDirection: 'row', alignItems: 'center' },
   muteBtn: { flexDirection: 'row', alignItems: 'center' },
+  progressBarWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: 10,
+    zIndex: 50,
+    elevation: 50,
+  },
+  progressSlider: {
+    width: '100%',
+    height: 30,
+  },
   audioText: { color: '#FFF', fontSize: 13, marginLeft: 5 },
   orderNowBtn: {
     backgroundColor: '#F5A623',
