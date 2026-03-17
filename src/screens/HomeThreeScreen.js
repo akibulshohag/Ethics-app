@@ -18,14 +18,62 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
+import { useSelector } from 'react-redux';
+import { getChannelProfile } from '../services/channelService';
 
 const { width } = Dimensions.get('window');
 const DEFAULT_IMAGE =
   'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
 
+const DAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
+
+const parseTimeToMinutes = raw => {
+  if (!raw) return null;
+  const s = String(raw).trim().toUpperCase();
+  // supports: 10AM, 10 AM, 10:30AM, 10.30AM, 12.00PM
+  const m = s.match(/^(\d{1,2})(?::|\.|)?(\d{2})?\s*(AM|PM)$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2] != null ? parseInt(m[2], 10) : 0;
+  const ap = m[3];
+  if (!Number.isFinite(h) || !Number.isFinite(min)) return null;
+  if (h === 12) h = 0;
+  if (ap === 'PM') h += 12;
+  return h * 60 + min;
+};
+
+const minutesToLabel = mins => {
+  if (mins == null) return '';
+  const h24 = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  const ap = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, '0')}${ap}`;
+};
+
+const normalizeOpeningHours = raw => {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr
+    .map(h => ({
+      day: String(h?.day || '').trim(),
+      open: h?.open || h?.opening || h?.start,
+      close: h?.close || h?.closing || h?.end,
+    }))
+    .filter(h => h.day);
+};
+
 const HomeThreeScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const route = useRoute();
+  const user = useSelector(state => state?.app?.user);
   const ownerId = route.params?.ownerId;
   const resTitle =
     route.params?.ownerName || route.params?.title || 'Restaurant';
@@ -48,6 +96,89 @@ const HomeThreeScreen = ({ onBack }) => {
   });
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
+  const [openingHours, setOpeningHours] = useState([]);
+  const [nowTick, setNowTick] = useState(0);
+
+  useEffect(() => {
+    // Tick every minute so the banner updates automatically
+    const t = setInterval(() => setNowTick(v => v + 1), 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (!ownerId) return;
+    const viewerId = user?.id || ownerId;
+    getChannelProfile(viewerId, ownerId)
+      .then(p => {
+        setOpeningHours(normalizeOpeningHours(p?.openingHours));
+      })
+      .catch(() => setOpeningHours([]));
+  }, [ownerId, user?.id]);
+
+  const openCloseBannerText = useMemo(() => {
+    // depend on nowTick so it refreshes
+    void nowTick;
+    if (!Array.isArray(openingHours) || openingHours.length === 0) return '';
+    const now = new Date();
+    const todayName = DAY_NAMES[now.getDay()];
+    const today = openingHours.find(
+      h => String(h.day).toLowerCase() === String(todayName).toLowerCase(),
+    );
+
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const openMins = parseTimeToMinutes(today?.open);
+    const closeMins = parseTimeToMinutes(today?.close);
+
+    const findNextOpen = () => {
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(now.getDate() + i);
+        const name = DAY_NAMES[d.getDay()];
+        const row = openingHours.find(
+          h => String(h.day).toLowerCase() === String(name).toLowerCase(),
+        );
+        const o = parseTimeToMinutes(row?.open);
+        if (o == null) continue;
+        if (i === 0) {
+          // today: only if in future
+          if (o > nowMins) return { mins: o, dayOffset: 0 };
+        } else {
+          return { mins: o, dayOffset: i };
+        }
+      }
+      return null;
+    };
+
+    if (openMins == null || closeMins == null) {
+      const nxt = findNextOpen();
+      if (!nxt) return '';
+      const when = minutesToLabel(nxt.mins);
+      return `This restaurant will be open at ${when}${
+        nxt.dayOffset === 1 ? ' (tomorrow)' : ''
+      }`;
+    }
+
+    // handle overnight windows (e.g. 8PM -> 2AM)
+    const crossesMidnight = closeMins <= openMins;
+    const isOpen = crossesMidnight
+      ? nowMins >= openMins || nowMins < closeMins
+      : nowMins >= openMins && nowMins < closeMins;
+
+    if (isOpen) {
+      const closeLabel = minutesToLabel(closeMins);
+      return `This restaurant will be close at ${closeLabel}`;
+    }
+
+    const nxt = findNextOpen();
+    const openLabel =
+      !crossesMidnight && nowMins < openMins
+        ? minutesToLabel(openMins)
+        : minutesToLabel(nxt?.mins);
+    if (!openLabel) return '';
+    return `This restaurant will be open at ${openLabel}${
+      nxt?.dayOffset === 1 ? ' (tomorrow)' : ''
+    }`;
+  }, [openingHours, nowTick]);
 
   // Dynamic categories: from API (owner-created) with item counts; or single "All" when none
   const menuCategories = useMemo(() => {
@@ -329,6 +460,14 @@ const HomeThreeScreen = ({ onBack }) => {
         </View>
 
         <FilterBar />
+
+        {!!openCloseBannerText && (
+          <View style={styles.openCloseBanner}>
+            <Text style={styles.openCloseBannerText} numberOfLines={2}>
+              {openCloseBannerText}
+            </Text>
+          </View>
+        )}
 
         {menuLoading ? (
           <View style={styles.menuLoading}>
@@ -632,6 +771,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#444',
     marginHorizontal: 6,
+  },
+  openCloseBanner: {
+    marginHorizontal: 15,
+    marginTop: -4,
+    marginBottom: 12,
+    backgroundColor: '#F5A623',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  openCloseBannerText: {
+    color: '#111',
+    fontSize: 13,
+    fontWeight: '700',
   },
   sectionHeading: {
     fontSize: 20,
