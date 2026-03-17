@@ -19,7 +19,7 @@ import Video from 'react-native-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import CommentsModal from '../components/CommentsModal';
 import SettingsModal from '../components/SettingsModal';
@@ -36,6 +36,7 @@ import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import Toast from 'react-native-toast-message';
 import { navigationRef } from '../utils/helper';
+import { setShortsMuted } from '../redux/actions/appSlice';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -157,6 +158,8 @@ const VideoItem = ({
 }) => {
   const [paused, setPaused] = useState(!isActive);
   const insets = useSafeAreaInsets();
+  const dispatch = useDispatch();
+  const shortsMuted = useSelector(state => state.app?.shortsMuted);
 
   // Manage play/pause based on active state
   useEffect(() => {
@@ -181,6 +184,7 @@ const VideoItem = ({
           resizeMode="cover"
           repeat
           paused={paused}
+          muted={!!shortsMuted}
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
@@ -348,7 +352,21 @@ const VideoItem = ({
           <View style={styles.audioRow}>
             <Icon name="music" size={18} color="#FFF" />
             <Text style={styles.audioText}>Original Sound</Text>
-            <Text style={[styles.audioText, { marginLeft: 12 }]}>Mute</Text>
+            <TouchableOpacity
+              style={styles.muteToggle}
+              onPress={() => dispatch(setShortsMuted(!shortsMuted))}
+              activeOpacity={0.8}
+            >
+              <Icon
+                name={shortsMuted ? 'volume-off' : 'volume-high'}
+                size={18}
+                color="#FFF"
+                style={{ marginLeft: 12 }}
+              />
+              <Text style={[styles.audioText, { marginLeft: 6 }]}>
+                {shortsMuted ? 'Mute' : 'Unmute'}
+              </Text>
+            </TouchableOpacity>
           </View>
           {(item.creatorRole === 'owner' || item.user?.id || item.userId) &&
             (!currentUser?.token ? (
@@ -382,9 +400,7 @@ const VideoItem = ({
               </TouchableOpacity>
             ))}
         </View>
-        <View style={styles.bottomArrow}>
-          <Icon name="chevron-down" size={40} color="#FFF" />
-        </View>
+        {/* bottom arrow removed */}
       </View>
     </View>
   );
@@ -1036,6 +1052,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  muteToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   audioText: {
     color: '#FFF',
     fontSize: 13,
@@ -1075,10 +1095,6 @@ const styles = StyleSheet.create({
   resOrderText: {
     color: '#FFF',
     fontWeight: 'bold',
-  },
-  bottomArrow: {
-    alignItems: 'center',
-    marginTop: 12,
   },
   reportOverlay: {
     flex: 1,

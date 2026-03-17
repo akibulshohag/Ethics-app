@@ -17,10 +17,11 @@ import {
   useRoute,
   useFocusEffect,
 } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import Video from 'react-native-video';
 import { shortsService } from '../../services/shortsService';
 import CommentsModal from '../../components/CommentsModal';
+import { setShortsMuted } from '../../redux/actions/appSlice';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -111,6 +112,8 @@ const ProductShortsVideo = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const user = useSelector(state => state?.app?.user);
+  const shortsMuted = useSelector(state => state?.app?.shortsMuted);
+  const dispatch = useDispatch();
   const initialItem = route.params?.item;
 
   const { width, height } = useWindowDimensions();
@@ -359,7 +362,7 @@ const ProductShortsVideo = () => {
           resizeMode="cover"
           repeat={true}
           paused={isPaused}
-          muted={false}
+          muted={!!shortsMuted}
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
@@ -464,13 +467,21 @@ const ProductShortsVideo = () => {
                 <Text style={styles.audioText}>
                   {item.audio || 'Original Sound'}
                 </Text>
-                <Icon
-                  name="volume-off"
-                  size={18}
-                  color="#FFF"
-                  style={{ marginLeft: 15 }}
-                />
-                <Text style={styles.audioText}>Mute</Text>
+                <TouchableOpacity
+                  style={styles.muteBtn}
+                  onPress={() => dispatch(setShortsMuted(!shortsMuted))}
+                  activeOpacity={0.8}
+                >
+                  <Icon
+                    name={shortsMuted ? 'volume-off' : 'volume-high'}
+                    size={18}
+                    color="#FFF"
+                    style={{ marginLeft: 15 }}
+                  />
+                  <Text style={styles.audioText}>
+                    {shortsMuted ? 'Mute' : 'Unmute'}
+                  </Text>
+                </TouchableOpacity>
               </View>
               {!user?.id ? (
                 <TouchableOpacity
@@ -499,9 +510,7 @@ const ProductShortsVideo = () => {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={styles.bottomArrow}>
-              <Icon name="chevron-down" size={40} color="#FFF" />
-            </View>
+            {/* bottom arrow removed */}
           </View>
         </View>
       </View>
@@ -685,6 +694,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   audioRow: { flexDirection: 'row', alignItems: 'center' },
+  muteBtn: { flexDirection: 'row', alignItems: 'center' },
   audioText: { color: '#FFF', fontSize: 13, marginLeft: 5 },
   orderNowBtn: {
     backgroundColor: '#F5A623',
@@ -693,7 +703,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   orderNowText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  bottomArrow: { alignItems: 'center', marginTop: 20 },
 });
 
 export default ProductShortsVideo;
