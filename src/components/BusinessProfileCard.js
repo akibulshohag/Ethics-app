@@ -122,7 +122,7 @@ const BusinessProfileCard = ({
                 activeOpacity={0.7}
               >
                 <View style={styles.badgeIconPart}>
-                  <Icon name="currency-usd" size={16} color="#222" />
+                  <Icon name="currency-gbp" size={16} color="#222" />
                 </View>
                 <View
                   style={[styles.badgeTextPart, { backgroundColor: '#FFa31A' }]}
