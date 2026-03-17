@@ -685,14 +685,15 @@ const UserViewsScreen = ({ navigation }) => {
           const iconOrder = [
             { type: 'instagram' },
             { type: 'facebook' },
-            { type: 'x' },
+            { type: 'x', image: require('../../assets/icons/x.png') },
             { type: 'tiktok' },
-            { type: 'youtube' },
+            { type: 'tripadvisor', image: require('../../assets/icons/tripadvisor.png') },
             { type: 'google', icon: 'google' },
             { type: 'website', icon: 'web' },
           ];
+          
 
-          return iconOrder.map(({ type, icon }) => {
+          return iconOrder.map(({ type, icon, image }) => {
             const match = normalized.find(l => l.type === type && l.url);
             const url = match?.url || '';
             const disabled = !url;
@@ -709,13 +710,25 @@ const UserViewsScreen = ({ navigation }) => {
                   Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
                 }}
                 activeOpacity={0.8}
-              >
-                <MaterialCommunityIcons
-                  name={icon || getSocialIcon(type)}
-                  size={20}
-                  color={disabled ? '#BDBDBD' : '#111'}
-                />
-              </TouchableOpacity>
+      >
+        {image ? (
+          <Image 
+            source={image} 
+            style={{ 
+              width: 22, 
+              height: 22, 
+              tintColor: disabled ? '#BDBDBD' : null,
+            }} 
+            resizeMode="contain"
+          />
+        ) : (
+          <MaterialCommunityIcons
+            name={icon || getSocialIcon(type)}
+            size={20}
+            color={disabled ? '#BDBDBD' : '#111'}
+          />
+        )}
+      </TouchableOpacity>
             );
           });
         })()}

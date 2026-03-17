@@ -118,7 +118,7 @@ const UserProfileCard = ({
             {/* Opaque Status Box */}
             <View style={styles.statusWhiteBox}>
               <Text style={styles.statusBodyText}>
-                {statusText.slice(0, 100) || 'No status yet.'}...
+                {statusText.slice(0, 75) || 'No status yet.'}...
               </Text>
             </View>
             <View style={styles.subscribeBtnContainer}>
