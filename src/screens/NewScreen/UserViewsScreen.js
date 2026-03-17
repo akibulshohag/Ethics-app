@@ -152,8 +152,7 @@ const mapVideoToCard = (v, profile) => {
 const mapVideoApiToModal = (v = {}) => {
   const u = v.user || {};
   const channelName = u.nickname || u.name || 'Unknown';
-  const rawAvatar =
-    u.photos?.[0] ?? (Array.isArray(u.photos) && u.photos[0]);
+  const rawAvatar = u.photos?.[0] ?? (Array.isArray(u.photos) && u.photos[0]);
   const channelAvatar = safeImageUri(
     rawAvatar?.src ?? rawAvatar,
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -164,7 +163,8 @@ const mapVideoApiToModal = (v = {}) => {
     id: v.id,
     title: v.title || 'Untitled',
     videoUrl: v.videoUrl,
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+    thumbnail:
+      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
     durationSeconds: v.duration ?? 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? 0,
@@ -251,7 +251,10 @@ const UserViewsScreen = ({ navigation }) => {
   const [videoModalError, setVideoModalError] = useState(null);
   const [modalVideo, setModalVideo] = useState(null);
   const [modalPaused, setModalPaused] = useState(true);
-  const [modalProgress, setModalProgress] = useState({ currentTime: 0, duration: 0 });
+  const [modalProgress, setModalProgress] = useState({
+    currentTime: 0,
+    duration: 0,
+  });
   const [modalIsSliding, setModalIsSliding] = useState(false);
   const [modalSlidingValue, setModalSlidingValue] = useState(0);
   const modalVideoRef = React.useRef(null);
@@ -261,7 +264,10 @@ const UserViewsScreen = ({ navigation }) => {
   const [saveVisible, setSaveVisible] = useState(false);
   const [videoCommentsVisible, setVideoCommentsVisible] = useState(false);
 
-  const [channelSub, setChannelSub] = useState({ isSubscribed: false, subscriberCount: 0 });
+  const [channelSub, setChannelSub] = useState({
+    isSubscribed: false,
+    subscriberCount: 0,
+  });
   const [subLoading, setSubLoading] = useState(false);
 
   const headerTitle = useMemo(() => {
@@ -297,7 +303,11 @@ const UserViewsScreen = ({ navigation }) => {
     setModalSlidingValue(0);
     setChannelSub({ isSubscribed: false, subscriberCount: 0 });
     try {
-      const res = await getVideoById(videoId, currentUser?.id, currentUser?.role || 'user');
+      const res = await getVideoById(
+        videoId,
+        currentUser?.id,
+        currentUser?.role || 'user',
+      );
       const mv = mapVideoApiToModal(res);
       setModalVideo(mv);
       setModalPaused(false);
@@ -312,7 +322,9 @@ const UserViewsScreen = ({ navigation }) => {
           .catch(() => {});
       }
     } catch (e) {
-      setVideoModalError(e?.response?.data?.message || e?.message || 'Failed to load video');
+      setVideoModalError(
+        e?.response?.data?.message || e?.message || 'Failed to load video',
+      );
     } finally {
       setVideoModalLoading(false);
     }
@@ -338,7 +350,9 @@ const UserViewsScreen = ({ navigation }) => {
     return `${m}:${String(s).padStart(2, '0')}`;
   };
 
-  const modalDisplayTime = modalIsSliding ? modalSlidingValue : modalProgress.currentTime;
+  const modalDisplayTime = modalIsSliding
+    ? modalSlidingValue
+    : modalProgress.currentTime;
 
   const handleModalLike = async () => {
     if (requireLogin()) return;
@@ -352,19 +366,28 @@ const UserViewsScreen = ({ navigation }) => {
         isLiked,
         isDisliked: isLiked ? false : wasDisliked,
         likeCount: Math.max(0, prev.likeCount + (isLiked ? 1 : -1)),
-        dislikeCount: isLiked && wasDisliked ? Math.max(0, prev.dislikeCount - 1) : prev.dislikeCount,
+        dislikeCount:
+          isLiked && wasDisliked
+            ? Math.max(0, prev.dislikeCount - 1)
+            : prev.dislikeCount,
       };
     });
     try {
       const res = await toggleVideoLike(modalVideo.id, currentUser.id);
       if (res) {
-        setModalVideo(prev => prev ? ({
-          ...prev,
-          ...(res.likeCount != null && { likeCount: res.likeCount }),
-          ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
-          ...(res.isLiked != null && { isLiked: res.isLiked }),
-          ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
-        }) : prev);
+        setModalVideo(prev =>
+          prev
+            ? {
+                ...prev,
+                ...(res.likeCount != null && { likeCount: res.likeCount }),
+                ...(res.dislikeCount != null && {
+                  dislikeCount: res.dislikeCount,
+                }),
+                ...(res.isLiked != null && { isLiked: res.isLiked }),
+                ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+              }
+            : prev,
+        );
       }
     } catch (_) {}
   };
@@ -381,19 +404,28 @@ const UserViewsScreen = ({ navigation }) => {
         isDisliked,
         isLiked: isDisliked ? false : wasLiked,
         dislikeCount: Math.max(0, prev.dislikeCount + (isDisliked ? 1 : -1)),
-        likeCount: isDisliked && wasLiked ? Math.max(0, prev.likeCount - 1) : prev.likeCount,
+        likeCount:
+          isDisliked && wasLiked
+            ? Math.max(0, prev.likeCount - 1)
+            : prev.likeCount,
       };
     });
     try {
       const res = await toggleVideoDislike(modalVideo.id, currentUser.id);
       if (res) {
-        setModalVideo(prev => prev ? ({
-          ...prev,
-          ...(res.likeCount != null && { likeCount: res.likeCount }),
-          ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
-          ...(res.isLiked != null && { isLiked: res.isLiked }),
-          ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
-        }) : prev);
+        setModalVideo(prev =>
+          prev
+            ? {
+                ...prev,
+                ...(res.likeCount != null && { likeCount: res.likeCount }),
+                ...(res.dislikeCount != null && {
+                  dislikeCount: res.dislikeCount,
+                }),
+                ...(res.isLiked != null && { isLiked: res.isLiked }),
+                ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
+              }
+            : prev,
+        );
       }
     } catch (_) {}
   };
@@ -401,7 +433,9 @@ const UserViewsScreen = ({ navigation }) => {
   const handleModalShare = async () => {
     if (!modalVideo?.id) return;
     try {
-      setModalVideo(prev => prev ? ({ ...prev, shareCount: (prev.shareCount ?? 0) + 1 }) : prev);
+      setModalVideo(prev =>
+        prev ? { ...prev, shareCount: (prev.shareCount ?? 0) + 1 } : prev,
+      );
       recordVideoShare(modalVideo.id);
       await Share.share({
         message: modalVideo?.title ? `${modalVideo.title}` : 'Check this video',
@@ -419,12 +453,21 @@ const UserViewsScreen = ({ navigation }) => {
     try {
       if (channelSub.isSubscribed) {
         await unsubscribeFromChannel(currentUser.id, modalVideo.userId);
-        setChannelSub(p => ({ ...p, isSubscribed: false, subscriberCount: Math.max(0, (p.subscriberCount ?? 0) - 1) }));
+        setChannelSub(p => ({
+          ...p,
+          isSubscribed: false,
+          subscriberCount: Math.max(0, (p.subscriberCount ?? 0) - 1),
+        }));
       } else {
         await subscribeToChannel(currentUser.id, modalVideo.userId);
-        setChannelSub(p => ({ ...p, isSubscribed: true, subscriberCount: (p.subscriberCount ?? 0) + 1 }));
+        setChannelSub(p => ({
+          ...p,
+          isSubscribed: true,
+          subscriberCount: (p.subscriberCount ?? 0) + 1,
+        }));
       }
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       setSubLoading(false);
     }
   };
@@ -449,7 +492,10 @@ const UserViewsScreen = ({ navigation }) => {
         isLiked,
         isDisliked: isLiked ? false : wasDisliked,
         likeCount: Math.max(0, (p.likeCount ?? 0) + (isLiked ? 1 : -1)),
-        dislikeCount: isLiked && wasDisliked ? Math.max(0, (p.dislikeCount ?? 0) - 1) : (p.dislikeCount ?? 0),
+        dislikeCount:
+          isLiked && wasDisliked
+            ? Math.max(0, (p.dislikeCount ?? 0) - 1)
+            : p.dislikeCount ?? 0,
       };
     });
 
@@ -482,8 +528,14 @@ const UserViewsScreen = ({ navigation }) => {
         ...p,
         isDisliked,
         isLiked: isDisliked ? false : wasLiked,
-        dislikeCount: Math.max(0, (p.dislikeCount ?? 0) + (isDisliked ? 1 : -1)),
-        likeCount: isDisliked && wasLiked ? Math.max(0, (p.likeCount ?? 0) - 1) : (p.likeCount ?? 0),
+        dislikeCount: Math.max(
+          0,
+          (p.dislikeCount ?? 0) + (isDisliked ? 1 : -1),
+        ),
+        likeCount:
+          isDisliked && wasLiked
+            ? Math.max(0, (p.likeCount ?? 0) - 1)
+            : p.likeCount ?? 0,
       };
     });
 
@@ -507,7 +559,10 @@ const UserViewsScreen = ({ navigation }) => {
     const postId = post?.postId || post?.id;
     if (!postId) return;
     try {
-      updatePostLocal(postId, p => ({ ...p, shareCount: (p.shareCount ?? 0) + 1 }));
+      updatePostLocal(postId, p => ({
+        ...p,
+        shareCount: (p.shareCount ?? 0) + 1,
+      }));
       recordPostShare(postId);
       await Share.share({
         message: post?.title ? `${post.title}` : 'Check this post',
@@ -686,12 +741,14 @@ const UserViewsScreen = ({ navigation }) => {
             { type: 'instagram' },
             { type: 'facebook' },
             { type: 'x', image: require('../../assets/icons/x.png') },
-            { type: 'tiktok' },
-            { type: 'tripadvisor', image: require('../../assets/icons/tripadvisor.png') },
+            { type: 'tiktok', image: require('../../assets/icons/tiktok.png') },
+            {
+              type: 'tripadvisor',
+              image: require('../../assets/icons/tripadvisor.png'),
+            },
             { type: 'google', icon: 'google' },
             { type: 'website', icon: 'web' },
           ];
-          
 
           return iconOrder.map(({ type, icon, image }) => {
             const match = normalized.find(l => l.type === type && l.url);
@@ -707,28 +764,30 @@ const UserViewsScreen = ({ navigation }) => {
                 disabled={disabled}
                 onPress={() => {
                   if (!url) return;
-                  Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                  Linking.openURL(
+                    url.startsWith('http') ? url : `https://${url}`,
+                  );
                 }}
                 activeOpacity={0.8}
-      >
-        {image ? (
-          <Image 
-            source={image} 
-            style={{ 
-              width: 22, 
-              height: 22, 
-              tintColor: disabled ? '#BDBDBD' : null,
-            }} 
-            resizeMode="contain"
-          />
-        ) : (
-          <MaterialCommunityIcons
-            name={icon || getSocialIcon(type)}
-            size={20}
-            color={disabled ? '#BDBDBD' : '#111'}
-          />
-        )}
-      </TouchableOpacity>
+              >
+                {image ? (
+                  <Image
+                    source={image}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      tintColor: disabled ? '#BDBDBD' : null,
+                    }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <MaterialCommunityIcons
+                    name={icon || getSocialIcon(type)}
+                    size={20}
+                    color={disabled ? '#BDBDBD' : '#111'}
+                  />
+                )}
+              </TouchableOpacity>
             );
           });
         })()}
@@ -789,20 +848,14 @@ const UserViewsScreen = ({ navigation }) => {
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Home') {
       const about =
-        profile?.channelAbout ||
-        profile?.about ||
-        profile?.bio ||
-        '—';
+        profile?.channelAbout || profile?.about || profile?.bio || '—';
       const phone =
         profile?.phone ||
         profile?.phoneNumber ||
         profile?.mobile ||
         profile?.contactPhone ||
         '—';
-      const email =
-        profile?.email ||
-        profile?.contactEmail ||
-        '—';
+      const email = profile?.email || profile?.contactEmail || '—';
       const address = profile?.address || '—';
       const lat = profile?.latitude;
       const lng = profile?.longitude;
@@ -812,7 +865,8 @@ const UserViewsScreen = ({ navigation }) => {
         Number.isFinite(Number(lat)) &&
         Number.isFinite(Number(lng));
 
-      const isOwnerProfile = String(profile?.role || '').toLowerCase() === 'owner';
+      const isOwnerProfile =
+        String(profile?.role || '').toLowerCase() === 'owner';
       const openingHours =
         Array.isArray(profile?.openingHours) && profile.openingHours.length
           ? profile.openingHours
@@ -822,11 +876,10 @@ const UserViewsScreen = ({ navigation }) => {
         <View style={styles.homeDetailsWrap}>
           <View style={styles.homeSection}>
             <Text style={styles.homeSectionTitle}>About</Text>
-            <Text style={styles.homeSectionText}>{about}</Text>
+            <Text style={styles.aboutText}>{about}</Text>
           </View>
 
           <View style={styles.homeSection}>
-            <Text style={styles.homeSectionTitle}>Contact :</Text>
             <TouchableOpacity
               disabled={!phone || phone === '—'}
               onPress={() => {
@@ -834,11 +887,14 @@ const UserViewsScreen = ({ navigation }) => {
                 Linking.openURL(`tel:${String(phone).replace(/\s/g, '')}`);
               }}
               activeOpacity={0.8}
+              style={{ flexDirection: 'row', alignItems: 'center' }} // Ensures horizontal alignment
             >
-              <Text style={[styles.homeSectionText, styles.linkText]}>
-                + {String(phone)}
+              <Text style={styles.homeSectionTitle}>
+                {/* "Contact:" label inline with the link */}
+                Contact: <Text style={styles.phoneText}>+{String(phone)}</Text>
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               disabled={!email || email === '—'}
               onPress={() => {
@@ -851,7 +907,9 @@ const UserViewsScreen = ({ navigation }) => {
                 {String(email)}
               </Text>
             </TouchableOpacity>
-            <Text style={styles.homeSectionText}>Address : {String(address)}</Text>
+            <Text style={styles.homeSectionText}>
+              Address : {String(address)}
+            </Text>
           </View>
 
           <View style={styles.homeSection}>
@@ -874,7 +932,9 @@ const UserViewsScreen = ({ navigation }) => {
                   style={styles.mapOpenBtn}
                   onPress={() =>
                     Linking.openURL(
-                      `https://www.google.com/maps?q=${Number(lat)},${Number(lng)}`,
+                      `https://www.google.com/maps?q=${Number(lat)},${Number(
+                        lng,
+                      )}`,
                     )
                   }
                   activeOpacity={0.85}
@@ -895,22 +955,47 @@ const UserViewsScreen = ({ navigation }) => {
               <Text style={styles.homeSectionTitle}>Opening Hours :</Text>
               <View style={styles.hoursHeaderRow}>
                 <Text style={[styles.hoursHeaderText, { flex: 1 }]}>Days</Text>
-                <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
+                <Text
+                  style={[
+                    styles.hoursHeaderText,
+                    { width: 90, textAlign: 'right' },
+                  ]}
+                >
                   Opening Time
                 </Text>
-                <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
+                <Text
+                  style={[
+                    styles.hoursHeaderText,
+                    { width: 90, textAlign: 'right' },
+                  ]}
+                >
                   Close Time
                 </Text>
               </View>
               {(openingHours || []).map((h, idx) => (
                 <View key={`${h.day || idx}-${idx}`} style={styles.hoursRow}>
-                  <Text style={[styles.hoursCellDay, { flex: 1 }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.hoursCellDay, { flex: 1 }]}
+                    numberOfLines={1}
+                  >
                     {h.day || '—'}
                   </Text>
-                  <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.hoursCell,
+                      { width: 90, textAlign: 'right' },
+                    ]}
+                    numberOfLines={1}
+                  >
                     {h.open || h.opening || h.start || '—'}
                   </Text>
-                  <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.hoursCell,
+                      { width: 90, textAlign: 'right' },
+                    ]}
+                    numberOfLines={1}
+                  >
                     {h.close || h.closing || h.end || '—'}
                   </Text>
                 </View>
@@ -1081,8 +1166,15 @@ const UserViewsScreen = ({ navigation }) => {
       >
         <SafeAreaView style={styles.videoModalContainer} edges={['top']}>
           <View style={styles.videoModalHeader}>
-            <TouchableOpacity onPress={closeVideoModal} style={styles.videoModalHeaderBtn}>
-              <MaterialCommunityIcons name="chevron-down" size={30} color="#fff" />
+            <TouchableOpacity
+              onPress={closeVideoModal}
+              style={styles.videoModalHeaderBtn}
+            >
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={30}
+                color="#fff"
+              />
             </TouchableOpacity>
             <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
               {modalVideo?.title || 'Video'}
@@ -1098,13 +1190,21 @@ const UserViewsScreen = ({ navigation }) => {
               </View>
             ) : videoModalError ? (
               <View style={styles.videoErrorOverlay}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={44} color="#fff" />
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={44}
+                  color="#fff"
+                />
                 <Text style={styles.videoErrorText}>{videoModalError}</Text>
                 <TouchableOpacity
                   style={styles.videoRetryBtn}
                   onPress={() => activeVideoId && openVideoModal(activeVideoId)}
                 >
-                  <MaterialCommunityIcons name="refresh" size={18} color="#fff" />
+                  <MaterialCommunityIcons
+                    name="refresh"
+                    size={18}
+                    color="#fff"
+                  />
                   <Text style={styles.videoRetryText}>Retry</Text>
                 </TouchableOpacity>
               </View>
@@ -1124,7 +1224,10 @@ const UserViewsScreen = ({ navigation }) => {
                   playWhenInactive={false}
                   ignoreSilentSwitch="ignore"
                   onLoad={data => {
-                    setModalProgress(p => ({ ...p, duration: data?.duration || 0 }));
+                    setModalProgress(p => ({
+                      ...p,
+                      duration: data?.duration || 0,
+                    }));
                     setModalPaused(false);
                   }}
                   onProgress={data => {
@@ -1134,17 +1237,26 @@ const UserViewsScreen = ({ navigation }) => {
                     progressUpdateRef.current = now;
                     setModalProgress(p => ({
                       currentTime: data?.currentTime ?? p.currentTime,
-                      duration: data?.seekableDuration || data?.duration || p.duration,
+                      duration:
+                        data?.seekableDuration || data?.duration || p.duration,
                     }));
                   }}
-                  onError={() => setVideoModalError('Failed to play video. The video format may not be supported or the URL is inaccessible.')}
+                  onError={() =>
+                    setVideoModalError(
+                      'Failed to play video. The video format may not be supported or the URL is inaccessible.',
+                    )
+                  }
                 />
                 <Pressable
                   style={styles.videoTapOverlay}
                   onPress={() => setModalPaused(p => !p)}
                 >
                   <MaterialCommunityIcons
-                    name={modalPaused ? 'play-circle-outline' : 'pause-circle-outline'}
+                    name={
+                      modalPaused
+                        ? 'play-circle-outline'
+                        : 'pause-circle-outline'
+                    }
                     size={74}
                     color="rgba(255,255,255,0.9)"
                   />
@@ -1165,11 +1277,17 @@ const UserViewsScreen = ({ navigation }) => {
                     }}
                     onValueChange={val => setModalSlidingValue(val)}
                     onSlidingComplete={val => {
-                      if (!modalVideoRef.current || modalProgress.duration <= 0) {
+                      if (
+                        !modalVideoRef.current ||
+                        modalProgress.duration <= 0
+                      ) {
                         setModalIsSliding(false);
                         return;
                       }
-                      const clamped = Math.max(0, Math.min(val, modalProgress.duration));
+                      const clamped = Math.max(
+                        0,
+                        Math.min(val, modalProgress.duration),
+                      );
                       seekingRef.current = true;
                       modalVideoRef.current.seek(clamped);
                       setModalProgress(p => ({ ...p, currentTime: clamped }));
@@ -1181,7 +1299,8 @@ const UserViewsScreen = ({ navigation }) => {
                     }}
                   />
                   <Text style={styles.videoTimeText}>
-                    {formatTime(modalDisplayTime)} / {formatTime(modalProgress.duration)}
+                    {formatTime(modalDisplayTime)} /{' '}
+                    {formatTime(modalProgress.duration)}
                   </Text>
                 </View>
               </>
@@ -1192,23 +1311,38 @@ const UserViewsScreen = ({ navigation }) => {
             )}
           </View>
 
-          <ScrollView style={styles.videoModalBody} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.videoModalBody}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.videoActionsRow}>
-              <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalLike}>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={handleModalLike}
+              >
                 <MaterialCommunityIcons
                   name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
                   size={22}
                   color={modalVideo?.isLiked ? '#FF7F0B' : '#222'}
                 />
-                <Text style={styles.videoActionText}>{formatCount(modalVideo?.likeCount ?? 0)}</Text>
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.likeCount ?? 0)}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalDislike}>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={handleModalDislike}
+              >
                 <MaterialCommunityIcons
-                  name={modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+                  name={
+                    modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
+                  }
                   size={22}
                   color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
                 />
-                <Text style={styles.videoActionText}>{formatCount(modalVideo?.dislikeCount ?? 0)}</Text>
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.dislikeCount ?? 0)}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.videoActionBtn}
@@ -1217,12 +1351,27 @@ const UserViewsScreen = ({ navigation }) => {
                   setVideoCommentsVisible(true);
                 }}
               >
-                <MaterialCommunityIcons name="comment-text-outline" size={22} color="#222" />
-                <Text style={styles.videoActionText}>{formatCount(modalVideo?.commentCount ?? 0)}</Text>
+                <MaterialCommunityIcons
+                  name="comment-text-outline"
+                  size={22}
+                  color="#222"
+                />
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.commentCount ?? 0)}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalShare}>
-                <MaterialCommunityIcons name="share-outline" size={22} color="#222" />
-                <Text style={styles.videoActionText}>{formatCount(modalVideo?.shareCount ?? 0)}</Text>
+              <TouchableOpacity
+                style={styles.videoActionBtn}
+                onPress={handleModalShare}
+              >
+                <MaterialCommunityIcons
+                  name="share-outline"
+                  size={22}
+                  color="#222"
+                />
+                <Text style={styles.videoActionText}>
+                  {formatCount(modalVideo?.shareCount ?? 0)}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.videoActionBtn}
@@ -1231,7 +1380,11 @@ const UserViewsScreen = ({ navigation }) => {
                   setSaveVisible(true);
                 }}
               >
-                <MaterialCommunityIcons name="bookmark-outline" size={22} color="#222" />
+                <MaterialCommunityIcons
+                  name="bookmark-outline"
+                  size={22}
+                  color="#222"
+                />
                 <Text style={styles.videoActionText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -1264,10 +1417,12 @@ const UserViewsScreen = ({ navigation }) => {
                 {subLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={[
-                    styles.subscribeText,
-                    channelSub.isSubscribed && styles.subscribedText,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.subscribeText,
+                      channelSub.isSubscribed && styles.subscribedText,
+                    ]}
+                  >
                     {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
                   </Text>
                 )}
@@ -1287,7 +1442,11 @@ const UserViewsScreen = ({ navigation }) => {
                   });
                 }}
               >
-                <MaterialCommunityIcons name="message-text-outline" size={18} color="#fff" />
+                <MaterialCommunityIcons
+                  name="message-text-outline"
+                  size={18}
+                  color="#fff"
+                />
                 <Text style={styles.messageBtnText}>Message</Text>
               </TouchableOpacity>
 
@@ -1302,7 +1461,9 @@ const UserViewsScreen = ({ navigation }) => {
                       onPress={() => {
                         const url = (l.url || '').trim();
                         if (!url) return;
-                        Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                        Linking.openURL(
+                          url.startsWith('http') ? url : `https://${url}`,
+                        );
                       }}
                     >
                       <MaterialCommunityIcons
@@ -1324,12 +1485,23 @@ const UserViewsScreen = ({ navigation }) => {
             user={currentUser}
             onCommentAdded={() => {
               if (!modalVideo?.id) return;
-              setModalVideo(prev => prev ? ({ ...prev, commentCount: (prev.commentCount ?? 0) + 1 }) : prev);
+              setModalVideo(prev =>
+                prev
+                  ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 }
+                  : prev,
+              );
             }}
             onCommentDeleted={(wasTopLevel, deletedCount) => {
               const dec = deletedCount || (wasTopLevel ? 1 : 0) || 0;
               if (dec <= 0) return;
-              setModalVideo(prev => prev ? ({ ...prev, commentCount: Math.max(0, (prev.commentCount ?? 0) - dec) }) : prev);
+              setModalVideo(prev =>
+                prev
+                  ? {
+                      ...prev,
+                      commentCount: Math.max(0, (prev.commentCount ?? 0) - dec),
+                    }
+                  : prev,
+              );
             }}
           />
 
@@ -1361,9 +1533,9 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   homeSectionTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#111',
+    color: '#212121',
     marginBottom: 8,
   },
   homeSectionText: {
@@ -1372,10 +1544,23 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 6,
   },
-  linkText: {
-    color: '#FF7F0B',
-    fontWeight: '700',
+  phoneText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#424242',
+    marginBottom: 6,
+    fontWeight: '400',
   },
+  aboutText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#424242',
+    marginBottom: 6,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#EEEEEE',
+  },
+
   mapCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -1428,8 +1613,7 @@ const styles = StyleSheet.create({
   },
   hoursHeaderText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: '#111',
+    color: '#777',
   },
   hoursRow: {
     flexDirection: 'row',
@@ -1437,7 +1621,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   hoursCellDay: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#777',
   },
   hoursCell: {
@@ -1456,8 +1640,8 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   profileSocialBtn: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     borderRadius: 17,
     backgroundColor: '#fff',
     alignItems: 'center',
