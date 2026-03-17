@@ -112,17 +112,17 @@ const mapVideoApiToDisplay = v => {
   const pubAt = v.publishedAt || v.createdAt;
   const channelName = user.nickname || user.name || 'Unknown';
   const channelAvatarRaw =
-    user.photos?.[0] ||
-    (Array.isArray(user.photos) && user.photos[0]) ||
-    null;
+    user.photos?.[0] || (Array.isArray(user.photos) && user.photos[0]) || null;
   const channelAvatar =
     typeof channelAvatarRaw === 'string' && channelAvatarRaw.trim()
       ? channelAvatarRaw.trim()
-      : channelAvatarRaw && typeof channelAvatarRaw === 'object' && (channelAvatarRaw.src || channelAvatarRaw.uri)
-        ? (channelAvatarRaw.src || channelAvatarRaw.uri)
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(
-            channelName,
-          )}&background=111&color=fff`;
+      : channelAvatarRaw &&
+        typeof channelAvatarRaw === 'object' &&
+        (channelAvatarRaw.src || channelAvatarRaw.uri)
+      ? channelAvatarRaw.src || channelAvatarRaw.uri
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          channelName,
+        )}&background=111&color=fff`;
   return {
     id: v.id,
     title: v.title || 'Untitled',
@@ -589,11 +589,7 @@ const VideoDetailsScreen = () => {
                 uri: (() => {
                   const raw = videoPlaybackUri || currentVideo.videoUrl;
                   if (typeof raw === 'string' && raw.trim()) return raw.trim();
-                  if (
-                    raw &&
-                    typeof raw === 'object' &&
-                    (raw.uri || raw.src)
-                  )
+                  if (raw && typeof raw === 'object' && (raw.uri || raw.src))
                     return String(raw.uri || raw.src).trim();
                   return '';
                 })(),
@@ -813,6 +809,35 @@ const VideoDetailsScreen = () => {
           />
         </View>
 
+        {/* Creator social links (show above booking/order actions) */}
+        {currentVideo.creatorSocialLinks?.length > 0 &&
+          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim())
+            .length > 0 && (
+            <View style={styles.creatorSocialRow}>
+              {currentVideo.creatorSocialLinks
+                .filter(l => (l?.url || '').trim())
+                .map((link, index) => (
+                  <TouchableOpacity
+                    key={`creator-${link.type}-${index}`}
+                    style={styles.creatorSocialIconBtn}
+                    onPress={() => {
+                      const url = (link.url || '').trim();
+                      if (url)
+                        Linking.openURL(
+                          url.startsWith('http') ? url : `https://${url}`,
+                        );
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={getSocialIcon(link.type)}
+                      size={24}
+                      color="#F97507"
+                    />
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
+
         {/* Order / Message only when viewer is not the owner */}
         {(currentVideo?.creatorRole === 'owner' ||
           currentVideo?.user?.role === 'owner' ||
@@ -986,35 +1011,6 @@ const VideoDetailsScreen = () => {
             </TouchableOpacity>
           ) : null}
         </View>
-
-        {/* Creator social links */}
-        {currentVideo.creatorSocialLinks?.length > 0 &&
-          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim())
-            .length > 0 && (
-            <View style={styles.creatorSocialRow}>
-              {currentVideo.creatorSocialLinks
-                .filter(l => (l?.url || '').trim())
-                .map((link, index) => (
-                  <TouchableOpacity
-                    key={`creator-${link.type}-${index}`}
-                    style={styles.creatorSocialIconBtn}
-                    onPress={() => {
-                      const url = (link.url || '').trim();
-                      if (url)
-                        Linking.openURL(
-                          url.startsWith('http') ? url : `https://${url}`,
-                        );
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name={getSocialIcon(link.type)}
-                      size={24}
-                      color="#F97507"
-                    />
-                  </TouchableOpacity>
-                ))}
-            </View>
-          )}
 
         {/* Creator location map */}
         {/* {currentVideo.creatorLatitude != null &&

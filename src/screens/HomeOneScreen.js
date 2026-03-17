@@ -1503,62 +1503,6 @@ const HomeOneScreen = () => {
           )}
         </View>
 
-        <View style={styles.resSocialRow}>
-          <View style={styles.resIconGroup}>
-            {[
-              { type: 'instagram', icon: 'instagram' },
-              { type: 'facebook', icon: 'facebook' },
-              { type: 'x', icon: 'twitter' },
-              { type: 'website', icon: 'web' },
-            ].map(({ type, icon }) => {
-              const link = (
-                selectedItem?.user?.socialLinks ||
-                selectedItem?.creatorSocialLinks ||
-                []
-              ).find(s => (s.type || '').toLowerCase() === type.toLowerCase());
-              const url = link?.url || null;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  onPress={() => url && Linking.openURL(url)}
-                  style={styles.socialIconWrap}
-                >
-                  <Icon
-                    name={icon}
-                    size={28}
-                    color={url ? '#333' : '#000'}
-                    style={styles.socialIcon}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <View>
-            <TouchableOpacity style={styles.bookNowBtn}>
-              <Text style={styles.bookNowText}>Book Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.galleryBtn}
-              onPress={openGalleryModal}
-            >
-              <Text style={styles.galleryText}>Gallery</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        {/* <Text style={styles.webText}>
-          {(
-            selectedItem?.user?.socialLinks ||
-            selectedItem?.creatorSocialLinks ||
-            []
-          ).find(s => (s.type || '').toLowerCase() === 'website')?.url ||
-            (selectedItem?.user?.businessName
-              ? `www.${String(selectedItem.user.businessName)
-                  .toLowerCase()
-                  .replace(/\s+/g, '')}.com`
-              : null) ||
-            '—'}
-        </Text> */}
-
         <View style={styles.resActionsRow}>
           <TouchableOpacity
             style={styles.resActionItem}
@@ -1654,6 +1598,61 @@ const HomeOneScreen = () => {
             <Text style={styles.resActionText}>Save</Text>
           </TouchableOpacity>
         </View>
+        <View style={styles.resSocialRow}>
+          <View style={styles.resIconGroup}>
+            {[
+              { type: 'instagram', icon: 'instagram' },
+              { type: 'facebook', icon: 'facebook' },
+              { type: 'x', icon: 'twitter' },
+              { type: 'website', icon: 'web' },
+            ].map(({ type, icon }) => {
+              const link = (
+                selectedItem?.user?.socialLinks ||
+                selectedItem?.creatorSocialLinks ||
+                []
+              ).find(s => (s.type || '').toLowerCase() === type.toLowerCase());
+              const url = link?.url || null;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  onPress={() => url && Linking.openURL(url)}
+                  style={styles.socialIconWrap}
+                >
+                  <Icon
+                    name={icon}
+                    size={28}
+                    color={url ? '#333' : '#000'}
+                    style={styles.socialIcon}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View>
+            <TouchableOpacity style={styles.bookNowBtn}>
+              <Text style={styles.bookNowText}>Book Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.galleryBtn}
+              onPress={openGalleryModal}
+            >
+              <Text style={styles.galleryText}>Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {/* <Text style={styles.webText}>
+          {(
+            selectedItem?.user?.socialLinks ||
+            selectedItem?.creatorSocialLinks ||
+            []
+          ).find(s => (s.type || '').toLowerCase() === 'website')?.url ||
+            (selectedItem?.user?.businessName
+              ? `www.${String(selectedItem.user.businessName)
+                  .toLowerCase()
+                  .replace(/\s+/g, '')}.com`
+              : null) ||
+            '—'}
+        </Text> */}
 
         <View style={styles.descContainer}>
           <Text style={styles.sectionTitle}>Description</Text>
