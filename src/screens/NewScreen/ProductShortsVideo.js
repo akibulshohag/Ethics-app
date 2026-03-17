@@ -4,12 +4,15 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Modal,
+  TouchableWithoutFeedback,
   StatusBar,
   Dimensions,
   FlatList,
   ActivityIndicator,
   useWindowDimensions,
   Share,
+  Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
@@ -24,6 +27,8 @@ import CommentsModal from '../../components/CommentsModal';
 import { setShortsMuted } from '../../redux/actions/appSlice';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { safeImageUri } from '../../utils/helper';
+import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -125,6 +130,10 @@ const ProductShortsVideo = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [commentsVisible, setCommentsVisible] = useState(false);
+  const [subsModalOpen, setSubsModalOpen] = useState(false);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [subsUsers, setSubsUsers] = useState([]);
+  const [subsError, setSubsError] = useState('');
 
   useFocusEffect(
     React.useCallback(() => {
@@ -280,11 +289,13 @@ const ProductShortsVideo = () => {
     }
   }).current;
 
-  const handleLike = async item => {
+  const handleLike = async (item, opts = {}) => {
     if (!user?.id || !item?.id) {
       navigation.navigate('HomeSevenScreen');
       return;
     }
+    const forceLike = opts?.forceLike === true;
+    if (forceLike && item?.isLiked) return;
     try {
       await shortsService.toggleLike(item.id, user.id);
       setVideos(prev =>
@@ -345,6 +356,8 @@ const ProductShortsVideo = () => {
     const [currentTime, setCurrentTime] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
     const lastProgressUpdate = useRef(0);
+    const lastTapMsRef = useRef(0);
+    const singleTapTimerRef = useRef(null);
 
     useEffect(() => {
       if (!isCurrentlyViewable) {
@@ -358,6 +371,27 @@ const ProductShortsVideo = () => {
       if (isCurrentlyViewable) {
         setIsPausedLocally(!isPausedLocally);
       }
+    };
+
+    const onOverlayTap = () => {
+      const now = Date.now();
+      const DOUBLE_TAP_MS = 260;
+      if (now - lastTapMsRef.current < DOUBLE_TAP_MS) {
+        lastTapMsRef.current = 0;
+        if (singleTapTimerRef.current) {
+          clearTimeout(singleTapTimerRef.current);
+          singleTapTimerRef.current = null;
+        }
+        // Double tap: like only (no unlike)
+        onLike?.(item, { forceLike: true });
+        return;
+      }
+      lastTapMsRef.current = now;
+      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = setTimeout(() => {
+        singleTapTimerRef.current = null;
+        togglePause();
+      }, DOUBLE_TAP_MS);
     };
 
     const isPaused = !focused || !isCurrentlyViewable || isPausedLocally;
@@ -423,7 +457,7 @@ const ProductShortsVideo = () => {
 
         <TouchableOpacity
           activeOpacity={1}
-          onPress={togglePause}
+          onPress={onOverlayTap}
           style={styles.touchOverlay}
         >
           {isPausedLocally && isCurrentlyViewable && (
@@ -512,7 +546,16 @@ const ProductShortsVideo = () => {
             <Text style={styles.videoHashtags}>
               {item.hashtags || '#hashtags #music #dance'}
             </Text>
-            <Text style={styles.translationText}>See translation</Text>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                const itemOwnerId = item?.userId ?? item?.userObj?.id ?? null;
+                if (itemOwnerId) openSubscribersModal(itemOwnerId);
+              }}
+              disabled={!(item?.userId || item?.userObj?.id)}
+            >
+              <Text style={styles.translationText}>Subscribers Order</Text>
+            </TouchableOpacity>
             <View style={styles.footerRow}>
               <View style={styles.audioRow}>
                 <Icon name="music" size={18} color="#FFF" />
@@ -577,6 +620,29 @@ const ProductShortsVideo = () => {
   });
 
   const handleOpenComments = () => setCommentsVisible(true);
+
+  const openSubscribersModal = async ownerIdToLoad => {
+    if (!user?.token) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    if (!ownerIdToLoad) return;
+    setSubsModalOpen(true);
+    setSubsLoading(true);
+    setSubsError('');
+    try {
+      const res = await listMySubscribersWhoOrderedFromOwner(
+        user.token,
+        ownerIdToLoad,
+      );
+      setSubsUsers(Array.isArray(res?.items) ? res.items : []);
+    } catch (e) {
+      setSubsUsers([]);
+      setSubsError(e?.message || 'Failed to load subscribers');
+    } finally {
+      setSubsLoading(false);
+    }
+  };
 
   const listData = videos.length > 0 ? videos : DUMMY_VIDEOS;
   const currentShortForComments = listData[currentIndex];
@@ -648,6 +714,89 @@ const ProductShortsVideo = () => {
         onCommentAdded={handleCommentAdded}
         onCommentDeleted={handleCommentDeleted}
       />
+      <Modal
+        visible={subsModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSubsModalOpen(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setSubsModalOpen(false)}>
+          <View style={styles.subsBackdrop} />
+        </TouchableWithoutFeedback>
+        <View
+          style={[
+            styles.subsSheet,
+            { paddingBottom: Math.max(16, (insets?.bottom || 0) + 10) },
+          ]}
+        >
+          <View style={styles.subsHandle} />
+          <View style={styles.subsHeaderRow}>
+            <Text style={styles.subsTitle}>Subscribers Order</Text>
+            <TouchableOpacity
+              onPress={() => setSubsModalOpen(false)}
+              style={styles.subsCloseBtn}
+            >
+              <Icon name="close" size={20} color="#111" />
+            </TouchableOpacity>
+          </View>
+
+          {subsLoading ? (
+            <View style={styles.subsLoadingWrap}>
+              <ActivityIndicator size="small" color="#111" />
+              <Text style={styles.subsHint}>Loading…</Text>
+            </View>
+          ) : subsError ? (
+            <Text style={styles.subsErrorText}>{subsError}</Text>
+          ) : subsUsers.length === 0 ? (
+            <Text style={styles.subsHint}>
+              No subscribers ordered from this restaurant yet.
+            </Text>
+          ) : (
+            <FlatList
+              data={subsUsers}
+              keyExtractor={(u, idx) => String(u?.id || idx)}
+              renderItem={({ item: u }) => {
+                const displayName =
+                  u?.name || u?.nickname || u?.email || 'User';
+                const avatar = safeImageUri(
+                  u?.avatar,
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    displayName,
+                  )}&background=111&color=fff`,
+                );
+                return (
+                  <TouchableOpacity
+                    style={styles.subsRow}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSubsModalOpen(false);
+                      if (u?.id) {
+                        navigation.navigate('UserViewsScreen', {
+                          userId: u.id,
+                        });
+                      }
+                    }}
+                  >
+                    <Image source={{ uri: avatar }} style={styles.subsAvatar} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subsName} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                      {!!u?.email ? (
+                        <Text style={styles.subsSubText} numberOfLines={1}>
+                          {u.email}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            />
+          )}
+        </View>
+      </Modal>
       <FlatList
         data={listData}
         keyExtractor={item => item.id}
@@ -723,7 +872,7 @@ const styles = StyleSheet.create({
   actionItem: { alignItems: 'center', marginBottom: 20 },
   actionText: { color: '#FFF', fontSize: 12, marginTop: 5, fontWeight: '600' },
   // Extra bottom padding so progress bar doesn't overlap footer row
-  videoFooter: { padding: 20, paddingBottom: 16 },
+  videoFooter: { padding: 20, paddingBottom: 52 },
   videoUser: {
     color: '#FFF',
     fontSize: 14,
@@ -743,6 +892,74 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
     marginBottom: 15,
   },
+  subsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  subsSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: SCREEN_HEIGHT * 0.55,
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  subsHandle: {
+    alignSelf: 'center',
+    width: 46,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#E0E0E0',
+    marginBottom: 10,
+  },
+  subsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  subsTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
+  subsCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4F4F4',
+  },
+  subsLoadingWrap: { paddingVertical: 18, alignItems: 'center', gap: 8 },
+  subsHint: {
+    color: '#666',
+    fontSize: 13,
+    paddingVertical: 10,
+    textAlign: 'center',
+  },
+  subsErrorText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    paddingVertical: 10,
+    textAlign: 'center',
+  },
+  subsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  subsAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EEE',
+  },
+  subsName: { color: '#111', fontSize: 14, fontWeight: '700' },
+  subsSubText: { color: '#777', fontSize: 12, marginTop: 2 },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

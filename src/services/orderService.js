@@ -139,3 +139,21 @@ export const listRestaurantOrderReviews = async (token, params = {}) => {
   if (!res.ok) throw new Error('Failed to load order reviews');
   return res.json();
 };
+
+/**
+ * List current user's subscribers who ordered from a specific owner (restaurant).
+ * GET /restaurant-orders/subscribers-who-ordered?ownerId=...
+ */
+export const listMySubscribersWhoOrderedFromOwner = async (token, ownerId) => {
+  const q = new URLSearchParams();
+  if (ownerId) q.set('ownerId', String(ownerId));
+  const url = `${API_URL}/subscribers-who-ordered?${q.toString()}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to load subscribers');
+  }
+  return res.json();
+};

@@ -36,8 +36,9 @@ import {
 import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import Toast from 'react-native-toast-message';
-import { navigationRef } from '../utils/helper';
+import { navigationRef, safeImageUri } from '../utils/helper';
 import { setShortsMuted } from '../redux/actions/appSlice';
+import { listMySubscribersWhoOrderedFromOwner } from '../services/orderService';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -166,6 +167,8 @@ const VideoItem = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const lastProgressUpdate = useRef(0);
+  const lastTapMsRef = useRef(0);
+  const singleTapTimerRef = useRef(null);
 
   // Manage play/pause based on active state
   useEffect(() => {
@@ -174,6 +177,27 @@ const VideoItem = ({
 
   const togglePause = () => {
     setPaused(prev => !prev);
+  };
+
+  const onOverlayTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_MS = 260;
+    if (now - lastTapMsRef.current < DOUBLE_TAP_MS) {
+      lastTapMsRef.current = 0;
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
+      }
+      // Double tap: like only (no unlike)
+      onLike?.(item, { forceLike: true });
+      return;
+    }
+    lastTapMsRef.current = now;
+    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+    singleTapTimerRef.current = setTimeout(() => {
+      singleTapTimerRef.current = null;
+      togglePause();
+    }, DOUBLE_TAP_MS);
   };
 
   const hasValidVideo =
@@ -223,7 +247,7 @@ const VideoItem = ({
       {/* Transparent Touch Overlay for Play/Pause - ZIndex 1 */}
       <TouchableOpacity
         activeOpacity={1}
-        onPress={togglePause}
+        onPress={onOverlayTap}
         style={styles.touchOverlay}
       >
         {paused && (
@@ -395,8 +419,15 @@ const VideoItem = ({
             ))}
           </Text>
         )}
-        <TouchableOpacity activeOpacity={0.7}>
-          <Text style={styles.translationText}>See translation</Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            const ownerId = item.user?.id ?? item.userId ?? null;
+            if (ownerId) openSubscribersModal(ownerId);
+          }}
+          disabled={!(item.user?.id || item.userId)}
+        >
+          <Text style={styles.translationText}>Subscribers Order</Text>
         </TouchableOpacity>
         <View style={styles.footerRow}>
           <View style={styles.audioRow}>
@@ -505,6 +536,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   const route = useRoute();
   const initialShortId = route.params?.initialShortId ?? route.params?.shortId;
   const user = useSelector(state => state?.app?.user);
+  const insets = useSafeAreaInsets();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
@@ -545,6 +577,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [reportVisible, setReportVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState('Sexual Content');
   const [subscriptionMap, setSubscriptionMap] = useState({});
+  const [subsModalOpen, setSubsModalOpen] = useState(false);
+  const [subsLoading, setSubsLoading] = useState(false);
+  const [subsUsers, setSubsUsers] = useState([]);
+  const [subsError, setSubsError] = useState('');
 
   const screenHeight = windowHeight;
   const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
@@ -604,11 +640,13 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
-  const handleLike = async item => {
+  const handleLike = async (item, opts = {}) => {
     if (!user?.id) {
       navigateToHomeScreen('HomeSevenScreen');
       return;
     }
+    const forceLike = opts?.forceLike === true;
+    if (forceLike && item?.isLiked) return;
     try {
       await shortsService.toggleLike(item.id, user.id);
       setVideos(prev =>
@@ -731,6 +769,29 @@ const ShortsVideoScreen = ({ navigation }) => {
       return;
     }
     setTimeout(() => setReportVisible(true), 100);
+  };
+
+  const openSubscribersModal = async ownerIdToLoad => {
+    if (!user?.token) {
+      navigateToHomeScreen('HomeSevenScreen');
+      return;
+    }
+    if (!ownerIdToLoad) return;
+    setSubsModalOpen(true);
+    setSubsLoading(true);
+    setSubsError('');
+    try {
+      const res = await listMySubscribersWhoOrderedFromOwner(
+        user.token,
+        ownerIdToLoad,
+      );
+      setSubsUsers(Array.isArray(res?.items) ? res.items : []);
+    } catch (e) {
+      setSubsUsers([]);
+      setSubsError(e?.message || 'Failed to load subscribers');
+    } finally {
+      setSubsLoading(false);
+    }
   };
 
   const handleReportSubmit = async () => {
@@ -884,6 +945,89 @@ const ShortsVideoScreen = ({ navigation }) => {
         }}
         user={user}
       />
+      <Modal
+        animationType="slide"
+        transparent
+        visible={subsModalOpen}
+        onRequestClose={() => setSubsModalOpen(false)}
+      >
+        <Pressable
+          style={styles.subsBackdrop}
+          onPress={() => setSubsModalOpen(false)}
+        />
+        <View
+          style={[
+            styles.subsSheet,
+            { paddingBottom: Math.max(16, (insets?.bottom || 0) + 10) },
+          ]}
+        >
+          <View style={styles.subsHandle} />
+          <View style={styles.subsHeaderRow}>
+            <Text style={styles.subsTitle}>Subscribers Order</Text>
+            <TouchableOpacity
+              onPress={() => setSubsModalOpen(false)}
+              style={styles.subsCloseBtn}
+            >
+              <Icon name="close" size={20} color="#111" />
+            </TouchableOpacity>
+          </View>
+
+          {subsLoading ? (
+            <View style={styles.subsLoadingWrap}>
+              <ActivityIndicator size="small" color="#111" />
+              <Text style={styles.subsHint}>Loading…</Text>
+            </View>
+          ) : subsError ? (
+            <Text style={styles.subsErrorText}>{subsError}</Text>
+          ) : subsUsers.length === 0 ? (
+            <Text style={styles.subsHint}>
+              No subscribers ordered from this restaurant yet.
+            </Text>
+          ) : (
+            <FlatList
+              data={subsUsers}
+              keyExtractor={(u, idx) => String(u?.id || idx)}
+              renderItem={({ item: u }) => {
+                const displayName =
+                  u?.name || u?.nickname || u?.email || 'User';
+                const avatar = safeImageUri(
+                  u?.avatar,
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    displayName,
+                  )}&background=111&color=fff`,
+                );
+                return (
+                  <TouchableOpacity
+                    style={styles.subsRow}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setSubsModalOpen(false);
+                      if (u?.id)
+                        navigation.navigate('UserViewsScreen', {
+                          userId: u.id,
+                        });
+                    }}
+                  >
+                    <Image source={{ uri: avatar }} style={styles.subsAvatar} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subsName} numberOfLines={1}>
+                        {displayName}
+                      </Text>
+                      {!!u?.email ? (
+                        <Text style={styles.subsSubText} numberOfLines={1}>
+                          {u.email}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            />
+          )}
+        </View>
+      </Modal>
       <SettingsModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
@@ -1087,7 +1231,7 @@ const styles = StyleSheet.create({
   },
   videoFooter: {
     paddingVertical: 8,
-    paddingBottom: 32,
+    paddingBottom: 52,
   },
   videoUser: {
     color: '#FFF',
@@ -1161,6 +1305,74 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 6,
   },
+  subsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  subsSheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: windowHeight * 0.55,
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  subsHandle: {
+    alignSelf: 'center',
+    width: 46,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#E0E0E0',
+    marginBottom: 10,
+  },
+  subsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  subsTitle: { fontSize: 16, fontWeight: '800', color: '#111' },
+  subsCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4F4F4',
+  },
+  subsLoadingWrap: { paddingVertical: 18, alignItems: 'center', gap: 8 },
+  subsHint: {
+    color: '#666',
+    fontSize: 13,
+    paddingVertical: 10,
+    textAlign: 'center',
+  },
+  subsErrorText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    paddingVertical: 10,
+    textAlign: 'center',
+  },
+  subsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  subsAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#EEE',
+  },
+  subsName: { color: '#111', fontSize: 14, fontWeight: '700' },
+  subsSubText: { color: '#777', fontSize: 12, marginTop: 2 },
   resOrderBtn: {
     backgroundColor: '#F5A623',
     paddingHorizontal: 20,
