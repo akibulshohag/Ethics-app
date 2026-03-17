@@ -210,6 +210,16 @@ const mapPostToCard = (post, user) => {
 const BASE_TABS = ['Posts', 'Promotions', 'Grid', 'Video', 'Notification'];
 // ... (I will handle the rest in the next edit chunk for the render function to avoid giant replaces)
 
+const DEFAULT_OPENING_HOURS = [
+  { day: 'Sunday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Monday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Tuesday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Wednesday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Thursday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Friday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Saturday', open: '12.00PM', close: '12.00PM' },
+];
+
 const MOCK_POSTS = [
   {
     id: '1',
@@ -384,6 +394,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [editLatitude, setEditLatitude] = useState(null);
   const [editLongitude, setEditLongitude] = useState(null);
   const [editSocialLinks, setEditSocialLinks] = useState([]);
+  const [editOpeningHours, setEditOpeningHours] = useState(DEFAULT_OPENING_HOURS);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -1034,6 +1045,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         { value: 'website', label: 'Website' },
       ].map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
     );
+    const oh = profile?.openingHours ?? currentUser?.openingHours;
+    setEditOpeningHours(
+      Array.isArray(oh) && oh.length
+        ? oh.map(h => ({
+            day: h?.day || '',
+            open: h?.open || h?.opening || h?.start || '',
+            close: h?.close || h?.closing || h?.end || '',
+          }))
+        : DEFAULT_OPENING_HOURS,
+    );
     setEditProfileVisible(true);
   };
 
@@ -1142,6 +1163,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         ...(latitude != null && { latitude }),
         ...(longitude != null && { longitude }),
         socialLinks: socialLinks.length ? socialLinks : undefined,
+        ...(currentRole === 'owner' && {
+          openingHours: (editOpeningHours || [])
+            .map(h => ({
+              day: String(h?.day || '').trim(),
+              open: String(h?.open || '').trim(),
+              close: String(h?.close || '').trim(),
+            }))
+            .filter(h => h.day),
+        }),
       });
       await loadProfile();
       if (currentUser?.id === profileUserId) {
@@ -1158,6 +1188,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             socialLinks: socialLinks.length
               ? socialLinks
               : currentUser.socialLinks,
+            ...(currentRole === 'owner' && {
+              openingHours: editOpeningHours,
+            }),
           }),
         );
       }
@@ -1167,6 +1200,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const updateOpeningHour = (idx, patch) => {
+    setEditOpeningHours(prev =>
+      (prev || []).map((h, i) => (i === idx ? { ...h, ...patch } : h)),
+    );
   };
 
   const updateSocialLinkUrl = (idx, value) => {
@@ -2170,6 +2209,46 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   </View>
                 ))}
               </View>
+
+              {currentRole === 'owner' ? (
+                <>
+                  <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                    Opening Hours
+                  </Text>
+                  <View style={styles.openingHoursCard}>
+                    {(editOpeningHours || DEFAULT_OPENING_HOURS).map((h, idx) => (
+                      <View
+                        key={`${h.day || idx}-${idx}`}
+                        style={[
+                          styles.openingHoursRow,
+                          idx === (editOpeningHours || DEFAULT_OPENING_HOURS).length - 1 &&
+                            styles.openingHoursRowLast,
+                        ]}
+                      >
+                        <Text style={styles.openingDay} numberOfLines={1}>
+                          {h.day}
+                        </Text>
+                        <TextInput
+                          style={styles.openingTimeInput}
+                          value={h.open}
+                          onChangeText={v => updateOpeningHour(idx, { open: v })}
+                          placeholder="Open"
+                          placeholderTextColor="#999"
+                          autoCapitalize="none"
+                        />
+                        <TextInput
+                          style={styles.openingTimeInput}
+                          value={h.close}
+                          onChangeText={v => updateOpeningHour(idx, { close: v })}
+                          placeholder="Close"
+                          placeholderTextColor="#999"
+                          autoCapitalize="none"
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
             </ScrollView>
             <TouchableOpacity
               style={[
@@ -3071,6 +3150,39 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginTop: 4,
+  },
+  openingHoursCard: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+  },
+  openingHoursRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  openingHoursRowLast: {
+    marginBottom: 0,
+  },
+  openingDay: {
+    width: 92,
+    minWidth: 92,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#333',
+  },
+  openingTimeInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#333',
+    backgroundColor: '#fff',
   },
   socialLinkRow: {
     flexDirection: 'row',

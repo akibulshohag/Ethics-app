@@ -667,6 +667,60 @@ const UserViewsScreen = ({ navigation }) => {
         subscribeLoading={profileSubscribeLoading}
       />
 
+      {/* Social icons row (dynamic from profile.socialLinks) */}
+      <View style={styles.profileSocialRow}>
+        {(() => {
+          const raw = profile?.socialLinks;
+          const links = Array.isArray(raw)
+            ? raw
+            : raw && typeof raw === 'object'
+            ? [raw]
+            : [];
+          const normalized = links.map(l => ({
+            type: String(l?.type || 'others').toLowerCase(),
+            url: String(l?.url || '').trim(),
+          }));
+
+          // Match screenshot: 7 fixed icons (always visible)
+          const iconOrder = [
+            { type: 'instagram' },
+            { type: 'facebook' },
+            { type: 'x' },
+            { type: 'tiktok' },
+            { type: 'youtube' },
+            { type: 'google', icon: 'google' },
+            { type: 'website', icon: 'web' },
+          ];
+
+          return iconOrder.map(({ type, icon }) => {
+            const match = normalized.find(l => l.type === type && l.url);
+            const url = match?.url || '';
+            const disabled = !url;
+            return (
+              <TouchableOpacity
+                key={type}
+                style={[
+                  styles.profileSocialBtn,
+                  disabled && styles.profileSocialBtnDisabled,
+                ]}
+                disabled={disabled}
+                onPress={() => {
+                  if (!url) return;
+                  Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                }}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons
+                  name={icon || getSocialIcon(type)}
+                  size={20}
+                  color={disabled ? '#BDBDBD' : '#111'}
+                />
+              </TouchableOpacity>
+            );
+          });
+        })()}
+      </View>
+
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         {TABS.map(tab => {
@@ -745,6 +799,7 @@ const UserViewsScreen = ({ navigation }) => {
         Number.isFinite(Number(lat)) &&
         Number.isFinite(Number(lng));
 
+      const isOwnerProfile = String(profile?.role || '').toLowerCase() === 'owner';
       const openingHours =
         Array.isArray(profile?.openingHours) && profile.openingHours.length
           ? profile.openingHours
@@ -822,31 +877,33 @@ const UserViewsScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <View style={styles.homeSection}>
-            <Text style={styles.homeSectionTitle}>Opening Hours :</Text>
-            <View style={styles.hoursHeaderRow}>
-              <Text style={[styles.hoursHeaderText, { flex: 1 }]}>Days</Text>
-              <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
-                Opening Time
-              </Text>
-              <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
-                Close Time
-              </Text>
-            </View>
-            {(openingHours || []).map((h, idx) => (
-              <View key={`${h.day || idx}-${idx}`} style={styles.hoursRow}>
-                <Text style={[styles.hoursCellDay, { flex: 1 }]} numberOfLines={1}>
-                  {h.day || '—'}
+          {isOwnerProfile ? (
+            <View style={styles.homeSection}>
+              <Text style={styles.homeSectionTitle}>Opening Hours :</Text>
+              <View style={styles.hoursHeaderRow}>
+                <Text style={[styles.hoursHeaderText, { flex: 1 }]}>Days</Text>
+                <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
+                  Opening Time
                 </Text>
-                <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
-                  {h.open || h.opening || h.start || '—'}
-                </Text>
-                <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
-                  {h.close || h.closing || h.end || '—'}
+                <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
+                  Close Time
                 </Text>
               </View>
-            ))}
-          </View>
+              {(openingHours || []).map((h, idx) => (
+                <View key={`${h.day || idx}-${idx}`} style={styles.hoursRow}>
+                  <Text style={[styles.hoursCellDay, { flex: 1 }]} numberOfLines={1}>
+                    {h.day || '—'}
+                  </Text>
+                  <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
+                    {h.open || h.opening || h.start || '—'}
+                  </Text>
+                  <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
+                    {h.close || h.closing || h.end || '—'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       );
     }
@@ -1376,6 +1433,28 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     paddingBottom: 0,
+  },
+  profileSocialRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  profileSocialBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  profileSocialBtnDisabled: {
+    backgroundColor: '#FAFAFA',
+    borderColor: '#F0F0F0',
   },
   topNavigation: {
     flexDirection: 'row',
