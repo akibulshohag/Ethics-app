@@ -56,7 +56,7 @@ const HomeFiveScreen = ({ onHomePress }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#F5A623" />
-      
+
       <View style={styles.content}>
         {/* Top Message */}
         <Text style={styles.successText}>Order successfully placed</Text>
@@ -80,20 +80,20 @@ const HomeFiveScreen = ({ onHomePress }) => {
 
         {/* Rating Section */}
         <View style={styles.ratingSection}>
-          <Text style={styles.rateText}>Help us and rate</Text>
+          <Text style={styles.rateText}>Rate our App</Text>
           <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((star) => (
+            {[1, 2, 3, 4, 5].map(star => (
               <TouchableOpacity
                 key={star}
                 onPress={() => setRating(star)}
                 disabled={submitting}
                 activeOpacity={0.8}
               >
-                <Icon 
-                  name={star <= rating ? 'star' : 'star-outline'} 
-                  size={45} 
-                  color="#FFF" 
-                  style={styles.starIcon} 
+                <Icon
+                  name={star <= rating ? 'star' : 'star-outline'}
+                  size={45}
+                  color="#FFF"
+                  style={styles.starIcon}
                 />
               </TouchableOpacity>
             ))}
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     textDecorationLine: 'underline',
-  }
+  },
 });
 
 export default HomeFiveScreen;

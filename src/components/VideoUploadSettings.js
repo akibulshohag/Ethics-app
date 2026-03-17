@@ -314,7 +314,7 @@ const VideoUploadSettings = ({
               <TextInput
                 style={styles.textInput}
                 placeholder="Your title here..."
-                placeholderTextColor="#999"
+                placeholderTextColor="#ffffff"
                 value={title}
                 onChangeText={setTitle}
                 multiline
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   textInputContainer: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#F7BB5B',
     borderRadius: 20,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     fontSize: 16,
-    color: '#333',
+    color: '#ffffff',
     textAlignVertical: 'top',
   },
   settingsList: {

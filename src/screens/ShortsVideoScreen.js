@@ -1231,7 +1231,7 @@ const styles = StyleSheet.create({
   },
   videoFooter: {
     paddingVertical: 8,
-    paddingBottom: 52,
+    paddingBottom: 22,
   },
   videoUser: {
     color: '#FFF',
@@ -1279,6 +1279,7 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 13,
     marginLeft: 5,
+    marginRight: 10,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 6,
@@ -1375,13 +1376,14 @@ const styles = StyleSheet.create({
   subsSubText: { color: '#777', fontSize: 12, marginTop: 2 },
   resOrderBtn: {
     backgroundColor: '#F5A623',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderRadius: 8,
   },
   resOrderText: {
     color: '#FFF',
     fontWeight: 'bold',
+    fontSize: 12,
   },
   reportOverlay: {
     flex: 1,

@@ -1486,19 +1486,40 @@ const styles = StyleSheet.create({
   messageContainer: { flexDirection: 'row', alignItems: 'center' },
   messageLabel: { fontSize: 13, color: '#666', marginRight: 8 },
 
-  profileWrapper: { marginHorizontal: 16, marginTop: 4 },
+  profileWrapper: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    backgroundColor: '#F1F1F1',
+    borderRadius: 32,
+    overflow: 'hidden',
+  },
   darkHeader: {
     backgroundColor: '#34495E',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingTop: 24,
     paddingBottom: 20,
     alignItems: 'center',
   },
-  brandingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  // brandingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+
+  brandingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', // Pushes logos to ends and keeps avatar in middle
+    width: '100%',
+    paddingHorizontal: 30, // Adjust this to move logos closer/further from edges
+    marginBottom: 8,
+  },
   eatText: { color: '#FFF', fontSize: 44, fontWeight: 'bold', marginRight: 20 },
   ixText: { color: '#FFF', fontSize: 44, fontWeight: 'bold', marginLeft: 20 },
-  avatarContainer: { position: 'relative' },
+  // avatarContainer: { position: 'relative' },
+  avatarContainer: {
+    width: 80, // Matches width of headerLogoContainer for perfect centering
+    alignItems: 'flex-start',
+  },
   avatarImage: {
     width: 92,
     height: 92,
@@ -1576,7 +1597,7 @@ const styles = StyleSheet.create({
   },
   promoButton: {
     width: '48.5%',
-    paddingVertical: 14,
+    paddingVertical: 9,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 10,
@@ -1584,7 +1605,8 @@ const styles = StyleSheet.create({
   promoButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
   promoButtonSubText: {
     color: 'rgba(255,255,255,0.9)',
-    fontSize: 12,
+    fontSize: 18,
+    fontWeight: '600',
     marginTop: 4,
   },
 
@@ -1597,7 +1619,8 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 85,
     height: 30,
-    marginRight: 10,
+    // marginRight: 15,
+    marginLeft: -8,
     marginTop: -30,
   },
   logoImageIx: {
@@ -1608,6 +1631,18 @@ const styles = StyleSheet.create({
   },
 
   brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: -10 },
+  avatarImage: {
+    width: 95,
+    height: 95,
+    borderRadius: 47.5,
+    borderWidth: 2,
+    borderColor: '#000', // Darker border like the screenshot
+  },
+  avatarBorder: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   editModalOverlay: { flex: 1, justifyContent: 'flex-end' },
   editModalBackdrop: {

@@ -314,7 +314,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     <Text style={styles.btnText}>Sign Up</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.actionBtn]}
+                    style={[styles.actionBtnLogin]}
                     onPress={handleLogin}
                     disabled={loading}
                   >
@@ -391,8 +391,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F7C16F',
     borderRadius: 8,
-    height: 52,
-    paddingHorizontal: 15,
+    height: 42,
+    paddingHorizontal: 10,
     marginBottom: 20,
   },
   inputIcon: { marginRight: 10 },
@@ -409,6 +409,15 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between' },
   actionBtn: {
     backgroundColor: '#F5A623',
+    width: '40%',
+    height: 43,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  actionBtnLogin: {
+    backgroundColor: '#32373D',
     width: '40%',
     height: 43,
     borderRadius: 10,
