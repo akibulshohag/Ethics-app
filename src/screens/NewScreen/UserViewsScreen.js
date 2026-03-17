@@ -82,6 +82,16 @@ const MOCK_PLAYLISTS = [
   },
 ];
 
+const DEFAULT_OPENING_HOURS = [
+  { day: 'Sunday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Monday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Tuesday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Wednesday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Thursday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Friday', open: '12.00PM', close: '12.00PM' },
+  { day: 'Saturday', open: '12.00PM', close: '12.00PM' },
+];
+
 const formatCount = n => {
   const num = Number(n || 0);
   if (!Number.isFinite(num) || num <= 0) return '0';
@@ -695,7 +705,7 @@ const UserViewsScreen = ({ navigation }) => {
   const getListData = () => {
     switch (activeTab) {
       case 'Home':
-        return videos;
+        return [{ id: 'home' }];
       case 'Posts':
         return posts;
       case 'Gallery':
@@ -710,13 +720,136 @@ const UserViewsScreen = ({ navigation }) => {
   };
 
   const renderContentItem = ({ item }) => {
-    if (activeTab === 'Home')
+    if (activeTab === 'Home') {
+      const about =
+        profile?.channelAbout ||
+        profile?.about ||
+        profile?.bio ||
+        '—';
+      const phone =
+        profile?.phone ||
+        profile?.phoneNumber ||
+        profile?.mobile ||
+        profile?.contactPhone ||
+        '—';
+      const email =
+        profile?.email ||
+        profile?.contactEmail ||
+        '—';
+      const address = profile?.address || '—';
+      const lat = profile?.latitude;
+      const lng = profile?.longitude;
+      const hasCoords =
+        lat != null &&
+        lng != null &&
+        Number.isFinite(Number(lat)) &&
+        Number.isFinite(Number(lng));
+
+      const openingHours =
+        Array.isArray(profile?.openingHours) && profile.openingHours.length
+          ? profile.openingHours
+          : DEFAULT_OPENING_HOURS;
+
       return (
-        <VideoCard
-          video={item}
-          onPress={() => openVideoModal(item.id)}
-        />
+        <View style={styles.homeDetailsWrap}>
+          <View style={styles.homeSection}>
+            <Text style={styles.homeSectionTitle}>About</Text>
+            <Text style={styles.homeSectionText}>{about}</Text>
+          </View>
+
+          <View style={styles.homeSection}>
+            <Text style={styles.homeSectionTitle}>Contact :</Text>
+            <TouchableOpacity
+              disabled={!phone || phone === '—'}
+              onPress={() => {
+                if (!phone || phone === '—') return;
+                Linking.openURL(`tel:${String(phone).replace(/\s/g, '')}`);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.homeSectionText, styles.linkText]}>
+                + {String(phone)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              disabled={!email || email === '—'}
+              onPress={() => {
+                if (!email || email === '—') return;
+                Linking.openURL(`mailto:${String(email).trim()}`);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.homeSectionText, styles.linkText]}>
+                {String(email)}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.homeSectionText}>Address : {String(address)}</Text>
+          </View>
+
+          <View style={styles.homeSection}>
+            <View style={styles.mapCard}>
+              <Text style={styles.mapTitle}>Location</Text>
+              <View style={styles.mapPlaceholder}>
+                <MaterialCommunityIcons
+                  name="map-marker-radius-outline"
+                  size={24}
+                  color="#FFAD33"
+                />
+                <Text style={styles.mapText} numberOfLines={2}>
+                  {hasCoords
+                    ? `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`
+                    : 'Location not available'}
+                </Text>
+              </View>
+              {hasCoords ? (
+                <TouchableOpacity
+                  style={styles.mapOpenBtn}
+                  onPress={() =>
+                    Linking.openURL(
+                      `https://www.google.com/maps?q=${Number(lat)},${Number(lng)}`,
+                    )
+                  }
+                  activeOpacity={0.85}
+                >
+                  <MaterialCommunityIcons
+                    name="map-outline"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.mapOpenText}>Open in Maps</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.homeSection}>
+            <Text style={styles.homeSectionTitle}>Opening Hours :</Text>
+            <View style={styles.hoursHeaderRow}>
+              <Text style={[styles.hoursHeaderText, { flex: 1 }]}>Days</Text>
+              <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
+                Opening Time
+              </Text>
+              <Text style={[styles.hoursHeaderText, { width: 90, textAlign: 'right' }]}>
+                Close Time
+              </Text>
+            </View>
+            {(openingHours || []).map((h, idx) => (
+              <View key={`${h.day || idx}-${idx}`} style={styles.hoursRow}>
+                <Text style={[styles.hoursCellDay, { flex: 1 }]} numberOfLines={1}>
+                  {h.day || '—'}
+                </Text>
+                <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
+                  {h.open || h.opening || h.start || '—'}
+                </Text>
+                <Text style={[styles.hoursCell, { width: 90, textAlign: 'right' }]} numberOfLines={1}>
+                  {h.close || h.closing || h.end || '—'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
       );
+    }
     if (activeTab === 'Posts')
       return (
         <BusinessVideoCard
@@ -1149,6 +1282,97 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+  },
+  homeDetailsWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  homeSection: {
+    marginBottom: 18,
+  },
+  homeSectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111',
+    marginBottom: 8,
+  },
+  homeSectionText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#666',
+    marginBottom: 6,
+  },
+  linkText: {
+    color: '#FF7F0B',
+    fontWeight: '700',
+  },
+  mapCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#eee',
+    padding: 12,
+  },
+  mapTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111',
+    marginBottom: 10,
+  },
+  mapPlaceholder: {
+    height: 130,
+    borderRadius: 10,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FFE6CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  mapText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  mapOpenBtn: {
+    marginTop: 10,
+    backgroundColor: '#FFAD33',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  mapOpenText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  hoursHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  hoursHeaderText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#111',
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  hoursCellDay: {
+    fontSize: 12,
+    color: '#777',
+  },
+  hoursCell: {
+    fontSize: 12,
+    color: '#777',
   },
   headerContainer: {
     paddingBottom: 0,
