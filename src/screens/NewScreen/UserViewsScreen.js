@@ -23,7 +23,7 @@ import VideoCard from '../../components/VideoCard';
 import CompactVideoCard from '../../components/CompactVideoCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
 import PromotionCard from '../../components/PromotionCard';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { safeImageUri } from '../../utils/helper';
 import Video from 'react-native-video';
@@ -686,6 +686,15 @@ const UserViewsScreen = ({ navigation }) => {
     loadVideos();
   }, [profileUserId, loadProfile, loadVideos]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (route.params?.focusVideosTab) {
+        setActiveTab('Videos');
+        navigation.setParams({ focusVideosTab: undefined });
+      }
+    }, [route.params?.focusVideosTab, navigation]),
+  );
+
   useEffect(() => {
     if (!profileUserId) return;
     if (activeTab === 'Posts') loadPosts();
@@ -1041,10 +1050,14 @@ const UserViewsScreen = ({ navigation }) => {
         <CompactVideoCard
           video={item}
           onPress={() =>
-            navigateToHomeOneLibraryDetail(navigation, {
-              id: item.id,
-              type: 'video',
-            })
+            navigateToHomeOneLibraryDetail(
+              navigation,
+              { id: item.id, type: 'video' },
+              {
+                returnTo: 'user_views',
+                returnUserId: profileUserId,
+              },
+            )
           }
         />
       );

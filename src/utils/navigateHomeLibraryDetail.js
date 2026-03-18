@@ -1,7 +1,6 @@
 /**
- * Opens the same full video/short detail as Home feed (renderRestaurantDetail on HomeOneScreen).
- * - Library stack: walk up to bottom tabs, then Home1 → HomeOneScreen.
- * - Root stack (UserViewsScreen, etc.): Root (tab container) → Home1 → HomeOneScreen.
+ * Opens HomeOneScreen full video detail. Pass returnContext so Back returns to the right place.
+ * returnContext: { returnTo: 'watch_later'|'liked'|'favorites'|'library'|'user_views', returnUserId?: string }
  */
 function findTabNavigation(navigation) {
   let parent = navigation?.getParent?.();
@@ -15,7 +14,6 @@ function findTabNavigation(navigation) {
   return null;
 }
 
-/** Find a navigator that can reach the main tab app (screen name "Root" in RootStack). */
 function findNavigatorWithRootRoute(navigation) {
   let nav = navigation;
   for (let i = 0; i < 8 && nav; i++) {
@@ -28,16 +26,23 @@ function findNavigatorWithRootRoute(navigation) {
   return null;
 }
 
-export function navigateToHomeOneLibraryDetail(navigation, item) {
+export function navigateToHomeOneLibraryDetail(navigation, item, returnContext) {
   const id = item?.id;
   if (!id) return;
   const contentType = item?.type === 'short' ? 'short' : 'video';
-  const detailParams = {
-    openLibraryDetail: { contentType, contentId: String(id) },
+  const openLibraryDetail = {
+    contentType,
+    contentId: String(id),
   };
+  if (returnContext?.returnTo) {
+    openLibraryDetail.returnTo = returnContext.returnTo;
+  }
+  if (returnContext?.returnUserId != null && returnContext.returnUserId !== '') {
+    openLibraryDetail.returnUserId = String(returnContext.returnUserId);
+  }
   const homeOneParams = {
     screen: 'HomeOneScreen',
-    params: detailParams,
+    params: { openLibraryDetail },
   };
 
   const tabNav = findTabNavigation(navigation);

@@ -533,7 +533,7 @@ const LibraryScreen = ({ navigation }) => {
         });
         return;
       }
-      navigateToHomeOneLibraryDetail(navigation, item);
+      navigateToHomeOneLibraryDetail(navigation, item, { returnTo: 'library' });
     },
     [navigation],
   );

@@ -128,7 +128,7 @@ const LikedScreen = ({ navigation }) => {
 
   const handleItemPress = useCallback(
     item => {
-      navigateToHomeOneLibraryDetail(navigation, item);
+      navigateToHomeOneLibraryDetail(navigation, item, { returnTo: 'liked' });
     },
     [navigation],
   );

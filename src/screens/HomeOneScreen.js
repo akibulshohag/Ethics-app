@@ -16,6 +16,7 @@ import {
   Modal,
   FlatList,
   Share,
+  BackHandler,
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -182,6 +183,8 @@ const HomeOneScreen = () => {
   const [morePlaylistVisible, setMorePlaylistVisible] = useState(false);
   const [morePlaylistType, setMorePlaylistType] = useState('short');
   const [morePlaylistId, setMorePlaylistId] = useState(null);
+  /** When opening video from Library / UserViews Videos, Back returns there */
+  const libraryDetailReturnRef = useRef(null);
 
   const galleryUserId = selectedItem?.userId || selectedItem?.user?.id;
 
@@ -276,12 +279,75 @@ const HomeOneScreen = () => {
     setShowGalleryModal(false);
   }, []);
 
+  const handleRestaurantDetailBack = useCallback(() => {
+    setVideoPaused(true);
+    const t = libraryDetailReturnRef.current;
+    libraryDetailReturnRef.current = null;
+    setIsRestaurantDetail(false);
+    if (!t?.returnTo) return;
+
+    if (t.returnTo === 'user_views' && t.returnUserId) {
+      let nav = navigation;
+      for (let i = 0; i < 16 && nav; i++) {
+        const names = nav.getState?.()?.routeNames;
+        if (
+          Array.isArray(names) &&
+          names.includes('UserViewsScreen') &&
+          names.includes('Root')
+        ) {
+          nav.navigate('UserViewsScreen', {
+            userId: t.returnUserId,
+            focusVideosTab: true,
+          });
+          return;
+        }
+        nav = nav.getParent?.();
+      }
+      return;
+    }
+
+    const libraryScreens = {
+      watch_later: 'WatchLaterScreen',
+      liked: 'LikedScreen',
+      favorites: 'FavoritesScreen',
+      library: 'LibraryScreen',
+    };
+    const libScreen = libraryScreens[t.returnTo];
+    if (!libScreen) return;
+    let nav = navigation;
+    for (let i = 0; i < 14 && nav; i++) {
+      const names = nav.getState?.()?.routeNames;
+      if (Array.isArray(names) && names.includes('Library')) {
+        nav.navigate('Library', { screen: libScreen });
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+  }, [navigation]);
+
+  useEffect(() => {
+    if (!isRestaurantDetail) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleRestaurantDetailBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isRestaurantDetail, handleRestaurantDetailBack]);
+
   useFocusEffect(
     React.useCallback(() => {
       const stopPlaybackOnBlur = () => setVideoPaused(true);
       const params = route.params || {};
       const lib = params.openLibraryDetail;
       if (lib?.contentId && (lib.contentType === 'video' || lib.contentType === 'short')) {
+        if (lib.returnTo) {
+          libraryDetailReturnRef.current = {
+            returnTo: lib.returnTo,
+            returnUserId: lib.returnUserId,
+          };
+        } else {
+          libraryDetailReturnRef.current = null;
+        }
         navigation.setParams({ openLibraryDetail: undefined });
         setVideoPaused(true);
         setVideoError(null);
@@ -322,6 +388,7 @@ const HomeOneScreen = () => {
       const showRestaurant = params.showRestaurantDetail;
       const restaurantItem = params.restaurantItem;
       if (showRestaurant && restaurantItem) {
+        libraryDetailReturnRef.current = null;
         setSelectedItem(restaurantItem);
         setIsRestaurantDetail(true);
         navigation.setParams({
@@ -1507,7 +1574,7 @@ const HomeOneScreen = () => {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.resHeader}>
           <TouchableOpacity
-            onPress={() => setIsRestaurantDetail(false)}
+            onPress={handleRestaurantDetailBack}
             style={styles.resBackBtn}
           >
             <Icon name="chevron-left" size={20} color="#FFF" />

@@ -51,7 +51,9 @@ const WatchLaterScreen = ({ navigation }) => {
 
   const handleItemPress = useCallback(
     item => {
-      navigateToHomeOneLibraryDetail(navigation, item);
+      navigateToHomeOneLibraryDetail(navigation, item, {
+        returnTo: 'watch_later',
+      });
     },
     [navigation],
   );
