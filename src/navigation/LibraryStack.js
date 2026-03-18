@@ -13,6 +13,7 @@ import UploadVideoScreen from '../screens/UploadVideoScreen';
 import LikedScreen from '../screens/LikedScreen';
 import WatchLaterScreen from '../screens/WatchLaterScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import CustomPlaylistScreen from '../screens/CustomPlaylistScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import GeneralSettingsScreen from '../screens/GeneralSettingsScreen';
 import DataSavingScreen from '../screens/DataSavingScreen';
@@ -67,6 +68,15 @@ const LibraryNavigation = () => {
       <LibraryStack.Screen name="LikedScreen" component={LikedScreen} />
       <LibraryStack.Screen name="WatchLaterScreen" component={WatchLaterScreen} />
       <LibraryStack.Screen name="FavoritesScreen" component={FavoritesScreen} />
+      <LibraryStack.Screen
+        name="CustomPlaylistScreen"
+        component={CustomPlaylistScreen}
+        getId={({ params }) =>
+          params?.playlistId != null
+            ? String(params.playlistId)
+            : 'custom-pl-none'
+        }
+      />
       <LibraryStack.Screen name="SettingsScreen" component={SettingsScreen} />
       <LibraryStack.Screen
         name="GeneralSettingsScreen"

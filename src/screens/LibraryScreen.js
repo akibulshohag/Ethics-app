@@ -38,7 +38,12 @@ import {
   toggleDislike as toggleVideoDislike,
   recordShare as recordVideoShare,
 } from '../services/videoService';
-import { getWatchLater, getFavorites } from '../services/playlistService';
+import {
+  getWatchLater,
+  getFavorites,
+  listCustomPlaylists,
+  createCustomPlaylist,
+} from '../services/playlistService';
 import {
   getChannelProfile,
   subscribeToChannel,
@@ -192,7 +197,10 @@ const LibraryScreen = ({ navigation }) => {
   const { user: currentUser } = useSelector(state => state.app) || {};
   const [currentView, setCurrentView] = useState('library');
   const [modalVisible, setModalVisible] = useState(false);
-  const [playlistTitle, setPlaylistTitle] = useState('Best Songs All The Time');
+  const [playlistTitle, setPlaylistTitle] = useState('');
+  const [customPlaylists, setCustomPlaylists] = useState([]);
+  const [customPlaylistsLoading, setCustomPlaylistsLoading] = useState(false);
+  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [userVideos, setUserVideos] = useState([]);
   const [userShorts, setUserShorts] = useState([]);
   const [yourVideosLoading, setYourVideosLoading] = useState(false);
@@ -621,6 +629,28 @@ const LibraryScreen = ({ navigation }) => {
     }
   }, [currentView, currentUser?.id, loadPlaylistCounts]);
 
+  const loadCustomPlaylists = useCallback(async () => {
+    if (!currentUser?.id) {
+      setCustomPlaylists([]);
+      return;
+    }
+    setCustomPlaylistsLoading(true);
+    try {
+      const list = await listCustomPlaylists(currentUser.id);
+      setCustomPlaylists(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setCustomPlaylists([]);
+    } finally {
+      setCustomPlaylistsLoading(false);
+    }
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (currentView === 'library' && currentUser?.id) {
+      loadCustomPlaylists();
+    }
+  }, [currentView, currentUser?.id, loadCustomPlaylists]);
+
   const renderHeader = () => {
     const isLibrary = currentView === 'library';
     let title = 'Library';
@@ -721,6 +751,8 @@ const LibraryScreen = ({ navigation }) => {
                 <Text style={styles.inputLabel}>Playlist Title</Text>
                 <TextInput
                   style={styles.modalInput}
+                  placeholder="My playlist"
+                  placeholderTextColor="#999"
                   value={playlistTitle}
                   onChangeText={setPlaylistTitle}
                 />
@@ -751,10 +783,42 @@ const LibraryScreen = ({ navigation }) => {
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.createButton}
-                  onPress={() => setModalVisible(false)}
+                  style={[
+                    styles.createButton,
+                    creatingPlaylist && { opacity: 0.7 },
+                  ]}
+                  disabled={creatingPlaylist}
+                  onPress={async () => {
+                    if (requireLogin()) return;
+                    const name = (playlistTitle || '').trim() || 'My playlist';
+                    setCreatingPlaylist(true);
+                    try {
+                      const res = await createCustomPlaylist(name);
+                      setModalVisible(false);
+                      setPlaylistTitle('');
+                      await loadCustomPlaylists();
+                      await loadPlaylistCounts();
+                      navigation.navigate('CustomPlaylistScreen', {
+                        playlistId: res.id,
+                        title: res.name,
+                      });
+                    } catch (e) {
+                      Alert.alert(
+                        'Could not create playlist',
+                        e?.response?.data?.message ||
+                          e?.message ||
+                          'Try again.',
+                      );
+                    } finally {
+                      setCreatingPlaylist(false);
+                    }
+                  }}
                 >
-                  <Text style={styles.createButtonText}>Create</Text>
+                  {creatingPlaylist ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.createButtonText}>Create</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -1415,7 +1479,11 @@ const LibraryScreen = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.playlistItem}
-          onPress={() => setModalVisible(true)}
+          onPress={() => {
+            if (requireLogin()) return;
+            setPlaylistTitle('');
+            setModalVisible(true);
+          }}
         >
           <View style={styles.menuIconContainer}>
             <MaterialCommunityIcons name="plus" size={28} color="#F97507" />
@@ -1477,6 +1545,42 @@ const LibraryScreen = ({ navigation }) => {
             </Text>
           </View>
         </TouchableOpacity>
+
+        {customPlaylistsLoading ? (
+          <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+            <ActivityIndicator color="#F97507" />
+          </View>
+        ) : (
+          customPlaylists.map(pl => (
+            <TouchableOpacity
+              key={pl.id}
+              style={styles.playlistItem}
+              onPress={() =>
+                navigation.navigate('CustomPlaylistScreen', {
+                  playlistId: pl.id,
+                  title: pl.name,
+                })
+              }
+            >
+              <View style={styles.menuIconContainer}>
+                <MaterialCommunityIcons
+                  name="playlist-play"
+                  size={24}
+                  color="#F97507"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.menuText} numberOfLines={2}>
+                  {pl.name}
+                </Text>
+                <Text style={styles.subText}>
+                  {pl.itemCount ?? 0} video
+                  {(pl.itemCount ?? 0) !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
 
         {currentUser?.id ? (
           <>

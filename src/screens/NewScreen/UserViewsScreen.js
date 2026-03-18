@@ -51,37 +51,14 @@ import CommentsModal from '../../components/CommentsModal';
 import SaveModal from '../../components/SaveModal';
 import { getSocialIcon } from '../../constants/socialLinks';
 import { navigateToHomeOneLibraryDetail } from '../../utils/navigateHomeLibraryDetail';
+import { listCustomPlaylists } from '../../services/playlistService';
 
 const { width } = Dimensions.get('window');
 
 const TABS = ['Home', 'Posts', 'Gallery', 'Videos', 'Playlists'];
 
-const MOCK_PLAYLISTS = [
-  {
-    id: '1',
-    title: 'Dance Competition 2022',
-    price: 'World of Music\n\n120 videos', // Repurposing price field for multi-line subtitle as seen in image
-    image:
-      'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '120',
-  },
-  {
-    id: '2',
-    title: 'Top Music of All Time',
-    price: 'World of Music\n\n250 videos',
-    image:
-      'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '250',
-  },
-  {
-    id: '3',
-    title: 'Most Listened Songin Century',
-    price: 'World of Music\n\n300 videos',
-    image:
-      'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '300',
-  },
-];
+const PLAYLIST_PLACEHOLDER =
+  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80';
 
 const DEFAULT_OPENING_HOURS = [
   { day: 'Sunday', open: '12.00PM', close: '12.00PM' },
@@ -235,6 +212,9 @@ const UserViewsScreen = ({ navigation }) => {
 
   const [rawVideos, setRawVideos] = useState([]);
   const [videosLoading, setVideosLoading] = useState(false);
+
+  const [channelPlaylists, setChannelPlaylists] = useState([]);
+  const [playlistsLoading, setPlaylistsLoading] = useState(false);
 
   const [rawPosts, setRawPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -679,12 +659,54 @@ const UserViewsScreen = ({ navigation }) => {
     }
   }, [profileUserId]);
 
+  const loadPlaylists = useCallback(async () => {
+    if (!profileUserId) return;
+    setPlaylistsLoading(true);
+    try {
+      const rows = await listCustomPlaylists(profileUserId);
+      const ch =
+        profile?.channelName ||
+        profile?.nickname ||
+        profile?.name ||
+        'Channel';
+      const cover = safeImageUri(
+        profile?.channelAvatar ||
+          profile?.photos?.[0]?.src ||
+          profile?.photos?.[0],
+        PLAYLIST_PLACEHOLDER,
+      );
+      setChannelPlaylists(
+        (rows || []).map(p => ({
+          id: p.id,
+          title: p.name,
+          playlistName: p.name,
+          price: `${ch}\n\n${p.itemCount ?? 0} videos`,
+          image: cover,
+          views: String(p.itemCount ?? 0),
+        })),
+      );
+    } catch {
+      setChannelPlaylists([]);
+    } finally {
+      setPlaylistsLoading(false);
+    }
+  }, [profileUserId, profile]);
+
   useEffect(() => {
     if (!profileUserId) return;
     loadProfile();
     // Load Home tab data right away
     loadVideos();
   }, [profileUserId, loadProfile, loadVideos]);
+
+  useEffect(() => {
+    if (!profileUserId) {
+      setChannelPlaylists([]);
+      return;
+    }
+    if (activeTab !== 'Playlists') return;
+    loadPlaylists();
+  }, [activeTab, profileUserId, loadPlaylists]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -849,7 +871,7 @@ const UserViewsScreen = ({ navigation }) => {
       case 'Videos':
         return videos;
       case 'Playlists':
-        return MOCK_PLAYLISTS;
+        return playlistsLoading ? [] : channelPlaylists;
       default:
         return [];
     }
@@ -1064,8 +1086,15 @@ const UserViewsScreen = ({ navigation }) => {
     if (activeTab === 'Playlists')
       return (
         <View style={{ position: 'relative' }}>
-          <PromotionCard item={item} />
-          {/* Inject dots menu over the promotion card right side since promotion card doesn't have it natively */}
+          <PromotionCard
+            item={item}
+            onPress={() =>
+              navigation.navigate('CustomPlaylistScreen', {
+                playlistId: item.id,
+                title: item.playlistName || item.title,
+              })
+            }
+          />
           <TouchableOpacity
             style={{ position: 'absolute', top: 12, right: 16, padding: 4 }}
           >
@@ -1108,12 +1137,20 @@ const UserViewsScreen = ({ navigation }) => {
             (activeTab === 'Home' && videosLoading) ||
             (activeTab === 'Videos' && videosLoading) ||
             (activeTab === 'Posts' && postsLoading) ||
-            (activeTab === 'Gallery' && galleryLoading);
+            (activeTab === 'Gallery' && galleryLoading) ||
+            (activeTab === 'Playlists' && playlistsLoading);
           if (loading) {
             return (
               <View style={styles.loadingWrap}>
                 <ActivityIndicator size="large" color="#FFAD33" />
                 <Text style={styles.loadingText}>Loading...</Text>
+              </View>
+            );
+          }
+          if (activeTab === 'Playlists') {
+            return (
+              <View style={styles.loadingWrap}>
+                <Text style={styles.loadingText}>No playlists yet</Text>
               </View>
             );
           }

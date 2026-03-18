@@ -59,6 +59,12 @@ export const uploadVideo = async videoData => {
   if (videoData.height !== undefined && !isNaN(videoData.height) && videoData.height > 0) {
     formData.append('height', String(Math.floor(Number(videoData.height))));
   }
+  if (videoData.scheduledPublishAt) {
+    formData.append('scheduledPublishAt', String(videoData.scheduledPublishAt));
+  }
+  if (videoData.customPlaylistId) {
+    formData.append('customPlaylistId', String(videoData.customPlaylistId));
+  }
 
   const headers = getAuthHeaders();
   try {
@@ -307,6 +313,7 @@ export const getUserVideos = async (userId, page = 1, limit = 20) => {
   try {
     const response = await axios.get(`${API_URL}/user/${userId}`, {
       params: { page, limit },
+      headers: { ...getAuthHeaders() },
     });
     return response.data;
   } catch (error) {

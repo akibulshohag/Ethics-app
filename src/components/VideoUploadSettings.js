@@ -12,6 +12,7 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -23,7 +24,12 @@ import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
 import VideoDescriptionModal from './VideoDescriptionModal';
 import LocationSearchModal from './LocationSearchModal';
+import VideoScheduleModal from './VideoScheduleModal';
 import { uploadVideo } from '../services/videoService';
+import {
+  listCustomPlaylists,
+  setCustomPlaylistItem,
+} from '../services/playlistService';
 
 const { width } = Dimensions.get('window');
 
@@ -45,6 +51,14 @@ const VideoUploadSettings = ({
   const [audienceModalVisible, setAudienceModalVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  /** null = publish immediately; Date = go live at start of that local calendar day */
+  const [scheduledPublishDate, setScheduledPublishDate] = useState(null);
+
+  const [playlistModalVisible, setPlaylistModalVisible] = useState(false);
+  const [userPlaylists, setUserPlaylists] = useState([]);
+  const [playlistsLoadError, setPlaylistsLoadError] = useState(false);
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState([]);
 
   // Values State
   const [description, setDescription] = useState('');
@@ -67,6 +81,9 @@ const VideoUploadSettings = ({
       setSelectedThumbnail(null);
       setVisibility('public');
       setUploadProgress(0);
+      setScheduledPublishDate(null);
+      setSelectedPlaylistIds([]);
+      setUserPlaylists([]);
     } else if (visible && !userId) {
       // If modal opens without userId, show error and close
       Alert.alert(
@@ -82,6 +99,17 @@ const VideoUploadSettings = ({
     } else if (selectedVideo && visible) {
       // When modal opens with a video, try to extract thumbnail from video
       // For now, we'll let user pick thumbnail manually
+    }
+    if (visible && userId) {
+      listCustomPlaylists(userId)
+        .then(rows => {
+          setUserPlaylists(Array.isArray(rows) ? rows : []);
+          setPlaylistsLoadError(false);
+        })
+        .catch(() => {
+          setUserPlaylists([]);
+          setPlaylistsLoadError(true);
+        });
     }
   }, [visible, selectedVideo, userId]);
 
@@ -164,6 +192,15 @@ const VideoUploadSettings = ({
         },
       };
 
+      const scheduleMs =
+        scheduledPublishDate instanceof Date
+          ? scheduledPublishDate.getTime()
+          : 0;
+      if (scheduleMs > Date.now() + 60_000) {
+        videoData.scheduledPublishAt =
+          scheduledPublishDate.toISOString();
+      }
+
       console.log('Uploading video:', videoData);
 
       // Upload video
@@ -171,7 +208,35 @@ const VideoUploadSettings = ({
 
       console.log('Upload successful:', result);
 
-      Alert.alert('Success', 'Video uploaded successfully!', [
+      const videoId = result?.id || result?.video?.id;
+      if (videoId && plIds.length > 1) {
+        for (let i = 1; i < plIds.length; i++) {
+          try {
+            await setCustomPlaylistItem(plIds[i], 'video', videoId, true);
+          } catch (e) {
+            console.warn('Add to playlist', plIds[i], e?.message);
+          }
+        }
+      }
+
+      const scheduled =
+        scheduledPublishDate instanceof Date &&
+        scheduledPublishDate.getTime() > Date.now() + 60_000;
+      const dateStr = scheduled
+        ? scheduledPublishDate.toLocaleDateString(undefined, {
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+          })
+        : '';
+
+      Alert.alert(
+        scheduled ? 'Video scheduled' : 'Success',
+        scheduled
+          ? `Your video will appear to everyone on ${dateStr}. You can see it in your uploads anytime.`
+          : 'Video uploaded successfully!',
+        [
         {
           text: 'OK',
           onPress: () => {
@@ -195,6 +260,21 @@ const VideoUploadSettings = ({
       setUploading(false);
     }
   };
+
+  const scheduleDisplay = (() => {
+    if (!scheduledPublishDate) return 'Now';
+    const startTomorrow = new Date();
+    startTomorrow.setHours(0, 0, 0, 0);
+    startTomorrow.setDate(startTomorrow.getDate() + 1);
+    if (scheduledPublishDate.getTime() >= startTomorrow.getTime()) {
+      return scheduledPublishDate.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    }
+    return 'Now';
+  })();
 
   const SettingItem = ({
     icon,
@@ -344,7 +424,9 @@ const VideoUploadSettings = ({
             <SettingItem
               icon={{ type: 'Ionicons', name: 'calendar-outline' }}
               label="Schedule"
-              value="Now"
+              value={scheduleDisplay}
+              onPress={() => setScheduleModalVisible(true)}
+              disabled={uploading}
             />
             <SettingItem
               icon={{ type: 'Ionicons', name: 'chatbubble-outline' }}
@@ -444,6 +526,93 @@ const VideoUploadSettings = ({
           onClose={() => setLocationModalVisible(false)}
           onSelect={val => setLocation(val)}
         />
+        <VideoScheduleModal
+          visible={scheduleModalVisible}
+          onClose={() => setScheduleModalVisible(false)}
+          initialDate={scheduledPublishDate}
+          onSelectNow={() => setScheduledPublishDate(null)}
+          onConfirmDate={d => setScheduledPublishDate(d)}
+        />
+        <Modal
+          visible={playlistModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setPlaylistModalVisible(false)}
+        >
+          <View style={styles.playlistOverlay}>
+            <Pressable
+              style={styles.playlistBackdropFlex}
+              onPress={() => setPlaylistModalVisible(false)}
+            />
+            <View style={styles.playlistSheet}>
+              <Text style={styles.playlistSheetTitle}>Add to playlists</Text>
+              <Text style={styles.playlistSheetHint}>
+                Select one or more. First also links on upload.
+              </Text>
+              {playlistsLoadError ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!userId) return;
+                    listCustomPlaylists(userId)
+                      .then(rows => {
+                        setUserPlaylists(Array.isArray(rows) ? rows : []);
+                        setPlaylistsLoadError(false);
+                      })
+                      .catch(() => setPlaylistsLoadError(true));
+                  }}
+                >
+                  <Text style={styles.playlistRetry}>Tap to reload playlists</Text>
+                </TouchableOpacity>
+              ) : userPlaylists.length === 0 ? (
+                <Text style={styles.playlistEmpty}>
+                  No playlists yet. Create one in Library → New Playlist.
+                </Text>
+              ) : (
+                <ScrollView style={styles.playlistScroll}>
+                  {userPlaylists.map(pl => {
+                    const on = selectedPlaylistIds.includes(pl.id);
+                    return (
+                      <TouchableOpacity
+                        key={pl.id}
+                        style={styles.playlistRow}
+                        onPress={() => {
+                          setSelectedPlaylistIds(prev =>
+                            on
+                              ? prev.filter(x => x !== pl.id)
+                              : [...prev, pl.id],
+                          );
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.playlistCheck,
+                            on && styles.playlistCheckOn,
+                          ]}
+                        >
+                          {on ? (
+                            <Ionicons name="checkmark" size={18} color="#fff" />
+                          ) : null}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.playlistRowName}>{pl.name}</Text>
+                          <Text style={styles.playlistRowMeta}>
+                            {pl.itemCount ?? 0} videos
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+              <TouchableOpacity
+                style={styles.playlistDoneBtn}
+                onPress={() => setPlaylistModalVisible(false)}
+              >
+                <Text style={styles.playlistDoneText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </Modal>
   );
@@ -611,6 +780,92 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.sm,
     color: '#EF4444',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  playlistOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  playlistBackdropFlex: {
+    flex: 1,
+  },
+  playlistSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    maxHeight: width * 0.65,
+  },
+  playlistSheetTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111',
+  },
+  playlistSheetHint: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  playlistScroll: {
+    maxHeight: width * 0.42,
+  },
+  playlistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  playlistCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FF7F06',
+    marginRight: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playlistCheckOn: {
+    backgroundColor: '#FF7F06',
+  },
+  playlistRowName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222',
+  },
+  playlistRowMeta: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 2,
+  },
+  playlistDoneBtn: {
+    marginTop: SPACING.lg,
+    backgroundColor: '#FF7F06',
+    paddingVertical: 14,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  playlistDoneText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  playlistEmpty: {
+    paddingVertical: 20,
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  playlistRetry: {
+    color: '#FF7F06',
+    fontSize: 15,
+    paddingVertical: 16,
+    textAlign: 'center',
     fontWeight: '600',
   },
 });
