@@ -482,7 +482,7 @@ const VideoItem = ({
                 style={{ marginLeft: 12 }}
               />
               <Text style={[styles.audioText, { marginLeft: 6 }]}>
-                {shortsMuted ? 'Mute' : 'Unmute'}
+                {shortsMuted ? 'Unmute' : 'Mute'}
               </Text>
             </TouchableOpacity>
           </View>

@@ -604,6 +604,8 @@ const HomeThreeScreen = ({ onBack }) => {
   };
 
   const hasDynamicMenu = ownerId && menuItems.length > 0;
+  /** Real restaurant page but API returned no menu — never use demo static counts here */
+  const ownerHasNoMenu = !!ownerId && !hasDynamicMenu;
 
   const getItemsForHomeFour = () => {
     if (hasDynamicMenu) {
@@ -619,8 +621,11 @@ const HomeThreeScreen = ({ onBack }) => {
             quantity,
             currency: 'GBP',
             imageUrl: menuItem?.imageUrl,
-          };
-        });
+        };
+      });
+    }
+    if (ownerId) {
+      return [];
     }
     return [0, 1, 2]
       .filter(idx => (staticQuantities[idx] ?? 0) > 0)
@@ -634,7 +639,12 @@ const HomeThreeScreen = ({ onBack }) => {
   };
 
   const itemsForCheckout = getItemsForHomeFour();
-  const displayCount = hasDynamicMenu ? totalCount : staticTotal;
+  const displayCount = hasDynamicMenu
+    ? totalCount
+    : ownerId
+      ? totalCount
+      : staticTotal;
+  const cartBarDisabled = ownerHasNoMenu;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -839,19 +849,28 @@ const HomeThreeScreen = ({ onBack }) => {
           <Icon name="chevron-down" size={40} color="#333" />
         </View>
         <TouchableOpacity
-          style={styles.cartBar}
-          onPress={() =>
+          style={[styles.cartBar, cartBarDisabled && styles.cartBarDisabled]}
+          disabled={cartBarDisabled}
+          onPress={() => {
+            if (cartBarDisabled) return;
             navigation.navigate('HomeFourScreen', {
               ownerId: hasDynamicMenu ? ownerId : null,
               items: itemsForCheckout,
               ownerName: resTitle,
-            })
-          }
+            });
+          }}
         >
-          <Text style={styles.cartText}>
-            {displayCount > 0
-              ? `${displayCount} item${displayCount !== 1 ? 's' : ''} added`
-              : 'Add to Cart'}
+          <Text
+            style={[
+              styles.cartText,
+              cartBarDisabled && styles.cartTextDisabled,
+            ]}
+          >
+            {ownerHasNoMenu
+              ? '0 item added'
+              : displayCount > 0
+                ? `${displayCount} item${displayCount !== 1 ? 's' : ''} added`
+                : 'Add to Cart'}
           </Text>
           <View style={styles.cartIconCircle}>
             <Icon name="arrow-right" size={18} color="#F5A623" />
@@ -1353,6 +1372,12 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   arrowContainer: { alignItems: 'center', marginBottom: 10 },
+  cartBarDisabled: {
+    opacity: 0.55,
+  },
+  cartTextDisabled: {
+    opacity: 0.9,
+  },
   cartBar: {
     backgroundColor: '#F5A623',
     height: 55,

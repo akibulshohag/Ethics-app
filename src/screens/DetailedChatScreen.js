@@ -31,6 +31,7 @@ import {
 } from '../services/chatSocket';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { COLORS } from '../constants/theme';
+import { safeImageUri } from '../utils/helper';
 
 let pickDocumentNative = null;
 let docTypes = {};
@@ -82,8 +83,14 @@ export default function DetailedChatScreen() {
   const partnerId = normalizeId(rawPartnerId);
   const user = useSelector((s) => s?.app?.user);
   const myId = user?.id ? normalizeId(user.id) : '';
-  const partnerImage = partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partnerName || '')}&background=111&color=fff`;
-  const myImage = user?.photos?.[0] || 'https://i.pravatar.cc/150?u=me';
+  const partnerImage = safeImageUri(
+    partnerAvatar,
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(partnerName || '')}&background=111&color=fff`,
+  );
+  const myImage = safeImageUri(
+    user?.photos?.[0],
+    'https://i.pravatar.cc/150?u=me',
+  );
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);

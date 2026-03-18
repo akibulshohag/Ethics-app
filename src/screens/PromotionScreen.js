@@ -872,10 +872,10 @@ const PromotionScreen = ({ onBack }) => {
           />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <View style={styles.messageContainer}>
+        {/* <View style={styles.messageContainer}>
           <Text style={styles.messageLabel}>Message</Text>
           <Icon name="message-text-outline" size={26} color="#000" />
-        </View>
+        </View> */}
       </View>
 
       <ScrollView

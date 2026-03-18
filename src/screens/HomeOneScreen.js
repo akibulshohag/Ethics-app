@@ -48,7 +48,12 @@ import {
   recordShare as recordVideoShare,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
-import { getGallery, getChannelProfile } from '../services/channelService';
+import {
+  getGallery,
+  getChannelProfile,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+} from '../services/channelService';
 import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
 import { safeImageUri } from '../utils/helper';
@@ -183,10 +188,24 @@ const HomeOneScreen = () => {
   const [morePlaylistVisible, setMorePlaylistVisible] = useState(false);
   const [morePlaylistType, setMorePlaylistType] = useState('short');
   const [morePlaylistId, setMorePlaylistId] = useState(null);
+  /** Channel subscribe state for restaurant/video detail (not own video) */
+  const [resDetailSubscribe, setResDetailSubscribe] = useState({
+    isSubscribed: false,
+    loading: false,
+    toggling: false,
+  });
   /** When opening video from Library / UserViews Videos, Back returns there */
   const libraryDetailReturnRef = useRef(null);
 
   const galleryUserId = selectedItem?.userId || selectedItem?.user?.id;
+  const videoChannelOwnerId =
+    selectedItem?.userId ?? selectedItem?.user?.id ?? null;
+  const isOwnChannelVideo =
+    !!user?.id &&
+    !!videoChannelOwnerId &&
+    String(videoChannelOwnerId) === String(user.id);
+  const showSubscribeBtn =
+    !!videoChannelOwnerId && !isOwnChannelVideo;
 
   const saveLocationSelection = useCallback(async (coords, label) => {
     try {
@@ -823,6 +842,88 @@ const HomeOneScreen = () => {
     }
   };
 
+  useEffect(() => {
+    if (!isRestaurantDetail) {
+      setResDetailSubscribe({
+        isSubscribed: false,
+        loading: false,
+        toggling: false,
+      });
+      return;
+    }
+    if (!videoChannelOwnerId || isOwnChannelVideo) {
+      setResDetailSubscribe({
+        isSubscribed: false,
+        loading: false,
+        toggling: false,
+      });
+      return;
+    }
+    let cancelled = false;
+    setResDetailSubscribe(s => ({ ...s, loading: true, toggling: false }));
+    getChannelProfile(videoChannelOwnerId, user?.id)
+      .then(p => {
+        if (!cancelled) {
+          setResDetailSubscribe({
+            isSubscribed: !!p?.isSubscribed,
+            loading: false,
+            toggling: false,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResDetailSubscribe({
+            isSubscribed: false,
+            loading: false,
+            toggling: false,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isRestaurantDetail,
+    videoChannelOwnerId,
+    isOwnChannelVideo,
+    user?.id,
+    selectedItem?.id,
+  ]);
+
+  const handleRestaurantSubscribe = useCallback(() => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    if (!videoChannelOwnerId || isOwnChannelVideo) return;
+    setResDetailSubscribe(s => {
+      if (s.toggling || s.loading) return s;
+      const wasSubscribed = s.isSubscribed;
+      (async () => {
+        try {
+          if (wasSubscribed) {
+            await unsubscribeFromChannel(user.id, videoChannelOwnerId);
+          } else {
+            await subscribeToChannel(user.id, videoChannelOwnerId);
+          }
+          setResDetailSubscribe({
+            isSubscribed: !wasSubscribed,
+            loading: false,
+            toggling: false,
+          });
+        } catch (e) {
+          Alert.alert(
+            'Subscribe',
+            e?.message || 'Could not update subscription.',
+          );
+          setResDetailSubscribe(s2 => ({ ...s2, toggling: false }));
+        }
+      })();
+      return { ...s, toggling: true };
+    });
+  }, [user?.id, videoChannelOwnerId, isOwnChannelVideo, navigation]);
+
   const handleFeedItemPress = item => {
     if (item?.type === 'short') {
       // openShortDetail(item)
@@ -954,19 +1055,36 @@ const HomeOneScreen = () => {
     }
     const partnerId = selectedItem?.user?.id ?? selectedItem?.userId ?? null;
     if (!partnerId) return;
+    const partnerName =
+      selectedItem?.user?.nickname ||
+      selectedItem?.user?.name ||
+      selectedItem?.title ||
+      'User';
+    const avatarCandidate =
+      selectedItem?.channelAvatar ||
+      selectedItem?.user?.channelAvatar ||
+      selectedItem?.user?.photos?.[0] ||
+      selectedItem?.user?.avatar ||
+      selectedItem?.user?.profileImage;
+    const partnerAvatar = safeImageUri(
+      avatarCandidate,
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        partnerName,
+      )}&background=111&color=fff`,
+    );
     navigation.navigate('DetailedChatScreen', {
       partnerId,
-      partnerName:
-        selectedItem?.user?.nickname ||
-        selectedItem?.user?.name ||
-        selectedItem?.title ||
-        'User',
-      partnerAvatar:
-        selectedItem?.user?.channelAvatar ||
-        selectedItem?.user?.avatar ||
-        selectedItem?.user?.profileImage,
+      partnerName,
+      partnerAvatar,
     });
-  }, [navigation, selectedItem?.user?.id, selectedItem?.userId, user?.id]);
+  }, [
+    navigation,
+    selectedItem?.user?.id,
+    selectedItem?.userId,
+    selectedItem?.channelAvatar,
+    selectedItem?.user,
+    user?.id,
+  ]);
 
   const handleRestaurantDownload = useCallback(async () => {
     if (!selectedItem?.id || !selectedItem?.videoUrl) return;
@@ -1843,7 +1961,8 @@ const HomeOneScreen = () => {
                 style={styles.resVideoImg}
                 resizeMode="cover"
                 paused={videoPaused}
-                repeat={false}
+                repeat
+                ignoreSilentSwitch="ignore"
                 controls={false}
                 playInBackground={false}
                 playWhenInactive={false}
@@ -1853,6 +1972,7 @@ const HomeOneScreen = () => {
                   setVideoError(null);
                   const dur = data?.duration || 0;
                   setResVideoProgress(p => ({ ...p, duration: dur }));
+                  setVideoPaused(false);
                 }}
                 onProgress={data => {
                   if (resSeekingRef.current) return;
@@ -2038,7 +2158,7 @@ const HomeOneScreen = () => {
             <Icon name="chat-outline" size={22} color="#111" />
             <Text style={styles.resActionText}>Chat</Text>
           </TouchableOpacity>
-
+          {/* 
           <TouchableOpacity
             style={styles.resActionItem}
             onPress={handleRestaurantDownload}
@@ -2053,7 +2173,7 @@ const HomeOneScreen = () => {
             <Text style={styles.resActionText}>
               {resDownloadPct != null ? `${resDownloadPct}%` : 'Download'}
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           <TouchableOpacity
             style={styles.resActionItem}
@@ -2072,6 +2192,14 @@ const HomeOneScreen = () => {
             <Icon name="bookmark-outline" size={22} color="#111" />
             <Text style={styles.resActionText}>Save</Text>
           </TouchableOpacity>
+          <View style={styles.resActionItem} pointerEvents="none">
+            <Icon name="eye-outline" size={22} color="#111" />
+            <Text style={styles.resActionText}>
+              {formatCount(
+                selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0,
+              )}
+            </Text>
+          </View>
         </View>
         <View style={styles.resSocialRow}>
           {/* <View style={styles.resIconGroup}>
@@ -2103,16 +2231,56 @@ const HomeOneScreen = () => {
               );
             })}
           </View> */}
-          <View>
-            <TouchableOpacity style={styles.bookNowBtn}>
-              <Text style={styles.bookNowText}>Book Now</Text>
+          <View style={styles.resBookGalleryRow}>
+            <TouchableOpacity
+              style={[styles.resRowBtn, styles.resRowBtnPrimary]}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.resRowBtnTextLight}>Book Now</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.galleryBtn}
+              style={[styles.resRowBtn, styles.resRowBtnDark]}
               onPress={openGalleryModal}
+              activeOpacity={0.85}
             >
-              <Text style={styles.galleryText}>Gallery</Text>
+              <Text style={styles.resRowBtnTextLight}>Gallery</Text>
             </TouchableOpacity>
+            {showSubscribeBtn ? (
+              <TouchableOpacity
+                style={[
+                  styles.resRowBtn,
+                  resDetailSubscribe.isSubscribed
+                    ? styles.resRowBtnSubscribed
+                    : styles.resRowBtnSubscribeOutline,
+                ]}
+                onPress={handleRestaurantSubscribe}
+                activeOpacity={0.85}
+                disabled={
+                  resDetailSubscribe.loading || resDetailSubscribe.toggling
+                }
+              >
+                {resDetailSubscribe.loading || resDetailSubscribe.toggling ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={
+                      resDetailSubscribe.isSubscribed ? '#555' : '#F5A623'
+                    }
+                  />
+                ) : (
+                  <Text
+                    style={
+                      resDetailSubscribe.isSubscribed
+                        ? styles.resRowBtnTextMuted
+                        : styles.resRowBtnTextOrange
+                    }
+                  >
+                    {resDetailSubscribe.isSubscribed
+                      ? 'Subscribed'
+                      : 'Subscribe'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
         {/* <Text style={styles.webText}>
@@ -3138,6 +3306,53 @@ const styles = StyleSheet.create({
   resIconGroup: { flexDirection: 'row', flexWrap: 'wrap', width: '60%' },
   socialIconWrap: { marginRight: 15, marginBottom: 10 },
   socialIcon: {},
+  resBookGalleryRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingHorizontal: 15,
+    marginBottom: 12,
+    gap: 8,
+  },
+  resRowBtn: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  resRowBtnPrimary: { backgroundColor: '#F5A623' },
+  resRowBtnDark: { backgroundColor: '#222' },
+  resRowBtnSubscribeOutline: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#F5A623',
+  },
+  resRowBtnSubscribed: {
+    backgroundColor: '#E8E8E8',
+    borderWidth: 1,
+    borderColor: '#ccc',
+  },
+  resRowBtnTextLight: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  resRowBtnTextOrange: {
+    color: '#F5A623',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  resRowBtnTextMuted: {
+    color: '#555',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+  },
   bookNowBtn: {
     backgroundColor: '#F5A623',
     paddingHorizontal: 25,

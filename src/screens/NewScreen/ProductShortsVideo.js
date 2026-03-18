@@ -476,8 +476,8 @@ const ProductShortsVideo = () => {
               Number.isFinite(d) && d > 0
                 ? d
                 : Number.isFinite(api) && api > 0
-                  ? api
-                  : 0;
+                ? api
+                : 0;
             setDuration(use);
           }}
           onProgress={data => {
@@ -654,7 +654,7 @@ const ProductShortsVideo = () => {
                     style={{ marginLeft: 15 }}
                   />
                   <Text style={styles.audioText}>
-                    {shortsMuted ? 'Mute' : 'Unmute'}
+                    {shortsMuted ? 'Unmute' : ' Mute'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -809,7 +809,9 @@ const ProductShortsVideo = () => {
   };
 
   const subsPreviewOwnerId =
-    listData[currentIndex]?.userId ?? listData[currentIndex]?.userObj?.id ?? null;
+    listData[currentIndex]?.userId ??
+    listData[currentIndex]?.userObj?.id ??
+    null;
 
   useEffect(() => {
     if (!user?.token || !subsPreviewOwnerId) return;
