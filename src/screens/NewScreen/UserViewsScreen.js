@@ -50,6 +50,7 @@ import {
 import CommentsModal from '../../components/CommentsModal';
 import SaveModal from '../../components/SaveModal';
 import { getSocialIcon } from '../../constants/socialLinks';
+import { navigateToHomeOneLibraryDetail } from '../../utils/navigateHomeLibraryDetail';
 
 const { width } = Dimensions.get('window');
 
@@ -1039,7 +1040,12 @@ const UserViewsScreen = ({ navigation }) => {
       return (
         <CompactVideoCard
           video={item}
-          onPress={() => openVideoModal(item.id)}
+          onPress={() =>
+            navigateToHomeOneLibraryDetail(navigation, {
+              id: item.id,
+              type: 'video',
+            })
+          }
         />
       );
     if (activeTab === 'Playlists')
