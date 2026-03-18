@@ -665,10 +665,7 @@ const UserViewsScreen = ({ navigation }) => {
     try {
       const rows = await listCustomPlaylists(profileUserId);
       const ch =
-        profile?.channelName ||
-        profile?.nickname ||
-        profile?.name ||
-        'Channel';
+        profile?.channelName || profile?.nickname || profile?.name || 'Channel';
       const cover = safeImageUri(
         profile?.channelAvatar ||
           profile?.photos?.[0]?.src ||
@@ -754,76 +751,77 @@ const UserViewsScreen = ({ navigation }) => {
         subscribeLoading={profileSubscribeLoading}
       />
 
-      {/* Social icons row (dynamic from profile.socialLinks) */}
-      <View style={styles.profileSocialRow}>
-        {(() => {
-          const raw = profile?.socialLinks;
-          const links = Array.isArray(raw)
-            ? raw
-            : raw && typeof raw === 'object'
-            ? [raw]
-            : [];
-          const normalized = links.map(l => ({
-            type: String(l?.type || 'others').toLowerCase(),
-            url: String(l?.url || '').trim(),
-          }));
+      {/* Social icons row — business profiles only (hidden for role "user") */}
+      {String(profile?.role || '').toLowerCase() !== 'user' ? (
+        <View style={styles.profileSocialRow}>
+          {(() => {
+            const raw = profile?.socialLinks;
+            const links = Array.isArray(raw)
+              ? raw
+              : raw && typeof raw === 'object'
+              ? [raw]
+              : [];
+            const normalized = links.map(l => ({
+              type: String(l?.type || 'others').toLowerCase(),
+              url: String(l?.url || '').trim(),
+            }));
 
-          // Match screenshot: 7 fixed icons (always visible)
-          const iconOrder = [
-            { type: 'instagram' },
-            { type: 'facebook' },
-            { type: 'x', image: require('../../assets/icons/x.png') },
-            { type: 'tiktok', image: require('../../assets/icons/tiktok.png') },
-            {
-              type: 'tripadvisor',
-              image: require('../../assets/icons/tripadvisor.png'),
-            },
-            { type: 'google', icon: 'google' },
-            { type: 'website', icon: 'web' },
-          ];
+            const iconOrder = [
+              { type: 'instagram' },
+              { type: 'facebook' },
+              { type: 'x', image: require('../../assets/icons/x.png') },
+              { type: 'tiktok', image: require('../../assets/icons/tiktok.png') },
+              {
+                type: 'tripadvisor',
+                image: require('../../assets/icons/tripadvisor.png'),
+              },
+              { type: 'google', icon: 'google' },
+              { type: 'website', icon: 'web' },
+            ];
 
-          return iconOrder.map(({ type, icon, image }) => {
-            const match = normalized.find(l => l.type === type && l.url);
-            const url = match?.url || '';
-            const disabled = !url;
-            return (
-              <TouchableOpacity
-                key={type}
-                style={[
-                  styles.profileSocialBtn,
-                  disabled && styles.profileSocialBtnDisabled,
-                ]}
-                disabled={disabled}
-                onPress={() => {
-                  if (!url) return;
-                  Linking.openURL(
-                    url.startsWith('http') ? url : `https://${url}`,
-                  );
-                }}
-                activeOpacity={0.8}
-              >
-                {image ? (
-                  <Image
-                    source={image}
-                    style={{
-                      width: 22,
-                      height: 22,
-                      tintColor: disabled ? '#BDBDBD' : null,
-                    }}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <MaterialCommunityIcons
-                    name={icon || getSocialIcon(type)}
-                    size={20}
-                    color={disabled ? '#BDBDBD' : '#111'}
-                  />
-                )}
-              </TouchableOpacity>
-            );
-          });
-        })()}
-      </View>
+            return iconOrder.map(({ type, icon, image }) => {
+              const match = normalized.find(l => l.type === type && l.url);
+              const url = match?.url || '';
+              const disabled = !url;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.profileSocialBtn,
+                    disabled && styles.profileSocialBtnDisabled,
+                  ]}
+                  disabled={disabled}
+                  onPress={() => {
+                    if (!url) return;
+                    Linking.openURL(
+                      url.startsWith('http') ? url : `https://${url}`,
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {image ? (
+                    <Image
+                      source={image}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        tintColor: disabled ? '#BDBDBD' : null,
+                      }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={icon || getSocialIcon(type)}
+                      size={20}
+                      color={disabled ? '#BDBDBD' : '#111'}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            });
+          })()}
+        </View>
+      ) : null}
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>

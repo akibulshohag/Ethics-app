@@ -210,7 +210,7 @@ export default function OrderDetailsScreen() {
   );
   const items = order.items || [];
   const totalAmount = Number(order.totalAmount || 0);
-  const currency = order.currency || 'GBP';
+  const currency = '€';
   const displayOrderId = order.id ? `#${String(order.id).slice(0, 12)}` : '—';
 
   return (

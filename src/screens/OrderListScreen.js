@@ -251,8 +251,7 @@ const OrderListScreen = ({ navigation }) => {
         )}
         <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
         <Text style={styles.cardItems}>
-          {itemCount} item(s) · {item.currency}{' '}
-          {Number(item.totalAmount).toFixed(2)}
+          {itemCount} item(s) · {'€'} {Number(item.totalAmount).toFixed(2)}
         </Text>
 
         {isUser && (

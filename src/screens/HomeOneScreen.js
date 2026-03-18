@@ -699,6 +699,7 @@ const HomeOneScreen = () => {
 
   const openRestaurantDetail = item => {
     const campaignOwner = item?._campaignOwnerUser;
+    const campaignMeta = item?._campaignMeta || null;
     setSelectedItem(item);
     setVideoPaused(true);
     setVideoError(null);
@@ -713,23 +714,66 @@ const HomeOneScreen = () => {
       getVideoById(item.id, user?.id, user?.role || 'user')
         .then(res => {
           const full = mapToDisplayItem(res, item?.type || 'video');
-          if (campaignOwner?.id) {
-            const co = campaignOwner;
+          const videoDescriptionRaw =
+            (res?.description != null && String(res.description).trim()) ||
+            (full.description != null && String(full.description).trim()) ||
+            '';
+
+          const applyCampaignOwner = (co, profile) => {
+            const p = profile && typeof profile === 'object' ? profile : {};
             const u = {
               ...(full.user && typeof full.user === 'object' ? full.user : {}),
-              ...co,
-              id: co.id,
+              ...(co && typeof co === 'object' ? co : {}),
+              id: co?.id,
+              phone:
+                p.phone ??
+                p.phoneNumber ??
+                p.contactPhone ??
+                co?.phone ??
+                full.user?.phone,
+              email: p.email ?? p.contactEmail ?? co?.email ?? full.user?.email,
+              address: p.address ?? co?.address ?? full.user?.address,
+              channelAbout:
+                p.channelAbout ??
+                p.about ??
+                p.bio ??
+                co?.channelAbout ??
+                full.user?.channelAbout,
+              nickname:
+                p.nickname ??
+                p.channelName ??
+                co?.nickname ??
+                full.user?.nickname,
+              name: p.name ?? co?.name ?? full.user?.name,
+              photos: p.photos ?? co?.photos ?? full.user?.photos,
+              socialLinks: Array.isArray(p.socialLinks)
+                ? p.socialLinks
+                : Array.isArray(co?.socialLinks)
+                ? co.socialLinks
+                : full.user?.socialLinks,
+              role: p.role ?? co?.role ?? full.user?.role,
             };
             const channelName =
-              co.nickname || co.name || full.channelName || 'Restaurant';
-            const firstPhoto = co.photos?.[0];
+              u.nickname || u.name || full.channelName || 'Restaurant';
+            const photo0 = p.photos?.[0] ?? co?.photos?.[0] ?? u.photos?.[0];
             const avatar =
-              (typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src) ||
+              p.channelAvatar ||
+              (typeof photo0 === 'string' ? photo0 : photo0?.src) ||
               full.channelAvatar;
-            setSelectedItem(prev => ({
+            const addrLine =
+              (p.address && String(p.address).trim()) ||
+              (u.address && String(u.address).trim()) ||
+              (campaignMeta?.areaName &&
+                String(campaignMeta.areaName).trim()) ||
+              (co?.address && String(co.address).trim()) ||
+              full.location ||
+              'Near you';
+            return {
               ...full,
+              description: videoDescriptionRaw,
+              _campaignVideoDetail: true,
               user: u,
-              userId: co.id,
+              userId: co?.id,
               channelName,
               channelAvatar: safeImageUri(
                 avatar,
@@ -737,19 +781,40 @@ const HomeOneScreen = () => {
                   channelName,
                 )}&background=111&color=fff`,
               ),
-              location: co.address || full.location || 'Near you',
-              creatorAddress: co.address ?? full.creatorAddress,
-              creatorLatitude: co.latitude ?? full.creatorLatitude,
-              creatorLongitude: co.longitude ?? full.creatorLongitude,
-              creatorSocialLinks: Array.isArray(co.socialLinks)
-                ? co.socialLinks
+              location: addrLine,
+              creatorAddress:
+                (p.address && String(p.address).trim()) ||
+                (co?.address && String(co.address).trim()) ||
+                campaignMeta?.areaName ||
+                full.creatorAddress,
+              creatorLatitude:
+                p.latitude ?? co?.latitude ?? campaignMeta?.latitude,
+              creatorLongitude:
+                p.longitude ?? co?.longitude ?? campaignMeta?.longitude,
+              creatorSocialLinks: Array.isArray(u.socialLinks)
+                ? u.socialLinks
                 : full.creatorSocialLinks || [],
               creatorRole:
-                co.role != null
-                  ? String(co.role).toLowerCase()
+                u.role != null
+                  ? String(u.role).toLowerCase()
                   : full.creatorRole,
-              watchedAt: prev?.watchedAt,
-            }));
+            };
+          };
+
+          if (campaignOwner?.id) {
+            getChannelProfile(campaignOwner.id, user?.id)
+              .then(profile => {
+                setSelectedItem(prev => ({
+                  ...applyCampaignOwner(campaignOwner, profile),
+                  watchedAt: prev?.watchedAt,
+                }));
+              })
+              .catch(() => {
+                setSelectedItem(prev => ({
+                  ...applyCampaignOwner(campaignOwner, null),
+                  watchedAt: prev?.watchedAt,
+                }));
+              });
           } else {
             setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
           }
@@ -1089,6 +1154,18 @@ const HomeOneScreen = () => {
     [reportTarget, closeHomeMore],
   );
 
+  const campaignMetaFrom = parent =>
+    parent &&
+    (parent.areaName != null ||
+      parent.latitude != null ||
+      parent.longitude != null)
+      ? {
+          areaName: parent.areaName || '',
+          latitude: parent.latitude,
+          longitude: parent.longitude,
+        }
+      : null;
+
   /** Featured/sponsored API returns campaign owner on parent; video.user may be missing — keep owner for detail screen. */
   const featuredItem = (() => {
     if (!featuredVideo?.video) return null;
@@ -1102,7 +1179,14 @@ const HomeOneScreen = () => {
           }
         : video.user || co;
     const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
-    return co?.id ? { ...base, _campaignOwnerUser: co } : base;
+    const meta = campaignMetaFrom(featuredVideo);
+    return co?.id
+      ? {
+          ...base,
+          _campaignOwnerUser: co,
+          ...(meta && { _campaignMeta: meta }),
+        }
+      : base;
   })();
 
   const sponsoredItem = sponsoredVideo?.video
@@ -1119,7 +1203,14 @@ const HomeOneScreen = () => {
               }
             : video.user || co;
         const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
-        return co?.id ? { ...base, _campaignOwnerUser: co } : base;
+        const meta = campaignMetaFrom(sponsoredVideo);
+        return co?.id
+          ? {
+              ...base,
+              _campaignOwnerUser: co,
+              ...(meta && { _campaignMeta: meta }),
+            }
+          : base;
       })()
     : null;
 
@@ -1254,7 +1345,11 @@ const HomeOneScreen = () => {
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {featuredVideo?.video ? (
-          <View style={styles.bannerWrapper}>
+          <TouchableOpacity
+            style={styles.bannerWrapper}
+            activeOpacity={0.92}
+            onPress={() => featuredItem && openRestaurantDetail(featuredItem)}
+          >
             <Image
               source={{
                 uri:
@@ -1266,15 +1361,18 @@ const HomeOneScreen = () => {
               style={styles.bannerImage}
               resizeMode="cover"
             />
-            <TouchableOpacity
-              style={styles.featuredBadge}
-              onPress={() => featuredItem && openRestaurantDetail(featuredItem)}
-              activeOpacity={0.9}
-            >
+            <View style={styles.featuredPlayOverlay} pointerEvents="none">
+              <Icon
+                name="play-circle"
+                size={56}
+                color="rgba(255,255,255,0.92)"
+              />
+            </View>
+            <View style={styles.featuredBadge} pointerEvents="none">
               <Text style={styles.featuredText}>Featured</Text>
               <Icon name="chevron-right" size={16} color="#FFF" />
-            </TouchableOpacity>
-          </View>
+            </View>
+          </TouchableOpacity>
         ) : null}
 
         <View style={styles.locationSection}>
@@ -1600,7 +1698,7 @@ const HomeOneScreen = () => {
                       });
                     }}
                   >
-                    <Text style={styles.resOrderText}>Login</Text>
+                    <Text style={styles.resOrderText}>Order Now</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
@@ -1696,7 +1794,7 @@ const HomeOneScreen = () => {
                   });
                 }}
               >
-                <Text style={styles.resOrderText}>Login</Text>
+                <Text style={styles.resOrderText}>Order Now</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -1976,7 +2074,7 @@ const HomeOneScreen = () => {
           </TouchableOpacity>
         </View>
         <View style={styles.resSocialRow}>
-          <View style={styles.resIconGroup}>
+          {/* <View style={styles.resIconGroup}>
             {[
               { type: 'instagram', icon: 'instagram' },
               { type: 'facebook', icon: 'facebook' },
@@ -2004,7 +2102,7 @@ const HomeOneScreen = () => {
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </View> */}
           <View>
             <TouchableOpacity style={styles.bookNowBtn}>
               <Text style={styles.bookNowText}>Book Now</Text>
@@ -2035,9 +2133,14 @@ const HomeOneScreen = () => {
           <Text style={styles.sectionTitle}>Description</Text>
           <View style={styles.descBox}>
             <Text style={styles.descText}>
-              {selectedItem?.description ||
-                selectedItem?.user?.channelAbout ||
-                'No description.'}
+              {selectedItem?._campaignVideoDetail
+                ? selectedItem?.description &&
+                  String(selectedItem.description).trim()
+                  ? String(selectedItem.description).trim()
+                  : 'No description.'
+                : selectedItem?.description ||
+                  selectedItem?.user?.channelAbout ||
+                  'No description.'}
             </Text>
           </View>
         </View>
@@ -2059,6 +2162,27 @@ const HomeOneScreen = () => {
               selectedItem?.user?.address ||
               '—'}
           </Text>
+          {selectedItem?.creatorLatitude != null &&
+          selectedItem?.creatorLongitude != null &&
+          Number.isFinite(Number(selectedItem.creatorLatitude)) &&
+          Number.isFinite(Number(selectedItem.creatorLongitude)) ? (
+            <TouchableOpacity
+              onPress={() =>
+                Linking.openURL(
+                  `https://www.google.com/maps?q=${Number(
+                    selectedItem.creatorLatitude,
+                  )},${Number(selectedItem.creatorLongitude)}`,
+                )
+              }
+              activeOpacity={0.85}
+            >
+              <Text style={styles.contactMapLink}>
+                Open location on map ·{' '}
+                {Number(selectedItem.creatorLatitude).toFixed(5)},{' '}
+                {Number(selectedItem.creatorLongitude).toFixed(5)}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -2623,6 +2747,11 @@ const styles = StyleSheet.create({
   },
   bannerWrapper: { width: '100%', height: 210, position: 'relative' },
   bannerImage: { width: '100%', height: '100%' },
+  featuredPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   featuredBadge: {
     position: 'absolute',
     bottom: 20,
@@ -3001,10 +3130,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resSocialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
+    // justifyContent: 'space-between',
     paddingHorizontal: 15,
-    alignItems: 'flex-start',
+    alignItems: 'flex-end',
   },
   resIconGroup: { flexDirection: 'row', flexWrap: 'wrap', width: '60%' },
   socialIconWrap: { marginRight: 15, marginBottom: 10 },
@@ -3060,6 +3189,13 @@ const styles = StyleSheet.create({
   contactContainer: { paddingHorizontal: 15, paddingBottom: 30 },
   contactEmail: { color: '#555', marginTop: 5 },
   contactAddr: { color: '#555', marginTop: 5 },
+  contactMapLink: {
+    color: '#1565C0',
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
   galleryModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
