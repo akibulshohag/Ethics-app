@@ -105,10 +105,13 @@ const SubscriptionScreen = () => {
 
             <View style={styles.divider} />
 
-            <FeatureItem text="Boost engagement with a custom" />
-            <FeatureItem text="Watch all you want. Ad-free." />
-            <FeatureItem text="Allows streaming of 4K." />
-            <FeatureItem text="Video & Audio Quality is Better." />
+            <FeatureItem
+              text={`Up to ${pkg.videoLimit} video uploads`}
+            />
+            <FeatureItem
+              text={`Up to ${pkg.shortLimit} short uploads`}
+            />
+            <FeatureItem text="Higher plans = more content capacity" />
 
             {purchasing === pkg.id && (
               <ActivityIndicator size="small" color="#FF8C00" style={{marginTop: 10}} />
