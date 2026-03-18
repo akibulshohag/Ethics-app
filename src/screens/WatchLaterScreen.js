@@ -14,6 +14,7 @@ import { useSelector } from 'react-redux';
 import CompactVideoCard from '../components/CompactVideoCard';
 import { getWatchLater } from '../services/playlistService';
 import { mapVideoApiToDisplay, mapShortApiToDisplay } from '../utils/playlistMappers';
+import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 
 const WatchLaterScreen = ({ navigation }) => {
   const { user: currentUser } = useSelector(state => state.app) || {};
@@ -50,11 +51,7 @@ const WatchLaterScreen = ({ navigation }) => {
 
   const handleItemPress = useCallback(
     item => {
-      if (item.type === 'short') {
-        navigation?.navigate('ShortsVideoScreen', { shortId: item.id });
-      } else {
-        navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
-      }
+      navigateToHomeOneLibraryDetail(navigation, item);
     },
     [navigation],
   );

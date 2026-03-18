@@ -47,6 +47,7 @@ import {
 import { shortsService } from '../services/shortsService';
 import { getDownloadedVideos } from '../services/downloadService';
 import { getSocialIcon } from '../constants/socialLinks';
+import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 
 const { width } = Dimensions.get('window');
 
@@ -525,18 +526,16 @@ const LibraryScreen = ({ navigation }) => {
 
   const handleVideoPress = useCallback(
     item => {
-      if (item.type === 'short') {
-        navigation?.navigate('ShortsVideoScreen', { shortId: item.id });
-      } else if (item.localPath) {
+      if (item.localPath) {
         navigation?.navigate('VideoDetailsScreen', {
           videoId: item.id,
           offlineVideo: item,
         });
-      } else {
-        openVideoModal(item.id);
+        return;
       }
+      navigateToHomeOneLibraryDetail(navigation, item);
     },
-    [navigation, openVideoModal],
+    [navigation],
   );
 
   const loadHistory = useCallback(async () => {

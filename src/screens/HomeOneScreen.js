@@ -280,6 +280,45 @@ const HomeOneScreen = () => {
     React.useCallback(() => {
       const stopPlaybackOnBlur = () => setVideoPaused(true);
       const params = route.params || {};
+      const lib = params.openLibraryDetail;
+      if (lib?.contentId && (lib.contentType === 'video' || lib.contentType === 'short')) {
+        navigation.setParams({ openLibraryDetail: undefined });
+        setVideoPaused(true);
+        setVideoError(null);
+        setVideoLoading(false);
+        setRestaurantVideoKey(k => k + 1);
+        setResVideoProgress({ currentTime: 0, duration: 0 });
+        setResIsSliding(false);
+        setResSlidingValue(0);
+        setIsVideoDetail(false);
+        setIsRestaurantDetail(true);
+        const id = String(lib.contentId);
+        const ct = lib.contentType;
+        setSelectedItem({ id, type: ct });
+        if (ct === 'video') {
+          getVideoById(id, user?.id, user?.role || 'user')
+            .then(res => {
+              const full = mapToDisplayItem(res, 'video');
+              setSelectedItem(full);
+            })
+            .catch(() => {
+              Alert.alert('Error', 'Could not load this video.');
+              setIsRestaurantDetail(false);
+            });
+        } else {
+          shortsService
+            .getShortById(id, user?.id, user?.role || 'user')
+            .then(res => {
+              const full = mapToDisplayItem(res, 'short');
+              setSelectedItem(full);
+            })
+            .catch(() => {
+              Alert.alert('Error', 'Could not load this short.');
+              setIsRestaurantDetail(false);
+            });
+        }
+        return stopPlaybackOnBlur;
+      }
       const showRestaurant = params.showRestaurantDetail;
       const restaurantItem = params.restaurantItem;
       if (showRestaurant && restaurantItem) {
@@ -350,6 +389,8 @@ const HomeOneScreen = () => {
     }, [
       route.params,
       navigation,
+      user?.id,
+      user?.role,
       selectedLocation?.lat,
       selectedLocation?.lng,
       loadFeaturedAndFeed,
@@ -648,44 +689,64 @@ const HomeOneScreen = () => {
       navigation.navigate('HomeSevenScreen');
       return;
     }
-    // Restaurant detail is a "video" item
+    const isShort = selectedItem?.type === 'short';
     try {
-      await toggleVideoLike(selectedItem.id, user.id);
+      if (isShort) {
+        await shortsService.toggleLike(selectedItem.id, user.id);
+      } else {
+        await toggleVideoLike(selectedItem.id, user.id);
+      }
       setSelectedItem(prev => {
         if (!prev || prev.id !== selectedItem.id) return prev;
         const newLiked = !prev.isLiked;
         const delta = newLiked ? 1 : -1;
         const newCount = Math.max(0, (prev.likeCount ?? 0) + delta);
-        return { ...prev, isLiked: newLiked, likeCount: newCount };
+        return {
+          ...prev,
+          isLiked: newLiked,
+          likeCount: newCount,
+          ...(isShort && newLiked ? { isDisliked: false } : {}),
+        };
       });
     } catch {}
-  }, [navigation, selectedItem?.id, user?.id]);
+  }, [navigation, selectedItem?.id, selectedItem?.type, user?.id]);
 
   const handleRestaurantDislike = useCallback(async () => {
     if (!user?.id || !selectedItem?.id) {
       navigation.navigate('HomeSevenScreen');
       return;
     }
+    const isShort = selectedItem?.type === 'short';
     try {
-      await toggleVideoDislike(selectedItem.id, user.id);
+      if (isShort) {
+        await shortsService.toggleDislike(selectedItem.id, user.id);
+      } else {
+        await toggleVideoDislike(selectedItem.id, user.id);
+      }
       setSelectedItem(prev => {
         if (!prev || prev.id !== selectedItem.id) return prev;
         const newDisliked = !prev.isDisliked;
         const delta = newDisliked ? 1 : -1;
         const newCount = Math.max(0, (prev.dislikeCount ?? 0) + delta);
-        return { ...prev, isDisliked: newDisliked, dislikeCount: newCount };
+        return {
+          ...prev,
+          isDisliked: newDisliked,
+          dislikeCount: newCount,
+          ...(isShort && newDisliked ? { isLiked: false } : {}),
+        };
       });
     } catch {}
-  }, [navigation, selectedItem?.id, user?.id]);
+  }, [navigation, selectedItem?.id, selectedItem?.type, user?.id]);
 
   const handleRestaurantShare = useCallback(async () => {
     if (!selectedItem?.id) return;
-    const message = `${selectedItem?.title || 'Video'}\neatix://video/${
-      selectedItem.id
-    }`;
+    const isShort = selectedItem?.type === 'short';
+    const message = `${selectedItem?.title || 'Video'}\neatix://${
+      isShort ? 'shorts' : 'video'
+    }/${selectedItem.id}`;
     try {
       await Share.share({ message, title: selectedItem?.title || 'Share' });
-      recordVideoShare(selectedItem.id);
+      if (!isShort) recordVideoShare(selectedItem.id);
       setSelectedItem(prev => {
         if (!prev || prev.id !== selectedItem.id) return prev;
         const newCount = (prev.shareCount ?? 0) + 1;
@@ -696,7 +757,7 @@ const HomeOneScreen = () => {
         Alert.alert('Share', 'Share failed');
       }
     }
-  }, [selectedItem?.id]);
+  }, [selectedItem?.id, selectedItem?.type]);
 
   const handleRestaurantChat = useCallback(() => {
     if (!user?.id) {
@@ -1937,7 +1998,7 @@ const HomeOneScreen = () => {
       <CommentsModal
         visible={resCommentsVisible}
         onClose={() => setResCommentsVisible(false)}
-        contentType="video"
+        contentType={selectedItem?.type === 'short' ? 'short' : 'video'}
         contentId={selectedItem?.id}
         videoId={selectedItem?.id}
         video={{
