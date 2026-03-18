@@ -347,7 +347,10 @@ const HomeOneScreen = () => {
       const stopPlaybackOnBlur = () => setVideoPaused(true);
       const params = route.params || {};
       const lib = params.openLibraryDetail;
-      if (lib?.contentId && (lib.contentType === 'video' || lib.contentType === 'short')) {
+      if (
+        lib?.contentId &&
+        (lib.contentType === 'video' || lib.contentType === 'short')
+      ) {
         if (lib.returnTo) {
           libraryDetailReturnRef.current = {
             returnTo: lib.returnTo,
@@ -690,6 +693,7 @@ const HomeOneScreen = () => {
   }, [isVideoDetail, selectedItem?.id, selectedItem?.type, user?.id]);
 
   const openRestaurantDetail = item => {
+    const campaignOwner = item?._campaignOwnerUser;
     setSelectedItem(item);
     setVideoPaused(true);
     setVideoError(null);
@@ -704,7 +708,48 @@ const HomeOneScreen = () => {
       getVideoById(item.id, user?.id, user?.role || 'user')
         .then(res => {
           const full = mapToDisplayItem(res, item?.type || 'video');
-          setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
+          if (campaignOwner?.id) {
+            const co = campaignOwner;
+            const u = {
+              ...(full.user && typeof full.user === 'object' ? full.user : {}),
+              ...co,
+              id: co.id,
+            };
+            const channelName =
+              co.nickname || co.name || full.channelName || 'Restaurant';
+            const firstPhoto = co.photos?.[0];
+            const avatar =
+              (typeof firstPhoto === 'string'
+                ? firstPhoto
+                : firstPhoto?.src) ||
+              full.channelAvatar;
+            setSelectedItem(prev => ({
+              ...full,
+              user: u,
+              userId: co.id,
+              channelName,
+              channelAvatar: safeImageUri(
+                avatar,
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                  channelName,
+                )}&background=111&color=fff`,
+              ),
+              location: co.address || full.location || 'Near you',
+              creatorAddress: co.address ?? full.creatorAddress,
+              creatorLatitude: co.latitude ?? full.creatorLatitude,
+              creatorLongitude: co.longitude ?? full.creatorLongitude,
+              creatorSocialLinks: Array.isArray(co.socialLinks)
+                ? co.socialLinks
+                : full.creatorSocialLinks || [],
+              creatorRole:
+                co.role != null
+                  ? String(co.role).toLowerCase()
+                  : full.creatorRole,
+              watchedAt: prev?.watchedAt,
+            }));
+          } else {
+            setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
+          }
         })
         .catch(() => {});
     }
@@ -895,9 +940,7 @@ const HomeOneScreen = () => {
       contentId: item.id,
       videoUrl: item.videoUrl,
       title:
-        item.title ||
-        (item.description || 'Short').substring(0, 80) ||
-        'Short',
+        item.title || (item.description || 'Short').substring(0, 80) || 'Short',
       channelName:
         item.user?.nickname || item.user?.name || item.channelName || '',
     });
@@ -1026,8 +1069,7 @@ const HomeOneScreen = () => {
       setReportSubmitting(true);
       try {
         await submitReport({
-          contentType:
-            reportTarget.contentType === 'short' ? 'short' : 'video',
+          contentType: reportTarget.contentType === 'short' ? 'short' : 'video',
           contentId: reportTarget.contentId,
           reason,
         });
@@ -1044,21 +1086,35 @@ const HomeOneScreen = () => {
     [reportTarget, closeHomeMore],
   );
 
+  /** Featured/sponsored API returns campaign owner on parent; video.user may be missing — keep owner for detail screen. */
   const featuredItem = (() => {
     if (!featuredVideo?.video) return null;
     const video = featuredVideo.video;
-    const user = video.user || featuredVideo.user;
-    return mapToDisplayItem({ ...video, user }, 'video');
+    const co = featuredVideo.user;
+    const mergedUser =
+      co?.id || co?.name
+        ? { ...(video.user && typeof video.user === 'object' ? video.user : {}), ...co }
+        : video.user || co;
+    const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
+    return co?.id ? { ...base, _campaignOwnerUser: co } : base;
   })();
 
   const sponsoredItem = sponsoredVideo?.video
-    ? mapToDisplayItem(
-        {
-          ...sponsoredVideo.video,
-          user: sponsoredVideo.video.user || sponsoredVideo.user,
-        },
-        'video',
-      )
+    ? (() => {
+        const video = sponsoredVideo.video;
+        const co = sponsoredVideo.user;
+        const mergedUser =
+          co?.id || co?.name
+            ? {
+                ...(video.user && typeof video.user === 'object'
+                  ? video.user
+                  : {}),
+                ...co,
+              }
+            : video.user || co;
+        const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
+        return co?.id ? { ...base, _campaignOwnerUser: co } : base;
+      })()
     : null;
 
   // Sectioned feed: sponsored → 2 shorts → 2 videos → continue (3) → 4 shorts → 4 videos → 6 → 6 ...

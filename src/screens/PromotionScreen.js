@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   StyleSheet,
   View,
@@ -39,7 +45,6 @@ import {
 } from '../services/channelService';
 import {
   getUserVideos,
-  getLikedVideos,
   getVideoById,
   toggleLike as toggleVideoLike,
   toggleDislike as toggleVideoDislike,
@@ -197,8 +202,6 @@ const PromotionScreen = ({ onBack }) => {
   const [savedLoading, setSavedLoading] = useState(false);
   const [myVideos, setMyVideos] = useState([]);
   const [myVideosLoading, setMyVideosLoading] = useState(false);
-  const [mostLikedItems, setMostLikedItems] = useState([]);
-  const [mostLikedLoading, setMostLikedLoading] = useState(false);
   const [nearbyPromotions, setNearbyPromotions] = useState([]);
   const [promotionsLoading, setPromotionsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -294,8 +297,8 @@ const PromotionScreen = ({ onBack }) => {
     setMyVideosLoading(true);
     try {
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(userId, 1, 30),
-        shortsService.getUserShorts(userId, 1, 30),
+        getUserVideos(userId, 1, 100),
+        shortsService.getUserShorts(userId, 1, 100),
       ]);
       const videos = (vRes?.videos ?? []).map(v => ({
         ...v,
@@ -319,23 +322,11 @@ const PromotionScreen = ({ onBack }) => {
     }
   }, [userId]);
 
-  const loadMostLiked = useCallback(async () => {
-    if (!userId) return;
-    setMostLikedLoading(true);
-    try {
-      const [vRes, sRes] = await Promise.all([
-        getLikedVideos(userId, 1, 30),
-        shortsService.getLikedShorts(userId, 1, 30),
-      ]);
-      const videos = (vRes?.videos ?? []).map(v => ({ ...v, type: 'video' }));
-      const shorts = (sRes?.shorts ?? []).map(s => ({ ...s, type: 'short' }));
-      setMostLikedItems([...videos, ...shorts]);
-    } catch (e) {
-      setMostLikedItems([]);
-    } finally {
-      setMostLikedLoading(false);
-    }
-  }, [userId]);
+  /** Your uploads sorted by likes (same pool as My Videos). */
+  const mostLikedItems = useMemo(() => {
+    const likes = it => it.likeCount ?? it._count?.likes ?? 0;
+    return [...myVideos].sort((a, b) => likes(b) - likes(a));
+  }, [myVideos]);
 
   const loadNearbyPromotions = useCallback(async () => {
     const lat = currentUser?.latitude ?? profile?.latitude ?? 23.8103;
@@ -366,10 +357,9 @@ const PromotionScreen = ({ onBack }) => {
     if (userId) {
       loadSaved();
       loadMyVideos();
-      loadMostLiked();
       loadNearbyPromotions();
     }
-  }, [userId, loadSaved, loadMyVideos, loadMostLiked, loadNearbyPromotions]);
+  }, [userId, loadSaved, loadMyVideos, loadNearbyPromotions]);
 
   const onRefresh = useCallback(async () => {
     if (!userId) return;
@@ -378,18 +368,10 @@ const PromotionScreen = ({ onBack }) => {
       loadProfile(),
       loadSaved(),
       loadMyVideos(),
-      loadMostLiked(),
       loadNearbyPromotions(),
     ]);
     setRefreshing(false);
-  }, [
-    userId,
-    loadProfile,
-    loadSaved,
-    loadMyVideos,
-    loadMostLiked,
-    loadNearbyPromotions,
-  ]);
+  }, [userId, loadProfile, loadSaved, loadMyVideos, loadNearbyPromotions]);
 
   const openEditProfile = () => {
     const links = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
@@ -471,6 +453,28 @@ const PromotionScreen = ({ onBack }) => {
     const s = Math.floor(sec % 60);
     return `${m}:${String(s).padStart(2, '0')}`;
   };
+
+  /** Same as BusinessProfileViewScreen Video tab +: Create modal (short / upload / go live), return to Promotion on close */
+  const openMyVideosCreateFlow = useCallback(() => {
+    if (!currentUser?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    let nav = navigation;
+    for (let i = 0; i < 12 && nav; i++) {
+      const names = nav.getState?.()?.routeNames;
+      if (Array.isArray(names) && names.includes('Create')) {
+        const state = nav.getState();
+        const idx = state?.index ?? 0;
+        const tabName = state?.routes?.[idx]?.name || 'Home1';
+        nav.navigate('Create', {
+          returnTo: { tab: tabName, screen: 'PromotionScreen' },
+        });
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+  }, [navigation, currentUser?.id]);
 
   const openVideoModal = useCallback(
     async item => {
@@ -934,9 +938,9 @@ const PromotionScreen = ({ onBack }) => {
 
         {/* Dynamic Video Sections */}
         <VideoSection
-          title="Most Liked Videos"
+          title="My most liked"
           items={mostLikedThumbs}
-          loading={mostLikedLoading}
+          loading={myVideosLoading}
           onItemPress={openVideoModal}
         />
 
@@ -991,13 +995,21 @@ const PromotionScreen = ({ onBack }) => {
           items={myVideoThumbs}
           loading={myVideosLoading}
           onItemPress={openVideoModal}
-          rightAccessory={<Icon name="plus" size={24} color="#000" />}
+          rightAccessory={
+            <TouchableOpacity
+              onPress={openMyVideosCreateFlow}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Icon name="plus" size={24} color="#000" />
+            </TouchableOpacity>
+          }
         />
 
         {/* Scroll Indicator */}
-        <View style={styles.bottomArrowContainer}>
+        {/* <View style={styles.bottomArrowContainer}>
           <Icon name="chevron-down" size={45} color="#333" />
-        </View>
+        </View> */}
       </ScrollView>
 
       {/* Video quick-view modal (same as UserViewsScreen) */}
