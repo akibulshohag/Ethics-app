@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   Share,
   Image,
+  Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
@@ -24,11 +25,17 @@ import { useDispatch, useSelector } from 'react-redux';
 import Video from 'react-native-video';
 import { shortsService } from '../../services/shortsService';
 import CommentsModal from '../../components/CommentsModal';
+import ShortsMoreOptionsModal from '../../components/ShortsMoreOptionsModal';
+import ShortsReportModal from '../../components/ShortsReportModal';
+import SaveModal from '../../components/SaveModal';
 import { setShortsMuted } from '../../redux/actions/appSlice';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { safeImageUri } from '../../utils/helper';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
+import { setPlaylist } from '../../services/playlistService';
+import { submitReport } from '../../services/reportService';
+import Toast from 'react-native-toast-message';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -37,6 +44,40 @@ const formatCount = n => {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
   return String(n);
+};
+
+const formatShortsTime = sec => {
+  const s = Math.floor(Number(sec) || 0);
+  if (!Number.isFinite(s) || s < 0) return '0:00';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+  return `${m}:${String(r).padStart(2, '0')}`;
+};
+
+const firstNameFromSubscriber = u => {
+  const raw = String(u?.name || u?.nickname || u?.email || '').trim();
+  if (!raw) return 'Someone';
+  const word = raw.split(/\s+/)[0];
+  if (!word) return 'Someone';
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+};
+
+const subsOrderPreviewFromItems = items => {
+  const arr = Array.isArray(items) ? items : [];
+  if (!arr.length) return { firstDisplay: '', total: 0 };
+  return { firstDisplay: firstNameFromSubscriber(arr[0]), total: arr.length };
+};
+
+/** e.g. "Pino & others Ordered Here" or "Pino Ordered Here" */
+const buildSubscribersOrderLine = (firstDisplay, total) => {
+  if (total == null || total < 1) return 'Subscribers Order';
+  const name = firstDisplay || 'Someone';
+  if (total === 1) return `${name} Ordered Here`;
+  return `${name} & others Ordered Here`;
 };
 
 const normalizeShort = s => {
@@ -67,6 +108,10 @@ const normalizeShort = s => {
     shares: formatCount(shareCount) || '0',
     hashtags: s.hashtags || '#shorts',
     audio: s.audio || 'Original Sound',
+    duration:
+      s.duration != null && Number.isFinite(Number(s.duration))
+        ? Number(s.duration)
+        : null,
   };
 };
 
@@ -134,6 +179,13 @@ const ProductShortsVideo = () => {
   const [subsLoading, setSubsLoading] = useState(false);
   const [subsUsers, setSubsUsers] = useState([]);
   const [subsError, setSubsError] = useState('');
+  /** per ownerId: { firstDisplay, total } for footer + modal title */
+  const [subsOrderByOwner, setSubsOrderByOwner] = useState({});
+  const subsPreviewFetchedRef = useRef(new Set());
+  const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [moreMenuItem, setMoreMenuItem] = useState(null);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -141,6 +193,11 @@ const ProductShortsVideo = () => {
       return () => setIsScreenFocused(false);
     }, []),
   );
+
+  useEffect(() => {
+    subsPreviewFetchedRef.current.clear();
+    setSubsOrderByOwner({});
+  }, [user?.token]);
 
   const currentShortId = initialItem?.id;
   const ownerId =
@@ -347,7 +404,9 @@ const ProductShortsVideo = () => {
     onLike,
     onShare,
     onOpenComments,
+    onOpenMoreMenu,
     isScreenFocused: focused,
+    subscribersOrderLine,
   }) => {
     const isCurrentlyViewable = currentIndex === index;
     const [isPausedLocally, setIsPausedLocally] = useState(false);
@@ -412,7 +471,14 @@ const ProductShortsVideo = () => {
           controls={false}
           onLoad={data => {
             const d = Number(data?.duration || 0);
-            setDuration(Number.isFinite(d) ? d : 0);
+            const api = Number(item?.duration);
+            const use =
+              Number.isFinite(d) && d > 0
+                ? d
+                : Number.isFinite(api) && api > 0
+                  ? api
+                  : 0;
+            setDuration(use);
           }}
           onProgress={data => {
             if (!isCurrentlyViewable || isPaused) return;
@@ -425,34 +491,41 @@ const ProductShortsVideo = () => {
           }}
         />
 
-        {/* YouTube-style progress bar (seek) */}
         <View
           style={[
             styles.progressBarWrap,
-            // Place it slightly below the footer row (no overlap)
             { bottom: Math.max(6, (insets?.bottom || 0) + 4) },
           ]}
           pointerEvents="box-none"
         >
-          <Slider
-            style={styles.progressSlider}
-            value={Math.min(currentTime, duration || 0)}
-            minimumValue={0}
-            maximumValue={Math.max(0.1, duration || 0)}
-            minimumTrackTintColor="rgba(255,255,255,0.9)"
-            maximumTrackTintColor="rgba(255,255,255,0.35)"
-            thumbTintColor="rgba(255,255,255,0.95)"
-            onSlidingStart={() => setIsSeeking(true)}
-            onValueChange={val => setCurrentTime(val)}
-            onSlidingComplete={val => {
-              const v = Math.max(0, Math.min(Number(val) || 0, duration || 0));
-              try {
-                videoRef.current?.seek?.(v);
-              } catch (_) {}
-              setCurrentTime(v);
-              setIsSeeking(false);
-            }}
-          />
+          <View style={styles.progressRow}>
+            <Text style={styles.progressTimeText}>
+              {formatShortsTime(currentTime)}
+            </Text>
+            <Slider
+              style={styles.progressSlider}
+              value={Math.min(currentTime, Math.max(0.01, duration || 0.1))}
+              minimumValue={0}
+              maximumValue={Math.max(0.1, duration || 0.1)}
+              minimumTrackTintColor="rgba(255,255,255,0.9)"
+              maximumTrackTintColor="rgba(255,255,255,0.35)"
+              thumbTintColor="rgba(255,255,255,0.95)"
+              onSlidingStart={() => setIsSeeking(true)}
+              onValueChange={val => setCurrentTime(val)}
+              onSlidingComplete={val => {
+                const max = Math.max(0.1, duration || 0.1);
+                const v = Math.max(0, Math.min(Number(val) || 0, max));
+                try {
+                  videoRef.current?.seek?.(v);
+                } catch (_) {}
+                setCurrentTime(v);
+                setIsSeeking(false);
+              }}
+            />
+            <Text style={styles.progressTimeText}>
+              {duration > 0 ? formatShortsTime(duration) : '--:--'}
+            </Text>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -483,7 +556,12 @@ const ProductShortsVideo = () => {
                 color="#FFF"
                 style={{ marginRight: 15 }}
               />
-              <Icon name="dots-vertical" size={20} color="#FFF" />
+              <TouchableOpacity
+                onPress={() => onOpenMoreMenu?.(item)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="dots-vertical" size={20} color="#FFF" />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -554,7 +632,9 @@ const ProductShortsVideo = () => {
               }}
               disabled={!(item?.userId || item?.userObj?.id)}
             >
-              <Text style={styles.translationText}>Subscribers Order</Text>
+              <Text style={styles.translationText} numberOfLines={2}>
+                {subscribersOrderLine || 'Subscribers Order'}
+              </Text>
             </TouchableOpacity>
             <View style={styles.footerRow}>
               <View style={styles.audioRow}>
@@ -635,7 +715,14 @@ const ProductShortsVideo = () => {
         user.token,
         ownerIdToLoad,
       );
-      setSubsUsers(Array.isArray(res?.items) ? res.items : []);
+      const items = Array.isArray(res?.items) ? res.items : [];
+      setSubsUsers(items);
+      const { firstDisplay, total } = subsOrderPreviewFromItems(items);
+      setSubsOrderByOwner(prev => ({
+        ...prev,
+        [String(ownerIdToLoad)]: { firstDisplay, total },
+      }));
+      subsPreviewFetchedRef.current.add(String(ownerIdToLoad));
     } catch (e) {
       setSubsUsers([]);
       setSubsError(e?.message || 'Failed to load subscribers');
@@ -645,6 +732,108 @@ const ProductShortsVideo = () => {
   };
 
   const listData = videos.length > 0 ? videos : DUMMY_VIDEOS;
+
+  const menuTargetProduct = () =>
+    moreMenuItem || listData[currentIndex] || null;
+
+  const handleSaveToWatchLaterProduct = async () => {
+    const t = menuTargetProduct();
+    if (!user?.id || !t?.id) {
+      Toast.show({ type: 'info', text1: 'Please log in to save' });
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    try {
+      await setPlaylist(user.id, 'watch_later', 'short', t.id, true);
+      Toast.show({ type: 'success', text1: 'Saved to Watch Later' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Failed to save' });
+    }
+  };
+
+  const handleDownloadProduct = async () => {
+    const t = menuTargetProduct();
+    const url = t?.videoUrl;
+    if (!url || !String(url).trim()) {
+      Toast.show({ type: 'info', text1: 'No video link available' });
+      return;
+    }
+    try {
+      await Share.share({ message: String(url), url: String(url) });
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        try {
+          await Linking.openURL(String(url));
+        } catch (_) {
+          Toast.show({ type: 'error', text1: 'Could not open video' });
+        }
+      }
+    }
+  };
+
+  const handleNotInterestedProduct = () => {
+    const t = menuTargetProduct();
+    if (!t?.id) return;
+    setVideos(prev => {
+      const next = prev.filter(v => String(v.id) !== String(t.id));
+      return next.length > 0 ? next : prev;
+    });
+    Toast.show({ type: 'info', text1: "Got it — we'll show fewer like this" });
+  };
+
+  const openReportFromMenuProduct = () => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    setReportVisible(true);
+  };
+
+  const handleReportSubmitProduct = async reason => {
+    const t = menuTargetProduct();
+    if (!t?.id) {
+      setReportVisible(false);
+      return;
+    }
+    try {
+      await submitReport({
+        contentType: 'short',
+        contentId: t.id,
+        reason,
+      });
+      Toast.show({ type: 'success', text1: 'Report submitted' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: 'Failed to submit report' });
+    }
+    setReportVisible(false);
+  };
+
+  const subsPreviewOwnerId =
+    listData[currentIndex]?.userId ?? listData[currentIndex]?.userObj?.id ?? null;
+
+  useEffect(() => {
+    if (!user?.token || !subsPreviewOwnerId) return;
+    const key = String(subsPreviewOwnerId);
+    if (subsPreviewFetchedRef.current.has(key)) return;
+    subsPreviewFetchedRef.current.add(key);
+    let cancelled = false;
+    listMySubscribersWhoOrderedFromOwner(user.token, subsPreviewOwnerId)
+      .then(res => {
+        if (cancelled) return;
+        const items = Array.isArray(res?.items) ? res.items : [];
+        const { firstDisplay, total } = subsOrderPreviewFromItems(items);
+        setSubsOrderByOwner(prev => ({
+          ...prev,
+          [key]: { firstDisplay, total },
+        }));
+      })
+      .catch(() => {
+        subsPreviewFetchedRef.current.delete(key);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [subsPreviewOwnerId, user?.token]);
   const currentShortForComments = listData[currentIndex];
 
   const handleCommentAdded = () => {
@@ -678,17 +867,30 @@ const ProductShortsVideo = () => {
     );
   };
 
-  const renderItem = ({ item, index }) => (
-    <VideoItem
-      item={item}
-      index={index}
-      currentIndex={currentIndex}
-      onLike={handleLike}
-      onShare={handleShare}
-      onOpenComments={handleOpenComments}
-      isScreenFocused={isScreenFocused}
-    />
-  );
+  const renderItem = ({ item, index }) => {
+    const oid = String(item?.userId ?? item?.userObj?.id ?? '');
+    const preview = oid ? subsOrderByOwner[oid] : null;
+    const line =
+      preview && preview.total >= 1
+        ? buildSubscribersOrderLine(preview.firstDisplay, preview.total)
+        : 'Subscribers Order';
+    return (
+      <VideoItem
+        item={item}
+        index={index}
+        currentIndex={currentIndex}
+        onLike={handleLike}
+        onShare={handleShare}
+        onOpenComments={handleOpenComments}
+        onOpenMoreMenu={itemIn => {
+          setMoreMenuItem(itemIn);
+          setMoreMenuVisible(true);
+        }}
+        isScreenFocused={isScreenFocused}
+        subscribersOrderLine={line}
+      />
+    );
+  };
 
   if (loading && videos.length === 0) {
     return (
@@ -714,6 +916,33 @@ const ProductShortsVideo = () => {
         onCommentAdded={handleCommentAdded}
         onCommentDeleted={handleCommentDeleted}
       />
+      <ShortsMoreOptionsModal
+        visible={moreMenuVisible}
+        onClose={() => setMoreMenuVisible(false)}
+        onSaveToPlaylist={() => {
+          if (!user?.id) {
+            navigation.navigate('HomeSevenScreen');
+            return;
+          }
+          setSaveModalVisible(true);
+        }}
+        onSaveToWatchLater={handleSaveToWatchLaterProduct}
+        onDownload={handleDownloadProduct}
+        onShare={() => handleShare(menuTargetProduct())}
+        onNotInterested={handleNotInterestedProduct}
+        onReport={openReportFromMenuProduct}
+      />
+      <SaveModal
+        visible={saveModalVisible}
+        onClose={() => setSaveModalVisible(false)}
+        contentType="short"
+        contentId={menuTargetProduct()?.id}
+      />
+      <ShortsReportModal
+        visible={reportVisible}
+        onClose={() => setReportVisible(false)}
+        onSubmit={handleReportSubmitProduct}
+      />
       <Modal
         visible={subsModalOpen}
         transparent
@@ -731,7 +960,14 @@ const ProductShortsVideo = () => {
         >
           <View style={styles.subsHandle} />
           <View style={styles.subsHeaderRow}>
-            <Text style={styles.subsTitle}>Subscribers Order</Text>
+            <Text style={styles.subsTitle} numberOfLines={2}>
+              {!subsLoading && subsUsers.length > 0
+                ? buildSubscribersOrderLine(
+                    firstNameFromSubscriber(subsUsers[0]),
+                    subsUsers.length,
+                  )
+                : 'Subscribers Order'}
+            </Text>
             <TouchableOpacity
               onPress={() => setSubsModalOpen(false)}
               style={styles.subsCloseBtn}
@@ -972,13 +1208,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     zIndex: 50,
     elevation: 50,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressTimeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+    minWidth: 36,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   progressSlider: {
-    width: '100%',
-    height: 30,
+    flex: 1,
+    height: 32,
   },
   audioText: { color: '#FFF', fontSize: 13, marginLeft: 5 },
   orderNowBtn: {

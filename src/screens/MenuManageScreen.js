@@ -48,6 +48,8 @@ const MenuManageScreen = () => {
   const [imageUrl, setImageUrl] = useState('');
   const [itemImageAsset, setItemImageAsset] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  /** veg | egg | non_veg | '' */
+  const [dietaryType, setDietaryType] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
   const [fileUploadLoading, setFileUploadLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -149,6 +151,7 @@ const MenuManageScreen = () => {
     setImageUrl('');
     setItemImageAsset(null);
     setSelectedCategoryId(categories.length > 0 ? categories[0].id : '');
+    setDietaryType('');
     setAddSuccessInModal(false);
     setFormVisible(true);
   };
@@ -159,6 +162,7 @@ const MenuManageScreen = () => {
     setPrice(String(item.price ?? ''));
     setImageUrl(item.imageUrl || '');
     setItemImageAsset(null);
+    setDietaryType(item.dietaryType && ['veg', 'egg', 'non_veg'].includes(item.dietaryType) ? item.dietaryType : '');
     setSelectedCategoryId(item.categoryId || item.category?.id || (categories.length > 0 ? categories[0].id : ''));
     setAddSuccessInModal(false);
     setFormVisible(true);
@@ -200,6 +204,11 @@ const MenuManageScreen = () => {
         price: numPrice,
         imageUrl: imageUrl || undefined,
         ...(selectedCategoryId ? { categoryId: selectedCategoryId } : {}),
+        ...(dietaryType
+          ? { dietaryType }
+          : editingId
+            ? { clearDietary: true }
+            : {}),
       };
       if (editingId) {
         await updateMenuItem(user.token, editingId, payload);
@@ -511,6 +520,40 @@ const MenuManageScreen = () => {
                   placeholderTextColor="#999"
                   keyboardType="decimal-pad"
                 />
+                <Text style={styles.inputLabel}>Veg / Non-veg (for customer filters)</Text>
+                <View style={styles.dietaryRow}>
+                  {[
+                    { id: '', label: 'Any' },
+                    { id: 'veg', label: 'Veg', icon: 'circle' },
+                    { id: 'egg', label: 'Egg', icon: 'egg' },
+                    { id: 'non_veg', label: 'Non-veg', icon: 'triangle' },
+                  ].map((d) => (
+                    <TouchableOpacity
+                      key={d.id || 'any'}
+                      style={[
+                        styles.dietaryChip,
+                        dietaryType === d.id && styles.dietaryChipActive,
+                      ]}
+                      onPress={() => setDietaryType(d.id)}
+                    >
+                      {d.icon ? (
+                        <Icon
+                          name={d.icon}
+                          size={16}
+                          color={dietaryType === d.id ? COLORS.white : '#666'}
+                        />
+                      ) : null}
+                      <Text
+                        style={[
+                          styles.dietaryChipText,
+                          dietaryType === d.id && styles.dietaryChipTextActive,
+                        ]}
+                      >
+                        {d.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <Text style={styles.inputLabel}>Item image (upload file, no URL)</Text>
                 <TouchableOpacity
                   style={[styles.uploadImageBtn, imageUploading && styles.buttonDisabled]}
@@ -758,6 +801,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: { color: COLORS.white, fontWeight: '600' },
+  dietaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  dietaryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  dietaryChipActive: {
+    backgroundColor: COLORS.primaryOrange,
+    borderColor: COLORS.primaryOrange,
+  },
+  dietaryChipText: { fontSize: 14, color: COLORS.textPrimary },
+  dietaryChipTextActive: { color: COLORS.white, fontWeight: '600' },
 });
 
 export default MenuManageScreen;

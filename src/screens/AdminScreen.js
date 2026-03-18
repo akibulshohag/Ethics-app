@@ -61,6 +61,7 @@ import {
   deleteRestaurantOrderReview,
 } from '../services/orderService';
 import { uploadVideo } from '../services/videoService';
+import { listContentReports } from '../services/reportService';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 
@@ -147,6 +148,10 @@ const AdminScreen = () => {
   const [appRatingValue, setAppRatingValue] = useState(0);
   const [appRatingComment, setAppRatingComment] = useState('');
   const [orderReviews, setOrderReviews] = useState([]);
+  const [contentReports, setContentReports] = useState([]);
+  const [contentReportsTotal, setContentReportsTotal] = useState(0);
+  const [reportsPage, setReportsPage] = useState(1);
+  const [reportTypeFilter, setReportTypeFilter] = useState('all'); // all | short | video
   const [editingOrderReview, setEditingOrderReview] = useState(null);
   const [orderReviewValue, setOrderReviewValue] = useState(0);
   const [orderReviewComment, setOrderReviewComment] = useState('');
@@ -342,6 +347,31 @@ const AdminScreen = () => {
     }
   }, [user?.token]);
 
+  const loadContentReports = useCallback(
+    async (page = 1, append = false) => {
+      if (!user?.token) return;
+      try {
+        const res = await listContentReports(user.token, {
+          page,
+          limit: 50,
+        });
+        const items = res?.items || [];
+        setContentReports(prev => (append ? [...prev, ...items] : items));
+        setContentReportsTotal(Number(res?.total) || 0);
+        setReportsPage(page);
+      } catch (e) {
+        if (!append) setContentReports([]);
+        Alert.alert(
+          'Error',
+          e?.response?.data?.message ||
+            e?.message ||
+            'Failed to load content reports',
+        );
+      }
+    },
+    [user?.token],
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (menu === 'roles') await loadRoles();
@@ -353,6 +383,7 @@ const AdminScreen = () => {
     else if (menu === 'vendorSponsored') await loadVendorSponsored();
     else if (menu === 'appRatings') await loadAppRatings();
     else if (menu === 'orderReviews') await loadOrderReviews();
+    else if (menu === 'contentReports') await loadContentReports(1, false);
     setRefreshing(false);
   }, [
     menu,
@@ -365,6 +396,7 @@ const AdminScreen = () => {
     loadVendorSponsored,
     loadAppRatings,
     loadOrderReviews,
+    loadContentReports,
   ]);
 
   const searchOwners = useCallback(async query => {
@@ -1149,6 +1181,7 @@ const AdminScreen = () => {
     else if (menu === 'vendorSponsored') loadVendorSponsored();
     else if (menu === 'appRatings') loadAppRatings();
     else if (menu === 'orderReviews') loadOrderReviews();
+    else if (menu === 'contentReports') loadContentReports(1, false);
   }, [
     menu,
     loadRoles,
@@ -1160,6 +1193,7 @@ const AdminScreen = () => {
     loadVendorSponsored,
     loadAppRatings,
     loadOrderReviews,
+    loadContentReports,
   ]);
 
   const openEditAppRating = (r) => {
@@ -1641,6 +1675,34 @@ const AdminScreen = () => {
               </Text>
             </TouchableOpacity>
           )}
+
+          {isAdminUser && (
+            <TouchableOpacity
+              style={[
+                styles.sideItem,
+                menu === 'contentReports' && styles.sideItemActive,
+              ]}
+              onPress={() => setMenu('contentReports')}
+            >
+              <Icon
+                name="flag-outline"
+                size={24}
+                color={
+                  menu === 'contentReports'
+                    ? COLORS.primaryOrange
+                    : COLORS.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.sideText,
+                  menu === 'contentReports' && styles.sideTextActive,
+                ]}
+              >
+                Reports
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.main}>
@@ -1662,6 +1724,8 @@ const AdminScreen = () => {
                 ? 'App Ratings'
                 : menu === 'orderReviews'
                 ? 'Order Reviews'
+                : menu === 'contentReports'
+                ? 'Reported shorts & videos'
                 : 'Featured'}
             </Text>
             <TouchableOpacity
@@ -1672,7 +1736,10 @@ const AdminScreen = () => {
               <Icon name="logout" size={20} color={COLORS.white} />
               <Text style={styles.logoutBtnText}>Logout</Text>
             </TouchableOpacity>
-            {menu !== 'orders' && menu !== 'appRatings' && menu !== 'orderReviews' && (
+            {menu !== 'orders' &&
+              menu !== 'appRatings' &&
+              menu !== 'orderReviews' &&
+              menu !== 'contentReports' && (
               <TouchableOpacity
                 style={styles.addBtn}
                 onPress={
@@ -1711,6 +1778,170 @@ const AdminScreen = () => {
                 color={COLORS.primaryOrange}
                 style={{ marginTop: 40 }}
               />
+            ) : menu === 'contentReports' ? (
+              <>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    paddingHorizontal: 12,
+                    marginBottom: 12,
+                    gap: 8,
+                  }}
+                >
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'short', label: 'Shorts' },
+                    { id: 'video', label: 'Videos' },
+                  ].map(f => (
+                    <TouchableOpacity
+                      key={f.id}
+                      onPress={() => setReportTypeFilter(f.id)}
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                        borderRadius: 20,
+                        backgroundColor:
+                          reportTypeFilter === f.id
+                            ? COLORS.primaryOrange
+                            : '#F0F0F0',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontWeight: '600',
+                          color:
+                            reportTypeFilter === f.id
+                              ? '#FFF'
+                              : COLORS.textSecondary,
+                        }}
+                      >
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text
+                  style={{
+                    paddingHorizontal: 16,
+                    marginBottom: 8,
+                    color: COLORS.textSecondary,
+                    fontSize: 13,
+                  }}
+                >
+                  {contentReportsTotal} total report
+                  {contentReportsTotal !== 1 ? 's' : ''}
+                  {reportTypeFilter !== 'all'
+                    ? ` · showing ${reportTypeFilter}s`
+                    : ''}
+                </Text>
+                {contentReports.filter(
+                  r =>
+                    reportTypeFilter === 'all' ||
+                    r.contentType === reportTypeFilter,
+                ).length === 0 ? (
+                  <Text
+                    style={{
+                      padding: 24,
+                      color: COLORS.textSecondary,
+                      textAlign: 'center',
+                    }}
+                  >
+                    No content reports yet.
+                  </Text>
+                ) : (
+                  contentReports
+                    .filter(
+                      r =>
+                        reportTypeFilter === 'all' ||
+                        r.contentType === reportTypeFilter,
+                    )
+                    .map(r => (
+                      <View key={r.id} style={styles.row}>
+                        <View style={styles.rowLeft}>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <View
+                              style={{
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                borderRadius: 6,
+                                backgroundColor:
+                                  r.contentType === 'short'
+                                    ? '#7B1FA2'
+                                    : '#1565C0',
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: '#FFF',
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {r.contentType === 'short' ? 'Short' : 'Video'}
+                              </Text>
+                            </View>
+                            <Text
+                              style={[styles.rowTitle, { flex: 1 }]}
+                              numberOfLines={2}
+                            >
+                              {r.contentTitle || '—'}
+                            </Text>
+                          </View>
+                          <Text style={styles.rowSub}>
+                            <Text style={{ fontWeight: '600' }}>Reason: </Text>
+                            {r.reason || '—'}
+                          </Text>
+                          <Text style={styles.rowSub}>
+                            <Text style={{ fontWeight: '600' }}>Reporter: </Text>
+                            {r.reporter?.nickname ||
+                              r.reporter?.name ||
+                              r.reporter?.email ||
+                              '—'}
+                          </Text>
+                          <Text style={styles.rowSub}>
+                            Content ID: {r.contentId || '—'}
+                          </Text>
+                          <Text style={styles.rowSub}>
+                            {r.createdAt
+                              ? new Date(r.createdAt).toLocaleString()
+                              : '—'}
+                          </Text>
+                          {r.details ? (
+                            <Text style={[styles.rowSub, { marginTop: 4 }]}>
+                              Details: {r.details}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))
+                )}
+                {contentReports.length < contentReportsTotal ? (
+                  <TouchableOpacity
+                    style={{
+                      margin: 16,
+                      padding: 14,
+                      backgroundColor: '#F5F5F5',
+                      borderRadius: 10,
+                      alignItems: 'center',
+                    }}
+                    onPress={() => loadContentReports(reportsPage + 1, true)}
+                  >
+                    <Text style={{ fontWeight: '600', color: COLORS.primaryOrange }}>
+                      Load more ({contentReports.length} / {contentReportsTotal})
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
             ) : menu === 'orderReviews' ? (
               orderReviews.map(r => (
                 <View key={r.id} style={styles.row}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -14,7 +14,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
@@ -95,9 +95,19 @@ const HomeThreeScreen = ({ onBack }) => {
     2: 1,
   });
   const [menuModalVisible, setMenuModalVisible] = useState(false);
+  const [filterSortModalVisible, setFilterSortModalVisible] = useState(false);
+  const [appliedSort, setAppliedSort] = useState('default'); // default | price_low | price_high
+  const [appliedDietary, setAppliedDietary] = useState('all'); // all | veg | egg | non_veg
+  const [appliedHighlyReordered, setAppliedHighlyReordered] = useState(false);
+  const [draftSort, setDraftSort] = useState('default');
+  const [draftDietary, setDraftDietary] = useState('all');
+  const [draftHighlyReordered, setDraftHighlyReordered] = useState(false);
+  /** Quick bar: desserts (static) | bestseller (by sales) | rated (by reviews) — one at a time */
+  const [quickFilter, setQuickFilter] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [openingHours, setOpeningHours] = useState([]);
   const [nowTick, setNowTick] = useState(0);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     // Tick every minute so the banner updates automatically
@@ -214,6 +224,137 @@ const HomeThreeScreen = ({ onBack }) => {
     );
   }, [menuItems, selectedCategoryId]);
 
+  const isDessertItem = useCallback(
+    item => {
+      const cid = item.categoryId || item.category?.id;
+      const cat = (menuCategoriesFromApi || []).find(c => c.id === cid);
+      if (cat && /dessert|sweets?|pastry|cake|pudding|mousse/i.test(String(cat.name || ''))) {
+        return true;
+      }
+      const n = String(item.itemName || '').toLowerCase();
+      return [
+        'dessert',
+        'cake',
+        'sweet',
+        'ice cream',
+        'pudding',
+        'brownie',
+        'pastry',
+        'tiramisu',
+        'cheesecake',
+        'mousse',
+        'waffle',
+        'cookie',
+      ].some(k => n.includes(k));
+    },
+    [menuCategoriesFromApi],
+  );
+
+  const filteredMenuForDisplay = useMemo(() => {
+    let list = [...displayedMenuItems];
+    if (quickFilter === 'desserts') {
+      list = list.filter(isDessertItem);
+    }
+    if (appliedDietary !== 'all') {
+      list = list.filter(
+        it => String(it.dietaryType || '') === appliedDietary,
+      );
+    }
+    if (appliedHighlyReordered) {
+      const ordered = list.filter(it => (Number(it.timesOrdered) || 0) > 0);
+      list = ordered;
+    }
+
+    const bySales = (a, b) =>
+      (Number(b.timesOrdered) || 0) - (Number(a.timesOrdered) || 0);
+    const byRating = (a, b) => {
+      const ar = Number(a.avgRating) || 0;
+      const br = Number(b.avgRating) || 0;
+      if (br !== ar) return br - ar;
+      return (Number(b.ratingCount) || 0) - (Number(a.ratingCount) || 0);
+    };
+    const byPriceLo = (a, b) =>
+      Number(a.price || 0) - Number(b.price || 0);
+    const byPriceHi = (a, b) =>
+      Number(b.price || 0) - Number(a.price || 0);
+    const bySortOrder = (a, b) =>
+      (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+
+    if (appliedSort === 'price_low') {
+      list.sort(byPriceLo);
+    } else if (appliedSort === 'price_high') {
+      list.sort(byPriceHi);
+    } else if (appliedHighlyReordered && list.length > 0) {
+      list.sort(bySales);
+    } else if (quickFilter === 'bestseller') {
+      list.sort(bySales);
+    } else if (quickFilter === 'rated') {
+      list.sort(byRating);
+    } else {
+      list.sort(bySortOrder);
+    }
+    return list;
+  }, [
+    displayedMenuItems,
+    quickFilter,
+    isDessertItem,
+    appliedDietary,
+    appliedHighlyReordered,
+    appliedSort,
+  ]);
+
+  const filterActiveCount = useMemo(() => {
+    let n = 0;
+    if (appliedSort !== 'default') n += 1;
+    if (appliedDietary !== 'all') n += 1;
+    if (appliedHighlyReordered) n += 1;
+    return n;
+  }, [appliedSort, appliedDietary, appliedHighlyReordered]);
+
+  const openFilterModal = () => {
+    setDraftSort(appliedSort);
+    setDraftDietary(appliedDietary);
+    setDraftHighlyReordered(appliedHighlyReordered);
+    setFilterSortModalVisible(true);
+  };
+
+  const applyFilterModal = () => {
+    setAppliedSort(draftSort);
+    setAppliedDietary(draftDietary);
+    setAppliedHighlyReordered(draftHighlyReordered);
+    setFilterSortModalVisible(false);
+  };
+
+  const clearAllFilters = () => {
+    setDraftSort('default');
+    setDraftDietary('all');
+    setDraftHighlyReordered(false);
+    setAppliedSort('default');
+    setAppliedDietary('all');
+    setAppliedHighlyReordered(false);
+    setQuickFilter(null);
+    setFilterSortModalVisible(false);
+  };
+
+  const toggleQuick = key => {
+    setQuickFilter(prev => (prev === key ? null : key));
+    if (key === 'bestseller' || key === 'rated') {
+      setAppliedHighlyReordered(false);
+    }
+  };
+
+  const listSectionTitle = useMemo(() => {
+    if (quickFilter === 'desserts') return 'Desserts';
+    if (quickFilter === 'bestseller') return 'Best sellers';
+    if (quickFilter === 'rated') return 'Top rated';
+    if (selectedCategoryId && selectedCategoryId !== 'all') {
+      return (
+        menuCategories.find(c => c.id === selectedCategoryId)?.label || 'Menu'
+      );
+    }
+    return 'Most Ordered';
+  }, [quickFilter, selectedCategoryId, menuCategories]);
+
   // Sections for modal: all categories with their items, then uncategorized
   const menuSectionsForModal = useMemo(() => {
     const uncategorized = menuItems.filter(
@@ -302,7 +443,6 @@ const HomeThreeScreen = ({ onBack }) => {
       .finally(() => setMenuLoading(false));
   }, [ownerId, singleMenuItem?.id, promotionMenuItems]);
 
-  // Filter Bar Component
   const FilterBar = () => (
     <ScrollView
       horizontal
@@ -310,25 +450,97 @@ const HomeThreeScreen = ({ onBack }) => {
       style={styles.filterContainer}
       contentContainerStyle={styles.filterContent}
     >
-      <TouchableOpacity style={styles.filterChip}>
-        <Icon name="tune" size={18} color="#444" />
-        <Text style={styles.filterText}>Filters</Text>
-        <Icon name="chevron-down" size={18} color="#444" />
+      <TouchableOpacity
+        style={[
+          styles.filterChip,
+          filterActiveCount > 0 && styles.filterChipActive,
+        ]}
+        onPress={openFilterModal}
+      >
+        <Icon
+          name="tune"
+          size={18}
+          color={filterActiveCount > 0 ? '#F5A623' : '#444'}
+        />
+        <Text
+          style={[
+            styles.filterText,
+            filterActiveCount > 0 && styles.filterTextActive,
+          ]}
+        >
+          Filters{filterActiveCount > 0 ? ` (${filterActiveCount})` : ''}
+        </Text>
+        <Icon
+          name="chevron-down"
+          size={18}
+          color={filterActiveCount > 0 ? '#F5A623' : '#444'}
+        />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.filterChip}>
-        <Icon name="tune" size={18} color="#444" />
-        <Text style={styles.filterText}>Desserts</Text>
+      <TouchableOpacity
+        style={[
+          styles.filterChip,
+          quickFilter === 'desserts' && styles.filterChipActive,
+        ]}
+        onPress={() => toggleQuick('desserts')}
+      >
+        <Icon
+          name="cupcake"
+          size={18}
+          color={quickFilter === 'desserts' ? '#F5A623' : '#444'}
+        />
+        <Text
+          style={[
+            styles.filterText,
+            quickFilter === 'desserts' && styles.filterTextActive,
+          ]}
+        >
+          Desserts
+        </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.filterChip}>
-        <Icon name="tune" size={18} color="#444" />
-        <Text style={styles.filterText}>Bestseller</Text>
+      <TouchableOpacity
+        style={[
+          styles.filterChip,
+          quickFilter === 'bestseller' && styles.filterChipActive,
+        ]}
+        onPress={() => toggleQuick('bestseller')}
+      >
+        <Icon
+          name="trending-up"
+          size={18}
+          color={quickFilter === 'bestseller' ? '#F5A623' : '#444'}
+        />
+        <Text
+          style={[
+            styles.filterText,
+            quickFilter === 'bestseller' && styles.filterTextActive,
+          ]}
+        >
+          BestSeller
+        </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.filterChip}>
-        <Icon name="star" size={18} color="#FFC107" />
-        <Text style={styles.filterText}>Rated</Text>
+      <TouchableOpacity
+        style={[
+          styles.filterChip,
+          quickFilter === 'rated' && styles.filterChipActive,
+        ]}
+        onPress={() => toggleQuick('rated')}
+      >
+        <Icon
+          name="star"
+          size={18}
+          color={quickFilter === 'rated' ? '#FFC107' : '#444'}
+        />
+        <Text
+          style={[
+            styles.filterText,
+            quickFilter === 'rated' && styles.filterTextActive,
+          ]}
+        >
+          Rated
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -476,20 +688,53 @@ const HomeThreeScreen = ({ onBack }) => {
           </View>
         ) : hasDynamicMenu ? (
           <>
-            <Text style={styles.sectionHeading}>
-              {selectedCategoryId && selectedCategoryId !== 'all'
-                ? menuCategories.find(c => c.id === selectedCategoryId)
-                    ?.label || 'Menu'
-                : 'Most Ordered'}
-            </Text>
-            {displayedMenuItems.map(item => {
+            <Text style={styles.sectionHeading}>{listSectionTitle}</Text>
+            {filteredMenuForDisplay.length === 0 ? (
+              <View style={styles.emptyFilterWrap}>
+                <Text style={styles.emptyFilterText}>
+                  {quickFilter === 'desserts'
+                    ? 'No dessert-style items here. Use “Menu” to browse all categories, or clear Desserts.'
+                    : appliedHighlyReordered
+                      ? 'No items with order history yet. Try turning off “Highly reordered”.'
+                      : appliedDietary !== 'all'
+                        ? 'No items match this dietary filter.'
+                        : 'No items in this category.'}
+                </Text>
+              </View>
+            ) : null}
+            {filteredMenuForDisplay.map(item => {
               const qty = selectedItems[item.id] || 0;
+              const to = Number(item.timesOrdered) || 0;
               return (
                 <View key={item.id} style={styles.menuItemCard}>
                   <View style={styles.itemInfo}>
-                    <Text style={styles.itemTitle}>{item.itemName}</Text>
+                    <View style={styles.itemTitleRow}>
+                      <Text style={styles.itemTitle}>{item.itemName}</Text>
+                      {item.dietaryType === 'veg' ? (
+                        <View style={[styles.dietDot, styles.dietDotVeg]} />
+                      ) : item.dietaryType === 'egg' ? (
+                        <Icon name="egg" size={16} color="#C4A000" />
+                      ) : item.dietaryType === 'non_veg' ? (
+                        <View style={[styles.dietDot, styles.dietDotNonVeg]} />
+                      ) : null}
+                    </View>
                     <Text style={styles.itemPrice}>
                       £{Number(item.price || 0).toFixed(2)}
+                      {to > 0 ? (
+                        <Text style={styles.timesOrderedBadge}>
+                          {' '}
+                          · {to}x sold
+                        </Text>
+                      ) : null}
+                      {item.avgRating != null && Number(item.avgRating) > 0 ? (
+                        <Text style={styles.avgRatingBadge}>
+                          {' '}
+                          ★ {Number(item.avgRating).toFixed(1)}
+                          {Number(item.ratingCount) > 0
+                            ? ` (${item.ratingCount})`
+                            : ''}
+                        </Text>
+                      ) : null}
                     </Text>
                     {item.description ? (
                       <Text style={styles.itemDesc} numberOfLines={3}>
@@ -687,6 +932,161 @@ const HomeThreeScreen = ({ onBack }) => {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={filterSortModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setFilterSortModalVisible(false)}
+      >
+        <Pressable
+          style={styles.filterModalOverlay}
+          onPress={() => setFilterSortModalVisible(false)}
+        >
+          <Pressable
+            style={[
+              styles.filterModalSheet,
+              { paddingBottom: Math.max(20, insets.bottom + 16) },
+            ]}
+            onPress={e => e.stopPropagation()}
+          >
+            <View style={styles.menuModalHandle} />
+            <Text style={styles.filterModalTitle}>Filters and Sorting</Text>
+
+            <View style={styles.filterSectionCard}>
+              <Text style={styles.filterSectionHeading}>Sort by</Text>
+              <View style={styles.filterChipsRow}>
+                {[
+                  { id: 'price_low', label: 'Price · low to high' },
+                  { id: 'price_high', label: 'Price · high to low' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[
+                      styles.filterOptionChip,
+                      draftSort === opt.id && styles.filterOptionChipOn,
+                    ]}
+                    onPress={() => {
+                      setDraftSort(
+                        draftSort === opt.id ? 'default' : opt.id,
+                      );
+                      if (opt.id) setDraftHighlyReordered(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.filterOptionChipText,
+                        draftSort === opt.id && styles.filterOptionChipTextOn,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.filterSectionCard}>
+              <Text style={styles.filterSectionHeading}>
+                Veg / Non-veg preference
+              </Text>
+              <View style={styles.filterChipsRow}>
+                {[
+                  {
+                    id: 'veg',
+                    label: 'Veg',
+                    icon: 'circle',
+                    iconColor: '#2E7D32',
+                  },
+                  { id: 'egg', label: 'Egg', icon: 'egg', iconColor: '#C4A000' },
+                  {
+                    id: 'non_veg',
+                    label: 'Non-veg',
+                    icon: 'triangle',
+                    iconColor: '#C62828',
+                  },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[
+                      styles.filterOptionChip,
+                      draftDietary === opt.id && styles.filterOptionChipOn,
+                    ]}
+                    onPress={() =>
+                      setDraftDietary(
+                        draftDietary === opt.id ? 'all' : opt.id,
+                      )
+                    }
+                  >
+                    <Icon
+                      name={opt.icon}
+                      size={18}
+                      color={
+                        draftDietary === opt.id ? '#FFF' : opt.iconColor
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.filterOptionChipText,
+                        draftDietary === opt.id && styles.filterOptionChipTextOn,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.filterSectionCard}>
+              <Text style={styles.filterSectionHeading}>Top picks</Text>
+              <View style={styles.filterChipsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.filterOptionChip,
+                    draftHighlyReordered && styles.filterOptionChipGreen,
+                  ]}
+                  onPress={() => {
+                    setDraftHighlyReordered(v => !v);
+                    if (!draftHighlyReordered) {
+                      setDraftSort('default');
+                    }
+                  }}
+                >
+                  <Icon
+                    name="repeat"
+                    size={18}
+                    color={draftHighlyReordered ? '#FFF' : '#2E7D32'}
+                  />
+                  <Text
+                    style={[
+                      styles.filterOptionChipText,
+                      draftHighlyReordered && styles.filterOptionChipTextOn,
+                    ]}
+                  >
+                    Highly reordered
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.filterModalActions}>
+              <TouchableOpacity
+                style={styles.filterClearBtn}
+                onPress={clearAllFilters}
+              >
+                <Text style={styles.filterClearBtnText}>Clear all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.filterApplyBtn}
+                onPress={applyFilterModal}
+              >
+                <Text style={styles.filterApplyBtnText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -772,6 +1172,116 @@ const styles = StyleSheet.create({
     color: '#444',
     marginHorizontal: 6,
   },
+  filterTextActive: { color: '#F5A623', fontWeight: '700' },
+  filterChipActive: {
+    borderColor: '#F5A623',
+    backgroundColor: 'rgba(245,166,35,0.08)',
+  },
+  emptyFilterWrap: { paddingHorizontal: 20, paddingVertical: 24 },
+  emptyFilterText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  dietDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    borderWidth: 1.5,
+  },
+  dietDotVeg: {
+    borderColor: '#2E7D32',
+    backgroundColor: '#E8F5E9',
+  },
+  dietDotNonVeg: {
+    borderColor: '#C62828',
+    backgroundColor: '#FFEBEE',
+  },
+  timesOrderedBadge: { fontSize: 13, color: '#2E7D32', fontWeight: '600' },
+  avgRatingBadge: { fontSize: 13, color: '#F5A623', fontWeight: '600' },
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  filterModalSheet: {
+    backgroundColor: '#F5F5F5',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    maxHeight: '85%',
+  },
+  filterModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  filterSectionCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  filterSectionHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 10,
+  },
+  filterChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  filterOptionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    backgroundColor: '#FFF',
+  },
+  filterOptionChipOn: {
+    borderColor: '#F5A623',
+    backgroundColor: '#F5A623',
+  },
+  filterOptionChipGreen: {
+    borderColor: '#2E7D32',
+    backgroundColor: '#2E7D32',
+  },
+  filterOptionChipText: { fontSize: 14, color: '#222', fontWeight: '500' },
+  filterOptionChipTextOn: { color: '#FFF', fontWeight: '700' },
+  filterModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  filterClearBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFE4CC',
+    alignItems: 'center',
+  },
+  filterClearBtnText: { fontSize: 16, fontWeight: '700', color: '#F5A623' },
+  filterApplyBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#F5A623',
+    alignItems: 'center',
+  },
+  filterApplyBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   openCloseBanner: {
     marginHorizontal: 15,
     marginTop: -4,

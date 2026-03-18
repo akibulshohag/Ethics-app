@@ -14,6 +14,7 @@ import {
   Modal,
   Pressable,
   Share,
+  Linking,
 } from 'react-native';
 import Video from 'react-native-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,10 +24,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Slider from '@react-native-community/slider';
 import CommentsModal from '../components/CommentsModal';
-import SettingsModal from '../components/SettingsModal';
+import ShortsMoreOptionsModal from '../components/ShortsMoreOptionsModal';
+import ShortsReportModal from '../components/ShortsReportModal';
 import CreateVideoModal from '../components/CreateVideoModal';
 import SaveModal from '../components/SaveModal';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { shortsService } from '../services/shortsService';
 import {
   getChannelProfile,
@@ -49,15 +50,33 @@ const formatCount = n => {
   return String(n);
 };
 
-const REPORT_REASONS = [
-  'Sexual Content',
-  'Violent or Repulsive Content',
-  'Hateful or Abusive Content',
-  'Harmful or Dangerous Acts',
-  'Spam or Misleading',
-  'Child Abuse',
-  'Others',
-];
+/** Current / total time next to seek bar (YouTube Shorts–style) */
+const formatShortsTime = sec => {
+  const s = Math.floor(Number(sec) || 0);
+  if (!Number.isFinite(s) || s < 0) return '0:00';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+  return `${m}:${String(r).padStart(2, '0')}`;
+};
+
+const firstNameFromSubscriber = u => {
+  const raw = String(u?.name || u?.nickname || u?.email || '').trim();
+  if (!raw) return 'Someone';
+  const word = raw.split(/\s+/)[0];
+  if (!word) return 'Someone';
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+};
+
+const buildSubscribersOrderLine = (firstDisplay, total) => {
+  if (total == null || total < 1) return 'Subscribers Order';
+  const name = firstDisplay || 'Someone';
+  if (total === 1) return `${name} Ordered Here`;
+  return `${name} & others Ordered Here`;
+};
 
 // Fallback mock data when API has no shorts
 const MOCK_VIDEOS = [
@@ -146,7 +165,7 @@ const VideoItem = ({
   screenHeight,
   onBack,
   onOpenComments,
-  onOpenSettings,
+  onOpenMoreMenu,
   onOpenCreate,
   onLike,
   onDislike,
@@ -221,7 +240,14 @@ const VideoItem = ({
           ignoreSilentSwitch="ignore"
           onLoad={data => {
             const d = Number(data?.duration || 0);
-            setDuration(Number.isFinite(d) ? d : 0);
+            const api = Number(item?.duration);
+            const use =
+              Number.isFinite(d) && d > 0
+                ? d
+                : Number.isFinite(api) && api > 0
+                ? api
+                : 0;
+            setDuration(use);
           }}
           onProgress={data => {
             if (!isActive || paused) return;
@@ -261,34 +287,42 @@ const VideoItem = ({
         )}
       </TouchableOpacity>
 
-      {/* YouTube-style progress bar (seek) */}
+      {/* YouTube-style progress bar + current / duration timers */}
       <View
         style={[
           styles.progressBarWrap,
-          // Place it slightly below the footer row (no overlap)
           { bottom: Math.max(6, (insets?.bottom || 0) + 3) },
         ]}
         pointerEvents="box-none"
       >
-        <Slider
-          style={styles.progressSlider}
-          value={Math.min(currentTime, duration || 0)}
-          minimumValue={0}
-          maximumValue={Math.max(0.1, duration || 0)}
-          minimumTrackTintColor="rgba(255,255,255,0.9)"
-          maximumTrackTintColor="rgba(255,255,255,0.35)"
-          thumbTintColor="rgba(255,255,255,0.95)"
-          onSlidingStart={() => setIsSeeking(true)}
-          onValueChange={val => setCurrentTime(val)}
-          onSlidingComplete={val => {
-            const v = Math.max(0, Math.min(Number(val) || 0, duration || 0));
-            try {
-              videoRef.current?.seek?.(v);
-            } catch (_) {}
-            setCurrentTime(v);
-            setIsSeeking(false);
-          }}
-        />
+        <View style={styles.progressRow}>
+          <Text style={styles.progressTimeText}>
+            {formatShortsTime(Math.min(currentTime, duration || 999999))}
+          </Text>
+          <Slider
+            style={styles.progressSlider}
+            value={Math.min(currentTime, Math.max(0.01, duration || 0.1))}
+            minimumValue={0}
+            maximumValue={Math.max(0.1, duration || 0.1)}
+            minimumTrackTintColor="rgba(255,255,255,0.9)"
+            maximumTrackTintColor="rgba(255,255,255,0.35)"
+            thumbTintColor="rgba(255,255,255,0.95)"
+            onSlidingStart={() => setIsSeeking(true)}
+            onValueChange={val => setCurrentTime(val)}
+            onSlidingComplete={val => {
+              const max = Math.max(0.1, duration || 0.1);
+              const v = Math.max(0, Math.min(Number(val) || 0, max));
+              try {
+                videoRef.current?.seek?.(v);
+              } catch (_) {}
+              setCurrentTime(v);
+              setIsSeeking(false);
+            }}
+          />
+          <Text style={styles.progressTimeText}>
+            {duration > 0 ? formatShortsTime(duration) : '--:--'}
+          </Text>
+        </View>
       </View>
 
       {/* Gradient Overlay - ZIndex 5 (same as HomeOneScreen renderVideoDetail feel) */}
@@ -315,10 +349,13 @@ const VideoItem = ({
           <TouchableOpacity style={styles.iconButton}>
             <Icon name="magnify" size={26} color="#FFF" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={onOpenCreate}>
+          {/* <TouchableOpacity style={styles.iconButton} onPress={onOpenCreate}>
             <Icon name="camera-outline" size={26} color="#FFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={onOpenSettings}>
+          </TouchableOpacity> */}
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => onOpenMoreMenu?.(item)}
+          >
             <Icon name="dots-vertical" size={26} color="#FFF" />
           </TouchableOpacity>
         </View>
@@ -529,6 +566,10 @@ const mapShortToItem = s => {
       user.role != null ? String(user.role).toLowerCase() : undefined,
     userId: s.userId || user.id,
     location: user.address || 'Near you',
+    duration:
+      s.duration != null && Number.isFinite(Number(s.duration))
+        ? Number(s.duration)
+        : null,
   };
 };
 
@@ -575,7 +616,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [createVisible, setCreateVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [reportVisible, setReportVisible] = useState(false);
-  const [selectedReason, setSelectedReason] = useState('Sexual Content');
+  const [shortsMenuItem, setShortsMenuItem] = useState(null);
   const [subscriptionMap, setSubscriptionMap] = useState({});
   const [subsModalOpen, setSubsModalOpen] = useState(false);
   const [subsLoading, setSubsLoading] = useState(false);
@@ -747,28 +788,60 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
+  const menuTargetShort = () => shortsMenuItem || activeItem;
+
   const handleSaveToWatchLater = async () => {
-    if (!user?.id || !activeItem?.id) {
+    const t = menuTargetShort();
+    if (!user?.id || !t?.id) {
       Toast.show({ type: 'info', text1: 'Please log in to save' });
       setSettingsVisible(false);
       navigateToHomeScreen('HomeSevenScreen');
       return;
     }
     try {
-      await setPlaylist(user.id, 'watch_later', 'short', activeItem.id, true);
+      await setPlaylist(user.id, 'watch_later', 'short', t.id, true);
       Toast.show({ type: 'success', text1: 'Saved to Watch Later' });
     } catch (e) {
       Toast.show({ type: 'error', text1: 'Failed to save' });
     }
   };
 
-  const openReportModal = () => {
-    setSettingsVisible(false);
+  const handleDownloadShort = async () => {
+    const t = menuTargetShort();
+    const url = t?.videoUrl;
+    if (!url || !String(url).trim()) {
+      Toast.show({ type: 'info', text1: 'No video link available' });
+      return;
+    }
+    try {
+      await Share.share({ message: String(url), url: String(url) });
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        try {
+          await Linking.openURL(String(url));
+        } catch (_) {
+          Toast.show({ type: 'error', text1: 'Could not open video' });
+        }
+      }
+    }
+  };
+
+  const handleNotInterestedShort = () => {
+    const t = menuTargetShort();
+    if (!t?.id) return;
+    setVideos(prev => {
+      const next = prev.filter(v => String(v.id) !== String(t.id));
+      return next.length > 0 ? next : prev;
+    });
+    Toast.show({ type: 'info', text1: "Got it — we'll show fewer like this" });
+  };
+
+  const openReportFromMenu = () => {
     if (!user?.id) {
       navigateToHomeScreen('HomeSevenScreen');
       return;
     }
-    setTimeout(() => setReportVisible(true), 100);
+    setReportVisible(true);
   };
 
   const openSubscribersModal = async ownerIdToLoad => {
@@ -794,16 +867,17 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
-  const handleReportSubmit = async () => {
-    if (!activeItem?.id) {
+  const handleReportSubmit = async reason => {
+    const t = menuTargetShort();
+    if (!t?.id) {
       setReportVisible(false);
       return;
     }
     try {
       await submitReport({
         contentType: 'short',
-        contentId: activeItem.id,
-        reason: selectedReason,
+        contentId: t.id,
+        reason,
       });
       Toast.show({ type: 'success', text1: 'Report submitted' });
     } catch (e) {
@@ -889,7 +963,10 @@ const ShortsVideoScreen = ({ navigation }) => {
                 }
                 setCommentsVisible(true);
               }}
-              onOpenSettings={() => setSettingsVisible(true)}
+              onOpenMoreMenu={item => {
+                setShortsMenuItem(item);
+                setSettingsVisible(true);
+              }}
               onOpenCreate={() => setCreateVisible(true)}
               onLike={handleLike}
               onDislike={handleDislike}
@@ -962,7 +1039,14 @@ const ShortsVideoScreen = ({ navigation }) => {
         >
           <View style={styles.subsHandle} />
           <View style={styles.subsHeaderRow}>
-            <Text style={styles.subsTitle}>Subscribers Order</Text>
+            <Text style={styles.subsTitle} numberOfLines={2}>
+              {!subsLoading && subsUsers.length > 0
+                ? buildSubscribersOrderLine(
+                    firstNameFromSubscriber(subsUsers[0]),
+                    subsUsers.length,
+                  )
+                : 'Subscribers Order'}
+            </Text>
             <TouchableOpacity
               onPress={() => setSubsModalOpen(false)}
               style={styles.subsCloseBtn}
@@ -1027,82 +1111,38 @@ const ShortsVideoScreen = ({ navigation }) => {
           )}
         </View>
       </Modal>
-      <SettingsModal
+      <ShortsMoreOptionsModal
         visible={settingsVisible}
         onClose={() => setSettingsVisible(false)}
         onSaveToPlaylist={() => {
           if (!user?.id) {
-            setSettingsVisible(false);
             navigateToHomeScreen('HomeSevenScreen');
             return;
           }
           setSaveModalVisible(true);
         }}
         onSaveToWatchLater={handleSaveToWatchLater}
-        onReport={openReportModal}
-        onShare={() => handleShare(activeItem)}
+        onDownload={handleDownloadShort}
+        onShare={() => handleShare(menuTargetShort())}
+        onNotInterested={handleNotInterestedShort}
+        onReport={openReportFromMenu}
       />
       <SaveModal
         visible={saveModalVisible}
         onClose={() => setSaveModalVisible(false)}
         contentType="short"
-        contentId={displayVideos[activeVideoIndex]?.id}
+        contentId={menuTargetShort()?.id}
       />
       <CreateVideoModal
         visible={createVisible}
         onClose={() => setCreateVisible(false)}
       />
 
-      <Modal
-        animationType="slide"
-        transparent
+      <ShortsReportModal
         visible={reportVisible}
-        onRequestClose={() => setReportVisible(false)}
-      >
-        <Pressable
-          style={styles.reportOverlay}
-          onPress={() => setReportVisible(false)}
-        >
-          <View style={styles.reportModalContent}>
-            <View style={styles.reportHandle} />
-            <Text style={styles.reportTitle}>Report</Text>
-            <View style={styles.reportDivider} />
-            {REPORT_REASONS.map(reason => (
-              <TouchableOpacity
-                key={reason}
-                activeOpacity={0.8}
-                style={styles.reportOptionRow}
-                onPress={() => setSelectedReason(reason)}
-              >
-                <MaterialCommunityIcons
-                  name={
-                    selectedReason === reason
-                      ? 'radiobox-marked'
-                      : 'radiobox-blank'
-                  }
-                  size={24}
-                  color="#FF8C00"
-                />
-                <Text style={styles.reportOptionText}>{reason}</Text>
-              </TouchableOpacity>
-            ))}
-            <View style={styles.reportActionRow}>
-              <TouchableOpacity
-                style={styles.reportCancelButton}
-                onPress={() => setReportVisible(false)}
-              >
-                <Text style={styles.reportCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.reportSubmitButton}
-                onPress={handleReportSubmit}
-              >
-                <Text style={styles.reportSubmitText}>Report</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Pressable>
-      </Modal>
+        onClose={() => setReportVisible(false)}
+        onSubmit={handleReportSubmit}
+      />
     </View>
   );
 };
@@ -1266,13 +1306,29 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
     zIndex: 50,
     elevation: 50,
   },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  progressTimeText: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '600',
+    minWidth: 38,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   progressSlider: {
-    width: '100%',
-    height: 30,
+    flex: 1,
+    height: 36,
   },
   audioText: {
     color: '#FFF',
@@ -1383,80 +1439,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: 'bold',
     fontSize: 12,
-  },
-  reportOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  reportModalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    paddingTop: 10,
-  },
-  reportHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#ddd',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 15,
-  },
-  reportTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 15,
-  },
-  reportDivider: {
-    height: 1,
-    backgroundColor: '#eee',
-    marginBottom: 15,
-  },
-  reportOptionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  reportOptionText: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 12,
-  },
-  reportActionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 25,
-  },
-  reportCancelButton: {
-    flex: 1,
-    backgroundColor: '#FFF5F0',
-    paddingVertical: 15,
-    borderRadius: 30,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  reportCancelText: {
-    color: '#FF8C00',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  reportSubmitButton: {
-    flex: 1,
-    backgroundColor: '#FF8C00',
-    paddingVertical: 15,
-    borderRadius: 30,
-    marginLeft: 10,
-    alignItems: 'center',
-  },
-  reportSubmitText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
   },
 });
 

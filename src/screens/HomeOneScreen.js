@@ -306,6 +306,14 @@ const HomeOneScreen = () => {
       return;
     }
 
+    if (t.returnTo === 'business_profile' && t.returnUserId) {
+      navigation.navigate('BusinessProfileViewScreen', {
+        userId: t.returnUserId,
+        focusVideoTab: true,
+      });
+      return;
+    }
+
     const libraryScreens = {
       watch_later: 'WatchLaterScreen',
       liked: 'LikedScreen',

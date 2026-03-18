@@ -45,16 +45,8 @@ import {
   getGallery,
   uploadGallery,
   deleteGalleryPhoto,
-  subscribeToChannel,
-  unsubscribeFromChannel,
 } from '../../services/channelService';
-import {
-  getUserVideos,
-  getVideoById,
-  toggleLike as toggleVideoLike,
-  toggleDislike as toggleVideoDislike,
-  recordShare as recordVideoShare,
-} from '../../services/videoService';
+import { getUserVideos } from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
 import { getNotificationsByUserId } from '../../services/notificationService';
 import {
@@ -72,9 +64,8 @@ import {
 } from '../../utils/geolocation';
 import CreatePromotionModal from '../../components/CreatePromotionModal';
 import Video from 'react-native-video';
-import Slider from '@react-native-community/slider';
-import SaveModal from '../../components/SaveModal';
 import { getSocialIcon } from '../../constants/socialLinks';
+import { navigateToHomeOneLibraryDetail } from '../../utils/navigateHomeLibraryDetail';
 
 const { width } = Dimensions.get('window');
 
@@ -97,73 +88,6 @@ const formatTimeAgo = dateStr => {
   if (diffMonths > 0) return `${diffMonths}mo ago`;
   if (diffDays > 0) return `${diffDays}d ago`;
   return 'Recently';
-};
-
-const mapVideoApiToModal = (v = {}) => {
-  const u = v.user || {};
-  const channelName = u.nickname || u.name || 'Unknown';
-  const channelAvatar =
-    u.photos?.[0] ||
-    (Array.isArray(u.photos) && u.photos[0]) ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      channelName,
-    )}&background=111&color=fff`;
-  return {
-    id: v.id,
-    title: v.title || 'Untitled',
-    videoUrl: v.videoUrl,
-    thumbnail:
-      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
-    durationSeconds: v.duration ?? 0,
-    likeCount: v.likeCount ?? v._count?.likes ?? 0,
-    dislikeCount: v.dislikeCount ?? 0,
-    commentCount: v.commentCount ?? v._count?.comments ?? 0,
-    shareCount: v.shareCount ?? 0,
-    isLiked: v.isLiked ?? false,
-    isDisliked: v.isDisliked ?? false,
-    userId: v.userId,
-    channelName,
-    channelAvatar:
-      typeof channelAvatar === 'string'
-        ? channelAvatar
-        : channelAvatar?.src ?? channelAvatar,
-    socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
-  };
-};
-
-const mapShortApiToModal = (s = {}) => {
-  const u = s.user || {};
-  const channelName = u.nickname || u.name || 'Unknown';
-  const channelAvatar =
-    u.photos?.[0] ||
-    (Array.isArray(u.photos) && u.photos[0]) ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      channelName,
-    )}&background=111&color=fff`;
-  return {
-    id: s.id,
-    title: s.title || 'Short',
-    videoUrl: s.videoUrl,
-    thumbnail:
-      s.thumbnailUrl ||
-      s.coverUrl ||
-      s.videoUrl ||
-      'https://via.placeholder.com/600',
-    durationSeconds: s.duration ?? 0,
-    likeCount: s.likeCount ?? s._count?.likes ?? 0,
-    dislikeCount: s.dislikeCount ?? 0,
-    commentCount: s.commentCount ?? s._count?.comments ?? 0,
-    shareCount: s.shareCount ?? 0,
-    isLiked: s.isLiked ?? false,
-    isDisliked: s.isDisliked ?? false,
-    userId: s.userId,
-    channelName,
-    channelAvatar:
-      typeof channelAvatar === 'string'
-        ? channelAvatar
-        : channelAvatar?.src ?? channelAvatar,
-    socialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
-  };
 };
 
 const mapPostToCard = (post, user) => {
@@ -429,30 +353,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState(null);
 
-  const [videoModalVisible, setVideoModalVisible] = useState(false);
-  const [activeVideoId, setActiveVideoId] = useState(null);
-  const [modalContentType, setModalContentType] = useState('video');
-  const [videoModalLoading, setVideoModalLoading] = useState(false);
-  const [videoModalError, setVideoModalError] = useState(null);
-  const [modalVideo, setModalVideo] = useState(null);
-  const [modalPaused, setModalPaused] = useState(true);
-  const [modalProgress, setModalProgress] = useState({
-    currentTime: 0,
-    duration: 0,
-  });
-  const [modalIsSliding, setModalIsSliding] = useState(false);
-  const [modalSlidingValue, setModalSlidingValue] = useState(0);
-  const [channelSub, setChannelSub] = useState({
-    isSubscribed: false,
-    subscriberCount: 0,
-  });
-  const [subLoading, setSubLoading] = useState(false);
-  const [videoCommentsVisible, setVideoCommentsVisible] = useState(false);
-  const [saveVisible, setSaveVisible] = useState(false);
-  const modalVideoRef = useRef(null);
-  const seekingRef = useRef(false);
-  const progressUpdateRef = useRef(0);
-
   const loadPosts = useCallback(
     async (refresh = false) => {
       if (!profileUserId) {
@@ -658,6 +558,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     }, [activeTab, profileUserId, loadMenu]),
   );
 
+  // After full video detail (HomeOne) back → return to Video tab
+  useFocusEffect(
+    useCallback(() => {
+      if (route.params?.focusVideoTab) {
+        setActiveTab('Video');
+        navigation.setParams({ focusVideoTab: undefined });
+      }
+    }, [route.params?.focusVideoTab, navigation]),
+  );
+
   const handleGalleryUpload = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || galleryUploading)
       return;
@@ -724,108 +634,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     loadProfile();
   }, [loadProfile]);
 
-  const requireLogin = () => {
-    if (!currentUser?.id) {
-      Alert.alert('Login required', 'Please login to continue.');
-      return true;
-    }
-    return false;
-  };
-
-  const formatTime = sec => {
-    if (!sec || isNaN(sec)) return '0:00';
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
-  };
-
-  const openVideoModal = useCallback(
-    async item => {
-      if (!item?.id) return;
-      const contentType = item._type === 'short' ? 'short' : 'video';
-      setActiveVideoId(item.id);
-      setModalContentType(contentType);
-      setVideoModalVisible(true);
-      setVideoModalLoading(true);
-      setVideoModalError(null);
-      setModalVideo(null);
-      setModalPaused(true);
-      setModalProgress({ currentTime: 0, duration: 0 });
-      setModalIsSliding(false);
-      setModalSlidingValue(0);
-      setChannelSub({ isSubscribed: false, subscriberCount: 0 });
-      const viewerRole = (currentUser?.role || 'user').toLowerCase();
-      try {
-        let mv = null;
-        if (contentType === 'short') {
-          const res = await shortsService.getShortById(
-            item.id,
-            currentUser?.id,
-            viewerRole,
-          );
-          mv = mapShortApiToModal(res);
-          setModalVideo(mv);
-        } else {
-          const res = await getVideoById(item.id, currentUser?.id, viewerRole);
-          mv = mapVideoApiToModal(res);
-          setModalVideo(mv);
-        }
-        setModalPaused(false);
-        if (mv?.userId) {
-          getChannelProfile(mv.userId, currentUser?.id)
-            .then(p => {
-              setChannelSub({
-                isSubscribed: p?.isSubscribed ?? false,
-                subscriberCount: p?.subscriberCount ?? 0,
-              });
-              const profileAvatar =
-                p?.channelAvatar ||
-                (p?.photos?.[0] &&
-                  (typeof p.photos[0] === 'string'
-                    ? p.photos[0]
-                    : p.photos[0]?.src));
-              if (profileAvatar) {
-                setModalVideo(prev =>
-                  prev
-                    ? {
-                        ...prev,
-                        channelAvatar:
-                          typeof profileAvatar === 'string'
-                            ? profileAvatar
-                            : profileAvatar?.src ?? prev.channelAvatar,
-                        channelName:
-                          p?.channelName || p?.nickname || prev.channelName,
-                      }
-                    : prev,
-                );
-              }
-            })
-            .catch(() => {});
-        }
-      } catch (e) {
-        setVideoModalError(
-          e?.response?.data?.message || e?.message || 'Failed to load video',
-        );
-      } finally {
-        setVideoModalLoading(false);
-      }
-    },
-    [currentUser?.id, currentUser?.role],
-  );
-
-  const closeVideoModal = useCallback(() => {
-    setVideoModalVisible(false);
-    setActiveVideoId(null);
-    setModalVideo(null);
-    setVideoModalError(null);
-    setModalPaused(true);
-    setModalProgress({ currentTime: 0, duration: 0 });
-    setModalIsSliding(false);
-    setModalSlidingValue(0);
-    setVideoCommentsVisible(false);
-    setSaveVisible(false);
-  }, []);
-
   const openVideoDetails = useCallback(
     item => {
       if (!item?.id) return;
@@ -856,169 +664,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     },
     [navigation],
   );
-
-  const modalDisplayTime = modalIsSliding
-    ? modalSlidingValue
-    : modalProgress.currentTime;
-
-  const handleModalLike = useCallback(async () => {
-    if (requireLogin()) return;
-    if (!modalVideo?.id) return;
-    setModalVideo(prev => {
-      if (!prev) return prev;
-      const isLiked = !prev.isLiked;
-      const wasDisliked = prev.isDisliked;
-      return {
-        ...prev,
-        isLiked,
-        isDisliked: isLiked ? false : wasDisliked,
-        likeCount: Math.max(0, prev.likeCount + (isLiked ? 1 : -1)),
-        dislikeCount:
-          isLiked && wasDisliked
-            ? Math.max(0, prev.dislikeCount - 1)
-            : prev.dislikeCount,
-      };
-    });
-    try {
-      if (modalContentType === 'short') {
-        const res = await shortsService.toggleLike(
-          modalVideo.id,
-          currentUser.id,
-        );
-        if (res)
-          setModalVideo(prev =>
-            prev
-              ? {
-                  ...prev,
-                  ...(res.likeCount != null && { likeCount: res.likeCount }),
-                  ...(res.liked != null && { isLiked: res.liked }),
-                }
-              : prev,
-          );
-      } else {
-        const res = await toggleVideoLike(modalVideo.id, currentUser.id);
-        if (res)
-          setModalVideo(prev =>
-            prev
-              ? {
-                  ...prev,
-                  ...(res.likeCount != null && { likeCount: res.likeCount }),
-                  ...(res.dislikeCount != null && {
-                    dislikeCount: res.dislikeCount,
-                  }),
-                  ...(res.isLiked != null && { isLiked: res.isLiked }),
-                  ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
-                }
-              : prev,
-          );
-      }
-    } catch (_) {}
-  }, [modalVideo?.id, modalContentType, currentUser?.id]);
-
-  const handleModalDislike = useCallback(async () => {
-    if (requireLogin()) return;
-    if (!modalVideo?.id) return;
-    setModalVideo(prev => {
-      if (!prev) return prev;
-      const isDisliked = !prev.isDisliked;
-      const wasLiked = prev.isLiked;
-      return {
-        ...prev,
-        isDisliked,
-        isLiked: isDisliked ? false : wasLiked,
-        dislikeCount: Math.max(0, prev.dislikeCount + (isDisliked ? 1 : -1)),
-        likeCount:
-          isDisliked && wasLiked
-            ? Math.max(0, prev.likeCount - 1)
-            : prev.likeCount,
-      };
-    });
-    try {
-      if (modalContentType === 'short') {
-        const res = await shortsService.toggleDislike(
-          modalVideo.id,
-          currentUser.id,
-        );
-        if (res)
-          setModalVideo(prev =>
-            prev
-              ? {
-                  ...prev,
-                  ...(res.dislikeCount != null && {
-                    dislikeCount: res.dislikeCount,
-                  }),
-                  ...(res.disliked != null && { isDisliked: res.disliked }),
-                }
-              : prev,
-          );
-      } else {
-        const res = await toggleVideoDislike(modalVideo.id, currentUser.id);
-        if (res)
-          setModalVideo(prev =>
-            prev
-              ? {
-                  ...prev,
-                  ...(res.likeCount != null && { likeCount: res.likeCount }),
-                  ...(res.dislikeCount != null && {
-                    dislikeCount: res.dislikeCount,
-                  }),
-                  ...(res.isLiked != null && { isLiked: res.isLiked }),
-                  ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
-                }
-              : prev,
-          );
-      }
-    } catch (_) {}
-  }, [modalVideo?.id, modalContentType, currentUser?.id]);
-
-  const handleModalShare = useCallback(async () => {
-    if (!modalVideo?.id) return;
-    try {
-      setModalVideo(prev =>
-        prev ? { ...prev, shareCount: (prev.shareCount ?? 0) + 1 } : prev,
-      );
-      if (modalContentType === 'video') {
-        recordVideoShare(modalVideo.id);
-      }
-      await Share.share({
-        message: modalVideo?.title ? `${modalVideo.title}` : 'Check this video',
-        url: modalVideo?.videoUrl || '',
-        title: modalVideo?.title || 'Video',
-      });
-    } catch (_) {}
-  }, [
-    modalVideo?.id,
-    modalVideo?.title,
-    modalVideo?.videoUrl,
-    modalContentType,
-  ]);
-
-  const handleSubscribe = useCallback(async () => {
-    if (requireLogin()) return;
-    if (!modalVideo?.userId || !currentUser?.id) return;
-    if (String(modalVideo.userId) === String(currentUser.id)) return;
-    setSubLoading(true);
-    try {
-      if (channelSub.isSubscribed) {
-        await unsubscribeFromChannel(currentUser.id, modalVideo.userId);
-        setChannelSub(p => ({
-          ...p,
-          isSubscribed: false,
-          subscriberCount: Math.max(0, (p.subscriberCount ?? 0) - 1),
-        }));
-      } else {
-        await subscribeToChannel(currentUser.id, modalVideo.userId);
-        setChannelSub(p => ({
-          ...p,
-          isSubscribed: true,
-          subscriberCount: (p.subscriberCount ?? 0) + 1,
-        }));
-      }
-    } catch (_) {
-    } finally {
-      setSubLoading(false);
-    }
-  }, [modalVideo?.userId, currentUser?.id, channelSub.isSubscribed]);
 
   const openEditProfile = () => {
     setEditName(profile?.name ?? currentUser?.name ?? '');
@@ -1707,7 +1352,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               item.location || profile?.address || currentUser?.address || '',
             distance: item.distance || '',
           }}
-          onPress={() => openVideoModal(item)}
+          onPress={() => {
+            if (!item?.id || !profileUserId) return;
+            navigateToHomeOneLibraryDetail(
+              navigation,
+              {
+                id: item.id,
+                type: item._type === 'short' ? 'short' : 'video',
+              },
+              {
+                returnTo: 'business_profile',
+                returnUserId: profileUserId,
+              },
+            );
+          }}
         />
       );
     }
@@ -2290,400 +1948,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* Video/Short modal (same as UserViewsScreen) */}
-      <Modal
-        visible={videoModalVisible}
-        animationType="slide"
-        onRequestClose={closeVideoModal}
-      >
-        <SafeAreaView style={styles.videoModalContainer} edges={['top']}>
-          <View style={styles.videoModalHeader}>
-            <TouchableOpacity
-              onPress={closeVideoModal}
-              style={styles.videoModalHeaderBtn}
-            >
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={30}
-                color="#fff"
-              />
-            </TouchableOpacity>
-            <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
-              {modalVideo?.title || 'Video'}
-            </Text>
-            <View style={styles.videoModalHeaderBtn} />
-          </View>
-
-          <View style={styles.videoPlayerWrap}>
-            {videoModalLoading ? (
-              <View style={styles.videoLoadingOverlay}>
-                <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.videoLoadingText}>Loading…</Text>
-              </View>
-            ) : videoModalError ? (
-              <View style={styles.videoErrorOverlay}>
-                <MaterialCommunityIcons
-                  name="alert-circle-outline"
-                  size={44}
-                  color="#fff"
-                />
-                <Text style={styles.videoErrorText}>{videoModalError}</Text>
-                <TouchableOpacity
-                  style={styles.videoRetryBtn}
-                  onPress={() =>
-                    activeVideoId &&
-                    openVideoModal(
-                      ownerVideos.find(
-                        v => String(v.id) === String(activeVideoId),
-                      ),
-                    )
-                  }
-                >
-                  <MaterialCommunityIcons
-                    name="refresh"
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.videoRetryText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
-            ) : modalVideo?.videoUrl ? (
-              <>
-                <Video
-                  ref={modalVideoRef}
-                  source={{ uri: String(modalVideo.videoUrl).trim() }}
-                  poster={modalVideo.thumbnail}
-                  posterResizeMode="cover"
-                  style={styles.videoPlayer}
-                  resizeMode="contain"
-                  paused={modalPaused}
-                  repeat={false}
-                  controls={false}
-                  playInBackground={false}
-                  playWhenInactive={false}
-                  ignoreSilentSwitch="ignore"
-                  onLoad={data => {
-                    setModalProgress(p => ({
-                      ...p,
-                      duration: data?.duration || 0,
-                    }));
-                    setModalPaused(false);
-                  }}
-                  onProgress={data => {
-                    if (seekingRef.current) return;
-                    const now = Date.now();
-                    if (now - progressUpdateRef.current < 500) return;
-                    progressUpdateRef.current = now;
-                    setModalProgress(p => ({
-                      ...p,
-                      currentTime: data?.currentTime ?? p.currentTime,
-                      duration:
-                        data?.seekableDuration || data?.duration || p.duration,
-                    }));
-                  }}
-                  onError={() =>
-                    setVideoModalError(
-                      'Failed to play video. The video format may not be supported or the URL is inaccessible.',
-                    )
-                  }
-                />
-                <Pressable
-                  style={styles.videoTapOverlay}
-                  onPress={() => setModalPaused(p => !p)}
-                >
-                  <MaterialCommunityIcons
-                    name={
-                      modalPaused
-                        ? 'play-circle-outline'
-                        : 'pause-circle-outline'
-                    }
-                    size={74}
-                    color="rgba(255,255,255,0.9)"
-                  />
-                </Pressable>
-
-                <View style={styles.videoSliderRow}>
-                  <Slider
-                    style={styles.videoSlider}
-                    value={modalDisplayTime}
-                    minimumValue={0}
-                    maximumValue={Math.max(0.1, modalProgress.duration)}
-                    minimumTrackTintColor="#fff"
-                    maximumTrackTintColor="rgba(255,255,255,0.35)"
-                    thumbTintColor="#fff"
-                    onSlidingStart={() => {
-                      setModalIsSliding(true);
-                      setModalSlidingValue(modalProgress.currentTime);
-                    }}
-                    onValueChange={val => setModalSlidingValue(val)}
-                    onSlidingComplete={val => {
-                      if (
-                        !modalVideoRef.current ||
-                        modalProgress.duration <= 0
-                      ) {
-                        setModalIsSliding(false);
-                        return;
-                      }
-                      const clamped = Math.max(
-                        0,
-                        Math.min(val, modalProgress.duration),
-                      );
-                      seekingRef.current = true;
-                      modalVideoRef.current.seek(clamped);
-                      setModalProgress(p => ({ ...p, currentTime: clamped }));
-                      progressUpdateRef.current = Date.now();
-                      setTimeout(() => {
-                        seekingRef.current = false;
-                      }, 300);
-                      setModalIsSliding(false);
-                    }}
-                  />
-                  <Text style={styles.videoTimeText}>
-                    {formatTime(modalDisplayTime)} /{' '}
-                    {formatTime(modalProgress.duration)}
-                  </Text>
-                </View>
-              </>
-            ) : (
-              <View style={styles.videoErrorOverlay}>
-                <Text style={styles.videoErrorText}>Video not available</Text>
-              </View>
-            )}
-          </View>
-
-          <ScrollView
-            style={styles.videoModalBody}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.videoActionsRow}>
-              <TouchableOpacity
-                style={styles.videoActionBtn}
-                onPress={handleModalLike}
-              >
-                <MaterialCommunityIcons
-                  name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
-                  size={22}
-                  color={modalVideo?.isLiked ? '#FF7F0B' : '#222'}
-                />
-                <Text style={styles.videoActionText}>
-                  {formatCount(modalVideo?.likeCount ?? 0)}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.videoActionBtn}
-                onPress={handleModalDislike}
-              >
-                <MaterialCommunityIcons
-                  name={
-                    modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
-                  }
-                  size={22}
-                  color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
-                />
-                <Text style={styles.videoActionText}>
-                  {formatCount(modalVideo?.dislikeCount ?? 0)}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.videoActionBtn}
-                onPress={() => {
-                  if (requireLogin()) return;
-                  setVideoCommentsVisible(true);
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="comment-text-outline"
-                  size={22}
-                  color="#222"
-                />
-                <Text style={styles.videoActionText}>
-                  {formatCount(modalVideo?.commentCount ?? 0)}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.videoActionBtn}
-                onPress={handleModalShare}
-              >
-                <MaterialCommunityIcons
-                  name="share-outline"
-                  size={22}
-                  color="#222"
-                />
-                <Text style={styles.videoActionText}>
-                  {formatCount(modalVideo?.shareCount ?? 0)}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.videoActionBtn}
-                onPress={() => {
-                  if (requireLogin()) return;
-                  setSaveVisible(true);
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="bookmark-outline"
-                  size={22}
-                  color="#222"
-                />
-                <Text style={styles.videoActionText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.channelRow}>
-              <View style={styles.channelLeft}>
-                <Image
-                  source={{
-                    uri: safeImageUri(
-                      modalVideo?.channelAvatar ||
-                        (modalVideo?.userId === profileUserId &&
-                          (profile?.channelAvatar ||
-                            (profile?.photos?.[0]
-                              ? typeof profile.photos[0] === 'string'
-                                ? profile.photos[0]
-                                : profile.photos[0]?.src
-                              : null))),
-                    ),
-                  }}
-                  style={styles.channelAvatar}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.channelName} numberOfLines={1}>
-                    {modalVideo?.channelName || 'Channel'}
-                  </Text>
-                  <Text style={styles.channelSubText}>
-                    {formatCount(channelSub.subscriberCount ?? 0)} subscribers
-                  </Text>
-                </View>
-              </View>
-              {modalVideo?.userId &&
-              currentUser?.id &&
-              String(modalVideo.userId) === String(currentUser.id) ? null : (
-                <TouchableOpacity
-                  style={[
-                    styles.subscribeBtn,
-                    channelSub.isSubscribed && styles.subscribedBtn,
-                  ]}
-                  onPress={handleSubscribe}
-                  disabled={subLoading || !modalVideo?.userId}
-                >
-                  {subLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text
-                      style={[
-                        styles.subscribeText,
-                        channelSub.isSubscribed && styles.subscribedText,
-                      ]}
-                    >
-                      {channelSub.isSubscribed ? 'Subscribed' : 'Subscribe'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.contactRow}>
-              {modalVideo?.userId &&
-              currentUser?.id &&
-              String(modalVideo.userId) === String(currentUser.id) ? null : (
-                <TouchableOpacity
-                  style={styles.messageBtn}
-                  onPress={() => {
-                    if (requireLogin()) return;
-                    if (!modalVideo?.userId) return;
-                    const modalAvatar =
-                      modalVideo.channelAvatar ||
-                      (modalVideo.userId === profileUserId &&
-                        (profile?.channelAvatar ||
-                          (profile?.photos?.[0]
-                            ? typeof profile.photos[0] === 'string'
-                              ? profile.photos[0]
-                              : profile.photos[0]?.src
-                            : null)));
-                    navigation.navigate('ChatScreen', {
-                      partnerId: modalVideo.userId,
-                      partnerName: modalVideo.channelName || 'Channel',
-                      partnerAvatar: modalAvatar,
-                    });
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="message-text-outline"
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.messageBtnText}>Message</Text>
-                </TouchableOpacity>
-              )}
-
-              <View style={styles.socialRow}>
-                {(modalVideo?.socialLinks || [])
-                  .filter(l => (l?.url || '').trim())
-                  .slice(0, 6)
-                  .map((l, idx) => (
-                    <TouchableOpacity
-                      key={`${l.type}-${idx}`}
-                      style={styles.socialBtn}
-                      onPress={() => {
-                        const url = (l.url || '').trim();
-                        if (!url) return;
-                        Linking.openURL(
-                          url.startsWith('http') ? url : `https://${url}`,
-                        );
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={getSocialIcon((l.type || '').toLowerCase())}
-                        size={20}
-                        color="#FF7F0B"
-                      />
-                    </TouchableOpacity>
-                  ))}
-              </View>
-            </View>
-          </ScrollView>
-
-          <CommentsModal
-            visible={videoCommentsVisible}
-            onClose={() => setVideoCommentsVisible(false)}
-            contentType={modalContentType}
-            contentId={modalVideo?.id}
-            videoId={modalVideo?.id}
-            video={modalVideo}
-            user={currentUser}
-            onCommentAdded={() => {
-              if (!modalVideo?.id) return;
-              setModalVideo(prev =>
-                prev
-                  ? {
-                      ...prev,
-                      commentCount: (prev.commentCount ?? 0) + 1,
-                    }
-                  : prev,
-              );
-            }}
-            onCommentDeleted={(wasTopLevel, deletedCount) => {
-              const dec = deletedCount || (wasTopLevel ? 1 : 0) || 0;
-              if (dec <= 0) return;
-              setModalVideo(prev =>
-                prev
-                  ? {
-                      ...prev,
-                      commentCount: Math.max(0, (prev.commentCount ?? 0) - dec),
-                    }
-                  : prev,
-              );
-            }}
-          />
-
-          <SaveModal
-            visible={saveVisible}
-            onClose={() => setSaveVisible(false)}
-            contentType={modalContentType}
-            contentId={modalVideo?.id}
-          />
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 };
