@@ -803,7 +803,6 @@ const ShortsVideoScreen = ({ navigation }) => {
       await submitReport({
         contentType: 'short',
         contentId: activeItem.id,
-        reporterId: user?.id,
         reason: selectedReason,
       });
       Toast.show({ type: 'success', text1: 'Report submitted' });

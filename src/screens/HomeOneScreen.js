@@ -54,7 +54,11 @@ import { safeImageUri } from '../utils/helper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SaveModal from '../components/SaveModal';
 import CommentsModal from '../components/CommentsModal';
+import HomeMoreOptionModal from '../components/HomeMoreOptionModal';
+import ReportContentModal from '../components/ReportContentModal';
 import { downloadVideo } from '../services/downloadService';
+import { setPlaylist } from '../services/playlistService';
+import { submitReport } from '../services/reportService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -170,6 +174,14 @@ const HomeOneScreen = () => {
   const [resSaveVisible, setResSaveVisible] = useState(false);
   const [resCommentsVisible, setResCommentsVisible] = useState(false);
   const [resDownloadPct, setResDownloadPct] = useState(null);
+  const [homeMoreVisible, setHomeMoreVisible] = useState(false);
+  const [homeMoreTarget, setHomeMoreTarget] = useState(null);
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [morePlaylistVisible, setMorePlaylistVisible] = useState(false);
+  const [morePlaylistType, setMorePlaylistType] = useState('short');
+  const [morePlaylistId, setMorePlaylistId] = useState(null);
 
   const galleryUserId = selectedItem?.userId || selectedItem?.user?.id;
 
@@ -740,6 +752,162 @@ const HomeOneScreen = () => {
     setResSaveVisible(true);
   }, [navigation, user?.id]);
 
+  const openHomeMoreForShort = useCallback(item => {
+    if (!item?.id) return;
+    setHomeMoreTarget({
+      contentType: 'short',
+      contentId: item.id,
+      videoUrl: item.videoUrl,
+      title:
+        item.title ||
+        (item.description || 'Short').substring(0, 80) ||
+        'Short',
+      channelName:
+        item.user?.nickname || item.user?.name || item.channelName || '',
+    });
+    setHomeMoreVisible(true);
+  }, []);
+
+  const openHomeMoreFromSelected = useCallback(() => {
+    if (!selectedItem?.id) return;
+    const isShort = selectedItem.type === 'short';
+    setHomeMoreTarget({
+      contentType: isShort ? 'short' : 'video',
+      contentId: selectedItem.id,
+      videoUrl: selectedItem.videoUrl,
+      title: selectedItem.title || 'Video',
+      channelName:
+        selectedItem.channelName ||
+        selectedItem?.user?.nickname ||
+        selectedItem?.user?.name ||
+        '',
+    });
+    setHomeMoreVisible(true);
+  }, [selectedItem]);
+
+  const closeHomeMore = useCallback(() => {
+    setHomeMoreVisible(false);
+    setHomeMoreTarget(null);
+  }, []);
+
+  const requireLogin = useCallback(() => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return false;
+    }
+    return true;
+  }, [navigation, user?.id]);
+
+  const onMoreSavePlaylist = useCallback(() => {
+    if (!homeMoreTarget?.contentId) return;
+    if (!requireLogin()) return;
+    setMorePlaylistType(homeMoreTarget.contentType);
+    setMorePlaylistId(homeMoreTarget.contentId);
+    setMorePlaylistVisible(true);
+  }, [homeMoreTarget, requireLogin]);
+
+  const onMoreWatchLater = useCallback(async () => {
+    if (!homeMoreTarget?.contentId) return;
+    if (!requireLogin()) return;
+    try {
+      await setPlaylist(
+        user.id,
+        'watch_later',
+        homeMoreTarget.contentType,
+        homeMoreTarget.contentId,
+        true,
+      );
+      Alert.alert('Saved', 'Added to Watch Later.');
+    } catch {
+      Alert.alert('Error', 'Could not save to Watch Later.');
+    }
+  }, [homeMoreTarget, requireLogin, user?.id]);
+
+  const onMoreDownload = useCallback(async () => {
+    const t = homeMoreTarget;
+    if (!t?.videoUrl || !t?.contentId) {
+      Alert.alert('Download', 'No video URL available.');
+      return;
+    }
+    try {
+      setResDownloadPct(0);
+      await downloadVideo(
+        {
+          id: t.contentId,
+          title: t.title,
+          videoUrl: t.videoUrl,
+          thumbnail: null,
+          channelName: t.channelName,
+        },
+        pct => setResDownloadPct(pct),
+      );
+      setResDownloadPct(null);
+      Alert.alert('Downloaded', 'Saved for offline in Library > Downloads.');
+    } catch (e) {
+      setResDownloadPct(null);
+      Alert.alert('Download failed', e?.message || 'Could not download.');
+    }
+  }, [homeMoreTarget]);
+
+  const onMoreShare = useCallback(async () => {
+    const t = homeMoreTarget;
+    if (!t?.contentId) return;
+    const msg = `${t.title || 'Check this out'}\neatix://${
+      t.contentType === 'short' ? 'shorts' : 'video'
+    }/${t.contentId}`;
+    try {
+      await Share.share({ message: msg, title: t.title });
+      if (t.contentType === 'video') {
+        try {
+          await recordVideoShare(t.contentId);
+        } catch (_) {}
+      }
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        /* ignore */
+      }
+    }
+  }, [homeMoreTarget, user?.id]);
+
+  const onMoreNotInterested = useCallback(() => {
+    Alert.alert(
+      'Not interested',
+      "We'll try to show you less content like this.",
+    );
+  }, []);
+
+  const onMoreOpenReport = useCallback(() => {
+    if (!requireLogin()) return;
+    const t = homeMoreTarget;
+    if (!t?.contentId) return;
+    setReportTarget({ ...t });
+    setReportVisible(true);
+  }, [homeMoreTarget, requireLogin]);
+
+  const handleReportSubmit = useCallback(
+    async reason => {
+      if (!reportTarget?.contentId) return;
+      setReportSubmitting(true);
+      try {
+        await submitReport({
+          contentType:
+            reportTarget.contentType === 'short' ? 'short' : 'video',
+          contentId: reportTarget.contentId,
+          reason,
+        });
+        Alert.alert('Thanks', 'Your report was submitted.');
+        setReportVisible(false);
+        setReportTarget(null);
+        closeHomeMore();
+      } catch {
+        Alert.alert('Error', 'Could not submit report. Please try again.');
+      } finally {
+        setReportSubmitting(false);
+      }
+    },
+    [reportTarget, closeHomeMore],
+  );
+
   const featuredItem = (() => {
     if (!featuredVideo?.video) return null;
     const video = featuredVideo.video;
@@ -992,6 +1160,7 @@ const HomeOneScreen = () => {
                             img={item.img}
                             views={item.views}
                             onPress={() => handleFeedItemPress(item)}
+                            onMorePress={() => openHomeMoreForShort(item)}
                           />
                         </View>
                       ))}
@@ -1128,7 +1297,12 @@ const HomeOneScreen = () => {
                 color="#FFF"
                 style={{ marginRight: 15 }}
               />
-              <Icon name="dots-vertical" size={26} color="#FFF" />
+              <TouchableOpacity
+                onPress={openHomeMoreFromSelected}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="dots-vertical" size={26} color="#FFF" />
+              </TouchableOpacity>
             </View>
           </View>
           <View style={styles.rightActions}>
@@ -1278,7 +1452,12 @@ const HomeOneScreen = () => {
             <Icon name="chevron-left" size={20} color="#FFF" />
             <Text style={styles.resBackText}>Back</Text>
           </TouchableOpacity>
-          <Icon name="dots-vertical" size={24} color="#666" />
+          <TouchableOpacity
+            onPress={openHomeMoreFromSelected}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Icon name="dots-vertical" size={24} color="#666" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.resTitleRow}>
@@ -1719,10 +1898,40 @@ const HomeOneScreen = () => {
         : renderResults()}
 
       <SaveModal
-        visible={resSaveVisible}
-        onClose={() => setResSaveVisible(false)}
-        contentType="video"
-        contentId={selectedItem?.id}
+        visible={
+          (resSaveVisible && !!selectedItem?.id) ||
+          (morePlaylistVisible && !!morePlaylistId)
+        }
+        onClose={() => {
+          setResSaveVisible(false);
+          setMorePlaylistVisible(false);
+          setMorePlaylistId(null);
+        }}
+        contentType={morePlaylistVisible ? morePlaylistType : 'video'}
+        contentId={morePlaylistVisible ? morePlaylistId : selectedItem?.id}
+      />
+
+      <HomeMoreOptionModal
+        visible={homeMoreVisible}
+        onClose={closeHomeMore}
+        onPlaylist={onMoreSavePlaylist}
+        onWatchLater={onMoreWatchLater}
+        onDownload={onMoreDownload}
+        onShare={onMoreShare}
+        onNotInterested={onMoreNotInterested}
+        onReport={onMoreOpenReport}
+      />
+
+      <ReportContentModal
+        visible={reportVisible}
+        onClose={() => {
+          if (!reportSubmitting) {
+            setReportVisible(false);
+            setReportTarget(null);
+          }
+        }}
+        onSubmit={handleReportSubmit}
+        submitting={reportSubmitting}
       />
 
       <CommentsModal
@@ -2053,23 +2262,34 @@ const HomeOneScreen = () => {
 // --- SUB-COMPONENT ---
 
 // Two-per-row short card (HomeVersion-style): image, play overlay, bottom overlay with title + views
-const ShortCard = ({ title, img, views, onPress }) => (
-  <TouchableOpacity
-    style={styles.shortCard}
-    onPress={onPress}
-    activeOpacity={0.9}
-  >
-    <Image source={{ uri: img }} style={styles.shortCardImage} />
-    <View style={styles.shortPlayIconOverlay}>
-      <Icon name="play-circle" size={40} color="rgba(255,255,255,0.8)" />
-    </View>
-    <View style={styles.shortCardOverlay}>
-      <Text style={styles.shortCardTitle} numberOfLines={2}>
-        {title}
-      </Text>
-      <Text style={styles.shortCardViews}>{views}</Text>
-    </View>
-  </TouchableOpacity>
+const ShortCard = ({ title, img, views, onPress, onMorePress }) => (
+  <View style={styles.shortCard}>
+    <TouchableOpacity
+      style={styles.shortCardPress}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <Image source={{ uri: img }} style={styles.shortCardImage} />
+      <View style={styles.shortPlayIconOverlay}>
+        <Icon name="play-circle" size={40} color="rgba(255,255,255,0.8)" />
+      </View>
+      <View style={styles.shortCardOverlay}>
+        <Text style={styles.shortCardTitle} numberOfLines={2}>
+          {title}
+        </Text>
+        <Text style={styles.shortCardViews}>{views}</Text>
+      </View>
+    </TouchableOpacity>
+    {onMorePress ? (
+      <TouchableOpacity
+        style={styles.shortCardDots}
+        onPress={onMorePress}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Icon name="dots-vertical" size={22} color="#FFF" />
+      </TouchableOpacity>
+    ) : null}
+  </View>
 );
 
 const FoodCard = ({ title, location, isSponsored, img, onPress }) => (
@@ -2288,6 +2508,20 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#222',
+    position: 'relative',
+  },
+  shortCardPress: {
+    width: '100%',
+    height: '100%',
+  },
+  shortCardDots: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 20,
+    padding: 6,
   },
   shortCardImage: { width: '100%', height: '100%' },
   shortPlayIconOverlay: {

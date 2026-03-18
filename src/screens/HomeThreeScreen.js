@@ -107,8 +107,8 @@ const HomeThreeScreen = ({ onBack }) => {
 
   useEffect(() => {
     if (!ownerId) return;
-    const viewerId = user?.id || ownerId;
-    getChannelProfile(viewerId, ownerId)
+    const viewerId = user?.id || null;
+    getChannelProfile(ownerId, viewerId)
       .then(p => {
         setOpeningHours(normalizeOpeningHours(p?.openingHours));
       })

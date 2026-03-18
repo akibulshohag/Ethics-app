@@ -1381,7 +1381,6 @@ const HomeVersion = () => {
                       contentType:
                         selectedItem.type === 'short' ? 'short' : 'video',
                       contentId: selectedItem.id,
-                      reporterId: currentUser?.id,
                       reason: selectedReason,
                     });
                     Toast.show({ type: 'success', text1: 'Report submitted' });
