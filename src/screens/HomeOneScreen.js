@@ -314,6 +314,11 @@ const HomeOneScreen = () => {
       return;
     }
 
+    if (t.returnTo === 'promotion') {
+      navigation.navigate('PromotionScreen');
+      return;
+    }
+
     const libraryScreens = {
       watch_later: 'WatchLaterScreen',
       liked: 'LikedScreen',
@@ -719,9 +724,7 @@ const HomeOneScreen = () => {
               co.nickname || co.name || full.channelName || 'Restaurant';
             const firstPhoto = co.photos?.[0];
             const avatar =
-              (typeof firstPhoto === 'string'
-                ? firstPhoto
-                : firstPhoto?.src) ||
+              (typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src) ||
               full.channelAvatar;
             setSelectedItem(prev => ({
               ...full,
@@ -1093,7 +1096,10 @@ const HomeOneScreen = () => {
     const co = featuredVideo.user;
     const mergedUser =
       co?.id || co?.name
-        ? { ...(video.user && typeof video.user === 'object' ? video.user : {}), ...co }
+        ? {
+            ...(video.user && typeof video.user === 'object' ? video.user : {}),
+            ...co,
+          }
         : video.user || co;
     const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
     return co?.id ? { ...base, _campaignOwnerUser: co } : base;
@@ -3005,19 +3011,19 @@ const styles = StyleSheet.create({
   socialIcon: {},
   bookNowBtn: {
     backgroundColor: '#F5A623',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
+    paddingHorizontal: 25,
+    paddingVertical: 10,
     borderRadius: 20,
     marginBottom: 10,
   },
   bookNowText: { color: '#FFF', fontWeight: 'bold' },
   galleryBtn: {
     backgroundColor: '#222',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
+    paddingHorizontal: 25,
+    paddingVertical: 10,
     borderRadius: 20,
   },
-  galleryText: { color: '#FFF', fontWeight: 'bold' },
+  galleryText: { color: '#FFF', fontWeight: 'bold', textAlign: 'center' },
   webText: {
     paddingHorizontal: 15,
     color: '#666',
