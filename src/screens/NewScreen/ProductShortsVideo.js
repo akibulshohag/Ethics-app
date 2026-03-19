@@ -18,6 +18,7 @@ import {
   TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   useNavigation,
   useRoute,
@@ -30,8 +31,13 @@ import CommentsModal from '../../components/CommentsModal';
 import ShortsMoreOptionsModal from '../../components/ShortsMoreOptionsModal';
 import ShortsReportModal from '../../components/ShortsReportModal';
 import SaveModal from '../../components/SaveModal';
+import SetVisibilityModal from '../../components/SetVisibilityModal';
+import SelectAudienceModal from '../../components/SelectAudienceModal';
+import CommentsSettingsModal from '../../components/CommentsSettingsModal';
+import VideoScheduleModal from '../../components/VideoScheduleModal';
 import { setShortsMuted } from '../../redux/actions/appSlice';
 import Slider from '@react-native-community/slider';
+import { launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { safeImageUri } from '../../utils/helper';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
@@ -62,6 +68,19 @@ const formatShortsTime = sec => {
     return `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
   return `${m}:${String(r).padStart(2, '0')}`;
+};
+
+const mapVisibilityForApi = v => {
+  const x = String(v || 'Public').toLowerCase();
+  if (x.includes('private')) return 'private';
+  return 'public';
+};
+
+const mapCommentsForApi = c => {
+  const x = String(c || '').toLowerCase();
+  if (x.includes('disable')) return 'disable';
+  if (x.includes('hold')) return 'hold';
+  return 'allow';
 };
 
 const firstNameFromSubscriber = u => {
@@ -221,8 +240,28 @@ const ProductShortsVideo = () => {
   const [reportVisible, setReportVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [editShortVisible, setEditShortVisible] = useState(false);
+  const [editShortTitle, setEditShortTitle] = useState('');
   const [editShortText, setEditShortText] = useState('');
   const [editShortTargetId, setEditShortTargetId] = useState(null);
+  const [editShortThumbnailUri, setEditShortThumbnailUri] = useState('');
+  const [editShortVideoUri, setEditShortVideoUri] = useState('');
+  const [editShortVisibility, setEditShortVisibility] = useState('Public');
+  const [editShortAudience, setEditShortAudience] = useState({
+    madeForKids: null,
+    ageRestricted: null,
+  });
+  const [editShortComments, setEditShortComments] = useState(
+    'Allow all comments',
+  );
+  const [editShortScheduleDate, setEditShortScheduleDate] = useState(null);
+  const [editVisibilityModalVisible, setEditVisibilityModalVisible] =
+    useState(false);
+  const [editAudienceModalVisible, setEditAudienceModalVisible] =
+    useState(false);
+  const [editCommentsModalVisible, setEditCommentsModalVisible] =
+    useState(false);
+  const [editScheduleModalVisible, setEditScheduleModalVisible] =
+    useState(false);
   const [editShortSubmitting, setEditShortSubmitting] = useState(false);
 
   const hasAvatarInShort = useCallback(shortItem => {
@@ -1127,26 +1166,112 @@ const ProductShortsVideo = () => {
     const ownerId = t?.userId ?? t?.userObj?.id ?? null;
     if (!ownerId || String(ownerId) !== String(user.id)) return;
     setEditShortTargetId(String(t.id));
+    setEditShortTitle(String(t?.title || t?.desc || '').trim());
     setEditShortText(String(t?.desc || t?.title || '').trim());
+    setEditShortThumbnailUri(
+      String(t?.thumbnailUrl || t?.thumbnail || t?.coverUrl || '').trim(),
+    );
+    setEditShortVideoUri(String(t?.videoUrl || t?.mediaUrl || '').trim());
+    setEditShortVisibility(
+      String(t?.visibility || '').toLowerCase() === 'private'
+        ? 'Private'
+        : 'Public',
+    );
+    setEditShortComments(
+      String(t?.commentSetting || '').toLowerCase() === 'disable'
+        ? 'Disable comments'
+        : String(t?.commentSetting || '').toLowerCase() === 'hold'
+        ? 'Hold potentially inappropriate comments'
+        : 'Allow all comments',
+    );
+    setEditShortAudience({
+      madeForKids:
+        typeof t?.madeForKids === 'boolean' ? Boolean(t.madeForKids) : null,
+      ageRestricted:
+        typeof t?.ageRestricted === 'boolean' ? Boolean(t.ageRestricted) : null,
+    });
+    setEditShortScheduleDate(
+      t?.scheduledPublishAt ? new Date(t.scheduledPublishAt) : null,
+    );
     setEditShortVisible(true);
+  };
+
+  const pickEditShortThumbnailProduct = async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.9,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (asset?.uri) setEditShortThumbnailUri(asset.uri);
+  };
+
+  const pickEditShortVideoProduct = async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'video',
+      quality: 1,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (asset?.uri) setEditShortVideoUri(asset.uri);
   };
 
   const submitEditShortFromMenuProduct = async () => {
     if (!editShortTargetId || !user?.id) return;
+    const nextTitle = String(editShortTitle || '').trim();
     const nextText = String(editShortText || '').trim();
-    if (!nextText) {
-      Toast.show({ type: 'info', text1: 'Description is required' });
+    if (!nextTitle && !nextText) {
+      Toast.show({ type: 'info', text1: 'Add title or description' });
       return;
     }
     try {
       setEditShortSubmitting(true);
       await shortsService.updateShort(editShortTargetId, user.id, {
-        description: nextText,
+        title: nextTitle || undefined,
+        description: nextText || undefined,
+        thumbnailUrl: String(editShortThumbnailUri || '').trim() || undefined,
+        videoUrl: String(editShortVideoUri || '').trim() || undefined,
+        mediaUrl: String(editShortVideoUri || '').trim() || undefined,
+        visibility: mapVisibilityForApi(editShortVisibility),
+        commentSetting: mapCommentsForApi(editShortComments),
+        ...(editShortAudience?.madeForKids != null && {
+          madeForKids: Boolean(editShortAudience.madeForKids),
+        }),
+        ...(editShortAudience?.ageRestricted != null && {
+          ageRestricted: Boolean(editShortAudience.ageRestricted),
+        }),
+        ...(editShortScheduleDate instanceof Date && {
+          scheduledPublishAt: editShortScheduleDate.toISOString(),
+        }),
       });
       setVideos(prev =>
         prev.map(v =>
           String(v.id) === String(editShortTargetId)
-            ? { ...v, desc: nextText, title: nextText }
+            ? {
+                ...v,
+                desc: nextText || v.desc,
+                description: nextText || v.description,
+                title: nextTitle || v.title,
+                thumbnailUrl: editShortThumbnailUri || v.thumbnailUrl,
+                thumbnail: editShortThumbnailUri || v.thumbnail,
+                coverUrl: editShortThumbnailUri || v.coverUrl,
+                videoUrl: editShortVideoUri || v.videoUrl,
+                mediaUrl: editShortVideoUri || v.mediaUrl,
+                visibility: mapVisibilityForApi(editShortVisibility),
+                commentSetting: mapCommentsForApi(editShortComments),
+                madeForKids:
+                  editShortAudience?.madeForKids != null
+                    ? Boolean(editShortAudience.madeForKids)
+                    : v.madeForKids,
+                ageRestricted:
+                  editShortAudience?.ageRestricted != null
+                    ? Boolean(editShortAudience.ageRestricted)
+                    : v.ageRestricted,
+                scheduledPublishAt:
+                  editShortScheduleDate instanceof Date
+                    ? editShortScheduleDate.toISOString()
+                    : v.scheduledPublishAt,
+              }
             : v,
         ),
       );
@@ -1342,45 +1467,186 @@ const ProductShortsVideo = () => {
       />
       <Modal
         animationType="slide"
-        transparent
+        transparent={false}
         visible={editShortVisible}
         onRequestClose={() => setEditShortVisible(false)}
       >
-        <View style={styles.editOverlay}>
-          <TouchableWithoutFeedback onPress={() => setEditShortVisible(false)}>
-            <View style={styles.editBackdrop} />
-          </TouchableWithoutFeedback>
-          <View style={styles.editBox}>
-            <Text style={styles.editTitle}>Edit short description</Text>
+        <View style={styles.editFullContainer}>
+          <View style={styles.editHeader}>
+            <TouchableOpacity
+              onPress={() => setEditShortVisible(false)}
+              style={styles.editHeaderBtn}
+            >
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.editHeaderTitle}>Add Details</Text>
+            <TouchableOpacity style={styles.editHeaderBtn}>
+              <Ionicons
+                name="ellipsis-horizontal-circle-outline"
+                size={24}
+                color="#000"
+              />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.editContent}>
+            <View style={styles.editTopSection}>
+              <TouchableOpacity
+                style={styles.editCoverContainer}
+                onPress={pickEditShortThumbnailProduct}
+              >
+                <Image
+                  source={{
+                    uri: safeImageUri(
+                      editShortThumbnailUri,
+                      'https://images.unsplash.com/photo-1611162616475-46b635cb6868?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80',
+                    ),
+                  }}
+                  style={styles.editCoverImage}
+                />
+                <View style={styles.editSelectCoverOverlay}>
+                  <Text style={styles.editSelectCoverText}>Select Cover</Text>
+                </View>
+              </TouchableOpacity>
+              <View style={styles.editCaptionContainer}>
+                <TextInput
+                  value={editShortText}
+                  onChangeText={setEditShortText}
+                  style={styles.editCaptionInput}
+                  placeholder="Caption your shorts..."
+                  placeholderTextColor="#999"
+                  multiline
+                  editable={!editShortSubmitting}
+                />
+              </View>
+            </View>
             <TextInput
-              value={editShortText}
-              onChangeText={setEditShortText}
-              style={styles.editInput}
-              placeholder="Write description..."
-              placeholderTextColor="#888"
-              multiline
-              maxLength={280}
+              value={editShortTitle}
+              onChangeText={setEditShortTitle}
+              style={styles.editTitleInput}
+              placeholder="Title"
+              placeholderTextColor="#999"
               editable={!editShortSubmitting}
             />
-            <View style={styles.editActions}>
+            {editShortVideoUri ? (
+              <View style={styles.editVideoSelectedRow}>
+                <Ionicons name="checkmark-circle" size={20} color="#12B76A" />
+                <Text style={styles.editVideoSelectedText}>Video selected</Text>
+              </View>
+            ) : null}
+            <View style={styles.editOptionsList}>
               <TouchableOpacity
-                style={styles.editBtnSecondary}
-                onPress={() => setEditShortVisible(false)}
-                disabled={editShortSubmitting}
+                style={styles.editOptionItem}
+                onPress={() => setEditVisibilityModalVisible(true)}
               >
-                <Text style={styles.editBtnSecondaryText}>Cancel</Text>
+                <View style={styles.editOptionLeft}>
+                  <Ionicons name="eye-outline" size={22} color="#333" />
+                  <Text style={styles.editOptionLabel}>Visibility</Text>
+                </View>
+                <View style={styles.editOptionRight}>
+                  <Text style={styles.editOptionValue}>{editShortVisibility}</Text>
+                  <Ionicons name="chevron-forward" size={18} color="#333" />
+                </View>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.editBtnPrimary}
-                onPress={submitEditShortFromMenuProduct}
+                style={styles.editOptionItem}
+                onPress={() => setEditAudienceModalVisible(true)}
+              >
+                <View style={styles.editOptionLeft}>
+                  <Ionicons name="people-outline" size={22} color="#333" />
+                  <Text style={styles.editOptionLabel}>Select Audience</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#333" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editOptionItem}
+                onPress={() => setEditScheduleModalVisible(true)}
+              >
+                <View style={styles.editOptionLeft}>
+                  <Ionicons name="calendar-outline" size={22} color="#333" />
+                  <Text style={styles.editOptionLabel}>Schedule</Text>
+                </View>
+                <View style={styles.editOptionRight}>
+                  <Text style={styles.editOptionValue}>
+                    {editShortScheduleDate instanceof Date
+                      ? editShortScheduleDate.toLocaleDateString()
+                      : 'Now'}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color="#333" />
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editOptionItem}
+                onPress={() => setEditCommentsModalVisible(true)}
+              >
+                <View style={styles.editOptionLeft}>
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={22}
+                    color="#333"
+                  />
+                  <Text style={styles.editOptionLabel}>Comments</Text>
+                </View>
+                <View style={styles.editOptionRight}>
+                  <Text style={styles.editOptionValue} numberOfLines={1}>
+                    {editShortComments}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color="#333" />
+                </View>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.editMediaRow}>
+              <TouchableOpacity
+                style={styles.editMediaBtn}
+                onPress={pickEditShortThumbnailProduct}
                 disabled={editShortSubmitting}
               >
-                <Text style={styles.editBtnPrimaryText}>
-                  {editShortSubmitting ? 'Saving...' : 'Save'}
-                </Text>
+                <Text style={styles.editMediaBtnText}>Change Image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editMediaBtn}
+                onPress={pickEditShortVideoProduct}
+                disabled={editShortSubmitting}
+              >
+                <Text style={styles.editMediaBtnText}>Change Video</Text>
               </TouchableOpacity>
             </View>
           </View>
+          <View style={styles.editFooter}>
+            <TouchableOpacity
+              style={styles.editUploadBtn}
+              onPress={submitEditShortFromMenuProduct}
+              disabled={editShortSubmitting}
+            >
+              <Text style={styles.editUploadBtnText}>
+                {editShortSubmitting ? 'Saving...' : 'Save Changes'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <SetVisibilityModal
+            visible={editVisibilityModalVisible}
+            onClose={() => setEditVisibilityModalVisible(false)}
+            initialValue={editShortVisibility}
+            onApply={v => setEditShortVisibility(v)}
+          />
+          <SelectAudienceModal
+            visible={editAudienceModalVisible}
+            onClose={() => setEditAudienceModalVisible(false)}
+            initialValue={editShortAudience}
+            onApply={v => setEditShortAudience(v)}
+          />
+          <CommentsSettingsModal
+            visible={editCommentsModalVisible}
+            onClose={() => setEditCommentsModalVisible(false)}
+            initialValue={editShortComments}
+            onApply={v => setEditShortComments(v)}
+          />
+          <VideoScheduleModal
+            visible={editScheduleModalVisible}
+            onClose={() => setEditScheduleModalVisible(false)}
+            initialDate={editShortScheduleDate}
+            onSelectNow={() => setEditShortScheduleDate(null)}
+            onConfirmDate={d => setEditShortScheduleDate(d)}
+          />
         </View>
       </Modal>
       <SaveModal
@@ -1786,25 +2052,82 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   orderNowText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  editOverlay: {
+  editFullContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
-  },
-  editBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  editBox: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 16,
-    paddingBottom: 20,
   },
-  editTitle: {
-    color: '#111',
-    fontSize: 16,
+  editHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  editHeaderBtn: {
+    padding: 4,
+  },
+  editHeaderTitle: {
+    fontSize: 20,
     fontWeight: '700',
+    color: '#111',
+  },
+  editContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  editTopSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  editCoverContainer: {
+    width: 100,
+    height: 150,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#f2f2f2',
+  },
+  editCoverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  editSelectCoverOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  editSelectCoverText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  editCaptionContainer: {
+    flex: 1,
+    marginLeft: 12,
+    minHeight: 150,
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 10,
+  },
+  editCaptionInput: {
+    color: '#222',
+    fontSize: 14,
+    textAlignVertical: 'top',
+    minHeight: 120,
+  },
+  editInputSingle: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#111',
     marginBottom: 10,
   },
   editInput: {
@@ -1819,29 +2142,93 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: 12,
   },
-  editActions: {
+  editMediaRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    gap: 10,
+    marginBottom: 12,
+  },
+  editMediaBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#FFD5A0',
+    backgroundColor: '#FFF5E8',
+    borderRadius: 10,
+    paddingVertical: 10,
     alignItems: 'center',
   },
-  editBtnSecondary: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginRight: 10,
-  },
-  editBtnSecondaryText: {
-    color: '#666',
-    fontWeight: '600',
-  },
-  editBtnPrimary: {
-    backgroundColor: '#FF8C00',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  editBtnPrimaryText: {
-    color: '#fff',
+  editMediaBtnText: {
+    color: '#E26A00',
     fontWeight: '700',
+    fontSize: 12,
+  },
+  editTitleInput: {
+    borderWidth: 1,
+    borderColor: '#E6E6E6',
+    borderRadius: 10,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#222',
+  },
+  editVideoSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  editVideoSelectedText: {
+    color: '#12B76A',
+    marginLeft: 6,
+    fontSize: 14,
+  },
+  editOptionsList: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  editOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f4f4f4',
+  },
+  editOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  editOptionLabel: {
+    color: '#222',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  editOptionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '60%',
+  },
+  editOptionValue: {
+    color: '#666',
+    fontSize: 14,
+    marginRight: 8,
+  },
+  editFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  editUploadBtn: {
+    backgroundColor: '#FF8C00',
+    borderRadius: 26,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editUploadBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

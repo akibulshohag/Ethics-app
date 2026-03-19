@@ -21,6 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
+import VideoScheduleModal from './VideoScheduleModal';
 import { shortsService } from '../services/shortsService';
 
 const AddDetailsModal = ({
@@ -39,6 +40,8 @@ const AddDetailsModal = ({
   });
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
   const [comments, setComments] = useState('Allow all comments');
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [scheduledPublishDate, setScheduledPublishDate] = useState(null);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [localVideo, setLocalVideo] = useState(null);
@@ -90,6 +93,17 @@ const AddDetailsModal = ({
     return 'allow';
   };
 
+  const scheduleDisplay = (() => {
+    if (!(scheduledPublishDate instanceof Date)) return 'Now';
+    const ms = scheduledPublishDate.getTime();
+    if (!Number.isFinite(ms) || ms <= Date.now() + 60_000) return 'Now';
+    return scheduledPublishDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  })();
+
   const handleUploadShorts = async () => {
     if (!shortsMetadata?.userId) {
       Alert.alert('Error', 'Please sign in to upload shorts');
@@ -125,6 +139,24 @@ const AddDetailsModal = ({
       );
       formData.append('visibility', mapToVisibility(visibility));
       formData.append('commentSetting', mapToCommentSetting(comments));
+      if (audience?.madeForKids != null) {
+        formData.append('madeForKids', String(Boolean(audience.madeForKids)));
+      }
+      if (audience?.ageRestricted != null) {
+        formData.append(
+          'ageRestricted',
+          String(Boolean(audience.ageRestricted)),
+        );
+      }
+      if (
+        scheduledPublishDate instanceof Date &&
+        scheduledPublishDate.getTime() > Date.now() + 60_000
+      ) {
+        formData.append(
+          'scheduledPublishAt',
+          scheduledPublishDate.toISOString(),
+        );
+      }
       if (shortsMetadata.selectedFilter?.id) {
         formData.append('filterId', shortsMetadata.selectedFilter.id);
         formData.append('filterName', shortsMetadata.selectedFilter.name);
@@ -289,7 +321,10 @@ const AddDetailsModal = ({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => setScheduleModalVisible(true)}
+            >
               <View style={styles.optionLeft}>
                 <Ionicons
                   name="calendar-outline"
@@ -300,7 +335,7 @@ const AddDetailsModal = ({
                 <Text style={styles.optionLabel}>Schedule</Text>
               </View>
               <View style={styles.optionRight}>
-                <Text style={styles.optionValue}>Now</Text>
+                <Text style={styles.optionValue}>{scheduleDisplay}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#333" />
               </View>
             </TouchableOpacity>
@@ -367,6 +402,13 @@ const AddDetailsModal = ({
           onClose={() => setCommentsModalVisible(false)}
           initialValue={comments}
           onApply={val => setComments(val)}
+        />
+        <VideoScheduleModal
+          visible={scheduleModalVisible}
+          onClose={() => setScheduleModalVisible(false)}
+          initialDate={scheduledPublishDate}
+          onSelectNow={() => setScheduledPublishDate(null)}
+          onConfirmDate={d => setScheduledPublishDate(d)}
         />
       </SafeAreaView>
     </Modal>

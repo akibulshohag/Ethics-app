@@ -59,6 +59,7 @@ import {
 } from '../../services/promotionService';
 import {
   getMenuByUserId,
+  getMenuFiles,
   updateMenuItem,
   deleteMenuItem,
 } from '../../services/menuService';
@@ -359,6 +360,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const promotionVideoRef = useRef(null);
   const [menuItems, setMenuItems] = useState([]);
   const [menuCategories, setMenuCategories] = useState([]);
+  const [menuFiles, setMenuFiles] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
 
   const [previewVisible, setPreviewVisible] = useState(false);
@@ -571,16 +573,25 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setMenuLoading(true);
     try {
-      const res = await getMenuByUserId(profileUserId);
+      const [res, filesRes] = await Promise.all([
+        getMenuByUserId(profileUserId),
+        currentUser?.token
+          ? getMenuFiles(currentUser.token, profileUserId).catch(() => ({
+              files: [],
+            }))
+          : Promise.resolve({ files: [] }),
+      ]);
       setMenuItems(res?.menu ?? []);
       setMenuCategories(res?.categories ?? []);
+      setMenuFiles(filesRes?.files ?? []);
     } catch (e) {
       setMenuItems([]);
       setMenuCategories([]);
+      setMenuFiles([]);
     } finally {
       setMenuLoading(false);
     }
-  }, [profileUserId]);
+  }, [profileUserId, currentUser?.token]);
 
   useEffect(() => {
     if (activeTab === 'Menus' && profileUserId) loadMenu();
@@ -1499,6 +1510,24 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
       case 'Menus': {
         const result = [];
+        const files = Array.isArray(menuFiles) ? menuFiles : [];
+        if (files.length > 0) {
+          result.push({
+            type: 'menuSection',
+            id: 'section-menu-files',
+            title: 'Menu Files',
+          });
+          files.forEach(f =>
+            result.push({
+              type: 'menuFile',
+              id: `file-${f.id || f.fileUrl}`,
+              fileId: f.id,
+              fileUrl: f.fileUrl,
+              fileType: f.fileType || '',
+              title: f.originalName || f.name || 'Menu file',
+            }),
+          );
+        }
         (menuCategories || []).forEach(cat => {
           const items = menuItems.filter(
             m => (m.categoryId || m.category?.id) === cat.id,
@@ -1647,6 +1676,37 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               {item.title}
             </Text>
           </View>
+        );
+      }
+      if (item.type === 'menuFile') {
+        const url = String(item.fileUrl || '').trim();
+        const isPdf = /\.pdf(\?|$)/i.test(url) || item.fileType === 'application/pdf';
+        return (
+          <TouchableOpacity
+            style={styles.menuRowItem}
+            onPress={() => {
+              if (!url) return;
+              Linking.openURL(safeImageUri(url));
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
+              <MaterialCommunityIcons
+                name={isPdf ? 'file-pdf-box' : 'file-image'}
+                size={24}
+                color={isPdf ? '#E53935' : '#FF7F0B'}
+              />
+            </View>
+            <View style={styles.menuRowBody}>
+              <Text style={styles.menuRowName} numberOfLines={1}>
+                {item.title || (isPdf ? 'Menu PDF' : 'Menu image')}
+              </Text>
+              <Text style={styles.menuRowPrice}>
+                {isPdf ? 'PDF menu file' : 'Image menu file'}
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="open-in-new" size={20} color="#666" />
+          </TouchableOpacity>
         );
       }
       return (
