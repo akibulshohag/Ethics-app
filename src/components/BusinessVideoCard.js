@@ -17,6 +17,7 @@ const BusinessVideoCard = ({
   onDislike,
   onCommentPress,
   onShare,
+  onMenuPress,
 }) => {
   const [avatarError, setAvatarError] = useState(false);
   const avatarUri = video.channelAvatar && String(video.channelAvatar).trim() ? video.channelAvatar : null;
@@ -60,7 +61,7 @@ const BusinessVideoCard = ({
             <Text style={styles.timeAgo}>{video.publishedAt}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.menuButton}>
+        <TouchableOpacity style={styles.menuButton} onPress={onMenuPress}>
           <MaterialCommunityIcons name="dots-vertical" size={24} color="#333" />
         </TouchableOpacity>
       </View>

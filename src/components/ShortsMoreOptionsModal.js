@@ -46,6 +46,21 @@ const OPTIONS = [
   },
 ];
 
+const OWNER_OPTIONS = [
+  {
+    id: 'edit',
+    label: 'Edit',
+    icon: 'square-edit-outline',
+    highlight: false,
+  },
+  {
+    id: 'delete',
+    label: 'Delete',
+    icon: 'delete-outline',
+    highlight: true,
+  },
+];
+
 /**
  * Bottom sheet: More Option (shorts / product shorts).
  */
@@ -58,15 +73,21 @@ const ShortsMoreOptionsModal = ({
   onShare,
   onNotInterested,
   onReport,
+  onEdit,
+  onDelete,
   hideNotInterested = false,
   hideReport = false,
+  showOwnerActions = false,
 }) => {
   const insets = useSafeAreaInsets();
-  const filteredOptions = OPTIONS.filter(item => {
+  const baseOptions = OPTIONS.filter(item => {
     if (hideNotInterested && item.id === 'not_interested') return false;
     if (hideReport && item.id === 'report') return false;
     return true;
   });
+  const filteredOptions = showOwnerActions
+    ? [...baseOptions, ...OWNER_OPTIONS]
+    : baseOptions;
 
   const handlePress = item => {
     onClose();
@@ -79,6 +100,8 @@ const ShortsMoreOptionsModal = ({
       else if (item.id === 'not_interested' && onNotInterested)
         onNotInterested();
       else if (item.id === 'report' && onReport) onReport();
+      else if (item.id === 'edit' && onEdit) onEdit();
+      else if (item.id === 'delete' && onDelete) onDelete();
     }, 280);
   };
 

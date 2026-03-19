@@ -14,6 +14,8 @@ import {
   Share,
   Image,
   Linking,
+  Alert,
+  TextInput,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
@@ -218,6 +220,10 @@ const ProductShortsVideo = () => {
   const [moreMenuItem, setMoreMenuItem] = useState(null);
   const [reportVisible, setReportVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [editShortVisible, setEditShortVisible] = useState(false);
+  const [editShortText, setEditShortText] = useState('');
+  const [editShortTargetId, setEditShortTargetId] = useState(null);
+  const [editShortSubmitting, setEditShortSubmitting] = useState(false);
 
   const hasAvatarInShort = useCallback(shortItem => {
     const s = shortItem || {};
@@ -1112,6 +1118,78 @@ const ProductShortsVideo = () => {
     setReportVisible(true);
   };
 
+  const openEditShortFromMenuProduct = () => {
+    const t = menuTargetProduct();
+    if (!user?.id || !t?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    const ownerId = t?.userId ?? t?.userObj?.id ?? null;
+    if (!ownerId || String(ownerId) !== String(user.id)) return;
+    setEditShortTargetId(String(t.id));
+    setEditShortText(String(t?.desc || t?.title || '').trim());
+    setEditShortVisible(true);
+  };
+
+  const submitEditShortFromMenuProduct = async () => {
+    if (!editShortTargetId || !user?.id) return;
+    const nextText = String(editShortText || '').trim();
+    if (!nextText) {
+      Toast.show({ type: 'info', text1: 'Description is required' });
+      return;
+    }
+    try {
+      setEditShortSubmitting(true);
+      await shortsService.updateShort(editShortTargetId, user.id, {
+        description: nextText,
+      });
+      setVideos(prev =>
+        prev.map(v =>
+          String(v.id) === String(editShortTargetId)
+            ? { ...v, desc: nextText, title: nextText }
+            : v,
+        ),
+      );
+      Toast.show({ type: 'success', text1: 'Short updated' });
+      setEditShortVisible(false);
+      setEditShortTargetId(null);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: e?.message || 'Failed to update short' });
+    } finally {
+      setEditShortSubmitting(false);
+    }
+  };
+
+  const handleDeleteShortFromMenuProduct = () => {
+    const t = menuTargetProduct();
+    if (!user?.id || !t?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    const ownerId = t?.userId ?? t?.userObj?.id ?? null;
+    if (!ownerId || String(ownerId) !== String(user.id)) return;
+    Alert.alert('Delete Short', 'Are you sure you want to delete this short?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await shortsService.deleteShort(t.id, user.id);
+            setVideos(prev => prev.filter(v => String(v.id) !== String(t.id)));
+            setCurrentIndex(prev => Math.max(0, prev - 1));
+            Toast.show({ type: 'success', text1: 'Short deleted' });
+          } catch (e) {
+            Toast.show({
+              type: 'error',
+              text1: e?.message || 'Failed to delete short',
+            });
+          }
+        },
+      },
+    ]);
+  };
+
   const handleReportSubmitProduct = async reason => {
     const t = menuTargetProduct();
     if (!t?.id) {
@@ -1256,9 +1334,55 @@ const ProductShortsVideo = () => {
         onShare={() => handleShare(menuTargetProduct())}
         onNotInterested={handleNotInterestedProduct}
         onReport={openReportFromMenuProduct}
+        onEdit={openEditShortFromMenuProduct}
+        onDelete={handleDeleteShortFromMenuProduct}
         hideNotInterested={isOwnMenuTargetProduct}
         hideReport={isOwnMenuTargetProduct}
+        showOwnerActions={isOwnMenuTargetProduct}
       />
+      <Modal
+        animationType="slide"
+        transparent
+        visible={editShortVisible}
+        onRequestClose={() => setEditShortVisible(false)}
+      >
+        <View style={styles.editOverlay}>
+          <TouchableWithoutFeedback onPress={() => setEditShortVisible(false)}>
+            <View style={styles.editBackdrop} />
+          </TouchableWithoutFeedback>
+          <View style={styles.editBox}>
+            <Text style={styles.editTitle}>Edit short description</Text>
+            <TextInput
+              value={editShortText}
+              onChangeText={setEditShortText}
+              style={styles.editInput}
+              placeholder="Write description..."
+              placeholderTextColor="#888"
+              multiline
+              maxLength={280}
+              editable={!editShortSubmitting}
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                style={styles.editBtnSecondary}
+                onPress={() => setEditShortVisible(false)}
+                disabled={editShortSubmitting}
+              >
+                <Text style={styles.editBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editBtnPrimary}
+                onPress={submitEditShortFromMenuProduct}
+                disabled={editShortSubmitting}
+              >
+                <Text style={styles.editBtnPrimaryText}>
+                  {editShortSubmitting ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <SaveModal
         visible={saveModalVisible}
         onClose={() => setSaveModalVisible(false)}
@@ -1662,6 +1786,63 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   orderNowText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  editOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  editBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  editBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    paddingBottom: 20,
+  },
+  editTitle: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  editInput: {
+    minHeight: 100,
+    maxHeight: 180,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#111',
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  editBtnSecondary: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginRight: 10,
+  },
+  editBtnSecondaryText: {
+    color: '#666',
+    fontWeight: '600',
+  },
+  editBtnPrimary: {
+    backgroundColor: '#FF8C00',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  editBtnPrimaryText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
 });
 
 export default ProductShortsVideo;

@@ -15,6 +15,7 @@ import {
   Pressable,
   Share,
   Linking,
+  TextInput,
 } from 'react-native';
 import Video from 'react-native-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -836,6 +837,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [subsLoading, setSubsLoading] = useState(false);
   const [subsUsers, setSubsUsers] = useState([]);
   const [subsError, setSubsError] = useState('');
+  const [editShortVisible, setEditShortVisible] = useState(false);
+  const [editShortText, setEditShortText] = useState('');
+  const [editShortTargetId, setEditShortTargetId] = useState(null);
+  const [editShortSubmitting, setEditShortSubmitting] = useState(false);
 
   const hasAvatarInShort = useCallback(shortItem => {
     const s = shortItem || {};
@@ -1191,6 +1196,78 @@ const ShortsVideoScreen = ({ navigation }) => {
     setReportVisible(true);
   };
 
+  const openEditShortFromMenu = () => {
+    const t = menuTargetShort();
+    if (!user?.id || !t?.id) {
+      navigateToHomeScreen('HomeSevenScreen');
+      return;
+    }
+    const ownerId = t?.user?.id ?? t?.userId ?? null;
+    if (!ownerId || String(ownerId) !== String(user.id)) return;
+    setEditShortTargetId(String(t.id));
+    setEditShortText(String(t?.description || t?.title || '').trim());
+    setEditShortVisible(true);
+  };
+
+  const submitEditShortFromMenu = async () => {
+    if (!editShortTargetId || !user?.id) return;
+    const nextText = String(editShortText || '').trim();
+    if (!nextText) {
+      Toast.show({ type: 'info', text1: 'Description is required' });
+      return;
+    }
+    try {
+      setEditShortSubmitting(true);
+      await shortsService.updateShort(editShortTargetId, user.id, {
+        description: nextText,
+      });
+      setVideos(prev =>
+        prev.map(v =>
+          String(v.id) === String(editShortTargetId)
+            ? { ...v, description: nextText, title: nextText }
+            : v,
+        ),
+      );
+      Toast.show({ type: 'success', text1: 'Short updated' });
+      setEditShortVisible(false);
+      setEditShortTargetId(null);
+    } catch (e) {
+      Toast.show({ type: 'error', text1: e?.message || 'Failed to update short' });
+    } finally {
+      setEditShortSubmitting(false);
+    }
+  };
+
+  const handleDeleteShortFromMenu = () => {
+    const t = menuTargetShort();
+    if (!user?.id || !t?.id) {
+      navigateToHomeScreen('HomeSevenScreen');
+      return;
+    }
+    const ownerId = t?.user?.id ?? t?.userId ?? null;
+    if (!ownerId || String(ownerId) !== String(user.id)) return;
+    Alert.alert('Delete Short', 'Are you sure you want to delete this short?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await shortsService.deleteShort(t.id, user.id);
+            setVideos(prev => prev.filter(v => String(v.id) !== String(t.id)));
+            setActiveVideoIndex(prev => Math.max(0, prev - 1));
+            Toast.show({ type: 'success', text1: 'Short deleted' });
+          } catch (e) {
+            Toast.show({
+              type: 'error',
+              text1: e?.message || 'Failed to delete short',
+            });
+          }
+        },
+      },
+    ]);
+  };
+
   const openSubscribersModal = async ownerIdToLoad => {
     if (!user?.token) {
       navigateToHomeScreen('HomeSevenScreen');
@@ -1474,9 +1551,56 @@ const ShortsVideoScreen = ({ navigation }) => {
         onShare={() => handleShare(menuTargetShort())}
         onNotInterested={handleNotInterestedShort}
         onReport={openReportFromMenu}
+        onEdit={openEditShortFromMenu}
+        onDelete={handleDeleteShortFromMenu}
         hideNotInterested={isOwnMenuTargetShort}
         hideReport={isOwnMenuTargetShort}
+        showOwnerActions={isOwnMenuTargetShort}
       />
+      <Modal
+        animationType="slide"
+        transparent
+        visible={editShortVisible}
+        onRequestClose={() => setEditShortVisible(false)}
+      >
+        <View style={styles.editOverlay}>
+          <Pressable
+            style={styles.editBackdrop}
+            onPress={() => setEditShortVisible(false)}
+          />
+          <View style={styles.editBox}>
+            <Text style={styles.editTitle}>Edit short description</Text>
+            <TextInput
+              value={editShortText}
+              onChangeText={setEditShortText}
+              style={styles.editInput}
+              placeholder="Write description..."
+              placeholderTextColor="#888"
+              multiline
+              maxLength={280}
+              editable={!editShortSubmitting}
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                style={styles.editBtnSecondary}
+                onPress={() => setEditShortVisible(false)}
+                disabled={editShortSubmitting}
+              >
+                <Text style={styles.editBtnSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.editBtnPrimary}
+                onPress={submitEditShortFromMenu}
+                disabled={editShortSubmitting}
+              >
+                <Text style={styles.editBtnPrimaryText}>
+                  {editShortSubmitting ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <SaveModal
         visible={saveModalVisible}
         onClose={() => setSaveModalVisible(false)}
@@ -1876,6 +2000,63 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: 'bold',
     fontSize: 12,
+  },
+  editOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  editBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  editBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    paddingBottom: 20,
+  },
+  editTitle: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  editInput: {
+    minHeight: 100,
+    maxHeight: 180,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#111',
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  editBtnSecondary: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginRight: 10,
+  },
+  editBtnSecondaryText: {
+    color: '#666',
+    fontWeight: '600',
+  },
+  editBtnPrimary: {
+    backgroundColor: '#FF8C00',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  editBtnPrimaryText: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });
 

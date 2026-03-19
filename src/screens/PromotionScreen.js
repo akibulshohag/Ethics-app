@@ -17,6 +17,7 @@ import {
   Dimensions,
   Share,
 } from 'react-native';
+import Video from 'react-native-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
@@ -32,7 +33,7 @@ import {
   uploadProfilePhoto,
   uploadCoverImage,
 } from '../services/channelService';
-import { getUserVideos } from '../services/videoService';
+import { getUserVideos, updateVideo, deleteVideo } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import { getWatchLater } from '../services/playlistService';
 import { getNearbyPromotions } from '../services/promotionService';
@@ -41,6 +42,8 @@ import { safeImageUri } from '../utils/helper';
 import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 import {
   getPostsByUser,
+  updatePost,
+  deletePost,
   togglePostLike,
   togglePostDislike,
   recordPostShare,
@@ -183,6 +186,8 @@ const mapPostToCardTab = (post, user) => {
     website: post.website || '',
     hashtags: Array.isArray(post.hashtags) ? post.hashtags : [],
     mediaUrl: post.mediaUrl,
+    mediaType: post.mediaType || 'image',
+    description: post.description || post.desc || '',
   };
 };
 
@@ -232,6 +237,19 @@ const PromotionScreen = ({ onBack }) => {
   const [createPostTabVisible, setCreatePostTabVisible] = useState(false);
   const [galleryPreviewVisible, setGalleryPreviewVisible] = useState(false);
   const [galleryPreviewUri, setGalleryPreviewUri] = useState(null);
+  const [postPreviewVisible, setPostPreviewVisible] = useState(false);
+  const [postPreviewUri, setPostPreviewUri] = useState('');
+  const [postPreviewType, setPostPreviewType] = useState('image');
+  const [itemActionsVisible, setItemActionsVisible] = useState(false);
+  const [itemEditVisible, setItemEditVisible] = useState(false);
+  const [actionTarget, setActionTarget] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editWebsite, setEditWebsite] = useState('');
+  const [editHashtags, setEditHashtags] = useState('');
+  const [editThumbnailUri, setEditThumbnailUri] = useState('');
+  const [editVideoUri, setEditVideoUri] = useState('');
+  const [itemEditSaving, setItemEditSaving] = useState(false);
 
   const userId = currentUser?.id;
   const displayName =
@@ -553,6 +571,17 @@ const PromotionScreen = ({ onBack }) => {
     [commentsModalPostId, updatePostTab],
   );
 
+  const openPostMediaPreview = useCallback(item => {
+    const media = String(item?.mediaUrl || item?.thumbnail || '').trim();
+    if (!media) return;
+    const mt = String(item?.mediaType || '').toLowerCase();
+    const byExt = /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+    const type = mt === 'video' || byExt ? 'video' : 'image';
+    setPostPreviewType(type);
+    setPostPreviewUri(safeImageUri(media));
+    setPostPreviewVisible(true);
+  }, []);
+
   const handleGalleryTabUpload = useCallback(() => {
     if (!userId || galleryTabUploading) return;
     launchImageLibrary(
@@ -579,27 +608,222 @@ const PromotionScreen = ({ onBack }) => {
     );
   }, [userId, galleryTabUploading, loadGalleryTab]);
 
-  const handleDeleteGalleryTabPhoto = useCallback(
-    async photoId => {
-      if (!userId) return;
-      Alert.alert('Delete photo', 'Remove this photo from your gallery?', [
+  const openItemActions = useCallback(target => {
+    if (!target) return;
+    setActionTarget(target);
+    setItemActionsVisible(true);
+  }, []);
+
+  const openEditForTarget = useCallback(() => {
+    if (!actionTarget) return;
+    setItemActionsVisible(false);
+    setEditTitle(String(actionTarget?.title || '').trim());
+    setEditDescription(
+      String(actionTarget?.description || actionTarget?.desc || '').trim(),
+    );
+    setEditWebsite(String(actionTarget?.website || '').trim());
+    const tags = Array.isArray(actionTarget?.hashtags)
+      ? actionTarget.hashtags.join(' ')
+      : String(actionTarget?.hashtags || '').trim();
+    setEditHashtags(tags);
+    setEditThumbnailUri(
+      String(
+        actionTarget?.thumbnail ||
+          actionTarget?.thumbnailUrl ||
+          actionTarget?.coverUrl ||
+          '',
+      ).trim(),
+    );
+    setEditVideoUri(
+      String(actionTarget?.videoUrl || actionTarget?.mediaUrl || '').trim(),
+    );
+    setItemEditVisible(true);
+  }, [actionTarget]);
+
+  const handlePickEditThumbnail = useCallback(() => {
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, res => {
+      if (res.didCancel || res.errorCode || !res.assets?.length) return;
+      const a = res.assets[0];
+      if (a?.uri) setEditThumbnailUri(String(a.uri));
+    });
+  }, []);
+
+  const handlePickEditVideo = useCallback(() => {
+    launchImageLibrary({ mediaType: 'video', selectionLimit: 1 }, res => {
+      if (res.didCancel || res.errorCode || !res.assets?.length) return;
+      const a = res.assets[0];
+      if (a?.uri) setEditVideoUri(String(a.uri));
+    });
+  }, []);
+
+  const handleDeleteTarget = useCallback(() => {
+    if (!actionTarget || !userId) return;
+    setItemActionsVisible(false);
+    const label =
+      actionTarget.kind === 'gallery'
+        ? 'photo'
+        : actionTarget.kind === 'post'
+        ? 'post'
+        : actionTarget.kind === 'short'
+        ? 'short'
+        : 'video';
+    Alert.alert(
+      `Delete ${label}`,
+      `Are you sure you want to delete this ${label}?`,
+      [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteGalleryPhoto(userId, photoId);
-              setGalleryTab(prev => prev.filter(p => p.id !== photoId));
+              if (actionTarget.kind === 'post') {
+                await deletePost(actionTarget.id, userId);
+                setPostsTab(prev =>
+                  prev.filter(p => String(p.id || p.postId) !== String(actionTarget.id)),
+                );
+              } else if (actionTarget.kind === 'video') {
+                await deleteVideo(actionTarget.id, userId);
+                setMyVideos(prev =>
+                  prev.filter(v => String(v.id) !== String(actionTarget.id)),
+                );
+              } else if (actionTarget.kind === 'short') {
+                await shortsService.deleteShort(actionTarget.id, userId);
+                setMyVideos(prev =>
+                  prev.filter(v => String(v.id) !== String(actionTarget.id)),
+                );
+              } else if (actionTarget.kind === 'gallery') {
+                await deleteGalleryPhoto(userId, actionTarget.id);
+                setGalleryTab(prev =>
+                  prev.filter(p => String(p.id) !== String(actionTarget.id)),
+                );
+              }
             } catch (e) {
-              Alert.alert('Error', e?.message || 'Failed to delete');
+              Alert.alert('Error', e?.message || `Failed to delete ${label}`);
             }
           },
         },
-      ]);
-    },
-    [userId],
-  );
+      ],
+    );
+  }, [actionTarget, userId]);
+
+  const handleSaveEditTarget = useCallback(async () => {
+    if (!actionTarget || !userId) return;
+    if (actionTarget.kind === 'gallery') {
+      launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, async res => {
+        if (res.didCancel || res.errorCode || !res.assets?.length) return;
+        try {
+          const a = res.assets[0];
+          await uploadGallery(userId, [
+            {
+              uri: a.uri,
+              type: a.type || 'image/jpeg',
+              name: a.fileName || 'photo.jpg',
+            },
+          ]);
+          await deleteGalleryPhoto(userId, actionTarget.id);
+          await loadGalleryTab();
+          setItemEditVisible(false);
+        } catch (e) {
+          Alert.alert('Error', e?.message || 'Failed to update photo');
+        }
+      });
+      return;
+    }
+    const payload = {
+      title: editTitle.trim() || undefined,
+      description: editDescription.trim() || undefined,
+      website: editWebsite.trim() || undefined,
+      thumbnailUrl: editThumbnailUri.trim() || undefined,
+      mediaUrl: editVideoUri.trim() || undefined,
+      videoUrl: editVideoUri.trim() || undefined,
+      hashtags: editHashtags
+        .split(/[\s,]+/)
+        .map(t => t.trim())
+        .filter(Boolean),
+    };
+    try {
+      setItemEditSaving(true);
+      if (actionTarget.kind === 'post') {
+        await updatePost(actionTarget.id, userId, payload);
+        setPostsTab(prev =>
+          prev.map(p =>
+            String(p.id || p.postId) === String(actionTarget.id)
+              ? {
+                  ...p,
+                  title: payload.title ?? p.title,
+                  description: payload.description ?? p.description,
+                  thumbnail: payload.thumbnailUrl ?? p.thumbnail,
+                  videoUrl: payload.videoUrl ?? p.videoUrl,
+                  mediaUrl: payload.mediaUrl ?? p.mediaUrl,
+                  website: payload.website ?? p.website,
+                  hashtags: payload.hashtags?.length
+                    ? payload.hashtags
+                    : p.hashtags,
+                }
+              : p,
+          ),
+        );
+      } else if (actionTarget.kind === 'video') {
+        await updateVideo(actionTarget.id, userId, payload);
+        setMyVideos(prev =>
+          prev.map(v =>
+            String(v.id) === String(actionTarget.id)
+              ? {
+                  ...v,
+                  title: payload.title ?? v.title,
+                  description: payload.description ?? v.description,
+                  thumbnailUrl: payload.thumbnailUrl ?? v.thumbnailUrl,
+                  thumbnail: payload.thumbnailUrl ?? v.thumbnail,
+                  videoUrl: payload.videoUrl ?? v.videoUrl,
+                  mediaUrl: payload.mediaUrl ?? v.mediaUrl,
+                  website: payload.website ?? v.website,
+                  hashtags: payload.hashtags?.length
+                    ? payload.hashtags
+                    : v.hashtags,
+                }
+              : v,
+          ),
+        );
+      } else if (actionTarget.kind === 'short') {
+        await shortsService.updateShort(actionTarget.id, userId, payload);
+        setMyVideos(prev =>
+          prev.map(v =>
+            String(v.id) === String(actionTarget.id)
+              ? {
+                  ...v,
+                  title: payload.title ?? v.title,
+                  description: payload.description ?? v.description,
+                  coverUrl: payload.thumbnailUrl ?? v.coverUrl,
+                  thumbnailUrl: payload.thumbnailUrl ?? v.thumbnailUrl,
+                  thumbnail: payload.thumbnailUrl ?? v.thumbnail,
+                  videoUrl: payload.videoUrl ?? v.videoUrl,
+                  mediaUrl: payload.mediaUrl ?? v.mediaUrl,
+                  hashtags: payload.hashtags?.length
+                    ? payload.hashtags
+                    : v.hashtags,
+                }
+              : v,
+          ),
+        );
+      }
+      setItemEditVisible(false);
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to update');
+    } finally {
+      setItemEditSaving(false);
+    }
+  }, [
+    actionTarget,
+    userId,
+    editTitle,
+    editDescription,
+    editWebsite,
+    editHashtags,
+    editThumbnailUri,
+    editVideoUri,
+    loadGalleryTab,
+  ]);
 
   const onRefresh = useCallback(async () => {
     if (!userId) return;
@@ -1090,6 +1314,21 @@ const PromotionScreen = ({ onBack }) => {
                           channelAvatar: postOwnerAvatar || item.channelAvatar,
                         }}
                         postId={postId}
+                        onPress={() => openPostMediaPreview(item)}
+                        onMenuPress={() =>
+                          openItemActions({
+                            kind: 'post',
+                            id: postId,
+                            title: item?.title || '',
+                            description: item?.description || '',
+                            website: item?.website || '',
+                            hashtags: item?.hashtags || [],
+                            thumbnail: item?.thumbnail || item?.mediaUrl || '',
+                            mediaUrl: item?.mediaUrl || '',
+                            videoUrl: item?.videoUrl || '',
+                            mediaType: item?.mediaType || '',
+                          })
+                        }
                         onLike={
                           currentUser?.id
                             ? () => handlePostTabLike(postId)
@@ -1139,26 +1378,38 @@ const PromotionScreen = ({ onBack }) => {
                       </Text>
                     ) : (
                       galleryTab.map(photo => (
-                        <TouchableOpacity
+                        <View
                           key={photo.id}
                           style={[
                             styles.promoTabGalleryCell,
                             { width: PROMO_TAB_GRID_W },
                           ]}
-                          onPress={() => {
-                            setGalleryPreviewUri(safeImageUri(photo.src));
-                            setGalleryPreviewVisible(true);
-                          }}
-                          onLongPress={() =>
-                            photo.id && handleDeleteGalleryTabPhoto(photo.id)
-                          }
-                          activeOpacity={0.9}
                         >
-                          <Image
-                            source={{ uri: safeImageUri(photo.src) }}
-                            style={styles.promoTabGalleryImg}
-                          />
-                        </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.galleryItemMenuBtn}
+                            onPress={() =>
+                              openItemActions({
+                                kind: 'gallery',
+                                id: photo.id,
+                                title: 'Gallery photo',
+                              })
+                            }
+                          >
+                            <Icon name="dots-vertical" size={16} color="#fff" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setGalleryPreviewUri(safeImageUri(photo.src));
+                              setGalleryPreviewVisible(true);
+                            }}
+                            activeOpacity={0.9}
+                          >
+                            <Image
+                              source={{ uri: safeImageUri(photo.src) }}
+                              style={styles.promoTabGalleryImg}
+                            />
+                          </TouchableOpacity>
+                        </View>
                       ))
                     )}
                   </View>
@@ -1179,23 +1430,43 @@ const PromotionScreen = ({ onBack }) => {
                   <Text style={styles.promoTabEmpty}>No videos yet.</Text>
                 ) : (
                   myVideos.map(item => (
-                    <BusinessVideoTabCard
-                      key={String(item.id)}
-                      item={{
-                        ...item,
-                        thumbnail: item.thumbnail || item.thumbnailUrl,
-                        title: item.title || 'Video',
-                        views:
-                          item.views || formatCountTab(item.viewCount ?? 0),
-                        location:
-                          item.location ||
-                          profile?.address ||
-                          currentUser?.address ||
-                          '',
-                        distance: item.distance || '',
-                      }}
-                      onPress={() => openLibraryMedia(item)}
-                    />
+                    <View key={String(item.id)} style={styles.itemCardWrap}>
+                      <TouchableOpacity
+                        style={styles.itemMenuBtn}
+                        onPress={() =>
+                          openItemActions({
+                            kind: item?.type === 'short' ? 'short' : 'video',
+                            id: item.id,
+                            title: item?.title || '',
+                            description: item?.description || item?.desc || '',
+                            website: item?.website || '',
+                            hashtags: item?.hashtags || [],
+                            thumbnail:
+                              item?.thumbnail || item?.thumbnailUrl || item?.coverUrl || '',
+                            mediaUrl: item?.mediaUrl || '',
+                            videoUrl: item?.videoUrl || '',
+                          })
+                        }
+                      >
+                        <Icon name="dots-vertical" size={18} color="#333" />
+                      </TouchableOpacity>
+                      <BusinessVideoTabCard
+                        item={{
+                          ...item,
+                          thumbnail: item.thumbnail || item.thumbnailUrl,
+                          title: item.title || 'Video',
+                          views:
+                            item.views || formatCountTab(item.viewCount ?? 0),
+                          location:
+                            item.location ||
+                            profile?.address ||
+                            currentUser?.address ||
+                            '',
+                          distance: item.distance || '',
+                        }}
+                        onPress={() => openLibraryMedia(item)}
+                      />
+                    </View>
                   ))
                 )}
               </>
@@ -1379,6 +1650,200 @@ const PromotionScreen = ({ onBack }) => {
         onSuccess={() => loadPostsTab()}
         userId={currentUser?.id}
       />
+
+      <Modal
+        visible={postPreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPostPreviewVisible(false)}
+      >
+        <View style={styles.promoGalleryPreviewBackdrop}>
+          <TouchableOpacity
+            style={styles.promoGalleryPreviewClose}
+            onPress={() => setPostPreviewVisible(false)}
+          >
+            <Icon name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {postPreviewUri ? (
+            postPreviewType === 'video' ? (
+              <Video
+                source={{ uri: postPreviewUri }}
+                style={styles.postPreviewVideo}
+                controls
+                resizeMode="contain"
+                paused={false}
+                repeat
+                ignoreSilentSwitch="ignore"
+              />
+            ) : (
+              <Image
+                source={{ uri: postPreviewUri }}
+                style={styles.promoGalleryPreviewImg}
+                resizeMode="contain"
+              />
+            )
+          ) : null}
+        </View>
+      </Modal>
+
+      <Modal
+        visible={itemActionsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setItemActionsVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.actionSheetBackdrop}
+          onPress={() => setItemActionsVisible(false)}
+        >
+          <View style={styles.actionSheetBox}>
+            <Text style={styles.actionSheetTitle}>
+              {actionTarget?.title || 'Item options'}
+            </Text>
+            <TouchableOpacity
+              style={styles.actionSheetRow}
+              onPress={openEditForTarget}
+            >
+              <Icon name="square-edit-outline" size={22} color="#222" />
+              <Text style={styles.actionSheetText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionSheetRow}
+              onPress={handleDeleteTarget}
+            >
+              <Icon name="delete-outline" size={22} color="#E53935" />
+              <Text style={[styles.actionSheetText, { color: '#E53935' }]}>
+                Delete
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={itemEditVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !itemEditSaving && setItemEditVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.editModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.editModalBackdrop} />
+          <View style={styles.editModalBox}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>
+                {actionTarget?.kind === 'gallery' ? 'Edit Gallery Photo' : 'Edit'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => !itemEditSaving && setItemEditVisible(false)}
+                disabled={itemEditSaving}
+              >
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            {actionTarget?.kind === 'gallery' ? (
+              <View style={{ paddingHorizontal: 16, paddingBottom: 18 }}>
+                <Text style={styles.promoTabLoadingText}>
+                  Pick a new photo to replace this one.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.editModalScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={styles.editLabel}>Title</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="Title"
+                  placeholderTextColor="#999"
+                  editable={!itemEditSaving}
+                />
+                <Text style={styles.editLabel}>Description</Text>
+                <TextInput
+                  style={[styles.editInput, styles.editInputMultiline]}
+                  value={editDescription}
+                  onChangeText={setEditDescription}
+                  placeholder="Description"
+                  placeholderTextColor="#999"
+                  multiline
+                  editable={!itemEditSaving}
+                />
+                <Text style={styles.editLabel}>Website</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editWebsite}
+                  onChangeText={setEditWebsite}
+                  placeholder="https://..."
+                  placeholderTextColor="#999"
+                  autoCapitalize="none"
+                  editable={!itemEditSaving}
+                />
+                <Text style={styles.editLabel}>Hashtags</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editHashtags}
+                  onChangeText={setEditHashtags}
+                  placeholder="#food #offer"
+                  placeholderTextColor="#999"
+                  autoCapitalize="none"
+                  editable={!itemEditSaving}
+                />
+                <Text style={styles.editLabel}>Thumbnail</Text>
+                <TouchableOpacity
+                  style={styles.thumbPickBtn}
+                  onPress={handlePickEditThumbnail}
+                  disabled={itemEditSaving}
+                >
+                  <Icon name="image-edit-outline" size={18} color="#333" />
+                  <Text style={styles.thumbPickText}>Change thumbnail</Text>
+                </TouchableOpacity>
+                {editThumbnailUri ? (
+                  <Image
+                    source={{ uri: safeImageUri(editThumbnailUri) }}
+                    style={styles.editThumbPreview}
+                  />
+                ) : null}
+                <Text style={styles.editLabel}>Video</Text>
+                <TouchableOpacity
+                  style={styles.thumbPickBtn}
+                  onPress={handlePickEditVideo}
+                  disabled={itemEditSaving}
+                >
+                  <Icon name="video-outline" size={18} color="#333" />
+                  <Text style={styles.thumbPickText}>Change video</Text>
+                </TouchableOpacity>
+                {!!editVideoUri ? (
+                  <Text style={styles.editVideoHint} numberOfLines={1}>
+                    Selected: {editVideoUri.split('/').pop()}
+                  </Text>
+                ) : null}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.editSaveBtn,
+                itemEditSaving && styles.editSaveBtnDisabled,
+              ]}
+              onPress={handleSaveEditTarget}
+              disabled={itemEditSaving}
+            >
+              <Text style={styles.editSaveBtnText}>
+                {itemEditSaving
+                  ? 'Saving...'
+                  : actionTarget?.kind === 'gallery'
+                  ? 'Choose Photo'
+                  : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Modal
         visible={galleryPreviewVisible}
@@ -1900,10 +2365,97 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
   },
+  itemCardWrap: {
+    position: 'relative',
+  },
+  itemMenuBtn: {
+    position: 'absolute',
+    right: 22,
+    top: 10,
+    zIndex: 5,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
+  },
+  galleryItemMenuBtn: {
+    position: 'absolute',
+    right: 6,
+    top: 6,
+    zIndex: 3,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.48)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   promoTabGalleryImg: {
     width: '100%',
     height: '100%',
     borderRadius: 8,
+  },
+  actionSheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  actionSheetBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+  },
+  actionSheetTitle: {
+    fontSize: 14,
+    color: '#444',
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  actionSheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  actionSheetText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222',
+  },
+  thumbPickBtn: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  thumbPickText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  editThumbPreview: {
+    width: '100%',
+    height: 170,
+    borderRadius: 10,
+    marginTop: 10,
+    backgroundColor: '#F2F2F2',
+  },
+  editVideoHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#666',
   },
   promoNotifRow: {
     flexDirection: 'row',
@@ -1951,6 +2503,10 @@ const styles = StyleSheet.create({
   promoGalleryPreviewImg: {
     width: '100%',
     height: '100%',
+  },
+  postPreviewVideo: {
+    width: '100%',
+    height: '85%',
   },
 });
 
