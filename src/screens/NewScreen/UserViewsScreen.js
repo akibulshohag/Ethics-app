@@ -55,7 +55,7 @@ import { listCustomPlaylists } from '../../services/playlistService';
 
 const { width } = Dimensions.get('window');
 
-const TABS = ['Home', 'Posts', 'Gallery', 'Videos', 'Playlists'];
+const TABS = ['Home', 'Posts', 'Gallery', 'Videos', 'Instagram', 'Playlists'];
 
 const PLAYLIST_PLACEHOLDER =
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80';
@@ -209,6 +209,8 @@ const UserViewsScreen = ({ navigation }) => {
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
   const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
   const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
+  const [instagramPreviewVisible, setInstagramPreviewVisible] = useState(false);
+  const [instagramPreviewItem, setInstagramPreviewItem] = useState(null);
 
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -266,6 +268,61 @@ const UserViewsScreen = ({ navigation }) => {
   const posts = useMemo(() => {
     return (rawPosts || []).map(p => mapPostToCard(p, profile));
   }, [rawPosts, profile]);
+
+  const instagramFeedItems = useMemo(() => {
+    const postItems = (rawPosts || []).map(p => {
+      const media = String(p?.mediaUrl || p?.thumbnailUrl || '').trim();
+      const mt = String(p?.mediaType || '').toLowerCase();
+      const isVideo = mt === 'video' || /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+      return {
+        id: `post-${p.id}`,
+        originId: p.id,
+        sourceType: 'post',
+        title: p?.title || 'Post',
+        subtitle: timeAgo(p?.publishedAt || p?.createdAt),
+        mediaType: isVideo ? 'video' : 'image',
+        mediaUrl: media,
+        thumbnail: safeImageUri(
+          p?.thumbnailUrl || p?.mediaUrl,
+          'https://via.placeholder.com/600',
+        ),
+        createdAt:
+          new Date(p?.publishedAt || p?.createdAt || 0).getTime() || Date.now(),
+      };
+    });
+
+    const videoItems = (rawVideos || []).map(v => ({
+      id: `video-${v.id}`,
+      originId: v.id,
+      sourceType: 'video',
+      title: v?.title || 'Video',
+      subtitle: timeAgo(v?.publishedAt || v?.createdAt),
+      mediaType: 'video',
+      mediaUrl: String(v?.videoUrl || '').trim(),
+      thumbnail: safeImageUri(
+        v?.thumbnailUrl || v?.videoUrl,
+        'https://via.placeholder.com/600',
+      ),
+      createdAt:
+        new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
+    }));
+
+    const galleryItems = (galleryPhotos || []).map(g => ({
+      id: `gallery-${g.id}`,
+      originId: g.id,
+      sourceType: 'gallery',
+      title: 'Gallery',
+      subtitle: timeAgo(g?.createdAt),
+      mediaType: 'image',
+      mediaUrl: String(g?.src || '').trim(),
+      thumbnail: safeImageUri(g?.src, 'https://via.placeholder.com/600'),
+      createdAt: new Date(g?.createdAt || 0).getTime() || Date.now(),
+    }));
+
+    return [...postItems, ...videoItems, ...galleryItems].sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
+  }, [rawPosts, rawVideos, galleryPhotos]);
 
   const requireLogin = () => {
     if (!currentUser?.id) {
@@ -578,6 +635,12 @@ const UserViewsScreen = ({ navigation }) => {
     setPostMediaPreviewVisible(true);
   };
 
+  const openInstagramPreview = item => {
+    if (!item?.mediaUrl) return;
+    setInstagramPreviewItem(item);
+    setInstagramPreviewVisible(true);
+  };
+
   const loadProfile = useCallback(async () => {
     if (!profileUserId) return;
     setProfileLoading(true);
@@ -748,6 +811,11 @@ const UserViewsScreen = ({ navigation }) => {
     if (activeTab === 'Posts') loadPosts();
     if (activeTab === 'Gallery') loadGallery();
     if (activeTab === 'Videos') loadVideos();
+    if (activeTab === 'Instagram') {
+      loadPosts();
+      loadGallery();
+      loadVideos();
+    }
   }, [activeTab, profileUserId, loadPosts, loadGallery, loadVideos]);
 
   const renderHeader = () => (
@@ -873,7 +941,7 @@ const UserViewsScreen = ({ navigation }) => {
             >
               {isGrid ? (
                 <MaterialCommunityIcons
-                  name="view-grid"
+                  name={tab === 'Instagram' ? 'instagram' : 'view-grid'}
                   size={22}
                   color={isActive ? '#FF7F0B' : '#444'}
                 />
@@ -901,6 +969,8 @@ const UserViewsScreen = ({ navigation }) => {
         return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
       case 'Videos':
         return videos;
+      case 'Instagram':
+        return instagramFeedItems;
       case 'Playlists':
         return playlistsLoading ? [] : channelPlaylists;
       default:
@@ -1100,6 +1170,22 @@ const UserViewsScreen = ({ navigation }) => {
         </TouchableOpacity>
       );
     }
+    if (activeTab === 'Instagram') {
+      return (
+        <TouchableOpacity
+          style={styles.instaGridImageContainer}
+          activeOpacity={0.85}
+          onPress={() => openInstagramPreview(item)}
+        >
+          <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
+          {item.mediaType === 'video' ? (
+            <View style={styles.instaVideoBadge}>
+              <MaterialCommunityIcons name="play" size={14} color="#fff" />
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      );
+    }
     if (activeTab === 'Videos')
       return (
         <CompactVideoCard
@@ -1154,16 +1240,22 @@ const UserViewsScreen = ({ navigation }) => {
         </View>
       ) : null}
       <FlatList
-        key={activeTab === 'Gallery' ? 'grid-3-col' : `list-1-col-${activeTab}`}
+        key={
+          activeTab === 'Gallery' || activeTab === 'Instagram'
+            ? `grid-3-col-${activeTab}`
+            : `list-1-col-${activeTab}`
+        }
         data={getListData()}
         keyExtractor={item => String(item.id)}
         renderItem={renderContentItem}
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        numColumns={activeTab === 'Gallery' ? 3 : 1}
+        numColumns={activeTab === 'Gallery' || activeTab === 'Instagram' ? 3 : 1}
         columnWrapperStyle={
-          activeTab === 'Gallery' ? styles.gridColumnWrapper : undefined
+          activeTab === 'Gallery' || activeTab === 'Instagram'
+            ? styles.gridColumnWrapper
+            : undefined
         }
         ListEmptyComponent={() => {
           const loading =
@@ -1171,6 +1263,8 @@ const UserViewsScreen = ({ navigation }) => {
             (activeTab === 'Videos' && videosLoading) ||
             (activeTab === 'Posts' && postsLoading) ||
             (activeTab === 'Gallery' && galleryLoading) ||
+            (activeTab === 'Instagram' &&
+              (postsLoading || videosLoading || galleryLoading)) ||
             (activeTab === 'Playlists' && playlistsLoading);
           if (loading) {
             return (
@@ -1282,6 +1376,53 @@ const UserViewsScreen = ({ navigation }) => {
           }));
         }}
       />
+
+      {/* Instagram mixed-feed preview modal */}
+      <Modal
+        visible={instagramPreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInstagramPreviewVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setInstagramPreviewVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {instagramPreviewItem?.mediaUrl ? (
+            instagramPreviewItem.mediaType === 'video' ? (
+              <Video
+                source={{ uri: instagramPreviewItem.mediaUrl }}
+                style={styles.previewVideo}
+                controls
+                paused={false}
+                repeat
+                resizeMode="contain"
+                ignoreSilentSwitch="ignore"
+              />
+            ) : (
+              <Image
+                source={{ uri: instagramPreviewItem.mediaUrl }}
+                style={styles.previewImage}
+                resizeMode="contain"
+              />
+            )
+          ) : null}
+          <View style={styles.instagramPreviewMeta}>
+            <Text style={styles.instagramPreviewMetaType}>
+              {instagramPreviewItem?.sourceType || ''}
+            </Text>
+            <Text style={styles.instagramPreviewMetaTitle} numberOfLines={2}>
+              {instagramPreviewItem?.title || 'Post'}
+            </Text>
+            <Text style={styles.instagramPreviewMetaSub} numberOfLines={1}>
+              {instagramPreviewItem?.subtitle || 'Recently'}
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* Video quick-view modal (from UserViewsScreen) */}
       <Modal
@@ -1845,11 +1986,30 @@ const styles = StyleSheet.create({
     aspectRatio: 0.8, // Slightly taller than square exactly as done before
     marginBottom: 8,
   },
+  instaGridImageContainer: {
+    width: (width - 32 - 16) / 3,
+    aspectRatio: 1.05,
+    marginBottom: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F5',
+  },
   gridImage: {
     width: '100%',
     height: '100%',
     borderRadius: 8,
     resizeMode: 'cover',
+  },
+  instaVideoBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   loadingWrap: { paddingVertical: 30, alignItems: 'center' },
   loadingText: { marginTop: 10, color: '#666' },
@@ -1876,6 +2036,32 @@ const styles = StyleSheet.create({
   previewVideo: {
     width: '100%',
     height: '85%',
+  },
+  instagramPreviewMeta: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  instagramPreviewMetaType: {
+    color: '#FFAD33',
+    fontSize: 11,
+    textTransform: 'capitalize',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  instagramPreviewMetaTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  instagramPreviewMetaSub: {
+    color: '#ddd',
+    fontSize: 12,
+    marginTop: 2,
   },
   videoModalContainer: {
     flex: 1,
