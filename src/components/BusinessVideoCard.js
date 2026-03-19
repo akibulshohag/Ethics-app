@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const getInitials = (name) => {
+const getInitials = name => {
   if (!name || typeof name !== 'string') return '?';
   const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
+  if (parts.length >= 2)
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
   return name.slice(0, 2).toUpperCase();
 };
 
@@ -18,9 +19,13 @@ const BusinessVideoCard = ({
   onCommentPress,
   onShare,
   onMenuPress,
+  hideMenuButton = false,
 }) => {
   const [avatarError, setAvatarError] = useState(false);
-  const avatarUri = video.channelAvatar && String(video.channelAvatar).trim() ? video.channelAvatar : null;
+  const avatarUri =
+    video.channelAvatar && String(video.channelAvatar).trim()
+      ? video.channelAvatar
+      : null;
   const showAvatarFallback = avatarError || !avatarUri;
 
   const wrap = (callback, content) =>
@@ -47,7 +52,9 @@ const BusinessVideoCard = ({
         <View style={styles.headerLeft}>
           {showAvatarFallback ? (
             <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitials}>{getInitials(video.channelName)}</Text>
+              <Text style={styles.avatarInitials}>
+                {getInitials(video.channelName)}
+              </Text>
             </View>
           ) : (
             <Image
@@ -61,9 +68,15 @@ const BusinessVideoCard = ({
             <Text style={styles.timeAgo}>{video.publishedAt}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.menuButton} onPress={onMenuPress}>
-          <MaterialCommunityIcons name="dots-vertical" size={24} color="#333" />
-        </TouchableOpacity>
+        {!hideMenuButton ? (
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={onMenuPress}
+            disabled={!onMenuPress}
+          >
+            <MaterialCommunityIcons name="dots-vertical" size={24} color="#333" />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* 2. Text Content (Title, Website, Hashtags) */}
@@ -72,9 +85,7 @@ const BusinessVideoCard = ({
           {video.title}
         </Text>
 
-        {video.website && (
-          <Text style={styles.website}>{video.website}</Text>
-        )}
+        {video.website && <Text style={styles.website}>{video.website}</Text>}
 
         {video.hashtags && video.hashtags.length > 0 && (
           <Text style={styles.hashtags}>
@@ -86,7 +97,7 @@ const BusinessVideoCard = ({
       {/* 3. Media (Thumbnail Image with Duration Overlay) */}
       <View style={styles.thumbnailContainer}>
         <Image source={{ uri: video.thumbnail }} style={styles.thumbnail} />
-        {(video.duration != null && video.duration !== '') && (
+        {video.duration != null && video.duration !== '' && (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{video.duration}</Text>
           </View>
@@ -120,14 +131,22 @@ const BusinessVideoCard = ({
         {wrap(
           onCommentPress,
           <>
-            <MaterialCommunityIcons name="message-outline" size={22} color="#444" />
+            <MaterialCommunityIcons
+              name="message-outline"
+              size={22}
+              color="#444"
+            />
             <Text style={styles.interactionText}>{video.comments || '0'}</Text>
           </>,
         )}
         {wrap(
           onShare,
           <>
-            <MaterialCommunityIcons name="share-outline" size={24} color="#444" />
+            <MaterialCommunityIcons
+              name="share-outline"
+              size={24}
+              color="#444"
+            />
             <Text style={styles.interactionText}>{video.shares || '0'}</Text>
           </>,
         )}

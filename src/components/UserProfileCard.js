@@ -24,6 +24,7 @@ const UserProfileCard = ({
   loading = false,
   canEdit = false,
   onSubscribe,
+  onMessagePress,
   subscribeLoading = false,
   showSubscribe = true,
 }) => {
@@ -109,10 +110,15 @@ const UserProfileCard = ({
                 <Text style={styles.statValMain}>{following}</Text>
                 <Text style={styles.statLabelMain}>Following</Text>
               </View>
-              <View style={styles.statColumn}>
+              <TouchableOpacity
+                style={styles.statColumn}
+                onPress={onMessagePress}
+                disabled={!onMessagePress}
+                activeOpacity={0.75}
+              >
                 <Text style={styles.statValMain}>{msgCount}</Text>
                 <Text style={styles.statLabelMain}>MSG</Text>
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Opaque Status Box */}
@@ -138,6 +144,15 @@ const UserProfileCard = ({
                   </Text>
                 </TouchableOpacity>
               )}
+              {onMessagePress ? (
+                <TouchableOpacity
+                  style={styles.headerMessageBtn}
+                  onPress={onMessagePress}
+                  activeOpacity={0.8}
+                >
+                  <Icon name="message-text-outline" size={18} color="#fff" />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
         </View>
@@ -160,6 +175,9 @@ const styles = StyleSheet.create({
   },
   subscribeBtnContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   subscribeBtn: {
     backgroundColor: '#F39C12',
@@ -169,8 +187,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 5,
-    marginHorizontal: 16,
     marginBottom: 10,
+  },
+  headerMessageBtn: {
+    marginTop: 5,
+    marginBottom: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#111',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subscribedBtn: {
     backgroundColor: '#333',

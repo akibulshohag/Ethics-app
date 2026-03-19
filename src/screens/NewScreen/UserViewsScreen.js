@@ -194,6 +194,7 @@ const mapPostToCard = (p, profile) => {
     website: p.website || '',
     hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
     mediaUrl: p.mediaUrl,
+    mediaType: p.mediaType || 'image',
   };
 };
 
@@ -205,6 +206,9 @@ const UserViewsScreen = ({ navigation }) => {
 
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState(null);
+  const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
+  const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
+  const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
 
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -563,6 +567,17 @@ const UserViewsScreen = ({ navigation }) => {
     setPostCommentsVisible(true);
   };
 
+  const openPostMediaPreview = post => {
+    const media = String(post?.mediaUrl || post?.thumbnail || '').trim();
+    if (!media) return;
+    const mt = String(post?.mediaType || '').toLowerCase();
+    const byExt = /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+    const kind = mt === 'video' || byExt ? 'video' : 'image';
+    setPostMediaPreviewType(kind);
+    setPostMediaPreviewUri(media);
+    setPostMediaPreviewVisible(true);
+  };
+
   const loadProfile = useCallback(async () => {
     if (!profileUserId) return;
     setProfileLoading(true);
@@ -619,6 +634,20 @@ const UserViewsScreen = ({ navigation }) => {
       setProfileSubscribeLoading(false);
     }
   };
+
+  const handleProfileMessagePress = useCallback(() => {
+    if (requireLogin()) return;
+    if (!profileUserId) return;
+    if (String(profileUserId) === String(currentUser?.id)) return;
+    navigation.navigate('ChatScreen', {
+      partnerId: profileUserId,
+      partnerName:
+        profile?.channelName || profile?.nickname || profile?.name || 'User',
+      partnerAvatar: safeImageUri(
+        profile?.channelAvatar || profile?.photos?.[0]?.src || profile?.photos?.[0],
+      ),
+    });
+  }, [profileUserId, currentUser?.id, navigation, profile]);
 
   const loadVideos = useCallback(async () => {
     if (!profileUserId) return;
@@ -748,6 +777,7 @@ const UserViewsScreen = ({ navigation }) => {
         loading={profileLoading}
         showSubscribe={showProfileSubscribe}
         onSubscribe={handleProfileSubscribe}
+        onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
       />
 
@@ -770,7 +800,10 @@ const UserViewsScreen = ({ navigation }) => {
               { type: 'instagram' },
               { type: 'facebook' },
               { type: 'x', image: require('../../assets/icons/x.png') },
-              { type: 'tiktok', image: require('../../assets/icons/tiktok.png') },
+              {
+                type: 'tiktok',
+                image: require('../../assets/icons/tiktok.png'),
+              },
               {
                 type: 'tripadvisor',
                 image: require('../../assets/icons/tripadvisor.png'),
@@ -1045,6 +1078,8 @@ const UserViewsScreen = ({ navigation }) => {
             comments: formatCount(item.commentCount ?? 0),
             shares: formatCount(item.shareCount ?? 0),
           }}
+          hideMenuButton
+          onPress={() => openPostMediaPreview(item)}
           onLike={() => handlePostLike(item)}
           onDislike={() => handlePostDislike(item)}
           onCommentPress={() => openPostComments(item)}
@@ -1180,6 +1215,42 @@ const UserViewsScreen = ({ navigation }) => {
               style={styles.previewImage}
               resizeMode="contain"
             />
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* Post media preview modal (image/video) */}
+      <Modal
+        visible={postMediaPreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPostMediaPreviewVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setPostMediaPreviewVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {postMediaPreviewUri ? (
+            postMediaPreviewType === 'video' ? (
+              <Video
+                source={{ uri: postMediaPreviewUri }}
+                style={styles.previewVideo}
+                controls
+                paused={false}
+                repeat
+                resizeMode="contain"
+                ignoreSilentSwitch="ignore"
+              />
+            ) : (
+              <Image
+                source={{ uri: postMediaPreviewUri }}
+                style={styles.previewImage}
+                resizeMode="contain"
+              />
+            )
           ) : null}
         </View>
       </Modal>
@@ -1801,6 +1872,10 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     height: '100%',
+  },
+  previewVideo: {
+    width: '100%',
+    height: '85%',
   },
   videoModalContainer: {
     flex: 1,

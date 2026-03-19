@@ -161,3 +161,57 @@ export const uploadPromotion = async (data) => {
     throw new Error(msg);
   }
 };
+
+/**
+ * Update promotion
+ */
+export const updatePromotion = async (promotionId, userId, updateData = {}) => {
+  if (!promotionId) throw new Error('Promotion ID is required');
+  if (!userId) throw new Error('User ID is required');
+  try {
+    const response = await axios.patch(
+      `${API_URL}/${promotionId}`,
+      {
+        userId,
+        ...updateData,
+      },
+      {
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    const msg =
+      error.response?.data?.message ||
+      (Array.isArray(error.response?.data?.message)
+        ? error.response.data.message.join(' ')
+        : null) ||
+      error.message ||
+      'Failed to update promotion';
+    throw new Error(msg);
+  }
+};
+
+/**
+ * Delete promotion
+ */
+export const deletePromotion = async (promotionId, userId) => {
+  if (!promotionId) throw new Error('Promotion ID is required');
+  if (!userId) throw new Error('User ID is required');
+  try {
+    const response = await axios.delete(`${API_URL}/${promotionId}`, {
+      data: { userId },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    const msg =
+      error.response?.data?.message ||
+      (Array.isArray(error.response?.data?.message)
+        ? error.response.data.message.join(' ')
+        : null) ||
+      error.message ||
+      'Failed to delete promotion';
+    throw new Error(msg);
+  }
+};

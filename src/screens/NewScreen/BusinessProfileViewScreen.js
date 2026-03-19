@@ -32,6 +32,8 @@ import CommentsModal from '../../components/CommentsModal';
 import CreatePostModal from '../../components/CreatePostModal';
 import {
   getPostsByUser,
+  updatePost,
+  deletePost,
   togglePostLike,
   togglePostDislike,
   recordPostShare,
@@ -46,14 +48,20 @@ import {
   uploadGallery,
   deleteGalleryPhoto,
 } from '../../services/channelService';
-import { getUserVideos } from '../../services/videoService';
+import { getUserVideos, updateVideo, deleteVideo } from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
 import { getNotificationsByUserId } from '../../services/notificationService';
 import {
   getPromotionsByUser,
   getNearbyPromotions,
+  updatePromotion,
+  deletePromotion,
 } from '../../services/promotionService';
-import { getMenuByUserId } from '../../services/menuService';
+import {
+  getMenuByUserId,
+  updateMenuItem,
+  deleteMenuItem,
+} from '../../services/menuService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
 import {
@@ -128,6 +136,9 @@ const mapPostToCard = (post, user) => {
     shares: formatCount(post.shareCount ?? 0),
     website: post.website || '',
     hashtags: Array.isArray(post.hashtags) ? post.hashtags : [],
+    description: post.description || post.desc || '',
+    mediaUrl: post.mediaUrl || '',
+    mediaType: post.mediaType || 'image',
   };
 };
 
@@ -352,6 +363,30 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState(null);
+  const [postActionVisible, setPostActionVisible] = useState(false);
+  const [postEditVisible, setPostEditVisible] = useState(false);
+  const [postActionTarget, setPostActionTarget] = useState(null);
+  const [postEditTitle, setPostEditTitle] = useState('');
+  const [postEditDescription, setPostEditDescription] = useState('');
+  const [postEditWebsite, setPostEditWebsite] = useState('');
+  const [postEditHashtags, setPostEditHashtags] = useState('');
+  const [postEditThumbnailUri, setPostEditThumbnailUri] = useState('');
+  const [postEditVideoUri, setPostEditVideoUri] = useState('');
+  const [postEditSaving, setPostEditSaving] = useState(false);
+  const [itemActionVisible, setItemActionVisible] = useState(false);
+  const [itemEditVisible, setItemEditVisible] = useState(false);
+  const [itemActionTarget, setItemActionTarget] = useState(null); // { kind: 'promotion'|'video'|'menu', item }
+  const [itemEditTitle, setItemEditTitle] = useState('');
+  const [itemEditDescription, setItemEditDescription] = useState('');
+  const [itemEditPrice, setItemEditPrice] = useState('');
+  const [itemEditPromoCode, setItemEditPromoCode] = useState('');
+  const [itemEditPromoAmount, setItemEditPromoAmount] = useState('');
+  const [itemEditThumbnailUri, setItemEditThumbnailUri] = useState('');
+  const [itemEditVideoUri, setItemEditVideoUri] = useState('');
+  const [itemEditSaving, setItemEditSaving] = useState(false);
+  const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
+  const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
+  const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
 
   const loadPosts = useCallback(
     async (refresh = false) => {
@@ -956,6 +991,314 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     [commentsModalPostId, updatePostInList],
   );
 
+  const openPostMediaPreview = useCallback(post => {
+    const media = String(post?.mediaUrl || post?.thumbnail || '').trim();
+    if (!media) return;
+    const mt = String(post?.mediaType || '').toLowerCase();
+    const byExt = /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+    const kind = mt === 'video' || byExt ? 'video' : 'image';
+    setPostMediaPreviewType(kind);
+    setPostMediaPreviewUri(safeImageUri(media));
+    setPostMediaPreviewVisible(true);
+  }, []);
+
+  const openPostActions = useCallback(post => {
+    if (!isOwnProfile || !post?.id) return;
+    setPostActionTarget(post);
+    setPostActionVisible(true);
+  }, [isOwnProfile]);
+
+  const openPostEdit = useCallback(() => {
+    const t = postActionTarget;
+    if (!t) return;
+    setPostActionVisible(false);
+    setPostEditTitle(String(t.title || '').trim());
+    setPostEditDescription(String(t.description || '').trim());
+    setPostEditWebsite(String(t.website || '').trim());
+    setPostEditHashtags(
+      Array.isArray(t.hashtags) ? t.hashtags.join(' ') : String(t.hashtags || ''),
+    );
+    setPostEditThumbnailUri(String(t.thumbnail || '').trim());
+    setPostEditVideoUri(
+      String(
+        (String(t.mediaType || '').toLowerCase() === 'video'
+          ? t.mediaUrl
+          : '') || '',
+      ).trim(),
+    );
+    setPostEditVisible(true);
+  }, [postActionTarget]);
+
+  const pickPostThumbnail = useCallback(async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.9,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (asset?.uri) setPostEditThumbnailUri(asset.uri);
+  }, []);
+
+  const pickPostVideo = useCallback(async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'video',
+      quality: 1,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (asset?.uri) {
+      setPostEditVideoUri(asset.uri);
+      if (!postEditThumbnailUri) {
+        setPostEditThumbnailUri(asset.uri);
+      }
+    }
+  }, [postEditThumbnailUri]);
+
+  const submitPostEdit = useCallback(async () => {
+    if (!postActionTarget?.id || !currentUser?.id) return;
+    const payload = {
+      title: postEditTitle.trim() || undefined,
+      description: postEditDescription.trim() || undefined,
+      website: postEditWebsite.trim() || undefined,
+      hashtags: postEditHashtags
+        .split(/[\s,]+/)
+        .map(t => t.trim())
+        .filter(Boolean),
+      thumbnailUrl: postEditThumbnailUri.trim() || undefined,
+      mediaUrl:
+        (postEditVideoUri.trim() || postEditThumbnailUri.trim() || '').trim() ||
+        undefined,
+      mediaType: postEditVideoUri.trim() ? 'video' : 'image',
+    };
+    try {
+      setPostEditSaving(true);
+      await updatePost(postActionTarget.id, currentUser.id, payload);
+      updatePostInList(postActionTarget.id, p => ({
+        ...p,
+        title: payload.title ?? p.title,
+        description: payload.description ?? p.description,
+        website: payload.website ?? p.website,
+        hashtags: payload.hashtags?.length ? payload.hashtags : p.hashtags,
+        thumbnail: payload.thumbnailUrl ?? p.thumbnail,
+        mediaUrl: payload.mediaUrl ?? p.mediaUrl,
+        mediaType: payload.mediaType ?? p.mediaType,
+      }));
+      setPostEditVisible(false);
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to update post');
+    } finally {
+      setPostEditSaving(false);
+    }
+  }, [
+    postActionTarget,
+    currentUser?.id,
+    postEditTitle,
+    postEditDescription,
+    postEditWebsite,
+    postEditHashtags,
+    postEditThumbnailUri,
+    postEditVideoUri,
+    updatePostInList,
+  ]);
+
+  const deletePostFromActions = useCallback(() => {
+    const t = postActionTarget;
+    if (!t?.id || !currentUser?.id) return;
+    setPostActionVisible(false);
+    Alert.alert('Delete post', 'Are you sure you want to delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePost(t.id, currentUser.id);
+            setPosts(prev =>
+              prev.filter(p => String(p.id || p.postId) !== String(t.id)),
+            );
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to delete post');
+          }
+        },
+      },
+    ]);
+  }, [postActionTarget, currentUser?.id]);
+
+  const openItemActions = useCallback((kind, item) => {
+    if (!isOwnProfile || !item?.id) return;
+    setItemActionTarget({ kind, item });
+    setItemActionVisible(true);
+  }, [isOwnProfile]);
+
+  const openItemEdit = useCallback(() => {
+    const target = itemActionTarget;
+    if (!target?.item) return;
+    const { kind, item } = target;
+    setItemActionVisible(false);
+    if (kind === 'menu') {
+      setItemEditTitle(String(item.itemName || '').trim());
+      setItemEditPrice(String(item.price ?? '').trim());
+      setItemEditDescription(String(item.description || '').trim());
+      setItemEditThumbnailUri(String(item.imageUrl || '').trim());
+      setItemEditVideoUri('');
+    } else if (kind === 'promotion') {
+      setItemEditTitle(String(item.title || '').trim());
+      setItemEditDescription(String(item.description || '').trim());
+      setItemEditPromoCode(String(item.promoCode || '').trim());
+      setItemEditPromoAmount(
+        item.promoAmount != null ? String(item.promoAmount) : '',
+      );
+      setItemEditThumbnailUri(
+        String(item.thumbnailUrl || item.image || '').trim(),
+      );
+      setItemEditVideoUri(String(item.videoUrl || '').trim());
+    } else {
+      setItemEditTitle(String(item.title || '').trim());
+      setItemEditDescription(String(item.description || '').trim());
+      setItemEditThumbnailUri(String(item.thumbnail || item.thumbnailUrl || '').trim());
+      setItemEditVideoUri(String(item.videoUrl || item.mediaUrl || '').trim());
+    }
+    setItemEditVisible(true);
+  }, [itemActionTarget]);
+
+  const pickItemThumbnail = useCallback(async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.9,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (asset?.uri) setItemEditThumbnailUri(asset.uri);
+  }, []);
+
+  const pickItemVideo = useCallback(async () => {
+    const res = await launchImageLibrary({
+      mediaType: 'video',
+      quality: 1,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (asset?.uri) setItemEditVideoUri(asset.uri);
+  }, []);
+
+  const submitItemEdit = useCallback(async () => {
+    const target = itemActionTarget;
+    const userId = currentUser?.id;
+    if (!target?.item?.id || !userId) return;
+    const { kind, item } = target;
+    try {
+      setItemEditSaving(true);
+      if (kind === 'promotion') {
+        const payload = {
+          title: itemEditTitle.trim() || undefined,
+          description: itemEditDescription.trim() || undefined,
+          promoCode: itemEditPromoCode.trim() || undefined,
+          promoAmount:
+            itemEditPromoAmount.trim() === ''
+              ? undefined
+              : Number(itemEditPromoAmount),
+          thumbnailUrl: itemEditThumbnailUri.trim() || undefined,
+          videoUrl: itemEditVideoUri.trim() || undefined,
+        };
+        await updatePromotion(item.id, userId, payload);
+        setPromotions(prev =>
+          prev.map(p => (p.id === item.id ? { ...p, ...payload } : p)),
+        );
+      } else if (kind === 'video') {
+        const payload = {
+          title: itemEditTitle.trim() || undefined,
+          description: itemEditDescription.trim() || undefined,
+          thumbnailUrl: itemEditThumbnailUri.trim() || undefined,
+          videoUrl: itemEditVideoUri.trim() || undefined,
+        };
+        if (String(item._type || '').toLowerCase() === 'short') {
+          await shortsService.updateShort(item.id, userId, payload);
+        } else {
+          await updateVideo(item.id, userId, payload);
+        }
+        setOwnerVideos(prev =>
+          prev.map(v =>
+            v.id === item.id
+              ? {
+                  ...v,
+                  title: payload.title ?? v.title,
+                  description: payload.description ?? v.description,
+                  thumbnail: payload.thumbnailUrl ?? v.thumbnail,
+                  thumbnailUrl: payload.thumbnailUrl ?? v.thumbnailUrl,
+                  videoUrl: payload.videoUrl ?? v.videoUrl,
+                }
+              : v,
+          ),
+        );
+      } else if (kind === 'menu') {
+        const payload = {
+          itemName: itemEditTitle.trim() || undefined,
+          description: itemEditDescription.trim() || undefined,
+          price:
+            itemEditPrice.trim() === '' ? undefined : Number(itemEditPrice.trim()),
+          imageUrl: itemEditThumbnailUri.trim() || undefined,
+        };
+        await updateMenuItem(currentUser?.token, item.id, payload);
+        setMenuItems(prev =>
+          prev.map(m => (m.id === item.id ? { ...m, ...payload } : m)),
+        );
+      }
+      setItemEditVisible(false);
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to update item');
+    } finally {
+      setItemEditSaving(false);
+    }
+  }, [
+    itemActionTarget,
+    currentUser?.id,
+    currentUser?.token,
+    itemEditTitle,
+    itemEditDescription,
+    itemEditPrice,
+    itemEditPromoCode,
+    itemEditPromoAmount,
+    itemEditThumbnailUri,
+    itemEditVideoUri,
+  ]);
+
+  const deleteItemFromActions = useCallback(() => {
+    const target = itemActionTarget;
+    const userId = currentUser?.id;
+    if (!target?.item?.id || !userId) return;
+    const { kind, item } = target;
+    const label =
+      kind === 'promotion' ? 'promotion' : kind === 'menu' ? 'menu item' : 'video';
+    setItemActionVisible(false);
+    Alert.alert(`Delete ${label}`, `Are you sure you want to delete this ${label}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (kind === 'promotion') {
+              await deletePromotion(item.id, userId);
+              setPromotions(prev => prev.filter(p => p.id !== item.id));
+            } else if (kind === 'video') {
+              if (String(item._type || '').toLowerCase() === 'short') {
+                await shortsService.deleteShort(item.id, userId);
+              } else {
+                await deleteVideo(item.id, userId);
+              }
+              setOwnerVideos(prev => prev.filter(v => v.id !== item.id));
+            } else if (kind === 'menu') {
+              await deleteMenuItem(currentUser?.token, item.id);
+              setMenuItems(prev => prev.filter(m => m.id !== item.id));
+            }
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to delete item');
+          }
+        },
+      },
+    ]);
+  }, [itemActionTarget, currentUser?.id, currentUser?.token]);
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       {/* Top Navigation - OUTSIDE the image */}
@@ -1249,7 +1592,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             channelAvatar: postOwnerAvatar || item.channelAvatar,
           }}
           postId={postId}
-          onPress={undefined}
+          onPress={() => openPostMediaPreview(item)}
           onLike={currentUser?.id ? () => handlePostLike(postId) : undefined}
           onDislike={
             currentUser?.id ? () => handlePostDislike(postId) : undefined
@@ -1258,24 +1601,42 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             setCommentsModalPostId(postId);
           }}
           onShare={() => handlePostShare(postId)}
+          onMenuPress={isOwnProfile ? () => openPostActions(item) : undefined}
+          hideMenuButton={!isOwnProfile}
         />
       );
     }
     if (activeTab === 'Promotions') {
+      const canManagePromotion =
+        isOwnProfile && isOwnerOrVendor && promotionSubTab === 'my';
       return (
-        <PromotionCard
-          item={{
-            ...item,
-            image: item.image
-              ? safeImageUri(item.image)
-              : 'https://via.placeholder.com/300',
-          }}
-          onPress={() => {
-            setSelectedPromotion(item);
-            setPromotionVideoPaused(true);
-            setPromotionDetailModalVisible(true);
-          }}
-        />
+        <View style={styles.manageCardWrap}>
+          <PromotionCard
+            item={{
+              ...item,
+              image: item.image
+                ? safeImageUri(item.image)
+                : 'https://via.placeholder.com/300',
+            }}
+            onPress={() => {
+              setSelectedPromotion(item);
+              setPromotionVideoPaused(true);
+              setPromotionDetailModalVisible(true);
+            }}
+          />
+          {canManagePromotion ? (
+            <TouchableOpacity
+              style={styles.manageDotsBtn}
+              onPress={() => openItemActions('promotion', item)}
+            >
+              <MaterialCommunityIcons
+                name="dots-vertical"
+                size={20}
+                color="#222"
+              />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       );
     }
     if (activeTab === 'Menus') {
@@ -1308,6 +1669,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               {item.price != null ? `$${Number(item.price).toFixed(2)}` : '—'}
             </Text>
           </View>
+          {isOwnProfile && item.id ? (
+            <TouchableOpacity
+              style={styles.menuManageBtn}
+              onPress={() => openItemActions('menu', item)}
+            >
+              <MaterialCommunityIcons
+                name="dots-vertical"
+                size={20}
+                color="#333"
+              />
+            </TouchableOpacity>
+          ) : null}
         </View>
       );
     }
@@ -1342,31 +1715,45 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     }
     if (activeTab === 'Video') {
       return (
-        <BusinessVideoTabCard
-          item={{
-            ...item,
-            thumbnail: item.thumbnail || item.thumbnailUrl,
-            title: item.title || 'Video',
-            views: item.views || formatCount(item.viewCount),
-            location:
-              item.location || profile?.address || currentUser?.address || '',
-            distance: item.distance || '',
-          }}
-          onPress={() => {
-            if (!item?.id || !profileUserId) return;
-            navigateToHomeOneLibraryDetail(
-              navigation,
-              {
-                id: item.id,
-                type: item._type === 'short' ? 'short' : 'video',
-              },
-              {
-                returnTo: 'business_profile',
-                returnUserId: profileUserId,
-              },
-            );
-          }}
-        />
+        <View style={styles.manageCardWrap}>
+          <BusinessVideoTabCard
+            item={{
+              ...item,
+              thumbnail: item.thumbnail || item.thumbnailUrl,
+              title: item.title || 'Video',
+              views: item.views || formatCount(item.viewCount),
+              location:
+                item.location || profile?.address || currentUser?.address || '',
+              distance: item.distance || '',
+            }}
+            onPress={() => {
+              if (!item?.id || !profileUserId) return;
+              navigateToHomeOneLibraryDetail(
+                navigation,
+                {
+                  id: item.id,
+                  type: item._type === 'short' ? 'short' : 'video',
+                },
+                {
+                  returnTo: 'business_profile',
+                  returnUserId: profileUserId,
+                },
+              );
+            }}
+          />
+          {isOwnProfile && item.id ? (
+            <TouchableOpacity
+              style={styles.manageDotsBtn}
+              onPress={() => openItemActions('video', item)}
+            >
+              <MaterialCommunityIcons
+                name="dots-vertical"
+                size={20}
+                color="#222"
+              />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       );
     }
     if (activeTab === 'Notification') {
@@ -1544,6 +1931,256 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         onSuccess={() => loadPosts(true)}
         userId={currentUser?.id}
       />
+      <Modal
+        visible={postActionVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPostActionVisible(false)}
+      >
+        <View style={styles.postActionBackdrop}>
+          <View style={styles.postActionCard}>
+            <TouchableOpacity
+              style={styles.postActionBtn}
+              onPress={openPostEdit}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.postActionText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.postActionBtn}
+              onPress={deletePostFromActions}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.postActionText, styles.postActionDeleteText]}>
+                Delete
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.postActionBtn, styles.postActionCancelBtn]}
+              onPress={() => setPostActionVisible(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.postActionText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={postEditVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPostEditVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.postEditBackdrop}
+        >
+          <View style={styles.postEditCard}>
+            <Text style={styles.postEditTitle}>Edit Post</Text>
+            <TextInput
+              style={styles.postEditInput}
+              value={postEditTitle}
+              onChangeText={setPostEditTitle}
+              placeholder="Title"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={[styles.postEditInput, styles.postEditTextarea]}
+              value={postEditDescription}
+              onChangeText={setPostEditDescription}
+              placeholder="Description"
+              placeholderTextColor="#9CA3AF"
+              multiline
+            />
+            <TextInput
+              style={styles.postEditInput}
+              value={postEditWebsite}
+              onChangeText={setPostEditWebsite}
+              placeholder="Website"
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={styles.postEditInput}
+              value={postEditHashtags}
+              onChangeText={setPostEditHashtags}
+              placeholder="#tags separated by space"
+              placeholderTextColor="#9CA3AF"
+            />
+            <View style={styles.postEditRow}>
+              <TouchableOpacity
+                style={styles.postEditMediaBtn}
+                onPress={pickPostThumbnail}
+              >
+                <Text style={styles.postEditMediaBtnText}>Change Thumbnail</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.postEditMediaBtn}
+                onPress={pickPostVideo}
+              >
+                <Text style={styles.postEditMediaBtnText}>Change Video</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.postEditActions}>
+              <TouchableOpacity
+                style={[styles.postEditActionBtn, styles.postEditCancelBtn]}
+                onPress={() => setPostEditVisible(false)}
+                disabled={postEditSaving}
+              >
+                <Text style={styles.postEditCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.postEditActionBtn, styles.postEditSaveBtn]}
+                onPress={submitPostEdit}
+                disabled={postEditSaving}
+              >
+                {postEditSaving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.postEditSaveText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal
+        visible={itemActionVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setItemActionVisible(false)}
+      >
+        <View style={styles.postActionBackdrop}>
+          <View style={styles.postActionCard}>
+            <TouchableOpacity
+              style={styles.postActionBtn}
+              onPress={openItemEdit}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.postActionText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.postActionBtn}
+              onPress={deleteItemFromActions}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.postActionText, styles.postActionDeleteText]}>
+                Delete
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.postActionBtn, styles.postActionCancelBtn]}
+              onPress={() => setItemActionVisible(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.postActionText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={itemEditVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setItemEditVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.postEditBackdrop}
+        >
+          <View style={styles.postEditCard}>
+            <Text style={styles.postEditTitle}>
+              Edit{' '}
+              {itemActionTarget?.kind === 'promotion'
+                ? 'Promotion'
+                : itemActionTarget?.kind === 'menu'
+                ? 'Menu'
+                : 'Video'}
+            </Text>
+            <TextInput
+              style={styles.postEditInput}
+              value={itemEditTitle}
+              onChangeText={setItemEditTitle}
+              placeholder={
+                itemActionTarget?.kind === 'menu' ? 'Item Name' : 'Title'
+              }
+              placeholderTextColor="#9CA3AF"
+            />
+            <TextInput
+              style={[styles.postEditInput, styles.postEditTextarea]}
+              value={itemEditDescription}
+              onChangeText={setItemEditDescription}
+              placeholder="Description"
+              placeholderTextColor="#9CA3AF"
+              multiline
+            />
+            {itemActionTarget?.kind === 'menu' ? (
+              <TextInput
+                style={styles.postEditInput}
+                value={itemEditPrice}
+                onChangeText={setItemEditPrice}
+                placeholder="Price"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="decimal-pad"
+              />
+            ) : null}
+            {itemActionTarget?.kind === 'promotion' ? (
+              <>
+                <TextInput
+                  style={styles.postEditInput}
+                  value={itemEditPromoCode}
+                  onChangeText={setItemEditPromoCode}
+                  placeholder="Promo code"
+                  placeholderTextColor="#9CA3AF"
+                />
+                <TextInput
+                  style={styles.postEditInput}
+                  value={itemEditPromoAmount}
+                  onChangeText={setItemEditPromoAmount}
+                  placeholder="Promo amount (%)"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                />
+              </>
+            ) : null}
+            <View style={styles.postEditRow}>
+              <TouchableOpacity
+                style={styles.postEditMediaBtn}
+                onPress={pickItemThumbnail}
+              >
+                <Text style={styles.postEditMediaBtnText}>Change Thumbnail</Text>
+              </TouchableOpacity>
+              {itemActionTarget?.kind !== 'menu' ? (
+                <TouchableOpacity
+                  style={styles.postEditMediaBtn}
+                  onPress={pickItemVideo}
+                >
+                  <Text style={styles.postEditMediaBtnText}>Change Video</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <View style={styles.postEditActions}>
+              <TouchableOpacity
+                style={[styles.postEditActionBtn, styles.postEditCancelBtn]}
+                onPress={() => setItemEditVisible(false)}
+                disabled={itemEditSaving}
+              >
+                <Text style={styles.postEditCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.postEditActionBtn, styles.postEditSaveBtn]}
+                onPress={submitItemEdit}
+                disabled={itemEditSaving}
+              >
+                {itemEditSaving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.postEditSaveText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
       <CreatePromotionModal
         visible={createPromotionModalVisible}
         onClose={() => setCreatePromotionModalVisible(false)}
@@ -1944,6 +2581,42 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               style={styles.previewImage}
               resizeMode="contain"
             />
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* Post media preview modal (image/video) */}
+      <Modal
+        visible={postMediaPreviewVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPostMediaPreviewVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setPostMediaPreviewVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {postMediaPreviewUri ? (
+            postMediaPreviewType === 'video' ? (
+              <Video
+                source={{ uri: postMediaPreviewUri }}
+                style={styles.previewVideo}
+                controls
+                paused={false}
+                repeat
+                resizeMode="contain"
+                ignoreSilentSwitch="ignore"
+              />
+            ) : (
+              <Image
+                source={{ uri: postMediaPreviewUri }}
+                style={styles.previewImage}
+                resizeMode="contain"
+              />
+            )
           ) : null}
         </View>
       </Modal>
@@ -2503,6 +3176,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
+  manageCardWrap: {
+    position: 'relative',
+  },
+  manageDotsBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 16,
+    padding: 4,
+  },
   menuRowImage: {
     width: 56,
     height: 56,
@@ -2516,6 +3200,10 @@ const styles = StyleSheet.create({
   menuRowBody: { flex: 1, marginLeft: 12 },
   menuRowName: { fontSize: 16, fontWeight: '600', color: '#212121' },
   menuRowPrice: { fontSize: 14, color: '#666', marginTop: 2 },
+  menuManageBtn: {
+    marginLeft: 8,
+    padding: 4,
+  },
   promotionDetailModalContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -2657,6 +3345,10 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     height: '100%',
+  },
+  previewVideo: {
+    width: '100%',
+    height: '85%',
   },
   videoModalContainer: {
     flex: 1,
@@ -2867,6 +3559,113 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF4EB',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  postActionBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  postActionCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  postActionBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  postActionCancelBtn: {
+    borderBottomWidth: 0,
+  },
+  postActionText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111',
+    textAlign: 'center',
+  },
+  postActionDeleteText: {
+    color: '#E53935',
+  },
+  postEditBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  postEditCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+  },
+  postEditTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#111',
+    marginBottom: 10,
+  },
+  postEditInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#111',
+    marginBottom: 10,
+  },
+  postEditTextarea: {
+    minHeight: 90,
+    textAlignVertical: 'top',
+  },
+  postEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 10,
+  },
+  postEditMediaBtn: {
+    flex: 1,
+    backgroundColor: '#FFF4EB',
+    borderWidth: 1,
+    borderColor: '#FFDFC2',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  postEditMediaBtnText: {
+    color: '#E26A00',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  postEditActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  postEditActionBtn: {
+    minWidth: 90,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postEditCancelBtn: {
+    backgroundColor: '#F3F4F6',
+  },
+  postEditSaveBtn: {
+    backgroundColor: '#FF7F0B',
+  },
+  postEditCancelText: {
+    color: '#111',
+    fontWeight: '700',
+  },
+  postEditSaveText: {
+    color: '#fff',
+    fontWeight: '700',
   },
 });
 
