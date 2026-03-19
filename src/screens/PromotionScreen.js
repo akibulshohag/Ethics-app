@@ -734,7 +734,7 @@ const PromotionScreen = ({ onBack }) => {
           if (Array.isArray(names) && names.includes('Shorts')) {
             nav.navigate('Shorts', {
               screen: 'ShortsVideoScreen',
-              params: { shortId: sid },
+              params: { shortId: sid, initialShortItem: item },
             });
             return;
           }
@@ -746,7 +746,7 @@ const PromotionScreen = ({ onBack }) => {
           if (Array.isArray(names) && names.includes('Library')) {
             nav.navigate('Library', {
               screen: 'ShortsVideoScreen',
-              params: { shortId: sid },
+              params: { shortId: sid, initialShortItem: item },
             });
             return;
           }

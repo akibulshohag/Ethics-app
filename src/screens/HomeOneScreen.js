@@ -82,6 +82,17 @@ const viewerRole = user =>
 const mapToDisplayItem = (v, type) => {
   const u = v.user || {};
   const channelName = u.nickname || u.name || 'Unknown';
+  const firstPhoto =
+    Array.isArray(u.photos) && u.photos.length > 0 ? u.photos[0] : null;
+  const channelAvatar =
+    u.channelAvatar ||
+    u.avatar ||
+    u.profileImage ||
+    u.photoUrl ||
+    (typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      channelName,
+    )}&background=111&color=fff`;
   const viewCount = v.viewCount ?? v._count?.views ?? 0;
   const viewsStr =
     viewCount >= 1000
@@ -102,16 +113,20 @@ const mapToDisplayItem = (v, type) => {
       v.videoUrl ||
       'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
     videoUrl: v.videoUrl,
-    user: v.user,
+    user: {
+      ...(u && typeof u === 'object' ? u : {}),
+      id: u.id ?? v.userId,
+      nickname: u.nickname || v.nickname || channelName,
+      name: u.name || v.name || channelName,
+      avatar: u.avatar || channelAvatar,
+      channelAvatar: u.channelAvatar || channelAvatar,
+      profileImage: u.profileImage || channelAvatar,
+      photoUrl: u.photoUrl || channelAvatar,
+    },
     userId: v.userId || u.id,
     creatorRole: u.role != null ? String(u.role).toLowerCase() : undefined,
     channelName,
-    channelAvatar:
-      u.photos?.[0] ||
-      (Array.isArray(u.photos) && u.photos[0]) ||
-      `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        channelName,
-      )}&background=111&color=fff`,
+    channelAvatar,
     views: viewsStr,
     viewCount,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
@@ -553,9 +568,88 @@ const HomeOneScreen = () => {
       const videos = (videosRes?.videos || []).map(v =>
         mapToDisplayItem(v, 'video'),
       );
-      const shorts = (shortsRes?.shorts || [])
-        .filter(s => s.videoUrl && String(s.videoUrl).trim())
-        .map(s => mapToDisplayItem(s, 'short'));
+      const rawShorts = (shortsRes?.shorts || []).filter(
+        s => s.videoUrl && String(s.videoUrl).trim(),
+      );
+      const hasShortAvatar = s => {
+        const u = s?.user && typeof s.user === 'object' ? s.user : {};
+        const p0 =
+          Array.isArray(u?.photos) && u.photos.length > 0 ? u.photos[0] : null;
+        return !!(
+          s?.avatar ||
+          s?.channelAvatar ||
+          s?.profileImage ||
+          s?.photoUrl ||
+          u?.avatar ||
+          u?.channelAvatar ||
+          u?.profileImage ||
+          u?.photoUrl ||
+          (typeof p0 === 'string' ? p0 : p0?.src)
+        );
+      };
+      const missingOwnerIds = Array.from(
+        new Set(
+          rawShorts
+            .filter(s => !hasShortAvatar(s))
+            .map(s => s?.userId || s?.user?.id)
+            .filter(Boolean)
+            .map(String),
+        ),
+      );
+      const ownerProfileById = {};
+      await Promise.allSettled(
+        missingOwnerIds.map(async oid => {
+          try {
+            const p = await getChannelProfile(oid, user?.id);
+            ownerProfileById[String(oid)] = p || null;
+          } catch (_) {
+            ownerProfileById[String(oid)] = null;
+          }
+        }),
+      );
+      const shorts = rawShorts.map(s => {
+        const oid = String(s?.userId || s?.user?.id || '');
+        const p = oid ? ownerProfileById[oid] : null;
+        if (!p) return mapToDisplayItem(s, 'short');
+        const u = s?.user && typeof s.user === 'object' ? s.user : {};
+        const p0 =
+          Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null;
+        const pPhoto =
+          typeof p0 === 'string'
+            ? p0
+            : p0?.src || p?.channelAvatar || p?.profileImage || null;
+        const mergedUser = {
+          ...u,
+          id: u?.id || s?.userId || p?.id,
+          nickname: u?.nickname || p?.nickname || p?.name || s?.nickname,
+          name: u?.name || p?.name || p?.nickname || s?.name,
+          avatar:
+            u?.avatar ||
+            u?.channelAvatar ||
+            u?.profileImage ||
+            u?.photoUrl ||
+            pPhoto,
+          channelAvatar: u?.channelAvatar || p?.channelAvatar || pPhoto,
+          profileImage: u?.profileImage || p?.profileImage || pPhoto,
+          photoUrl: u?.photoUrl || p?.photoUrl || pPhoto,
+          photos:
+            Array.isArray(u?.photos) && u.photos.length > 0
+              ? u.photos
+              : Array.isArray(p?.photos)
+                ? p.photos
+                : pPhoto
+                  ? [{ src: pPhoto }]
+                  : [],
+        };
+        return mapToDisplayItem(
+          {
+            ...s,
+            userId: s?.userId || mergedUser?.id,
+            user: mergedUser,
+          },
+          'short',
+        );
+      });
       setFeedVideos(videos);
       setFeedShorts(shorts);
     } catch (e) {

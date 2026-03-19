@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -35,6 +35,7 @@ import { safeImageUri } from '../../utils/helper';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
 import { setPlaylist } from '../../services/playlistService';
 import { submitReport } from '../../services/reportService';
+import { getChannelProfile, subscribeToChannel } from '../../services/channelService';
 import Toast from 'react-native-toast-message';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -85,17 +86,45 @@ const normalizeShort = s => {
   const likeCount = s.likeCount ?? s._count?.likes ?? 0;
   const commentCount = s.commentCount ?? s._count?.comments ?? 0;
   const shareCount = s.shareCount ?? 0;
+  const userObj = s.user && typeof s.user === 'object' ? s.user : {};
+  const firstPhoto =
+    Array.isArray(userObj?.photos) && userObj.photos.length > 0
+      ? userObj.photos[0]
+      : null;
+  const firstTopPhoto =
+    Array.isArray(s?.photos) && s.photos.length > 0 ? s.photos[0] : null;
+  const channelAvatarObj = s?.channelAvatar;
+  const avatar =
+    s.avatar ||
+    (typeof channelAvatarObj === 'string'
+      ? channelAvatarObj
+      : channelAvatarObj?.src || channelAvatarObj?.uri) ||
+    s.profileImage ||
+    s.photoUrl ||
+    (typeof firstTopPhoto === 'string' ? firstTopPhoto : firstTopPhoto?.src) ||
+    userObj?.avatar ||
+    userObj?.channelAvatar ||
+    userObj?.profileImage ||
+    userObj?.photoUrl ||
+    (typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src) ||
+    null;
+  const displayUser =
+    userObj?.nickname ||
+    userObj?.name ||
+    s?.channelName ||
+    s?.nickname ||
+    s?.name ||
+    s?.username ||
+    (typeof s?.user === 'string' ? s.user : '') ||
+    'user';
   return {
     id: s.id || String(Math.random()),
     videoUrl: s.videoUrl || s.mediaUrl || '',
     title: s.title || 'Short',
-    user:
-      s.user?.nickname ||
-      s.user?.name ||
-      (typeof s.user === 'string' ? s.user : '') ||
-      'user',
+    user: displayUser,
     userId: s.user?.id ?? s.userId,
-    userObj: s.user,
+    userObj: { ...userObj, avatar },
+    avatar,
     desc: s.description || s.title || s.desc || 'Description',
     viewCount,
     views: formatCount(viewCount) || '0',
@@ -168,6 +197,7 @@ const ProductShortsVideo = () => {
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const initialItem = route.params?.item;
+  console.log('initialItem', initialItem);
 
   const { width, height } = useWindowDimensions();
   const [videos, setVideos] = useState([]);
@@ -186,6 +216,91 @@ const ProductShortsVideo = () => {
   const [moreMenuItem, setMoreMenuItem] = useState(null);
   const [reportVisible, setReportVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+
+  const hasAvatarInShort = useCallback(shortItem => {
+    const s = shortItem || {};
+    const u = s.user && typeof s.user === 'object' ? s.user : {};
+    const p0 = Array.isArray(u.photos) && u.photos.length > 0 ? u.photos[0] : null;
+    const sp0 =
+      Array.isArray(s.photos) && s.photos.length > 0 ? s.photos[0] : null;
+    const sCa = s.channelAvatar;
+    return !!(
+      s.avatar ||
+      (typeof sCa === 'string' ? sCa : sCa?.src || sCa?.uri) ||
+      s.profileImage ||
+      s.photoUrl ||
+      (typeof sp0 === 'string' ? sp0 : sp0?.src) ||
+      u.avatar ||
+      u.channelAvatar ||
+      u.profileImage ||
+      u.photoUrl ||
+      (typeof p0 === 'string' ? p0 : p0?.src)
+    );
+  }, []);
+
+  const enrichShortsWithProfile = useCallback(
+    async rawShorts => {
+      const arr = Array.isArray(rawShorts) ? rawShorts : [];
+      const missingOwnerIds = Array.from(
+        new Set(
+          arr
+            .filter(s => !hasAvatarInShort(s))
+            .map(s => s?.userId || s?.user?.id)
+            .filter(Boolean)
+            .map(String),
+        ),
+      );
+      if (!missingOwnerIds.length) return arr;
+
+      const profileById = {};
+      await Promise.allSettled(
+        missingOwnerIds.map(async oid => {
+          try {
+            profileById[oid] = await getChannelProfile(oid, user?.id);
+          } catch (_) {
+            profileById[oid] = null;
+          }
+        }),
+      );
+
+      return arr.map(s => {
+        if (hasAvatarInShort(s)) return s;
+        const oid = String(s?.userId || s?.user?.id || '');
+        const p = profileById[oid];
+        if (!p) return s;
+        const p0 =
+          Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null;
+        const pPhoto =
+          typeof p0 === 'string'
+            ? p0
+            : p0?.src || p?.channelAvatar || p?.profileImage || null;
+        const u = s?.user && typeof s.user === 'object' ? s.user : {};
+        return {
+          ...s,
+          userId: s?.userId || u?.id || p?.id,
+          user: {
+            ...u,
+            id: u?.id || s?.userId || p?.id,
+            nickname: u?.nickname || p?.nickname || p?.name || s?.nickname,
+            name: u?.name || p?.name || p?.nickname || s?.name,
+            avatar: u?.avatar || pPhoto,
+            channelAvatar: u?.channelAvatar || p?.channelAvatar || pPhoto,
+            profileImage: u?.profileImage || p?.profileImage || pPhoto,
+            photoUrl: u?.photoUrl || p?.photoUrl || pPhoto,
+            photos:
+              Array.isArray(u?.photos) && u.photos.length > 0
+                ? u.photos
+                : Array.isArray(p?.photos)
+                  ? p.photos
+                  : pPhoto
+                    ? [{ src: pPhoto }]
+                    : [],
+          },
+        };
+      });
+    },
+    [hasAvatarInShort, user?.id],
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -231,7 +346,8 @@ const ProductShortsVideo = () => {
           const list = (res?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
-          if (!cancelled) setVideos(list.map(normalizeShort));
+          const enriched = await enrichShortsWithProfile(list);
+          if (!cancelled) setVideos(enriched.map(normalizeShort));
           return;
         }
 
@@ -247,17 +363,19 @@ const ProductShortsVideo = () => {
           const sameUserRaw = (userRes?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
-          const sameUserOther = sameUserRaw
+          const sameUserEnriched = await enrichShortsWithProfile(sameUserRaw);
+          const sameUserOther = sameUserEnriched
             .filter(s => String(s.id) !== String(currentShortId))
             .map(normalizeShort);
           const feedRaw = (feedRes?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
+          const feedEnriched = await enrichShortsWithProfile(feedRaw);
           const seen = new Set([
             currentShortId,
             ...sameUserOther.map(v => v.id),
           ]);
-          const others = feedRaw
+          const others = feedEnriched
             .filter(s => !seen.has(String(s.id)))
             .map(normalizeShort);
           if (!cancelled)
@@ -274,7 +392,8 @@ const ProductShortsVideo = () => {
           const list = (res?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
-          const others = list
+          const enriched = await enrichShortsWithProfile(list);
+          const others = enriched
             .filter(s => String(s.id) !== String(currentShortId))
             .map(normalizeShort);
           if (!cancelled) setVideos([currentNormalized, ...others]);
@@ -289,7 +408,8 @@ const ProductShortsVideo = () => {
         const list = (res?.shorts || []).filter(
           s => s.videoUrl && String(s.videoUrl).trim(),
         );
-        if (!cancelled) setVideos(list.map(normalizeShort));
+        const enriched = await enrichShortsWithProfile(list);
+        if (!cancelled) setVideos(enriched.map(normalizeShort));
       } catch (_) {
         if (!cancelled && initialItem) {
           setVideos([
@@ -313,7 +433,13 @@ const ProductShortsVideo = () => {
     return () => {
       cancelled = true;
     };
-  }, [currentShortId, ownerId, !!initialItem, user?.role]);
+  }, [
+    currentShortId,
+    ownerId,
+    !!initialItem,
+    user?.role,
+    enrichShortsWithProfile,
+  ]);
 
   const userRef = useRef(user);
   useEffect(() => {
@@ -408,6 +534,7 @@ const ProductShortsVideo = () => {
     isScreenFocused: focused,
     subscribersOrderLine,
   }) => {
+    console.log('item', item);
     const isCurrentlyViewable = currentIndex === index;
     const [isPausedLocally, setIsPausedLocally] = useState(false);
     const videoRef = useRef(null);
@@ -417,6 +544,29 @@ const ProductShortsVideo = () => {
     const lastProgressUpdate = useRef(0);
     const lastTapMsRef = useRef(0);
     const singleTapTimerRef = useRef(null);
+
+    const descText =
+      (item.desc && String(item.desc).trim()) || 'Description goes here';
+    const [descExpanded, setDescExpanded] = useState(false);
+    const [descNeedsMore, setDescNeedsMore] = useState(false);
+    const [descMeasureWidth, setDescMeasureWidth] = useState(0);
+    /** First line text from layout (when platform provides it) */
+    const [descFirstLine, setDescFirstLine] = useState('');
+    const [descLayoutDone, setDescLayoutDone] = useState(false);
+    const [subscribedLocal, setSubscribedLocal] = useState(
+      !!item?.userObj?.isSubscribed,
+    );
+    const [ownerAvatarBroken, setOwnerAvatarBroken] = useState(false);
+
+    useEffect(() => {
+      setDescExpanded(false);
+      setDescNeedsMore(false);
+      setDescMeasureWidth(0);
+      setDescFirstLine('');
+      setDescLayoutDone(false);
+      setSubscribedLocal(!!item?.userObj?.isSubscribed);
+      setOwnerAvatarBroken(false);
+    }, [item.id]);
 
     useEffect(() => {
       if (!isCurrentlyViewable) {
@@ -454,6 +604,60 @@ const ProductShortsVideo = () => {
     };
 
     const isPaused = !focused || !isCurrentlyViewable || isPausedLocally;
+    const ownerId = item?.userId ?? item?.userObj?.id ?? null;
+    const isOwnShort = !!(user?.id && ownerId && user.id === ownerId);
+    const showFollowPlus = !!ownerId && !isOwnShort && !subscribedLocal;
+    const ownerAvatarFallbackUri = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      item?.user || 'User',
+    )}&background=111&color=fff`;
+    const ownerAvatarUri = safeImageUri(
+      item?.avatar ||
+        item?.userObj?.avatar ||
+        item?.userObj?.channelAvatar ||
+        item?.userObj?.profileImage ||
+        item?.userObj?.photoUrl ||
+        (Array.isArray(item?.userObj?.photos) && item.userObj.photos[0]
+          ? typeof item.userObj.photos[0] === 'string'
+            ? item.userObj.photos[0]
+            : item.userObj.photos[0]?.src
+          : null) ||
+        null,
+      ownerAvatarFallbackUri,
+    );
+
+    /** One-line preview + room for "...more" on the same line */
+    let descPreviewOneLine = '';
+    if (!descExpanded && descNeedsMore && descMeasureWidth > 0) {
+      const flat = descText.replace(/\n/g, ' ').trim();
+      const approxCharPx = 6.8;
+      const moreReservePx = 52;
+      const maxChars = Math.max(
+        12,
+        Math.floor((descMeasureWidth - moreReservePx) / approxCharPx),
+      );
+      if (descFirstLine.length > 0) {
+        let line = descFirstLine.trimEnd();
+        const cut = Math.max(6, Math.ceil(moreReservePx / approxCharPx));
+        if (line.length > cut + 8) {
+          line = line
+            .slice(0, line.length - cut)
+            .replace(/\s+\S*$/, '')
+            .trim();
+        }
+        descPreviewOneLine = line || flat.slice(0, maxChars).trim();
+      } else {
+        descPreviewOneLine =
+          flat.length > maxChars
+            ? flat
+                .slice(0, maxChars)
+                .replace(/\s+\S*$/, '')
+                .trim()
+            : flat.slice(0, Math.min(flat.length, maxChars));
+      }
+      if (!descPreviewOneLine) {
+        descPreviewOneLine = flat.slice(0, maxChars);
+      }
+    }
 
     return (
       <View style={[styles.videoContainer, { height: height }]}>
@@ -565,24 +769,67 @@ const ProductShortsVideo = () => {
             </View>
           </View>
 
-          <View style={styles.rightActions}>
-            <View style={styles.actionItem}>
-              <Icon name="eye-outline" size={24} color="#FFF" />
-              <Text style={styles.actionText}>{item.views ?? '0'}</Text>
+          {/* Reels-style: vertical column on the right, sat low above scrubber */}
+          <View
+            style={[
+              styles.rightActionsColumn,
+              { bottom: Math.max(10, (insets?.bottom || 0) + 36) },
+            ]}
+            pointerEvents="box-none"
+          >
+            <TouchableOpacity
+              style={styles.ownerProfileAction}
+              activeOpacity={0.85}
+              onPress={async () => {
+                if (!ownerId) return;
+                if (showFollowPlus) {
+                  if (!user?.id) {
+                    navigation.navigate('HomeSevenScreen');
+                    return;
+                  }
+                  try {
+                    await subscribeToChannel(user.id, ownerId);
+                    setSubscribedLocal(true);
+                  } catch (_) {}
+                  return;
+                }
+                navigation.navigate('UserViewsScreen', { userId: ownerId });
+              }}
+            >
+              <View style={styles.ownerAvatarWrap}>
+                <Image
+                  source={{
+                    uri: ownerAvatarBroken
+                      ? ownerAvatarFallbackUri
+                      : ownerAvatarUri,
+                  }}
+                  style={styles.ownerAvatar}
+                  onError={() => setOwnerAvatarBroken(true)}
+                />
+                {showFollowPlus ? (
+                  <View style={styles.ownerPlusBadge}>
+                    <Icon name="plus" size={12} color="#FFF" />
+                  </View>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+            <View style={styles.actionItemCol}>
+              <Icon name="eye-outline" size={26} color="#FFF" />
+              <Text style={styles.actionTextCol}>{item.views ?? '0'}</Text>
             </View>
             <TouchableOpacity
-              style={styles.actionItem}
+              style={styles.actionItemCol}
               onPress={() => onLike?.(item)}
             >
               <Icon
                 name={item.isLiked ? 'heart' : 'heart-outline'}
-                size={24}
+                size={28}
                 color={item.isLiked ? '#FF4D4D' : '#FFF'}
               />
-              <Text style={styles.actionText}>{item.likes ?? '0'}</Text>
+              <Text style={styles.actionTextCol}>{item.likes ?? '0'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.actionItem}
+              style={styles.actionItemCol}
               onPress={() => {
                 if (!user?.id) {
                   navigation.navigate('HomeSevenScreen');
@@ -591,15 +838,15 @@ const ProductShortsVideo = () => {
                 onOpenComments?.();
               }}
             >
-              <Icon name="comment-text-outline" size={24} color="#FFF" />
-              <Text style={styles.actionText}>{item.comments ?? '0'}</Text>
+              <Icon name="comment-text-outline" size={26} color="#FFF" />
+              <Text style={styles.actionTextCol}>{item.comments ?? '0'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.actionItem}
+              style={styles.actionItemCol}
               onPress={() => onShare?.(item)}
             >
-              <Icon name="share-outline" size={24} color="#FFF" />
-              <Text style={styles.actionText}>{item.shares ?? '0'}</Text>
+              <Icon name="share-outline" size={26} color="#FFF" />
+              <Text style={styles.actionTextCol}>{item.shares ?? '0'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -618,9 +865,75 @@ const ProductShortsVideo = () => {
                 @{item.user || item.title?.toLowerCase().replace(' ', '')}
               </Text>
             </TouchableOpacity>
-            <Text style={styles.videoDesc}>
-              {item.desc || 'Description goes here'}
-            </Text>
+            <View
+              style={styles.descBlock}
+              onLayout={e => {
+                const w = Math.round(e.nativeEvent.layout.width);
+                if (w > 0 && w !== descMeasureWidth) {
+                  setDescMeasureWidth(w);
+                }
+              }}
+            >
+              {descMeasureWidth > 0 ? (
+                <Text
+                  pointerEvents="none"
+                  style={[
+                    styles.videoDesc,
+                    styles.descMeasureHidden,
+                    { width: descMeasureWidth },
+                  ]}
+                  onTextLayout={ev => {
+                    const lines = ev.nativeEvent.lines || [];
+                    setDescNeedsMore(lines.length > 1);
+                    const t0 = lines[0]?.text;
+                    if (typeof t0 === 'string' && t0.length > 0) {
+                      setDescFirstLine(t0.trimEnd());
+                    }
+                    setDescLayoutDone(true);
+                  }}
+                >
+                  {descText}
+                </Text>
+              ) : null}
+              {!descLayoutDone ? (
+                <Text
+                  style={styles.videoDesc}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {descText}
+                </Text>
+              ) : descExpanded ? (
+                <>
+                  <Text style={[styles.videoDesc, styles.videoDescExpanded]}>
+                    {descText}
+                  </Text>
+                  {descNeedsMore ? (
+                    <Text
+                      style={styles.viewLessLink}
+                      onPress={() => setDescExpanded(false)}
+                    >
+                      View less
+                    </Text>
+                  ) : null}
+                </>
+              ) : descNeedsMore ? (
+                <Text style={styles.videoDesc} numberOfLines={1}>
+                  {descPreviewOneLine}
+                  <Text style={styles.descEllipsisSameLine}>...</Text>
+                  <Text
+                    style={styles.moreInlineTap}
+                    onPress={() => setDescExpanded(true)}
+                  >
+                    more
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={styles.videoDesc} numberOfLines={1}>
+                  {descText}
+                </Text>
+              )}
+            </View>
             <Text style={styles.videoHashtags}>
               {item.hashtags || '#hashtags #music #dance'}
             </Text>
@@ -636,10 +949,14 @@ const ProductShortsVideo = () => {
                 {subscribersOrderLine || 'Subscribers Order'}
               </Text>
             </TouchableOpacity>
+            {/* Previous design: one row — audio / mute left, Order Now right (clears Reels column) */}
             <View style={styles.footerRow}>
               <View style={styles.audioRow}>
                 <Icon name="music" size={18} color="#FFF" />
-                <Text style={styles.audioText}>
+                <Text
+                  style={[styles.audioText, styles.audioTitleFlex]}
+                  numberOfLines={1}
+                >
                   {item.audio || 'Original Sound'}
                 </Text>
                 <TouchableOpacity
@@ -651,23 +968,23 @@ const ProductShortsVideo = () => {
                     name={shortsMuted ? 'volume-off' : 'volume-high'}
                     size={18}
                     color="#FFF"
-                    style={{ marginLeft: 15 }}
+                    style={{ marginLeft: 10 }}
                   />
                   <Text style={styles.audioText}>
-                    {shortsMuted ? 'Unmute' : ' Mute'}
+                    {shortsMuted ? 'Unmute' : 'Mute'}
                   </Text>
                 </TouchableOpacity>
               </View>
               {!user?.id ? (
                 <TouchableOpacity
-                  style={styles.orderNowBtn}
+                  style={styles.orderNowBtnFooter}
                   onPress={() => navigation.navigate('HomeSevenScreen')}
                 >
                   <Text style={styles.orderNowText}>Login</Text>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={styles.orderNowBtn}
+                  style={styles.orderNowBtnFooter}
                   onPress={() => {
                     const itemOwnerId =
                       item?.userId ?? item?.userObj?.id ?? null;
@@ -686,7 +1003,6 @@ const ProductShortsVideo = () => {
                 </TouchableOpacity>
               )}
             </View>
-            {/* bottom arrow removed */}
           </View>
         </View>
       </View>
@@ -735,6 +1051,11 @@ const ProductShortsVideo = () => {
 
   const menuTargetProduct = () =>
     moreMenuItem || listData[currentIndex] || null;
+  const isOwnMenuTargetProduct = (() => {
+    const t = menuTargetProduct();
+    const ownerId = t?.userId ?? t?.userObj?.id ?? null;
+    return !!(user?.id && ownerId && String(user.id) === String(ownerId));
+  })();
 
   const handleSaveToWatchLaterProduct = async () => {
     const t = menuTargetProduct();
@@ -933,6 +1254,8 @@ const ProductShortsVideo = () => {
         onShare={() => handleShare(menuTargetProduct())}
         onNotInterested={handleNotInterestedProduct}
         onReport={openReportFromMenuProduct}
+        hideNotInterested={isOwnMenuTargetProduct}
+        hideReport={isOwnMenuTargetProduct}
       />
       <SaveModal
         visible={saveModalVisible}
@@ -1101,23 +1424,119 @@ const styles = StyleSheet.create({
   },
   backText: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginLeft: 5 },
   videoHeaderIcons: { flexDirection: 'row', alignItems: 'center' },
-  rightActions: {
+  /** Reels-style: stacked actions on the right */
+  rightActionsColumn: {
     position: 'absolute',
-    right: 15,
-    bottom: SCREEN_HEIGHT * 0.25,
+    right: 10,
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  ownerProfileAction: {
+    marginBottom: 14,
     alignItems: 'center',
   },
-  actionItem: { alignItems: 'center', marginBottom: 20 },
-  actionText: { color: '#FFF', fontSize: 12, marginTop: 5, fontWeight: '600' },
-  // Extra bottom padding so progress bar doesn't overlap footer row
-  videoFooter: { padding: 20, paddingBottom: 52 },
+  ownerAvatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    overflow: 'visible',
+    backgroundColor: '#222',
+  },
+  ownerAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 21,
+  },
+  ownerPlusBadge: {
+    position: 'absolute',
+    bottom: -8,
+    left: '50%',
+    marginLeft: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FF2D55',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionItemCol: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionTextCol: {
+    color: '#FFF',
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+  },
+  audioTitleFlex: { flex: 1, minWidth: 0, marginLeft: 5 },
+  /** Sits left of the right Reels column so it doesn’t overlap icons */
+  orderNowBtnFooter: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    flexShrink: 0,
+    marginRight: 54,
+  },
+  // Caption block stays left of the action rail
+  videoFooter: {
+    padding: 20,
+    paddingRight: 72,
+    paddingBottom: 56,
+    maxWidth: '100%',
+  },
   videoUser: {
     color: '#FFF',
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 5,
   },
-  videoDesc: { color: '#FFF', fontSize: 14, marginBottom: 5 },
+  descBlock: {
+    width: '100%',
+    marginBottom: 5,
+    position: 'relative',
+  },
+  descMeasureHidden: {
+    position: 'absolute',
+    opacity: 0,
+    left: 0,
+    top: 0,
+    zIndex: -1,
+  },
+  videoDesc: { color: '#FFF', fontSize: 14, marginBottom: 0 },
+  videoDescExpanded: { marginBottom: 4 },
+  descEllipsisSameLine: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 14,
+  },
+  moreInlineTap: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  viewLessLink: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+    textDecorationLine: 'underline',
+  },
   videoHashtags: {
     color: '#FFF',
     fontSize: 14,
@@ -1198,13 +1617,13 @@ const styles = StyleSheet.create({
   },
   subsName: { color: '#111', fontSize: 14, fontWeight: '700' },
   subsSubText: { color: '#777', fontSize: 12, marginTop: 2 },
-  footerRow: {
+  audioRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: -20,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 6,
   },
-  audioRow: { flexDirection: 'row', alignItems: 'center' },
   muteBtn: { flexDirection: 'row', alignItems: 'center' },
   progressBarWrap: {
     position: 'absolute',

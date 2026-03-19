@@ -58,8 +58,15 @@ const ShortsMoreOptionsModal = ({
   onShare,
   onNotInterested,
   onReport,
+  hideNotInterested = false,
+  hideReport = false,
 }) => {
   const insets = useSafeAreaInsets();
+  const filteredOptions = OPTIONS.filter(item => {
+    if (hideNotInterested && item.id === 'not_interested') return false;
+    if (hideReport && item.id === 'report') return false;
+    return true;
+  });
 
   const handlePress = item => {
     onClose();
@@ -95,7 +102,7 @@ const ShortsMoreOptionsModal = ({
               <Text style={styles.headerTitle}>More Option</Text>
               <View style={styles.divider} />
               <View style={styles.optionsContainer}>
-                {OPTIONS.map(item => {
+                {filteredOptions.map(item => {
                   const color = item.highlight ? ORANGE : '#212121';
                   return (
                     <TouchableOpacity

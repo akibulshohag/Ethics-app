@@ -1,5 +1,5 @@
 /* eslint-disable react-native/no-inline-styles */
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -173,6 +173,7 @@ const VideoItem = ({
   onShare,
   onOrderNow,
   onLoginPress,
+  onSubscribersPress,
   isSubscribed,
   currentUser,
   navigation,
@@ -188,6 +189,24 @@ const VideoItem = ({
   const lastProgressUpdate = useRef(0);
   const lastTapMsRef = useRef(0);
   const singleTapTimerRef = useRef(null);
+
+  const descText =
+    (item.description && String(item.description).trim()) || 'Description';
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [descNeedsMore, setDescNeedsMore] = useState(false);
+  const [descMeasureWidth, setDescMeasureWidth] = useState(0);
+  const [descFirstLine, setDescFirstLine] = useState('');
+  const [descLayoutDone, setDescLayoutDone] = useState(false);
+  const [ownerAvatarBroken, setOwnerAvatarBroken] = useState(false);
+
+  useEffect(() => {
+    setDescExpanded(false);
+    setDescNeedsMore(false);
+    setDescMeasureWidth(0);
+    setDescFirstLine('');
+    setDescLayoutDone(false);
+    setOwnerAvatarBroken(false);
+  }, [item.id]);
 
   // Manage play/pause based on active state
   useEffect(() => {
@@ -221,6 +240,63 @@ const VideoItem = ({
 
   const hasValidVideo =
     item.videoUrl && String(item.videoUrl).trim().length > 0;
+  const ownerId = item.user?.id ?? item.userId ?? null;
+  const isOwnShort = !!(
+    currentUser?.id &&
+    ownerId &&
+    currentUser.id === ownerId
+  );
+  const showFollowPlus = !!ownerId && !isOwnShort && !isSubscribed;
+  const ownerAvatarFallbackUri = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    item.user?.username || 'User',
+  )}&background=111&color=fff`;
+  const ownerAvatarUri = safeImageUri(
+    item.avatar ||
+      item.user?.avatar ||
+      item.user?.channelAvatar ||
+      item.user?.profileImage ||
+      item.user?.photoUrl ||
+      (Array.isArray(item.user?.photos) && item.user.photos[0]
+        ? typeof item.user.photos[0] === 'string'
+          ? item.user.photos[0]
+          : item.user.photos[0]?.src
+        : null) ||
+      null,
+    ownerAvatarFallbackUri,
+  );
+
+  let descPreviewOneLine = '';
+  if (!descExpanded && descNeedsMore && descMeasureWidth > 0) {
+    const flat = descText.replace(/\n/g, ' ').trim();
+    const approxCharPx = 6.8;
+    const moreReservePx = 52;
+    const maxChars = Math.max(
+      12,
+      Math.floor((descMeasureWidth - moreReservePx) / approxCharPx),
+    );
+    if (descFirstLine.length > 0) {
+      let line = descFirstLine.trimEnd();
+      const cut = Math.max(6, Math.ceil(moreReservePx / approxCharPx));
+      if (line.length > cut + 8) {
+        line = line
+          .slice(0, line.length - cut)
+          .replace(/\s+\S*$/, '')
+          .trim();
+      }
+      descPreviewOneLine = line || flat.slice(0, maxChars).trim();
+    } else {
+      descPreviewOneLine =
+        flat.length > maxChars
+          ? flat
+              .slice(0, maxChars)
+              .replace(/\s+\S*$/, '')
+              .trim()
+          : flat.slice(0, Math.min(flat.length, maxChars));
+    }
+    if (!descPreviewOneLine) {
+      descPreviewOneLine = flat.slice(0, maxChars);
+    }
+  }
 
   return (
     <View
@@ -361,11 +437,40 @@ const VideoItem = ({
         </View>
       </View>
 
-      {/* Right Side Action Bar - exact HomeOneScreen: eye (views), heart (like), comment, share; position & size match - ZIndex 10 */}
+      {/* Reels-style: vertical actions on the right, low above scrubber */}
       <View
-        style={[styles.rightSideBar, { bottom: screenHeight * 0.25 }]}
+        style={[
+          styles.rightSideBar,
+          { bottom: Math.max(10, (insets?.bottom || 0) + 46) },
+        ]}
         pointerEvents="box-none"
       >
+        <TouchableOpacity
+          style={styles.ownerProfileAction}
+          activeOpacity={0.85}
+          onPress={() => {
+            if (!ownerId) return;
+            if (showFollowPlus) {
+              onSubscribe?.(item);
+              return;
+            }
+            navigation.navigate('UserViewsScreen', { userId: ownerId });
+          }}
+        >
+          <View style={styles.ownerAvatarWrap}>
+            <Image
+              source={{ uri: ownerAvatarBroken ? ownerAvatarFallbackUri : ownerAvatarUri }}
+              style={styles.ownerAvatar}
+              onError={() => setOwnerAvatarBroken(true)}
+            />
+            {showFollowPlus ? (
+              <View style={styles.ownerPlusBadge}>
+                <Icon name="plus" size={12} color="#FFF" />
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.actionItem}
           onPress={() =>
@@ -423,7 +528,13 @@ const VideoItem = ({
       <View
         style={[
           styles.videoFooter,
-          { position: 'absolute', left: 15, right: 80, bottom: 20, zIndex: 10 },
+          {
+            position: 'absolute',
+            left: 15,
+            right: 72,
+            bottom: Math.max(52, (insets?.bottom || 0) + 46),
+            zIndex: 10,
+          },
         ]}
         pointerEvents="box-none"
       >
@@ -444,9 +555,75 @@ const VideoItem = ({
               .replace(/\s+/g, '')}
           </Text>
         </TouchableOpacity>
-        <Text style={styles.videoDesc} numberOfLines={2}>
-          {item.description || 'Description'}
-        </Text>
+        <View
+          style={styles.descBlock}
+          onLayout={e => {
+            const w = Math.round(e.nativeEvent.layout.width);
+            if (w > 0 && w !== descMeasureWidth) {
+              setDescMeasureWidth(w);
+            }
+          }}
+        >
+          {descMeasureWidth > 0 ? (
+            <Text
+              pointerEvents="none"
+              style={[
+                styles.videoDesc,
+                styles.descMeasureHidden,
+                { width: descMeasureWidth },
+              ]}
+              onTextLayout={ev => {
+                const lines = ev.nativeEvent.lines || [];
+                setDescNeedsMore(lines.length > 1);
+                const t0 = lines[0]?.text;
+                if (typeof t0 === 'string' && t0.length > 0) {
+                  setDescFirstLine(t0.trimEnd());
+                }
+                setDescLayoutDone(true);
+              }}
+            >
+              {descText}
+            </Text>
+          ) : null}
+          {!descLayoutDone ? (
+            <Text
+              style={styles.videoDesc}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {descText}
+            </Text>
+          ) : descExpanded ? (
+            <>
+              <Text style={[styles.videoDesc, styles.videoDescExpanded]}>
+                {descText}
+              </Text>
+              {descNeedsMore ? (
+                <Text
+                  style={styles.viewLessLink}
+                  onPress={() => setDescExpanded(false)}
+                >
+                  View less
+                </Text>
+              ) : null}
+            </>
+          ) : descNeedsMore ? (
+            <Text style={styles.videoDesc} numberOfLines={1}>
+              {descPreviewOneLine}
+              <Text style={styles.descEllipsisSameLine}>...</Text>
+              <Text
+                style={styles.moreInlineTap}
+                onPress={() => setDescExpanded(true)}
+              >
+                more
+              </Text>
+            </Text>
+          ) : (
+            <Text style={styles.videoDesc} numberOfLines={1}>
+              {descText}
+            </Text>
+          )}
+        </View>
         {(item.hashtags || []).length > 0 && (
           <Text style={styles.hashtagsText}>
             {(item.hashtags || []).map((tag, idx) => (
@@ -460,7 +637,7 @@ const VideoItem = ({
           activeOpacity={0.7}
           onPress={() => {
             const ownerId = item.user?.id ?? item.userId ?? null;
-            if (ownerId) openSubscribersModal(ownerId);
+            if (ownerId) onSubscribersPress?.(ownerId);
           }}
           disabled={!(item.user?.id || item.userId)}
         >
@@ -469,7 +646,12 @@ const VideoItem = ({
         <View style={styles.footerRow}>
           <View style={styles.audioRow}>
             <Icon name="music" size={18} color="#FFF" />
-            <Text style={styles.audioText}>Original Sound</Text>
+            <Text
+              style={[styles.audioText, styles.audioTitleFlex]}
+              numberOfLines={1}
+            >
+              Original Sound
+            </Text>
             <TouchableOpacity
               style={styles.muteToggle}
               onPress={() => dispatch(setShortsMuted(!shortsMuted))}
@@ -479,7 +661,7 @@ const VideoItem = ({
                 name={shortsMuted ? 'volume-off' : 'volume-high'}
                 size={18}
                 color="#FFF"
-                style={{ marginLeft: 12 }}
+                style={{ marginLeft: 10 }}
               />
               <Text style={[styles.audioText, { marginLeft: 6 }]}>
                 {shortsMuted ? 'Unmute' : 'Mute'}
@@ -489,7 +671,7 @@ const VideoItem = ({
           {(item.creatorRole === 'owner' || item.user?.id || item.userId) &&
             (!currentUser?.token ? (
               <TouchableOpacity
-                style={styles.resOrderBtn}
+                style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
                 onPress={() => {
                   const ownerId = item.user?.id ?? item.userId ?? null;
                   onLoginPress?.({ returnToOrder: true, ownerUserId: ownerId });
@@ -499,7 +681,7 @@ const VideoItem = ({
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.resOrderBtn}
+                style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
                 onPress={() => {
                   const ownerId = item.user?.id ?? item.userId ?? null;
                   if (ownerId) {
@@ -531,18 +713,49 @@ const mapShortToItem = s => {
   const sharesCount = s.shareCount ?? 0;
   const viewCount = s.viewCount ?? s._count?.views ?? 0;
   const user = s.user || {};
+  const firstPhoto =
+    Array.isArray(user.photos) && user.photos.length > 0
+      ? user.photos[0]
+      : null;
+  const firstTopPhoto =
+    Array.isArray(s.photos) && s.photos.length > 0 ? s.photos[0] : null;
+  const channelAvatarObj = s.channelAvatar;
   const avatar =
+    s.avatar ||
+    (typeof channelAvatarObj === 'string'
+      ? channelAvatarObj
+      : channelAvatarObj?.src || channelAvatarObj?.uri) ||
+    s.profileImage ||
+    s.photoUrl ||
+    (typeof firstTopPhoto === 'string' ? firstTopPhoto : firstTopPhoto?.src) ||
     user.avatar ||
-    (Array.isArray(user.photos) && user.photos[0]) ||
+    user.channelAvatar ||
+    user.profileImage ||
+    user.photoUrl ||
+    (typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src) ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      user.name || user.nickname || 'User',
+      user.nickname ||
+        user.name ||
+        s.channelName ||
+        s.nickname ||
+        s.name ||
+        s.username ||
+        'User',
     )}&background=FF8C00&color=fff`;
+  const username =
+    user.nickname ||
+    user.name ||
+    s.channelName ||
+    s.nickname ||
+    s.name ||
+    s.username ||
+    'Unknown';
   return {
     id: s.id,
     videoUrl: s.videoUrl,
     user: {
-      id: user.id,
-      username: user.nickname || user.name || 'Unknown',
+      id: user.id || s.userId,
+      username,
       avatar,
       isSubscribed: false,
     },
@@ -576,6 +789,7 @@ const mapShortToItem = s => {
 const ShortsVideoScreen = ({ navigation }) => {
   const route = useRoute();
   const initialShortId = route.params?.initialShortId ?? route.params?.shortId;
+  const initialShortItem = route.params?.initialShortItem || null;
   const user = useSelector(state => state?.app?.user);
   const insets = useSafeAreaInsets();
   const [videos, setVideos] = useState([]);
@@ -623,6 +837,91 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [subsUsers, setSubsUsers] = useState([]);
   const [subsError, setSubsError] = useState('');
 
+  const hasAvatarInShort = useCallback(shortItem => {
+    const s = shortItem || {};
+    const u = s.user && typeof s.user === 'object' ? s.user : {};
+    const p0 = Array.isArray(u.photos) && u.photos.length > 0 ? u.photos[0] : null;
+    const sp0 =
+      Array.isArray(s.photos) && s.photos.length > 0 ? s.photos[0] : null;
+    const sCa = s.channelAvatar;
+    return !!(
+      s.avatar ||
+      (typeof sCa === 'string' ? sCa : sCa?.src || sCa?.uri) ||
+      s.profileImage ||
+      s.photoUrl ||
+      (typeof sp0 === 'string' ? sp0 : sp0?.src) ||
+      u.avatar ||
+      u.channelAvatar ||
+      u.profileImage ||
+      u.photoUrl ||
+      (typeof p0 === 'string' ? p0 : p0?.src)
+    );
+  }, []);
+
+  const enrichShortsWithProfile = useCallback(
+    async rawShorts => {
+      const arr = Array.isArray(rawShorts) ? rawShorts : [];
+      const missingOwnerIds = Array.from(
+        new Set(
+          arr
+            .filter(s => !hasAvatarInShort(s))
+            .map(s => s?.userId || s?.user?.id)
+            .filter(Boolean)
+            .map(String),
+        ),
+      );
+      if (!missingOwnerIds.length) return arr;
+
+      const profileById = {};
+      await Promise.allSettled(
+        missingOwnerIds.map(async oid => {
+          try {
+            profileById[oid] = await getChannelProfile(oid, user?.id);
+          } catch (_) {
+            profileById[oid] = null;
+          }
+        }),
+      );
+
+      return arr.map(s => {
+        if (hasAvatarInShort(s)) return s;
+        const oid = String(s?.userId || s?.user?.id || '');
+        const p = profileById[oid];
+        if (!p) return s;
+        const p0 =
+          Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null;
+        const pPhoto =
+          typeof p0 === 'string'
+            ? p0
+            : p0?.src || p?.channelAvatar || p?.profileImage || null;
+        const u = s?.user && typeof s.user === 'object' ? s.user : {};
+        return {
+          ...s,
+          userId: s?.userId || u?.id || p?.id,
+          user: {
+            ...u,
+            id: u?.id || s?.userId || p?.id,
+            nickname: u?.nickname || p?.nickname || p?.name || s?.nickname,
+            name: u?.name || p?.name || p?.nickname || s?.name,
+            avatar: u?.avatar || pPhoto,
+            channelAvatar: u?.channelAvatar || p?.channelAvatar || pPhoto,
+            profileImage: u?.profileImage || p?.profileImage || pPhoto,
+            photoUrl: u?.photoUrl || p?.photoUrl || pPhoto,
+            photos:
+              Array.isArray(u?.photos) && u.photos.length > 0
+                ? u.photos
+                : Array.isArray(p?.photos)
+                  ? p.photos
+                  : pPhoto
+                    ? [{ src: pPhoto }]
+                    : [],
+          },
+        };
+      });
+    },
+    [hasAvatarInShort, user?.id],
+  );
+
   const screenHeight = windowHeight;
   const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
 
@@ -634,7 +933,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   useEffect(() => {
     if (!initialShortId) return;
     hasAppliedInitialShort.current = false;
-  }, [initialShortId]);
+  }, [initialShortId, initialShortItem]);
 
   useEffect(() => {
     if (
@@ -648,15 +947,39 @@ const ShortsVideoScreen = ({ navigation }) => {
       );
       if (idx > 0) {
         const clicked = videos[idx];
+        const patchedClicked =
+          initialShortItem && String(initialShortItem.id) === String(clicked.id)
+            ? mapShortToItem({
+                ...initialShortItem,
+                ...clicked,
+                id: clicked.id,
+              })
+            : clicked;
         const rest = videos.filter((_, i) => i !== idx);
-        setVideos([clicked, ...rest]);
+        setVideos([patchedClicked, ...rest]);
         setActiveVideoIndex(0);
       } else if (idx === 0) {
+        if (
+          initialShortItem &&
+          String(initialShortItem.id) === String(videos[0]?.id)
+        ) {
+          const patched = mapShortToItem({
+            ...initialShortItem,
+            ...videos[0],
+            id: videos[0].id,
+          });
+          const rest = videos.slice(1);
+          setVideos([patched, ...rest]);
+        }
+        setActiveVideoIndex(0);
+      } else if (initialShortItem) {
+        const patched = mapShortToItem(initialShortItem);
+        setVideos([patched, ...videos]);
         setActiveVideoIndex(0);
       }
       hasAppliedInitialShort.current = true;
     }
-  }, [loading, videos, initialShortId]);
+  }, [loading, videos, initialShortId, initialShortItem]);
 
   const loadShorts = async () => {
     try {
@@ -670,7 +993,8 @@ const ShortsVideoScreen = ({ navigation }) => {
         const filtered = res.shorts.filter(
           s => s.videoUrl && String(s.videoUrl).trim(),
         );
-        setVideos(filtered.map(mapShortToItem));
+        const enriched = await enrichShortsWithProfile(filtered);
+        setVideos(enriched.map(mapShortToItem));
       } else {
         setVideos(MOCK_VIDEOS);
       }
@@ -789,6 +1113,11 @@ const ShortsVideoScreen = ({ navigation }) => {
   };
 
   const menuTargetShort = () => shortsMenuItem || activeItem;
+  const isOwnMenuTargetShort = (() => {
+    const t = menuTargetShort();
+    const ownerId = t?.user?.id ?? t?.userId ?? null;
+    return !!(user?.id && ownerId && String(user.id) === String(ownerId));
+  })();
 
   const handleSaveToWatchLater = async () => {
     const t = menuTargetShort();
@@ -978,6 +1307,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               onLoginPress={params =>
                 navigateToHomeScreen('HomeSevenScreen', params)
               }
+              onSubscribersPress={openSubscribersModal}
               isSubscribed={
                 subscriptionMap[item.user?.id] ??
                 item.user?.isSubscribed ??
@@ -1126,6 +1456,8 @@ const ShortsVideoScreen = ({ navigation }) => {
         onShare={() => handleShare(menuTargetShort())}
         onNotInterested={handleNotInterestedShort}
         onReport={openReportFromMenu}
+        hideNotInterested={isOwnMenuTargetShort}
+        hideReport={isOwnMenuTargetShort}
       />
       <SaveModal
         visible={saveModalVisible}
@@ -1241,8 +1573,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  ownerProfileAction: {
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  ownerAvatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 23,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    overflow: 'visible',
+    backgroundColor: '#222',
+  },
+  ownerAvatar: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 21,
+  },
+  ownerPlusBadge: {
+    position: 'absolute',
+    bottom: -8,
+    left: '50%',
+    marginLeft: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FF2D55',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   actionItem: {
-    marginBottom: 20,
+    marginBottom: 12,
     alignItems: 'center',
   },
   iconCircle: {
@@ -1284,19 +1648,69 @@ const styles = StyleSheet.create({
   videoDesc: {
     color: '#FFF',
     fontSize: 15,
-    marginBottom: 8,
+    marginBottom: 0,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: -1, height: 1 },
     textShadowRadius: 10,
+  },
+  descBlock: {
+    width: '100%',
+    marginBottom: 8,
+    position: 'relative',
+  },
+  descMeasureHidden: {
+    position: 'absolute',
+    opacity: 0,
+    left: 0,
+    top: 0,
+    zIndex: -1,
+  },
+  videoDescExpanded: { marginBottom: 4 },
+  descEllipsisSameLine: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 15,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 8,
+  },
+  moreInlineTap: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 8,
+  },
+  viewLessLink: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 2,
+    textDecorationLine: 'underline',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 6,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
   },
   audioRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 6,
+  },
+  audioTitleFlex: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 5,
+    marginRight: 4,
   },
   muteToggle: {
     flexDirection: 'row',
@@ -1434,6 +1848,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 8,
+    flexShrink: 0,
+  },
+  /** Clears Reels-style icon column on the right */
+  resOrderBtnFooter: {
+    marginRight: 54,
   },
   resOrderText: {
     color: '#FFF',
