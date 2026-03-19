@@ -35,7 +35,10 @@ import { safeImageUri } from '../../utils/helper';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
 import { setPlaylist } from '../../services/playlistService';
 import { submitReport } from '../../services/reportService';
-import { getChannelProfile, subscribeToChannel } from '../../services/channelService';
+import {
+  getChannelProfile,
+  subscribeToChannel,
+} from '../../services/channelService';
 import Toast from 'react-native-toast-message';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -197,7 +200,6 @@ const ProductShortsVideo = () => {
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const initialItem = route.params?.item;
-  console.log('initialItem', initialItem);
 
   const { width, height } = useWindowDimensions();
   const [videos, setVideos] = useState([]);
@@ -220,7 +222,8 @@ const ProductShortsVideo = () => {
   const hasAvatarInShort = useCallback(shortItem => {
     const s = shortItem || {};
     const u = s.user && typeof s.user === 'object' ? s.user : {};
-    const p0 = Array.isArray(u.photos) && u.photos.length > 0 ? u.photos[0] : null;
+    const p0 =
+      Array.isArray(u.photos) && u.photos.length > 0 ? u.photos[0] : null;
     const sp0 =
       Array.isArray(s.photos) && s.photos.length > 0 ? s.photos[0] : null;
     const sCa = s.channelAvatar;
@@ -291,10 +294,10 @@ const ProductShortsVideo = () => {
               Array.isArray(u?.photos) && u.photos.length > 0
                 ? u.photos
                 : Array.isArray(p?.photos)
-                  ? p.photos
-                  : pPhoto
-                    ? [{ src: pPhoto }]
-                    : [],
+                ? p.photos
+                : pPhoto
+                ? [{ src: pPhoto }]
+                : [],
           },
         };
       });
@@ -534,7 +537,6 @@ const ProductShortsVideo = () => {
     isScreenFocused: focused,
     subscribersOrderLine,
   }) => {
-    console.log('item', item);
     const isCurrentlyViewable = currentIndex === index;
     const [isPausedLocally, setIsPausedLocally] = useState(false);
     const videoRef = useRef(null);

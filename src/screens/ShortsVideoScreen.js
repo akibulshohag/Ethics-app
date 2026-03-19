@@ -950,8 +950,17 @@ const ShortsVideoScreen = ({ navigation }) => {
         const patchedClicked =
           initialShortItem && String(initialShortItem.id) === String(clicked.id)
             ? mapShortToItem({
-                ...initialShortItem,
                 ...clicked,
+                ...initialShortItem,
+                user: {
+                  ...(clicked?.user && typeof clicked.user === 'object'
+                    ? clicked.user
+                    : {}),
+                  ...(initialShortItem?.user &&
+                  typeof initialShortItem.user === 'object'
+                    ? initialShortItem.user
+                    : {}),
+                },
                 id: clicked.id,
               })
             : clicked;
@@ -964,8 +973,17 @@ const ShortsVideoScreen = ({ navigation }) => {
           String(initialShortItem.id) === String(videos[0]?.id)
         ) {
           const patched = mapShortToItem({
-            ...initialShortItem,
             ...videos[0],
+            ...initialShortItem,
+            user: {
+              ...(videos[0]?.user && typeof videos[0].user === 'object'
+                ? videos[0].user
+                : {}),
+              ...(initialShortItem?.user &&
+              typeof initialShortItem.user === 'object'
+                ? initialShortItem.user
+                : {}),
+            },
             id: videos[0].id,
           });
           const rest = videos.slice(1);

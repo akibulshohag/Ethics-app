@@ -728,13 +728,31 @@ const PromotionScreen = ({ onBack }) => {
         item.type === 'short' || String(item.type).toLowerCase() === 'short';
       if (isShort) {
         const sid = String(item.id);
+        const fallbackName =
+          item?.user?.nickname ||
+          item?.user?.name ||
+          profile?.nickname ||
+          profile?.name ||
+          currentUser?.nickname ||
+          currentUser?.name ||
+          'User';
+        const initialShortItem = {
+          ...item,
+          userId: item?.userId || item?.user?.id || userId,
+          user: {
+            ...(item?.user && typeof item.user === 'object' ? item.user : {}),
+            id: item?.user?.id || item?.userId || userId,
+            nickname: item?.user?.nickname || fallbackName,
+            name: item?.user?.name || fallbackName,
+          },
+        };
         let nav = navigation;
         for (let i = 0; i < 16 && nav; i++) {
           const names = nav.getState?.()?.routeNames;
           if (Array.isArray(names) && names.includes('Shorts')) {
             nav.navigate('Shorts', {
               screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem: item },
+              params: { shortId: sid, initialShortItem },
             });
             return;
           }
@@ -746,7 +764,7 @@ const PromotionScreen = ({ onBack }) => {
           if (Array.isArray(names) && names.includes('Library')) {
             nav.navigate('Library', {
               screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem: item },
+              params: { shortId: sid, initialShortItem },
             });
             return;
           }
@@ -758,7 +776,14 @@ const PromotionScreen = ({ onBack }) => {
         returnTo: 'promotion',
       });
     },
-    [navigation],
+    [
+      navigation,
+      userId,
+      profile?.nickname,
+      profile?.name,
+      currentUser?.nickname,
+      currentUser?.name,
+    ],
   );
 
   const handleCoverPress = () => {
