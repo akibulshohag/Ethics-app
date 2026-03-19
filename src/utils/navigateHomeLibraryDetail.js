@@ -30,6 +30,50 @@ export function navigateToHomeOneLibraryDetail(navigation, item, returnContext) 
   const id = item?.id;
   if (!id) return;
   const contentType = item?.type === 'short' ? 'short' : 'video';
+
+  if (contentType === 'short') {
+    const sid = String(id);
+    const initialShortItem = {
+      ...item,
+      id: sid,
+      type: 'short',
+      userId: item?.userId || item?.user?.id,
+    };
+
+    let nav = navigation;
+    for (let i = 0; i < 16 && nav; i += 1) {
+      const names = nav.getState?.()?.routeNames;
+      if (Array.isArray(names) && names.includes('Shorts')) {
+        nav.navigate('Shorts', {
+          screen: 'ShortsVideoScreen',
+          params: { shortId: sid, initialShortItem },
+        });
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+
+    nav = navigation;
+    for (let i = 0; i < 16 && nav; i += 1) {
+      const names = nav.getState?.()?.routeNames;
+      if (Array.isArray(names) && names.includes('ShortsVideoScreen')) {
+        nav.navigate('ShortsVideoScreen', {
+          shortId: sid,
+          initialShortItem,
+        });
+        return;
+      }
+      if (Array.isArray(names) && names.includes('Library')) {
+        nav.navigate('Library', {
+          screen: 'ShortsVideoScreen',
+          params: { shortId: sid, initialShortItem },
+        });
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+  }
+
   const openLibraryDetail = {
     contentType,
     contentId: String(id),

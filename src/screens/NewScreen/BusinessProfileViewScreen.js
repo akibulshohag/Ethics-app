@@ -62,6 +62,7 @@ import {
   getMenuFiles,
   updateMenuItem,
   deleteMenuItem,
+  deleteMenuFile,
 } from '../../services/menuService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
@@ -377,7 +378,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [postEditSaving, setPostEditSaving] = useState(false);
   const [itemActionVisible, setItemActionVisible] = useState(false);
   const [itemEditVisible, setItemEditVisible] = useState(false);
-  const [itemActionTarget, setItemActionTarget] = useState(null); // { kind: 'promotion'|'video'|'menu', item }
+  const [itemActionTarget, setItemActionTarget] = useState(null); // { kind: 'promotion'|'video'|'menu'|'menuFile', item }
   const [itemEditTitle, setItemEditTitle] = useState('');
   const [itemEditDescription, setItemEditDescription] = useState('');
   const [itemEditPrice, setItemEditPrice] = useState('');
@@ -1279,7 +1280,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!target?.item?.id || !userId) return;
     const { kind, item } = target;
     const label =
-      kind === 'promotion' ? 'promotion' : kind === 'menu' ? 'menu item' : 'video';
+      kind === 'promotion'
+        ? 'promotion'
+        : kind === 'menu'
+        ? 'menu item'
+        : kind === 'menuFile'
+        ? 'menu file'
+        : 'video';
     setItemActionVisible(false);
     Alert.alert(`Delete ${label}`, `Are you sure you want to delete this ${label}?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -1301,6 +1308,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             } else if (kind === 'menu') {
               await deleteMenuItem(currentUser?.token, item.id);
               setMenuItems(prev => prev.filter(m => m.id !== item.id));
+            } else if (kind === 'menuFile') {
+              const fileId = item.fileId || item.id;
+              if (!fileId || String(fileId).startsWith('file-')) {
+                throw new Error('Menu file id is missing');
+              }
+              await deleteMenuFile(currentUser?.token, fileId);
+              setMenuFiles(prev =>
+                prev.filter(f => String(f.id) !== String(fileId)),
+              );
             }
           } catch (e) {
             Alert.alert('Error', e?.message || 'Failed to delete item');
@@ -1705,7 +1721,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 {isPdf ? 'PDF menu file' : 'Image menu file'}
               </Text>
             </View>
-            <MaterialCommunityIcons name="open-in-new" size={20} color="#666" />
+            {isOwnProfile && item.fileId ? (
+              <TouchableOpacity
+                style={styles.menuManageBtn}
+                onPress={() => openItemActions('menuFile', item)}
+              >
+                <MaterialCommunityIcons
+                  name="dots-vertical"
+                  size={20}
+                  color="#333"
+                />
+              </TouchableOpacity>
+            ) : (
+              <MaterialCommunityIcons name="open-in-new" size={20} color="#666" />
+            )}
           </TouchableOpacity>
         );
       }
@@ -2111,13 +2140,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       >
         <View style={styles.postActionBackdrop}>
           <View style={styles.postActionCard}>
-            <TouchableOpacity
-              style={styles.postActionBtn}
-              onPress={openItemEdit}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.postActionText}>Edit</Text>
-            </TouchableOpacity>
+            {itemActionTarget?.kind !== 'menuFile' ? (
+              <TouchableOpacity
+                style={styles.postActionBtn}
+                onPress={openItemEdit}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.postActionText}>Edit</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={styles.postActionBtn}
               onPress={deleteItemFromActions}

@@ -124,6 +124,25 @@ export const getMenuFiles = async (token, userId = null) => {
 };
 
 /**
+ * Delete uploaded menu file (PDF/image). Requires auth.
+ */
+export const deleteMenuFile = async (token, id) => {
+  const res = await fetch(`${API_URL}/files/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    let message = 'Failed to delete menu file';
+    try {
+      const err = await res.json();
+      message = err?.message || message;
+    } catch (_) {}
+    throw new Error(message);
+  }
+  return res.json();
+};
+
+/**
  * List menu categories. Owner: own. Admin: ?userId=. Requires auth.
  * Returns { categories: [{ id, name, sortOrder, itemCount }, ...] }
  */

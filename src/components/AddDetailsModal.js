@@ -22,6 +22,7 @@ import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
 import VideoScheduleModal from './VideoScheduleModal';
+import VideoCoverPickerModal from './VideoCoverPickerModal';
 import { shortsService } from '../services/shortsService';
 
 const AddDetailsModal = ({
@@ -46,6 +47,7 @@ const AddDetailsModal = ({
   const [uploading, setUploading] = useState(false);
   const [localVideo, setLocalVideo] = useState(null);
   const [localThumb, setLocalThumb] = useState(null);
+  const [coverPickerVisible, setCoverPickerVisible] = useState(false);
 
   const videoUri = shortsMetadata?.videoUri || localVideo?.uri;
   const videoMeta = localVideo || shortsMetadata;
@@ -77,6 +79,14 @@ const AddDetailsModal = ({
         });
       }
     });
+  };
+
+  const pickCoverFromVideoInModal = () => {
+    if (!videoUri) {
+      Alert.alert('Select video first', 'Please select a video before choosing cover.');
+      return;
+    }
+    setCoverPickerVisible(true);
   };
 
   const mapToVisibility = v => {
@@ -236,7 +246,7 @@ const AddDetailsModal = ({
           <View style={styles.topSection}>
             <TouchableOpacity
               style={styles.coverContainer}
-              onPress={pickThumbnailInModal}
+              onPress={pickCoverFromVideoInModal}
             >
               <Image
                 source={{
@@ -249,7 +259,7 @@ const AddDetailsModal = ({
                 resizeMode="cover"
               />
               <View style={styles.selectCoverOverlay}>
-                <Text style={styles.selectCoverText}>Select Cover</Text>
+                <Text style={styles.selectCoverText}>Select Cover From Video</Text>
               </View>
             </TouchableOpacity>
             <View style={styles.captionContainer}>
@@ -279,6 +289,25 @@ const AddDetailsModal = ({
               <Ionicons name="checkmark-circle" size={20} color="#12B76A" />
               <Text style={styles.videoSelectedText}>Video selected</Text>
             </View>
+          )}
+          {videoUri && (
+            <TouchableOpacity
+              style={styles.selectVideoBtn}
+              onPress={pickCoverFromVideoInModal}
+            >
+              <Ionicons name="images-outline" size={22} color="#FF8C00" />
+              <Text style={styles.selectVideoText}>Choose cover from this video</Text>
+            </TouchableOpacity>
+          )}
+          {videoUri && (
+            <TouchableOpacity
+              style={styles.selectFromGalleryBtn}
+              onPress={pickThumbnailInModal}
+            >
+              <Text style={styles.selectFromGalleryText}>
+                Or pick cover photo from gallery
+              </Text>
+            </TouchableOpacity>
           )}
 
           <View style={styles.divider} />
@@ -410,6 +439,20 @@ const AddDetailsModal = ({
           onSelectNow={() => setScheduledPublishDate(null)}
           onConfirmDate={d => setScheduledPublishDate(d)}
         />
+        <VideoCoverPickerModal
+          visible={coverPickerVisible}
+          onClose={() => setCoverPickerVisible(false)}
+          videoUri={videoUri}
+          durationSec={videoMeta?.duration}
+          onSelect={frame =>
+            setLocalThumb({
+              uri: frame.uri,
+              type: frame.type || 'image/jpeg',
+              name: frame.fileName || 'thumb.jpg',
+            })
+          }
+          title="Select short cover"
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -474,6 +517,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FF8C00',
     marginLeft: 8,
+  },
+  selectFromGalleryBtn: {
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  selectFromGalleryText: {
+    fontSize: 13,
+    color: '#666',
+    textDecorationLine: 'underline',
   },
   videoSelectedRow: {
     flexDirection: 'row',

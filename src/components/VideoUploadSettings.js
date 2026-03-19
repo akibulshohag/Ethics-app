@@ -25,6 +25,7 @@ import CommentsSettingsModal from './CommentsSettingsModal';
 import VideoDescriptionModal from './VideoDescriptionModal';
 import LocationSearchModal from './LocationSearchModal';
 import VideoScheduleModal from './VideoScheduleModal';
+import VideoCoverPickerModal from './VideoCoverPickerModal';
 import { uploadVideo } from '../services/videoService';
 import {
   listCustomPlaylists,
@@ -42,6 +43,7 @@ const VideoUploadSettings = ({
 }) => {
   const [title, setTitle] = useState('');
   const [selectedThumbnail, setSelectedThumbnail] = useState(null);
+  const [coverPickerVisible, setCoverPickerVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -133,6 +135,14 @@ const VideoUploadSettings = ({
         setSelectedThumbnail(thumbnail);
       }
     });
+  };
+
+  const pickCoverFromVideo = () => {
+    if (!selectedVideo?.uri) {
+      Alert.alert('Select video first', 'Please choose a video before cover selection.');
+      return;
+    }
+    setCoverPickerVisible(true);
   };
 
   // Handle video upload
@@ -372,12 +382,19 @@ const VideoUploadSettings = ({
             )}
             <TouchableOpacity
               style={styles.coverOverlay}
-              onPress={pickThumbnail}
+              onPress={pickCoverFromVideo}
               disabled={uploading || !selectedVideo}
             >
               <Text style={styles.changeCoverText}>
-                {selectedThumbnail ? 'Change cover' : 'Select cover'}
+                {selectedThumbnail ? 'Change cover from video' : 'Select cover from video'}
               </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.galleryCoverBtn}
+              onPress={pickThumbnail}
+              disabled={uploading || !selectedVideo}
+            >
+              <Text style={styles.galleryCoverBtnText}>Or choose photo from gallery</Text>
             </TouchableOpacity>
             {uploading && (
               <View style={styles.uploadProgressOverlay}>
@@ -533,6 +550,14 @@ const VideoUploadSettings = ({
           onSelectNow={() => setScheduledPublishDate(null)}
           onConfirmDate={d => setScheduledPublishDate(d)}
         />
+        <VideoCoverPickerModal
+          visible={coverPickerVisible}
+          onClose={() => setCoverPickerVisible(false)}
+          videoUri={selectedVideo?.uri}
+          durationSec={selectedVideo?.duration}
+          onSelect={frame => setSelectedThumbnail(frame)}
+          title="Select video cover"
+        />
         <Modal
           visible={playlistModalVisible}
           animationType="slide"
@@ -660,6 +685,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  galleryCoverBtn: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  galleryCoverBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   changeCoverText: {
     color: '#fff',
