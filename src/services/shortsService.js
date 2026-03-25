@@ -15,6 +15,13 @@ const getAuthHeaders = () => {
   return {};
 };
 
+const shouldFallbackViewerParam = (error, params) =>
+  !!(
+    params &&
+    params.viewerUserId &&
+    error?.response?.status === 400
+  );
+
 export const shortsService = {
   /**
    * Upload short video with thumbnail and metadata.
@@ -56,11 +63,22 @@ export const shortsService = {
    * Get all shorts with filters
    */
   async getShorts(params = {}) {
-    const response = await axios.get(API_URL, {
-      params,
-      headers: getAuthHeaders(),
-    });
-    return response.data;
+    try {
+      const response = await axios.get(API_URL, {
+        params,
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error) {
+      if (!shouldFallbackViewerParam(error, params)) throw error;
+      const fallbackParams = { ...params };
+      delete fallbackParams.viewerUserId;
+      const retry = await axios.get(API_URL, {
+        params: fallbackParams,
+        headers: getAuthHeaders(),
+      });
+      return retry.data;
+    }
   },
 
   /**
@@ -219,12 +237,22 @@ export const shortsService = {
   /**
    * Get user shorts
    */
-  async getUserShorts(userId, page = 1, limit = 20) {
-    const response = await axios.get(`${API_URL}/user/${userId}`, {
-      params: {page, limit},
-      headers: getAuthHeaders(),
-    });
-    return response.data;
+  async getUserShorts(userId, page = 1, limit = 20, viewerUserId) {
+    const params = {page, limit, viewerUserId};
+    try {
+      const response = await axios.get(`${API_URL}/user/${userId}`, {
+        params,
+        headers: getAuthHeaders(),
+      });
+      return response.data;
+    } catch (error) {
+      if (!shouldFallbackViewerParam(error, params)) throw error;
+      const retry = await axios.get(`${API_URL}/user/${userId}`, {
+        params: {page, limit},
+        headers: getAuthHeaders(),
+      });
+      return retry.data;
+    }
   },
 
   /**

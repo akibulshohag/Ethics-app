@@ -223,7 +223,11 @@ const OrderListScreen = ({ navigation }) => {
 
   const renderOrder = ({ item }) => {
     const customerName = item.user?.name || item.user?.email || 'Customer';
-    const ownerName = item.owner?.name || item.owner?.email || 'Restaurant';
+    const ownerName =
+      item.owner?.nickname ||
+      item.owner?.name ||
+      item.owner?.email ||
+      'Restaurant';
     const itemCount = (item.items || []).reduce(
       (s, i) => s + (i.quantity || 0),
       0,
@@ -232,7 +236,12 @@ const OrderListScreen = ({ navigation }) => {
     return (
       <View style={styles.card}>
         <View style={styles.cardRow}>
-          <Text style={styles.cardId}>#{item.id.slice(0, 8)}</Text>
+          <View style={styles.cardIdWrap}>
+            <Text style={styles.cardIdLabel}>Order ID</Text>
+            <Text style={styles.cardId} selectable>
+              #{String(item.id)}
+            </Text>
+          </View>
           <View
             style={[
               styles.badge,
@@ -242,6 +251,11 @@ const OrderListScreen = ({ navigation }) => {
             <Text style={styles.badgeText}>{statusToLabel(item.status)}</Text>
           </View>
         </View>
+        {isUser && (
+          <Text style={styles.cardRestaurant} numberOfLines={2}>
+            Restaurant: {ownerName}
+          </Text>
+        )}
         {role !== 'user' && (
           <Text style={styles.cardCustomer}>
             {role === 'owner'
@@ -323,7 +337,7 @@ const OrderListScreen = ({ navigation }) => {
               ))}
             </View>
           )}
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.chatBtn}
           onPress={() => {
             const partnerId = role === 'user' ? item.ownerId : item.userId;
@@ -347,7 +361,7 @@ const OrderListScreen = ({ navigation }) => {
             color={COLORS.primaryOrange}
           />
           <Text style={styles.chatBtnText}>Chat about this order</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
     );
   };
@@ -422,8 +436,8 @@ const OrderListScreen = ({ navigation }) => {
           >
             <View style={styles.reviewHandle} />
             <Text style={styles.reviewTitle}>Review Order</Text>
-            <Text style={styles.reviewSubTitle} numberOfLines={1}>
-              #{String(reviewOrder?.id || '').slice(0, 8)}
+            <Text style={styles.reviewSubTitle} selectable numberOfLines={2}>
+              #{String(reviewOrder?.id || '')}
             </Text>
 
             {reviewLoading ? (
@@ -534,13 +548,32 @@ const styles = StyleSheet.create({
   cardRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 6,
+    gap: 8,
+  },
+  cardIdWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardIdLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.gray500,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   cardId: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.gray700,
+  },
+  cardRestaurant: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
   },
   badge: {
     paddingHorizontal: 8,

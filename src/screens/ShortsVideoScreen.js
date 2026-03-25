@@ -42,6 +42,7 @@ import {
   unsubscribeFromChannel,
 } from '../services/channelService';
 import { setPlaylist } from '../services/playlistService';
+import { downloadVideo } from '../services/downloadService';
 import { submitReport } from '../services/reportService';
 import Toast from 'react-native-toast-message';
 import { navigationRef, safeImageUri } from '../utils/helper';
@@ -784,7 +785,10 @@ const mapShortToItem = s => {
       id: user.id || s.userId,
       username,
       avatar,
-      isSubscribed: false,
+      isSubscribed:
+        typeof user.isSubscribed === 'boolean'
+          ? user.isSubscribed
+          : !!s.isSubscribed,
     },
     description: s.description || s.title || '',
     hashtags: Array.isArray(s.tags)
@@ -1002,15 +1006,15 @@ const ShortsVideoScreen = ({ navigation }) => {
         const patchedClicked =
           initialShortItem && String(initialShortItem.id) === String(clicked.id)
             ? mapShortToItem({
-                ...clicked,
                 ...initialShortItem,
+                ...clicked,
                 user: {
-                  ...(clicked?.user && typeof clicked.user === 'object'
-                    ? clicked.user
-                    : {}),
                   ...(initialShortItem?.user &&
                   typeof initialShortItem.user === 'object'
                     ? initialShortItem.user
+                    : {}),
+                  ...(clicked?.user && typeof clicked.user === 'object'
+                    ? clicked.user
                     : {}),
                 },
                 id: clicked.id,
@@ -1025,15 +1029,15 @@ const ShortsVideoScreen = ({ navigation }) => {
           String(initialShortItem.id) === String(videos[0]?.id)
         ) {
           const patched = mapShortToItem({
-            ...videos[0],
             ...initialShortItem,
+            ...videos[0],
             user: {
-              ...(videos[0]?.user && typeof videos[0].user === 'object'
-                ? videos[0].user
-                : {}),
               ...(initialShortItem?.user &&
               typeof initialShortItem.user === 'object'
                 ? initialShortItem.user
+                : {}),
+              ...(videos[0]?.user && typeof videos[0].user === 'object'
+                ? videos[0].user
                 : {}),
             },
             id: videos[0].id,
@@ -1058,6 +1062,7 @@ const ShortsVideoScreen = ({ navigation }) => {
         page: 1,
         limit: 50,
         viewerRole: user?.role || 'user',
+        viewerUserId: user?.id,
       });
       if (res?.shorts?.length > 0) {
         const filtered = res.shorts.filter(
@@ -1149,6 +1154,38 @@ const ShortsVideoScreen = ({ navigation }) => {
   };
 
   const activeItem = displayVideos[activeVideoIndex];
+  const currentShortForComments = displayVideos[activeVideoIndex];
+
+  const handleCommentAdded = () => {
+    if (!currentShortForComments?.id) return;
+    setVideos(prev =>
+      prev.map(v => {
+        if (String(v.id) !== String(currentShortForComments.id)) return v;
+        const newCount = (v._commentCount ?? 0) + 1;
+        return {
+          ...v,
+          _commentCount: newCount,
+          commentsDisplay: formatCount(newCount),
+        };
+      }),
+    );
+  };
+
+  const handleCommentDeleted = (_wasTopLevel, deletedCount) => {
+    const dec = deletedCount || 1;
+    if (!currentShortForComments?.id) return;
+    setVideos(prev =>
+      prev.map(v => {
+        if (String(v.id) !== String(currentShortForComments.id)) return v;
+        const newCount = Math.max(0, (v._commentCount ?? 0) - dec);
+        return {
+          ...v,
+          _commentCount: newCount,
+          commentsDisplay: formatCount(newCount),
+        };
+      }),
+    );
+  };
 
   const handleShare = async item => {
     if (!user?.id) {
@@ -1213,15 +1250,18 @@ const ShortsVideoScreen = ({ navigation }) => {
       return;
     }
     try {
-      await Share.share({ message: String(url), url: String(url) });
+      await downloadVideo({
+        id: t?.id,
+        title: t?.title || t?.description || 'Short',
+        videoUrl: String(url),
+        thumbnail:
+          t?.thumbnailUrl || t?.thumbnail || t?.coverUrl || t?.poster || '',
+        channelName: t?.user?.name || t?.user?.username || 'Channel',
+        duration: Number(t?.duration || 0),
+      });
+      Toast.show({ type: 'success', text1: 'Video downloaded' });
     } catch (e) {
-      if (e?.message !== 'User did not share') {
-        try {
-          await Linking.openURL(String(url));
-        } catch (_) {
-          Toast.show({ type: 'error', text1: 'Could not open video' });
-        }
-      }
+      Toast.show({ type: 'error', text1: e?.message || 'Download failed' });
     }
   };
 
@@ -1580,6 +1620,8 @@ const ShortsVideoScreen = ({ navigation }) => {
             0,
         }}
         user={user}
+        onCommentAdded={handleCommentAdded}
+        onCommentDeleted={handleCommentDeleted}
       />
       <Modal
         animationType="slide"

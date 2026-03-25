@@ -122,6 +122,8 @@ const mapToDisplayItem = (v, type) => {
       channelAvatar: u.channelAvatar || channelAvatar,
       profileImage: u.profileImage || channelAvatar,
       photoUrl: u.photoUrl || channelAvatar,
+      isSubscribed:
+        typeof u.isSubscribed === 'boolean' ? u.isSubscribed : !!v.isSubscribed,
     },
     userId: v.userId || u.id,
     creatorRole: u.role != null ? String(u.role).toLowerCase() : undefined,
@@ -209,6 +211,10 @@ const HomeOneScreen = () => {
     loading: false,
     toggling: false,
   });
+  const [resDetailRating, setResDetailRating] = useState({
+    average: 0,
+    reviewCount: 0,
+  });
   /** When opening video from Library / UserViews Videos, Back returns there */
   const libraryDetailReturnRef = useRef(null);
 
@@ -219,8 +225,7 @@ const HomeOneScreen = () => {
     !!user?.id &&
     !!videoChannelOwnerId &&
     String(videoChannelOwnerId) === String(user.id);
-  const showSubscribeBtn =
-    !!videoChannelOwnerId && !isOwnChannelVideo;
+  const showSubscribeBtn = !!videoChannelOwnerId && !isOwnChannelVideo;
 
   const saveLocationSelection = useCallback(async (coords, label) => {
     try {
@@ -521,7 +526,12 @@ const HomeOneScreen = () => {
     const lat = selectedLocation.lat;
     const lng = selectedLocation.lng;
     const role = viewerRole(user);
-    const baseParams = { page: 1, limit: 50, sort: 'latest', viewerRole: role };
+    const baseParams = {
+      page: 1,
+      limit: 50,
+      sort: 'latest',
+      viewerRole: role,
+    };
     const searchTerm = searchDebounced?.trim() || undefined;
     const videoParams = {
       ...baseParams,
@@ -534,6 +544,7 @@ const HomeOneScreen = () => {
     };
     const shortParams = {
       ...baseParams,
+      viewerUserId: user?.id,
       nearbyLat: lat,
       nearbyLng: lng,
       radiusKm: 50,
@@ -636,10 +647,10 @@ const HomeOneScreen = () => {
             Array.isArray(u?.photos) && u.photos.length > 0
               ? u.photos
               : Array.isArray(p?.photos)
-                ? p.photos
-                : pPhoto
-                  ? [{ src: pPhoto }]
-                  : [],
+              ? p.photos
+              : pPhoto
+              ? [{ src: pPhoto }]
+              : [],
         };
         return mapToDisplayItem(
           {
@@ -943,6 +954,7 @@ const HomeOneScreen = () => {
         loading: false,
         toggling: false,
       });
+      setResDetailRating({ average: 0, reviewCount: 0 });
       return;
     }
     if (!videoChannelOwnerId || isOwnChannelVideo) {
@@ -951,6 +963,7 @@ const HomeOneScreen = () => {
         loading: false,
         toggling: false,
       });
+      setResDetailRating({ average: 0, reviewCount: 0 });
       return;
     }
     let cancelled = false;
@@ -958,10 +971,25 @@ const HomeOneScreen = () => {
     getChannelProfile(videoChannelOwnerId, user?.id)
       .then(p => {
         if (!cancelled) {
+          const avgRaw =
+            p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
+          const countRaw =
+            p?.reviewCount ??
+            p?.reviewsCount ??
+            p?.totalReviews ??
+            p?.ratingCount;
+          const avg = Number(avgRaw);
+          const count = Number(countRaw);
           setResDetailSubscribe({
             isSubscribed: !!p?.isSubscribed,
             loading: false,
             toggling: false,
+          });
+          setResDetailRating({
+            average: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
+            reviewCount: Number.isFinite(count)
+              ? Math.max(0, Math.floor(count))
+              : 0,
           });
         }
       })
@@ -972,6 +1000,7 @@ const HomeOneScreen = () => {
             loading: false,
             toggling: false,
           });
+          setResDetailRating({ average: 0, reviewCount: 0 });
         }
       });
     return () => {
@@ -1951,308 +1980,368 @@ const HomeOneScreen = () => {
 
   const renderRestaurantDetail = () => (
     <View style={styles.resContainer}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.resHeader}>
-          <TouchableOpacity
-            onPress={handleRestaurantDetailBack}
-            style={styles.resBackBtn}
-          >
-            <Icon name="chevron-left" size={20} color="#FFF" />
-            <Text style={styles.resBackText}>Back</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={openHomeMoreFromSelected}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Icon name="dots-vertical" size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.resTitleRow}>
-          <View>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => {
-                const ownerId =
-                  selectedItem?.user?.id ?? selectedItem?.userId ?? null;
-                if (ownerId) {
-                  navigation.navigate('UserViewsScreen', { userId: ownerId });
-                }
-              }}
-              disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
-            >
-              <Text style={styles.resMainTitle}>
-                {selectedItem?.user?.nickname ||
-                  selectedItem?.user?.name ||
-                  selectedItem?.title ||
-                  '—'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={styles.resSubLoc}>{selectedItem?.location}</Text>
-          </View>
-          {(selectedItem?.creatorRole === 'owner' ||
-            selectedItem?.user?.role === 'owner' ||
-            selectedItem?.userId ||
-            selectedItem?.user?.id) &&
-            (!user?.token ? (
+      {(() => {
+        const avgRaw =
+          selectedItem?.user?.averageRating ??
+          selectedItem?.user?.ratingAverage ??
+          selectedItem?.user?.ratingAvg ??
+          selectedItem?.user?.rating ??
+          selectedItem?.averageRating ??
+          selectedItem?.ratingAverage ??
+          selectedItem?.ratingAvg ??
+          selectedItem?.rating;
+        const reviewRaw =
+          selectedItem?.user?.reviewCount ??
+          selectedItem?.user?.reviewsCount ??
+          selectedItem?.user?.totalReviews ??
+          selectedItem?.user?.ratingCount ??
+          selectedItem?.reviewCount ??
+          selectedItem?.reviewsCount ??
+          selectedItem?.totalReviews ??
+          selectedItem?.ratingCount;
+        const avg = Number.isFinite(Number(avgRaw))
+          ? Math.max(0, Math.min(5, Number(avgRaw)))
+          : 0;
+        const reviews = Number.isFinite(Number(reviewRaw))
+          ? Math.max(0, Math.floor(Number(reviewRaw)))
+          : 0;
+        const avgDisplay =
+          resDetailRating.average > 0 ? resDetailRating.average : avg;
+        const reviewsDisplay =
+          resDetailRating.reviewCount > 0
+            ? resDetailRating.reviewCount
+            : reviews;
+        const rounded = Math.round(avgDisplay);
+        return (
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.resHeader}>
               <TouchableOpacity
-                style={styles.resOrderBtn}
-                onPress={() => {
-                  const ownerId =
-                    selectedItem?.user?.id ?? selectedItem?.userId ?? null;
-                  navigation.navigate('HomeSevenScreen', {
-                    returnToOrder: true,
-                    ownerUserId: ownerId,
-                  });
-                }}
+                onPress={handleRestaurantDetailBack}
+                style={styles.resBackBtn}
               >
-                <Text style={styles.resOrderText}>Order Now</Text>
+                <Icon name="chevron-left" size={20} color="#FFF" />
+                <Text style={styles.resBackText}>Back</Text>
               </TouchableOpacity>
-            ) : (
               <TouchableOpacity
-                style={styles.resOrderBtn}
-                onPress={() => {
-                  const ownerId =
-                    selectedItem?.user?.id ?? selectedItem?.userId ?? null;
-                  if (ownerId) {
-                    navigation.navigate('HomeThreeScreen', {
-                      ownerId,
-                      ownerName:
-                        selectedItem?.user?.nickname ||
+                onPress={openHomeMoreFromSelected}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Icon name="dots-vertical" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.resTitleRow}>
+              <View>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    const ownerId =
+                      selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+                    if (ownerId) {
+                      navigation.navigate('UserViewsScreen', {
+                        userId: ownerId,
+                      });
+                    }
+                  }}
+                  disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
+                >
+                  <View style={styles.resNameRatingRow}>
+                    <Text style={styles.resMainTitle}>
+                      {selectedItem?.user?.nickname ||
                         selectedItem?.user?.name ||
-                        '',
-                      title: selectedItem?.title,
-                      location:
-                        selectedItem?.location ||
-                        selectedItem?.creatorAddress ||
-                        '',
-                    });
-                  } else {
-                    navigation.navigate('HomeThreeScreen');
-                  }
-                }}
-              >
-                <Text style={styles.resOrderText}>Order Now</Text>
-              </TouchableOpacity>
-            ))}
-        </View>
-
-        <View style={styles.resVideoCard}>
-          {selectedItem?.videoUrl &&
-          String(selectedItem.videoUrl).trim().startsWith('http') ? (
-            <>
-              <Video
-                ref={resVideoRef}
-                key={restaurantVideoKey}
-                source={{
-                  uri: String(selectedItem.videoUrl).trim(),
-                }}
-                poster={safeImageUri(
-                  selectedItem?.img,
-                  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                        selectedItem?.title ||
+                        '—'}
+                    </Text>
+                {(String(selectedItem?.creatorRole || '').toLowerCase() ===
+                  'owner' ||
+                  String(selectedItem?.user?.role || '').toLowerCase() ===
+                    'owner') && (
+                  <View style={styles.resRatingRow}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <Icon
+                        key={`res-rating-${star}`}
+                        name={star <= rounded ? 'star' : 'star-outline'}
+                        size={13}
+                        color={star <= rounded ? '#FFE082' : '#C7C7C7'}
+                      />
+                    ))}
+                    <Text style={styles.resRatingText}>
+                      ({reviewsDisplay}{' '}
+                      {reviewsDisplay === 1 ? 'review' : 'reviews'})
+                    </Text>
+                  </View>
                 )}
-                posterResizeMode="cover"
-                style={styles.resVideoImg}
-                resizeMode="cover"
-                paused={videoPaused}
-                repeat
-                ignoreSilentSwitch="ignore"
-                controls={false}
-                playInBackground={false}
-                playWhenInactive={false}
-                onLoadStart={() => setVideoLoading(true)}
-                onLoad={data => {
-                  setVideoLoading(false);
-                  setVideoError(null);
-                  const dur = data?.duration || 0;
-                  setResVideoProgress(p => ({ ...p, duration: dur }));
-                  setVideoPaused(false);
-                }}
-                onProgress={data => {
-                  if (resSeekingRef.current) return;
-                  const now = Date.now();
-                  if (now - resProgressUpdateRef.current < 500) return;
-                  resProgressUpdateRef.current = now;
-                  setResVideoProgress(p => ({
-                    currentTime: data?.currentTime ?? p.currentTime,
-                    duration:
-                      data?.seekableDuration || data?.duration || p.duration,
-                  }));
-                }}
-                onError={e => {
-                  setVideoLoading(false);
-                  setVideoError(getVideoErrorMessage(e));
-                }}
-              />
-
-              {videoLoading && (
-                <View style={styles.resVideoLoadingOverlay}>
-                  <ActivityIndicator size="small" color="#F5A623" />
-                </View>
-              )}
-              {videoError && (
-                <View style={styles.resVideoErrorOverlay}>
-                  <Text style={styles.resVideoErrorText} numberOfLines={2}>
-                    {videoError}
-                  </Text>
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.resSubLoc}>{selectedItem?.location}</Text>
+              </View>
+              {(selectedItem?.creatorRole === 'owner' ||
+                selectedItem?.user?.role === 'owner' ||
+                selectedItem?.userId ||
+                selectedItem?.user?.id) &&
+                (!user?.token ? (
                   <TouchableOpacity
-                    style={styles.resRetryBtn}
+                    style={styles.resOrderBtn}
                     onPress={() => {
-                      setVideoError(null);
-                      setVideoLoading(true);
-                      setVideoPaused(true);
-                      setRestaurantVideoKey(k => k + 1);
-                      setTimeout(() => setVideoPaused(false), 200);
+                      const ownerId =
+                        selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+                      navigation.navigate('HomeSevenScreen', {
+                        returnToOrder: true,
+                        ownerUserId: ownerId,
+                      });
                     }}
                   >
-                    <Icon name="refresh" size={20} color="#FFF" />
-                    <Text style={styles.resRetryText}>Retry</Text>
+                    <Text style={styles.resOrderText}>Order Now</Text>
                   </TouchableOpacity>
-                </View>
-              )}
-              <Pressable
-                style={styles.resPlayOverlay}
-                onPress={() => !videoError && setVideoPaused(p => !p)}
-              >
-                {!videoLoading && !videoError && (
-                  <Icon
-                    name={videoPaused ? 'play-circle' : 'pause-circle'}
-                    size={60}
-                    color="rgba(255,255,255,0.9)"
-                  />
-                )}
-              </Pressable>
-
-              {!videoError && (
-                <View style={styles.resProgressBarContainer}>
-                  <Slider
-                    style={styles.resProgressSlider}
-                    value={resDisplayTime}
-                    minimumValue={0}
-                    maximumValue={Math.max(0.1, resVideoProgress.duration)}
-                    minimumTrackTintColor="#fff"
-                    maximumTrackTintColor="rgba(255,255,255,0.4)"
-                    thumbTintColor="#fff"
-                    onSlidingStart={() => {
-                      setResIsSliding(true);
-                      setResSlidingValue(resVideoProgress.currentTime);
-                    }}
-                    onValueChange={val => setResSlidingValue(val)}
-                    onSlidingComplete={val => {
-                      if (
-                        !resVideoRef.current ||
-                        resVideoProgress.duration <= 0
-                      ) {
-                        setResIsSliding(false);
-                        return;
+                ) : (
+                  <TouchableOpacity
+                    style={styles.resOrderBtn}
+                    onPress={() => {
+                      const ownerId =
+                        selectedItem?.user?.id ?? selectedItem?.userId ?? null;
+                      if (ownerId) {
+                        navigation.navigate('HomeThreeScreen', {
+                          ownerId,
+                          ownerName:
+                            selectedItem?.user?.nickname ||
+                            selectedItem?.user?.name ||
+                            '',
+                          title: selectedItem?.title,
+                          location:
+                            selectedItem?.location ||
+                            selectedItem?.creatorAddress ||
+                            '',
+                        });
+                      } else {
+                        navigation.navigate('HomeThreeScreen');
                       }
-                      const clamped = Math.max(
-                        0,
-                        Math.min(val, resVideoProgress.duration),
-                      );
-                      resSeekingRef.current = true;
-                      resVideoRef.current.seek(clamped);
+                    }}
+                  >
+                    <Text style={styles.resOrderText}>Order Now</Text>
+                  </TouchableOpacity>
+                ))}
+            </View>
+
+            <View style={styles.resVideoCard}>
+              {selectedItem?.videoUrl &&
+              String(selectedItem.videoUrl).trim().startsWith('http') ? (
+                <>
+                  <Video
+                    ref={resVideoRef}
+                    key={restaurantVideoKey}
+                    source={{
+                      uri: String(selectedItem.videoUrl).trim(),
+                    }}
+                    poster={safeImageUri(
+                      selectedItem?.img,
+                      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                    )}
+                    posterResizeMode="cover"
+                    style={styles.resVideoImg}
+                    resizeMode="cover"
+                    paused={videoPaused}
+                    repeat
+                    ignoreSilentSwitch="ignore"
+                    controls={false}
+                    playInBackground={false}
+                    playWhenInactive={false}
+                    onLoadStart={() => setVideoLoading(true)}
+                    onLoad={data => {
+                      setVideoLoading(false);
+                      setVideoError(null);
+                      const dur = data?.duration || 0;
+                      setResVideoProgress(p => ({ ...p, duration: dur }));
+                      setVideoPaused(false);
+                    }}
+                    onProgress={data => {
+                      if (resSeekingRef.current) return;
+                      const now = Date.now();
+                      if (now - resProgressUpdateRef.current < 500) return;
+                      resProgressUpdateRef.current = now;
                       setResVideoProgress(p => ({
-                        ...p,
-                        currentTime: clamped,
+                        currentTime: data?.currentTime ?? p.currentTime,
+                        duration:
+                          data?.seekableDuration ||
+                          data?.duration ||
+                          p.duration,
                       }));
-                      resProgressUpdateRef.current = Date.now();
-                      setTimeout(() => {
-                        resSeekingRef.current = false;
-                      }, 300);
-                      setResIsSliding(false);
+                    }}
+                    onError={e => {
+                      setVideoLoading(false);
+                      setVideoError(getVideoErrorMessage(e));
                     }}
                   />
-                  <Text style={styles.resTimeText}>
-                    {formatTime(resDisplayTime)} /{' '}
-                    {formatTime(resVideoProgress.duration)}
-                  </Text>
-                </View>
+
+                  {videoLoading && (
+                    <View style={styles.resVideoLoadingOverlay}>
+                      <ActivityIndicator size="small" color="#F5A623" />
+                    </View>
+                  )}
+                  {videoError && (
+                    <View style={styles.resVideoErrorOverlay}>
+                      <Text style={styles.resVideoErrorText} numberOfLines={2}>
+                        {videoError}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.resRetryBtn}
+                        onPress={() => {
+                          setVideoError(null);
+                          setVideoLoading(true);
+                          setVideoPaused(true);
+                          setRestaurantVideoKey(k => k + 1);
+                          setTimeout(() => setVideoPaused(false), 200);
+                        }}
+                      >
+                        <Icon name="refresh" size={20} color="#FFF" />
+                        <Text style={styles.resRetryText}>Retry</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <Pressable
+                    style={styles.resPlayOverlay}
+                    onPress={() => !videoError && setVideoPaused(p => !p)}
+                  >
+                    {!videoLoading && !videoError && (
+                      <Icon
+                        name={videoPaused ? 'play-circle' : 'pause-circle'}
+                        size={60}
+                        color="rgba(255,255,255,0.9)"
+                      />
+                    )}
+                  </Pressable>
+
+                  {!videoError && (
+                    <View style={styles.resProgressBarContainer}>
+                      <Slider
+                        style={styles.resProgressSlider}
+                        value={resDisplayTime}
+                        minimumValue={0}
+                        maximumValue={Math.max(0.1, resVideoProgress.duration)}
+                        minimumTrackTintColor="#fff"
+                        maximumTrackTintColor="rgba(255,255,255,0.4)"
+                        thumbTintColor="#fff"
+                        onSlidingStart={() => {
+                          setResIsSliding(true);
+                          setResSlidingValue(resVideoProgress.currentTime);
+                        }}
+                        onValueChange={val => setResSlidingValue(val)}
+                        onSlidingComplete={val => {
+                          if (
+                            !resVideoRef.current ||
+                            resVideoProgress.duration <= 0
+                          ) {
+                            setResIsSliding(false);
+                            return;
+                          }
+                          const clamped = Math.max(
+                            0,
+                            Math.min(val, resVideoProgress.duration),
+                          );
+                          resSeekingRef.current = true;
+                          resVideoRef.current.seek(clamped);
+                          setResVideoProgress(p => ({
+                            ...p,
+                            currentTime: clamped,
+                          }));
+                          resProgressUpdateRef.current = Date.now();
+                          setTimeout(() => {
+                            resSeekingRef.current = false;
+                          }, 300);
+                          setResIsSliding(false);
+                        }}
+                      />
+                      <Text style={styles.resTimeText}>
+                        {formatTime(resDisplayTime)} /{' '}
+                        {formatTime(resVideoProgress.duration)}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Image
+                    source={{
+                      uri: safeImageUri(
+                        selectedItem?.img,
+                        'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                      ),
+                    }}
+                    style={styles.resVideoImg}
+                  />
+                  <View style={styles.resPlayOverlay}>
+                    <Icon
+                      name="play-circle"
+                      size={60}
+                      color="rgba(255,255,255,0.8)"
+                    />
+                  </View>
+                </>
               )}
-            </>
-          ) : (
-            <>
-              <Image
-                source={{
-                  uri: safeImageUri(
-                    selectedItem?.img,
-                    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-                  ),
-                }}
-                style={styles.resVideoImg}
-              />
-              <View style={styles.resPlayOverlay}>
+            </View>
+
+            <View style={styles.resActionsRow}>
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={handleRestaurantLike}
+                activeOpacity={0.7}
+              >
                 <Icon
-                  name="play-circle"
-                  size={60}
-                  color="rgba(255,255,255,0.8)"
+                  name={selectedItem?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+                  size={22}
+                  color="#111"
                 />
-              </View>
-            </>
-          )}
-        </View>
+                <Text style={styles.resActionText}>
+                  {formatCount(selectedItem?.likeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
 
-        <View style={styles.resActionsRow}>
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={handleRestaurantLike}
-            activeOpacity={0.7}
-          >
-            <Icon
-              name={selectedItem?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
-              size={22}
-              color="#111"
-            />
-            <Text style={styles.resActionText}>
-              {formatCount(selectedItem?.likeCount ?? 0)}
-            </Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={handleRestaurantDislike}
+                activeOpacity={0.7}
+              >
+                <Icon
+                  name={
+                    selectedItem?.isDisliked
+                      ? 'thumb-down'
+                      : 'thumb-down-outline'
+                  }
+                  size={22}
+                  color="#111"
+                />
+                <Text style={styles.resActionText}>
+                  {formatCount(selectedItem?.dislikeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={handleRestaurantDislike}
-            activeOpacity={0.7}
-          >
-            <Icon
-              name={
-                selectedItem?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
-              }
-              size={22}
-              color="#111"
-            />
-            <Text style={styles.resActionText}>
-              {formatCount(selectedItem?.dislikeCount ?? 0)}
-            </Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={() => {
+                  if (!user?.id) {
+                    navigation.navigate('HomeSevenScreen');
+                    return;
+                  }
+                  if (!selectedItem?.id) return;
+                  setResCommentsVisible(true);
+                }}
+                activeOpacity={0.7}
+                disabled={!selectedItem?.id}
+              >
+                <Icon name="comment-text-outline" size={22} color="#111" />
+                <Text style={styles.resActionText}>
+                  {formatCount(selectedItem?.commentCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={() => {
-              if (!user?.id) {
-                navigation.navigate('HomeSevenScreen');
-                return;
-              }
-              if (!selectedItem?.id) return;
-              setResCommentsVisible(true);
-            }}
-            activeOpacity={0.7}
-            disabled={!selectedItem?.id}
-          >
-            <Icon name="comment-text-outline" size={22} color="#111" />
-            <Text style={styles.resActionText}>
-              {formatCount(selectedItem?.commentCount ?? 0)}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={handleRestaurantChat}
-            activeOpacity={0.7}
-          >
-            <Icon name="chat-outline" size={22} color="#111" />
-            <Text style={styles.resActionText}>Chat</Text>
-          </TouchableOpacity>
-          {/* 
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={handleRestaurantChat}
+                activeOpacity={0.7}
+              >
+                <Icon name="chat-outline" size={22} color="#111" />
+                <Text style={styles.resActionText}>Chat</Text>
+              </TouchableOpacity>
+              {/* 
           <TouchableOpacity
             style={styles.resActionItem}
             onPress={handleRestaurantDownload}
@@ -2269,34 +2358,34 @@ const HomeOneScreen = () => {
             </Text>
           </TouchableOpacity> */}
 
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={handleRestaurantShare}
-            activeOpacity={0.7}
-          >
-            <Icon name="share-outline" size={22} color="#111" />
-            <Text style={styles.resActionText}>Share</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={handleRestaurantShare}
+                activeOpacity={0.7}
+              >
+                <Icon name="share-outline" size={22} color="#111" />
+                <Text style={styles.resActionText}>Share</Text>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={handleRestaurantSave}
-            activeOpacity={0.7}
-          >
-            <Icon name="bookmark-outline" size={22} color="#111" />
-            <Text style={styles.resActionText}>Save</Text>
-          </TouchableOpacity>
-          <View style={styles.resActionItem} pointerEvents="none">
-            <Icon name="eye-outline" size={22} color="#111" />
-            <Text style={styles.resActionText}>
-              {formatCount(
-                selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0,
-              )}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.resSocialRow}>
-          {/* <View style={styles.resIconGroup}>
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={handleRestaurantSave}
+                activeOpacity={0.7}
+              >
+                <Icon name="bookmark-outline" size={22} color="#111" />
+                <Text style={styles.resActionText}>Save</Text>
+              </TouchableOpacity>
+              <View style={styles.resActionItem} pointerEvents="none">
+                <Icon name="eye-outline" size={22} color="#111" />
+                <Text style={styles.resActionText}>
+                  {formatCount(
+                    selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0,
+                  )}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.resSocialRow}>
+              {/* <View style={styles.resIconGroup}>
             {[
               { type: 'instagram', icon: 'instagram' },
               { type: 'facebook', icon: 'facebook' },
@@ -2325,59 +2414,60 @@ const HomeOneScreen = () => {
               );
             })}
           </View> */}
-          <View style={styles.resBookGalleryRow}>
-            <TouchableOpacity
-              style={[styles.resRowBtn, styles.resRowBtnPrimary]}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.resRowBtnTextLight}>Book Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.resRowBtn, styles.resRowBtnDark]}
-              onPress={openGalleryModal}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.resRowBtnTextLight}>Gallery</Text>
-            </TouchableOpacity>
-            {showSubscribeBtn ? (
-              <TouchableOpacity
-                style={[
-                  styles.resRowBtn,
-                  resDetailSubscribe.isSubscribed
-                    ? styles.resRowBtnSubscribed
-                    : styles.resRowBtnSubscribeOutline,
-                ]}
-                onPress={handleRestaurantSubscribe}
-                activeOpacity={0.85}
-                disabled={
-                  resDetailSubscribe.loading || resDetailSubscribe.toggling
-                }
-              >
-                {resDetailSubscribe.loading || resDetailSubscribe.toggling ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={
-                      resDetailSubscribe.isSubscribed ? '#555' : '#F5A623'
-                    }
-                  />
-                ) : (
-                  <Text
-                    style={
+              <View style={styles.resBookGalleryRow}>
+                <TouchableOpacity
+                  style={[styles.resRowBtn, styles.resRowBtnPrimary]}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.resRowBtnTextLight}>Book Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.resRowBtn, styles.resRowBtnDark]}
+                  onPress={openGalleryModal}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.resRowBtnTextLight}>Gallery</Text>
+                </TouchableOpacity>
+                {showSubscribeBtn ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.resRowBtn,
                       resDetailSubscribe.isSubscribed
-                        ? styles.resRowBtnTextMuted
-                        : styles.resRowBtnTextOrange
+                        ? styles.resRowBtnSubscribed
+                        : styles.resRowBtnSubscribeOutline,
+                    ]}
+                    onPress={handleRestaurantSubscribe}
+                    activeOpacity={0.85}
+                    disabled={
+                      resDetailSubscribe.loading || resDetailSubscribe.toggling
                     }
                   >
-                    {resDetailSubscribe.isSubscribed
-                      ? 'Subscribed'
-                      : 'Subscribe'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </View>
-        {/* <Text style={styles.webText}>
+                    {resDetailSubscribe.loading ||
+                    resDetailSubscribe.toggling ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={
+                          resDetailSubscribe.isSubscribed ? '#555' : '#F5A623'
+                        }
+                      />
+                    ) : (
+                      <Text
+                        style={
+                          resDetailSubscribe.isSubscribed
+                            ? styles.resRowBtnTextMuted
+                            : styles.resRowBtnTextOrange
+                        }
+                      >
+                        {resDetailSubscribe.isSubscribed
+                          ? 'Subscribed'
+                          : 'Subscribe'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+            {/* <Text style={styles.webText}>
           {(
             selectedItem?.user?.socialLinks ||
             selectedItem?.creatorSocialLinks ||
@@ -2391,62 +2481,64 @@ const HomeOneScreen = () => {
             '—'}
         </Text> */}
 
-        <View style={styles.descContainer}>
-          <Text style={styles.sectionTitle}>Description</Text>
-          <View style={styles.descBox}>
-            <Text style={styles.descText}>
-              {selectedItem?._campaignVideoDetail
-                ? selectedItem?.description &&
-                  String(selectedItem.description).trim()
-                  ? String(selectedItem.description).trim()
-                  : 'No description.'
-                : selectedItem?.description ||
-                  selectedItem?.user?.channelAbout ||
-                  'No description.'}
-            </Text>
-          </View>
-        </View>
+            <View style={styles.descContainer}>
+              <Text style={styles.sectionTitle}>Description</Text>
+              <View style={styles.descBox}>
+                <Text style={styles.descText}>
+                  {selectedItem?._campaignVideoDetail
+                    ? selectedItem?.description &&
+                      String(selectedItem.description).trim()
+                      ? String(selectedItem.description).trim()
+                      : 'No description.'
+                    : selectedItem?.description ||
+                      selectedItem?.user?.channelAbout ||
+                      'No description.'}
+                </Text>
+              </View>
+            </View>
 
-        <View style={styles.contactContainer}>
-          <Text style={styles.sectionTitle}>
-            Phone :{' '}
-            <Text style={{ fontWeight: 'normal' }}>
-              {selectedItem?.user?.phone || '—'}
-            </Text>
-          </Text>
-          <Text style={styles.contactEmail}>
-            Email : {selectedItem?.user?.email || '—'}
-          </Text>
-          <Text style={styles.contactAddr}>
-            Address :{' '}
-            {selectedItem?.location ||
-              selectedItem?.creatorAddress ||
-              selectedItem?.user?.address ||
-              '—'}
-          </Text>
-          {selectedItem?.creatorLatitude != null &&
-          selectedItem?.creatorLongitude != null &&
-          Number.isFinite(Number(selectedItem.creatorLatitude)) &&
-          Number.isFinite(Number(selectedItem.creatorLongitude)) ? (
-            <TouchableOpacity
-              onPress={() =>
-                Linking.openURL(
-                  `https://www.google.com/maps?q=${Number(
-                    selectedItem.creatorLatitude,
-                  )},${Number(selectedItem.creatorLongitude)}`,
-                )
-              }
-              activeOpacity={0.85}
-            >
-              <Text style={styles.contactMapLink}>
-                Open location on map ·{' '}
-                {Number(selectedItem.creatorLatitude).toFixed(5)},{' '}
-                {Number(selectedItem.creatorLongitude).toFixed(5)}
+            <View style={styles.contactContainer}>
+              <Text style={styles.sectionTitle}>
+                Phone :{' '}
+                <Text style={{ fontWeight: 'normal' }}>
+                  {selectedItem?.user?.phone || '—'}
+                </Text>
               </Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </ScrollView>
+              <Text style={styles.contactEmail}>
+                Email : {selectedItem?.user?.email || '—'}
+              </Text>
+              <Text style={styles.contactAddr}>
+                Address :{' '}
+                {selectedItem?.location ||
+                  selectedItem?.creatorAddress ||
+                  selectedItem?.user?.address ||
+                  '—'}
+              </Text>
+              {selectedItem?.creatorLatitude != null &&
+              selectedItem?.creatorLongitude != null &&
+              Number.isFinite(Number(selectedItem.creatorLatitude)) &&
+              Number.isFinite(Number(selectedItem.creatorLongitude)) ? (
+                <TouchableOpacity
+                  onPress={() =>
+                    Linking.openURL(
+                      `https://www.google.com/maps?q=${Number(
+                        selectedItem.creatorLatitude,
+                      )},${Number(selectedItem.creatorLongitude)}`,
+                    )
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.contactMapLink}>
+                    Open location on map ·{' '}
+                    {Number(selectedItem.creatorLatitude).toFixed(5)},{' '}
+                    {Number(selectedItem.creatorLongitude).toFixed(5)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </ScrollView>
+        );
+      })()}
     </View>
   );
 
@@ -3314,7 +3406,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
   },
+  resNameRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: 220,
+  },
   resMainTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  resRatingRow: {
+    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  resRatingText: {
+    marginLeft: 4,
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '600',
+  },
   resSubLoc: { fontSize: 12, color: '#999', width: 200 },
   resOrderBtn: {
     backgroundColor: '#F5A623',

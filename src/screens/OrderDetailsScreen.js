@@ -139,6 +139,12 @@ export default function OrderDetailsScreen() {
     });
   };
 
+  const handleOwnerCall = () => {
+    const ownerPhone = order?.owner?.phone || '';
+    if (!ownerPhone) return;
+    Linking.openURL(`tel:${String(ownerPhone).replace(/\s/g, '')}`);
+  };
+
   const handleReject = () => {
     Alert.alert('Reject order', 'Cancel this order?', [
       { text: 'No', style: 'cancel' },
@@ -208,10 +214,40 @@ export default function OrderDetailsScreen() {
     order.user?.photos?.[0],
     'https://i.pravatar.cc/150?u=user',
   );
+  const ownerName =
+    order?.owner?.nickname ||
+    order?.owner?.name ||
+    order?.owner?.email ||
+    'Restaurant';
+  const ownerPhone = order?.owner?.phone || '';
+  const ownerPhotoRaw =
+    Array.isArray(order?.owner?.photos) && order.owner.photos.length > 0
+      ? order.owner.photos[0]
+      : null;
+  const ownerAvatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    ownerName,
+  )}&background=333&color=fff`;
+  const ownerAvatarUri = safeImageUri(ownerPhotoRaw, ownerAvatarFallback);
+
+  const openOwnerChat = () => {
+    const ownerId = order?.ownerId || order?.owner?.id;
+    if (!ownerId) return;
+    navigation.navigate('ChatScreen', {
+      partnerId: ownerId,
+      partnerName: ownerName,
+      partnerAvatar: ownerPhotoRaw,
+      orderId: order?.id,
+      orderDetails: {
+        itemName: order?.items?.[0]?.itemName,
+        itemImage: null,
+      },
+    });
+  };
+
   const items = order.items || [];
   const totalAmount = Number(order.totalAmount || 0);
   const currency = '€';
-  const displayOrderId = order.id ? `#${String(order.id).slice(0, 12)}` : '—';
+  const displayOrderId = order.id ? `#${String(order.id)}` : '—';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -259,7 +295,7 @@ export default function OrderDetailsScreen() {
                   </View>
                 ) : null}
               </View>
-              <View style={styles.actionIcons}>
+              {/* <View style={styles.actionIcons}>
                 <TouchableOpacity style={styles.iconCircle} onPress={openChat}>
                   <Icon name="message-text" size={18} color="white" />
                 </TouchableOpacity>
@@ -269,11 +305,40 @@ export default function OrderDetailsScreen() {
                 >
                   <Icon name="phone" size={18} color="white" />
                 </TouchableOpacity>
-              </View>
+              </View> */}
             </View>
           </View>
 
           <View style={styles.addressSection}>
+            <Text style={styles.sectionLabel}>Owner / Restaurant</Text>
+            <View style={styles.ownerInfoRow}>
+              <Image
+                source={{ uri: ownerAvatarUri }}
+                style={styles.ownerAvatar}
+              />
+              <View style={styles.ownerDetails}>
+                <Text style={styles.ownerName}>{ownerName}</Text>
+                <Text style={styles.ownerPhone}>
+                  {ownerPhone || 'Phone not available'}
+                </Text>
+              </View>
+              <View style={styles.actionIcons}>
+                <TouchableOpacity
+                  style={styles.iconCircle}
+                  onPress={openOwnerChat}
+                  disabled={!order?.ownerId && !order?.owner?.id}
+                >
+                  <Icon name="message-text" size={18} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconCircle}
+                  onPress={handleOwnerCall}
+                  disabled={!ownerPhone}
+                >
+                  <Icon name="phone" size={18} color="white" />
+                </TouchableOpacity>
+              </View>
+            </View>
             <Text style={styles.sectionLabel}>Delivery Address</Text>
             <Text style={styles.addressText}>
               {order.deliveryAddress || '—'}
@@ -425,6 +490,34 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   addressSection: { padding: 20 },
+  ownerInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 16,
+  },
+  ownerAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+  },
+  ownerDetails: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 10,
+  },
+  ownerName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1C1E',
+  },
+  ownerPhone: {
+    marginTop: 2,
+    color: '#667085',
+    fontSize: 13,
+  },
   sectionLabel: { fontSize: 16, fontWeight: '600', color: '#1A1C1E' },
   addressText: { color: '#667085', marginTop: 4 },
   timeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },

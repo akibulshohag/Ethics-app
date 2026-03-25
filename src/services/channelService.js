@@ -38,6 +38,25 @@ export const getChannelProfile = async (channelUserId, currentUserId) => {
 };
 
 /**
+ * Paginated restaurant order reviews for a channel (owner).
+ * GET /users/:channelUserId/channel-reviews?page=&limit=
+ */
+export const getChannelOrderReviews = async (
+  channelUserId,
+  page = 1,
+  limit = 30,
+) => {
+  const response = await axios.get(
+    `${API_URL}/${channelUserId}/channel-reviews`,
+    {
+      params: { page, limit },
+      headers: getAuthHeaders(),
+    },
+  );
+  return response.data;
+};
+
+/**
  * List followers (subscribers) for a given channel/user.
  * GET /users/:channelUserId/followers?currentUserId=&page=&limit=
  */

@@ -55,7 +55,14 @@ import { listCustomPlaylists } from '../../services/playlistService';
 
 const { width } = Dimensions.get('window');
 
-const TABS = ['Home', 'Posts', 'Gallery', 'Videos', 'Instagram', 'Playlists'];
+const TABS = [
+  'Gallery',
+  'Home',
+  'Posts',
+  'Videos',
+  // 'Instagram', // kept for future use
+  'Playlists',
+];
 
 const PLAYLIST_PLACEHOLDER =
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80';
@@ -199,7 +206,7 @@ const mapPostToCard = (p, profile) => {
 };
 
 const UserViewsScreen = ({ navigation }) => {
-  const [activeTab, setActiveTab] = useState('Home');
+  const [activeTab, setActiveTab] = useState('Gallery');
   const route = useRoute();
   const currentUser = useSelector(state => state.app?.user);
   const profileUserId = route.params?.userId || currentUser?.id || null;
@@ -850,6 +857,17 @@ const UserViewsScreen = ({ navigation }) => {
         onSubscribe={handleProfileSubscribe}
         onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
+        onPressReviews={() => {
+          if (!profileUserId) return;
+          navigation.navigate('ChannelReviewsScreen', {
+            channelUserId: profileUserId,
+            channelName:
+              profile?.channelName ||
+              profile?.nickname ||
+              profile?.name ||
+              'Channel',
+          });
+        }}
       />
 
       {/* Social icons row — business profiles only (hidden for role "user") */}
@@ -969,7 +987,7 @@ const UserViewsScreen = ({ navigation }) => {
       case 'Posts':
         return posts;
       case 'Gallery':
-        return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
+        return instagramFeedItems;
       case 'Videos':
         return videos;
       case 'Instagram':
@@ -1164,12 +1182,14 @@ const UserViewsScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.gridImageContainer}
           activeOpacity={0.85}
-          onPress={() => {
-            setPreviewImageUri(item.image);
-            setPreviewVisible(true);
-          }}
+          onPress={() => openInstagramPreview(item)}
         >
-          <Image source={{ uri: item.image }} style={styles.gridImage} />
+          <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
+          {item.mediaType === 'video' ? (
+            <View style={styles.instaVideoBadge}>
+              <MaterialCommunityIcons name="play" size={14} color="#fff" />
+            </View>
+          ) : null}
         </TouchableOpacity>
       );
     }

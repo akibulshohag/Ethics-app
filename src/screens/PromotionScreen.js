@@ -260,6 +260,10 @@ const PromotionScreen = ({ onBack }) => {
     'User';
   const displayLocation = profile?.address || currentUser?.address || '';
   const bio = profile?.channelAbout || currentUser?.channelAbout || '';
+  const followersCount = formatCountTab(
+    profile?.subscriberCount ?? profile?.followersCount ?? 0,
+  );
+  const followingCount = formatCountTab(profile?.followingCount ?? 0);
   // Avatar from API profile first (channelAvatar), same as BusinessProfileViewScreen / BusinessProfileCard
   const avatarUri =
     profile?.channelAvatar ||
@@ -1187,6 +1191,34 @@ const PromotionScreen = ({ onBack }) => {
             <Text style={styles.profileName}>{displayName}</Text>
             <Text style={styles.profileLocation}>{displayLocation || '—'}</Text>
 
+            <View style={styles.profileStatsRow}>
+              <TouchableOpacity
+                style={styles.profileStatItem}
+                activeOpacity={0.8}
+                onPress={() =>
+                  navigation.navigate('FollowersListScreen', {
+                    profileId: profile?.id || userId,
+                  })
+                }
+              >
+                <Text style={styles.profileStatValue}>{followersCount}</Text>
+                <Text style={styles.profileStatLabel}>Followers</Text>
+              </TouchableOpacity>
+              <View style={styles.profileStatDivider} />
+              <TouchableOpacity
+                style={styles.profileStatItem}
+                activeOpacity={0.8}
+                onPress={() =>
+                  navigation.navigate('FollowingListScreen', {
+                    profileId: profile?.id || userId,
+                  })
+                }
+              >
+                <Text style={styles.profileStatValue}>{followingCount}</Text>
+                <Text style={styles.profileStatLabel}>Following</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.actionButtonGroup}>
               <TouchableOpacity
                 style={styles.editProfileButton}
@@ -2072,6 +2104,34 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   profileLocation: { color: '#BDC3C7', fontSize: 13, marginBottom: 18 },
+  profileStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  profileStatItem: {
+    alignItems: 'center',
+    minWidth: 78,
+  },
+  profileStatValue: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  profileStatLabel: {
+    color: '#D2DAE2',
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  profileStatDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    marginHorizontal: 14,
+  },
 
   actionButtonGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   editProfileButton: {

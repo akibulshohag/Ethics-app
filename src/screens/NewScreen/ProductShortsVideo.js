@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -42,6 +42,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { safeImageUri } from '../../utils/helper';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
 import { setPlaylist } from '../../services/playlistService';
+import { downloadVideo } from '../../services/downloadService';
 import { submitReport } from '../../services/reportService';
 import {
   getChannelProfile,
@@ -147,7 +148,14 @@ const normalizeShort = s => {
     title: s.title || 'Short',
     user: displayUser,
     userId: s.user?.id ?? s.userId,
-    userObj: { ...userObj, avatar },
+    userObj: {
+      ...userObj,
+      avatar,
+      isSubscribed:
+        typeof userObj?.isSubscribed === 'boolean'
+          ? userObj.isSubscribed
+          : !!s?.isSubscribed,
+    },
     avatar,
     desc: s.description || s.title || s.desc || 'Description',
     viewCount,
@@ -389,6 +397,7 @@ const ProductShortsVideo = () => {
             page: 1,
             limit: 30,
             viewerRole: user?.role || 'user',
+            viewerUserId: user?.id,
           });
           const list = (res?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
@@ -400,11 +409,12 @@ const ProductShortsVideo = () => {
 
         if (ownerId && currentNormalized) {
           const [userRes, feedRes] = await Promise.all([
-            shortsService.getUserShorts(ownerId, 1, 30),
+            shortsService.getUserShorts(ownerId, 1, 30, user?.id),
             shortsService.getShorts({
               page: 1,
               limit: 30,
               viewerRole: user?.role || 'user',
+              viewerUserId: user?.id,
             }),
           ]);
           const sameUserRaw = (userRes?.shorts || []).filter(
@@ -435,6 +445,7 @@ const ProductShortsVideo = () => {
             page: 1,
             limit: 30,
             viewerRole: user?.role || 'user',
+            viewerUserId: user?.id,
           });
           const list = (res?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
@@ -451,6 +462,7 @@ const ProductShortsVideo = () => {
           page: 1,
           limit: 30,
           viewerRole: user?.role || 'user',
+          viewerUserId: user?.id,
         });
         const list = (res?.shorts || []).filter(
           s => s.videoUrl && String(s.videoUrl).trim(),
@@ -586,6 +598,7 @@ const ProductShortsVideo = () => {
     const videoRef = useRef(null);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
+    const currentTimeRef = useRef(0);
     const [isSeeking, setIsSeeking] = useState(false);
     const lastProgressUpdate = useRef(0);
     const lastTapMsRef = useRef(0);
@@ -651,7 +664,55 @@ const ProductShortsVideo = () => {
 
     const isPaused = !focused || !isCurrentlyViewable || isPausedLocally;
     const ownerId = item?.userId ?? item?.userObj?.id ?? null;
-    const isOwnShort = !!(user?.id && ownerId && user.id === ownerId);
+    const isOwnShort = !!(
+      user?.id &&
+      ownerId &&
+      String(user.id) === String(ownerId)
+    );
+
+    const videoSource = useMemo(
+      () => ({ uri: item?.videoUrl }),
+      [item?.videoUrl],
+    );
+
+    // When muting/unmuting, `react-native-video` may reload and jump to 0s.
+    // Re-seek to the last known `currentTime` to keep playback position.
+    useEffect(() => {
+      if (!isCurrentlyViewable) return;
+      if (isSeeking) return;
+      const t = currentTimeRef.current;
+      if (!(t > 0.5)) return;
+      const seekNow = () => {
+        try {
+          videoRef.current?.seek?.(t);
+          setCurrentTime(t);
+        } catch (_) {}
+      };
+      seekNow();
+      const tid = setTimeout(seekNow, 120);
+      return () => clearTimeout(tid);
+    }, [shortsMuted, isCurrentlyViewable, isSeeking]);
+
+    useEffect(() => {
+      let cancelled = false;
+      const apiSubscribed = item?.userObj?.isSubscribed;
+      if (typeof apiSubscribed === 'boolean') {
+        setSubscribedLocal(apiSubscribed);
+      }
+      if (!user?.id || !ownerId || isOwnShort) return;
+      getChannelProfile(ownerId, user.id)
+        .then(profile => {
+          if (cancelled) return;
+          if (typeof profile?.isSubscribed === 'boolean') {
+            setSubscribedLocal(profile.isSubscribed);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [item?.id, item?.userObj?.isSubscribed, isOwnShort, ownerId, user?.id]);
+
     const showFollowPlus = !!ownerId && !isOwnShort && !subscribedLocal;
     const ownerAvatarFallbackUri = `https://ui-avatars.com/api/?name=${encodeURIComponent(
       item?.user || 'User',
@@ -709,7 +770,7 @@ const ProductShortsVideo = () => {
       <View style={[styles.videoContainer, { height: height }]}>
         <Video
           ref={videoRef}
-          source={{ uri: item.videoUrl }}
+            source={videoSource}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
           repeat={true}
@@ -729,15 +790,36 @@ const ProductShortsVideo = () => {
                 ? api
                 : 0;
             setDuration(use);
+
+            // If video reloaded (e.g. mute/unmute), restore last playback position.
+            const t = currentTimeRef.current;
+            if (typeof t === 'number' && t > 0.5) {
+              const seekNow = () => {
+                try {
+                  videoRef.current?.seek?.(t);
+                  setCurrentTime(t);
+                } catch (_) {}
+              };
+              seekNow();
+              setTimeout(seekNow, 120);
+            }
           }}
           onProgress={data => {
-            if (!isCurrentlyViewable || isPaused) return;
-            if (isSeeking) return;
             const now = Date.now();
             if (now - lastProgressUpdate.current < 250) return;
             lastProgressUpdate.current = now;
             const t = Number(data?.currentTime || 0);
-            setCurrentTime(Number.isFinite(t) ? t : 0);
+            const nextT = Number.isFinite(t) ? t : 0;
+
+            // Always remember the last time so we can restore after reload.
+            if (nextT > 0.5) {
+              currentTimeRef.current = nextT;
+            }
+
+            // Only update UI state while this item is active.
+            if (!isCurrentlyViewable || isPaused) return;
+            if (isSeeking) return;
+            setCurrentTime(nextT);
           }}
         />
 
@@ -768,6 +850,7 @@ const ProductShortsVideo = () => {
                 try {
                   videoRef.current?.seek?.(v);
                 } catch (_) {}
+                if (v > 0.5) currentTimeRef.current = v;
                 setCurrentTime(v);
                 setIsSeeking(false);
               }}
@@ -1133,15 +1216,17 @@ const ProductShortsVideo = () => {
       return;
     }
     try {
-      await Share.share({ message: String(url), url: String(url) });
+      await downloadVideo({
+        id: t?.id,
+        title: t?.title || t?.desc || 'Short',
+        videoUrl: String(url),
+        thumbnail: t?.thumbnailUrl || t?.thumbnail || t?.coverUrl || '',
+        channelName: t?.userObj?.name || t?.userObj?.nickname || 'Channel',
+        duration: Number(t?.duration || 0),
+      });
+      Toast.show({ type: 'success', text1: 'Video downloaded' });
     } catch (e) {
-      if (e?.message !== 'User did not share') {
-        try {
-          await Linking.openURL(String(url));
-        } catch (_) {
-          Toast.show({ type: 'error', text1: 'Could not open video' });
-        }
-      }
+      Toast.show({ type: 'error', text1: e?.message || 'Download failed' });
     }
   };
 

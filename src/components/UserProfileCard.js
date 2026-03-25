@@ -25,6 +25,7 @@ const UserProfileCard = ({
   canEdit = false,
   onSubscribe,
   onMessagePress,
+  onPressReviews,
   subscribeLoading = false,
   showSubscribe = true,
 }) => {
@@ -104,40 +105,78 @@ const UserProfileCard = ({
               </View>
 
               <View style={styles.profileTextGroup}>
-                <View style={styles.nameAndRatingRow}>
+                <View style={styles.nameRow}>
                   <Text style={styles.businessNameHeading} numberOfLines={1}>
                     {loading ? 'Loading...' : displayName}
                   </Text>
-                  <View style={styles.ratingInlineRow}>
-                    <Text style={styles.ratingValueText}>
-                      {averageRatingLabel}
-                    </Text>
-                    <View style={styles.ratingStarsRow}>
-                      {stars.map(star => (
-                        <Icon
-                          key={star}
-                          name={star <= roundedRating ? 'star' : 'star-outline'}
-                          size={13}
-                          color={
-                            star <= roundedRating ? '#FFE082' : '#FFFFFFA6'
-                          }
-                          style={styles.ratingStarIcon}
-                        />
-                      ))}
+                </View>
+                {onPressReviews ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={onPressReviews}
+                    style={styles.ratingBelowNameRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="View all reviews"
+                  >
+                    <View style={styles.ratingInlineRow}>
+                      <Text style={styles.ratingValueText}>
+                        {averageRatingLabel}
+                      </Text>
+                      <View style={styles.ratingStarsRow}>
+                        {stars.map(star => (
+                          <Icon
+                            key={star}
+                            name={
+                              star <= roundedRating ? 'star' : 'star-outline'
+                            }
+                            size={13}
+                            color={
+                              star <= roundedRating ? '#FFE082' : '#FFFFFFA6'
+                            }
+                            style={styles.ratingStarIcon}
+                          />
+                        ))}
+                      </View>
+                      <Text style={styles.ratingCountText}>
+                        ({reviewCount}{' '}
+                        {reviewCount === 1 ? 'review' : 'reviews'})
+                      </Text>
+                      {/* <Icon
+                        name="chevron-right"
+                        size={16}
+                        color="rgba(255,255,255,0.85)"
+                        style={styles.ratingChevron}
+                      /> */}
                     </View>
-                    <Text style={styles.ratingCountText}>
-                      ({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})
-                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.ratingBelowNameRow}>
+                    <View style={styles.ratingInlineRow}>
+                      <Text style={styles.ratingValueText}>
+                        {averageRatingLabel}
+                      </Text>
+                      <View style={styles.ratingStarsRow}>
+                        {stars.map(star => (
+                          <Icon
+                            key={star}
+                            name={
+                              star <= roundedRating ? 'star' : 'star-outline'
+                            }
+                            size={13}
+                            color={
+                              star <= roundedRating ? '#FFE082' : '#FFFFFFA6'
+                            }
+                            style={styles.ratingStarIcon}
+                          />
+                        ))}
+                      </View>
+                      <Text style={styles.ratingCountText}>
+                        ({reviewCount}{' '}
+                        {reviewCount === 1 ? 'review' : 'reviews'})
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.verifiedIndicatorRow}>
-                  <View style={styles.verifiedLeftRow}>
-                    <Icon name="check-circle-outline" size={15} color="#fff" />
-                    <Text style={styles.verifiedAccountLabel}>
-                      verified account
-                    </Text>
-                  </View>
-                </View>
+                )}
               </View>
             </View>
           </View>
@@ -317,33 +356,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  nameAndRatingRow: {
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
   },
-  verifiedIndicatorRow: {
+  ratingBelowNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+    flexWrap: 'wrap',
   },
   ratingInlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
     flexShrink: 1,
-  },
-  verifiedLeftRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-  verifiedAccountLabel: {
-    color: '#fff',
-    fontSize: 12,
-    marginLeft: 6,
-    opacity: 0.95,
+    flexWrap: 'wrap',
   },
   ratingValueText: {
     color: '#fff',
@@ -363,6 +390,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     opacity: 0.95,
+  },
+  ratingChevron: {
+    marginLeft: 4,
   },
   faintDotSeparator: {
     width: 6,

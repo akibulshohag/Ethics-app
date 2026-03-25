@@ -187,6 +187,10 @@ const VideoDetailsScreen = () => {
     isSubscribed: false,
     subscriberCount: 0,
   });
+  const [channelRating, setChannelRating] = useState({
+    average: 0,
+    reviewCount: 0,
+  });
   const [subscribeLoading, setSubscribeLoading] = useState(false);
   const [liveChatModalVisible, setLiveChatModalVisible] = useState(false);
 
@@ -278,6 +282,26 @@ const VideoDetailsScreen = () => {
                 isSubscribed: profile.isSubscribed ?? false,
                 subscriberCount: profile.subscriberCount ?? 0,
               });
+              const avgRaw =
+                profile?.averageRating ??
+                profile?.ratingAverage ??
+                profile?.ratingAvg ??
+                profile?.rating;
+              const countRaw =
+                profile?.reviewCount ??
+                profile?.reviewsCount ??
+                profile?.totalReviews ??
+                profile?.ratingCount;
+              const avg = Number(avgRaw);
+              const count = Number(countRaw);
+              setChannelRating({
+                average: Number.isFinite(avg)
+                  ? Math.max(0, Math.min(5, avg))
+                  : 0,
+                reviewCount: Number.isFinite(count)
+                  ? Math.max(0, Math.floor(count))
+                  : 0,
+              });
             })
             .catch(() => {});
         }
@@ -308,6 +332,7 @@ const VideoDetailsScreen = () => {
       setCurrentVideo(null);
       setRelatedVideos([]);
       setChannelSubscription({ isSubscribed: false, subscriberCount: 0 });
+      setChannelRating({ average: 0, reviewCount: 0 });
     } finally {
       setLoading(false);
     }
@@ -975,6 +1000,28 @@ const VideoDetailsScreen = () => {
                   color="#3ea6ff"
                   style={{ marginLeft: 4 }}
                 />
+                <View style={styles.channelRatingRow}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <MaterialCommunityIcons
+                      key={`video-rating-star-${star}`}
+                      name={
+                        star <= Math.round(channelRating.average)
+                          ? 'star'
+                          : 'star-outline'
+                      }
+                      size={12}
+                      color={
+                        star <= Math.round(channelRating.average)
+                          ? '#FFE082'
+                          : '#BDBDBD'
+                      }
+                    />
+                  ))}
+                  <Text style={styles.channelRatingText}>
+                    ({channelRating.reviewCount}{' '}
+                    {channelRating.reviewCount === 1 ? 'review' : 'reviews'})
+                  </Text>
+                </View>
               </View>
               <Text style={styles.subscriberCount}>
                 {channelSubscription.subscriberCount > 0
@@ -1387,6 +1434,18 @@ const styles = StyleSheet.create({
   subscriberCount: {
     fontSize: 12,
     color: '#424242',
+  },
+  channelRatingRow: {
+    marginLeft: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+  },
+  channelRatingText: {
+    marginLeft: 4,
+    color: '#616161',
+    fontSize: 11,
+    fontWeight: '600',
   },
   subscribeButton: {
     backgroundColor: '#F97507',

@@ -522,7 +522,7 @@ const ChatScreen = () => {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <View style={styles.header}>
@@ -534,7 +534,7 @@ const ChatScreen = () => {
               {displayName}
             </Text>
           </View>
-          <View style={styles.headerRight}>
+          {/* <View style={styles.headerRight}>
             {partnerTyping ? (
               <Text style={styles.headerTime}>typing...</Text>
             ) : (
@@ -554,10 +554,10 @@ const ChatScreen = () => {
                 color="#000"
               />
             </TouchableOpacity>
-          </View>
+          </View> */}
         </View>
 
-        {isOrderChat && orderDetails && (
+        {/* {isOrderChat && orderDetails && (
           <>
             <View style={styles.orderCard}>
               <View style={styles.orderHeader}>
@@ -607,7 +607,7 @@ const ChatScreen = () => {
             </View>
             <Text style={styles.timestamp}>{formatTime(new Date())}</Text>
           </>
-        )}
+        )} */}
 
         {loading ? (
           <View style={styles.centered}>

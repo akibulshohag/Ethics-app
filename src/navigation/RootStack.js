@@ -16,6 +16,7 @@ import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import EarningsScreen from '../screens/EarningsScreen';
 import MessageListScreen from '../screens/MessageListScreen';
 import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
+import ChannelReviewsScreen from '../screens/NewScreen/ChannelReviewsScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import CustomPlaylistScreen from '../screens/CustomPlaylistScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
@@ -46,6 +47,10 @@ const RootStack = () => {
       <Root.Screen name="Earnings" component={EarningsScreen} />
       <Root.Screen name="MessageList" component={MessageListScreen} />
       <Root.Screen name="UserViewsScreen" component={UserViewsScreen} />
+      <Root.Screen
+        name="ChannelReviewsScreen"
+        component={ChannelReviewsScreen}
+      />
       <Root.Screen name="VideoDetailsScreen" component={VideoDetailsScreen} />
       <Root.Screen
         name="CustomPlaylistScreen"

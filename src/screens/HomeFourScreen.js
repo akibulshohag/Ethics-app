@@ -28,7 +28,10 @@ const HomeFourScreen = ({ onBack }) => {
   const [items, setItems] = useState(
     initialItems.map(i => ({ ...i, quantity: Math.max(1, i.quantity || 1) })),
   );
-  const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [restaurantNote, setRestaurantNote] = useState('');
+  const [customDeliveryAddress, setCustomDeliveryAddress] = useState('');
+  const [isAddressEditing, setIsAddressEditing] = useState(false);
+  const [addressDraft, setAddressDraft] = useState('');
   const [placing, setPlacing] = useState(false);
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromotion, setAppliedPromotion] = useState(null);
@@ -118,10 +121,38 @@ const HomeFourScreen = ({ onBack }) => {
     setPromoApplyError('');
   };
   const restaurantName = ownerName || 'Restaurant';
-  const deliveryAddress =
-    user?.address || deliveryNotes?.trim() || 'Add address';
+  const defaultDeliveryAddress = String(user?.address || '').trim();
+  const selectedDeliveryAddress =
+    String(customDeliveryAddress || '').trim() || defaultDeliveryAddress;
+  const deliveryAddress = selectedDeliveryAddress || 'Add address';
   const userPhone = user?.phone || user?.pin || '—';
   const userName = user?.name || user?.nickname || '—';
+
+  const startEditAddress = () => {
+    setAddressDraft(selectedDeliveryAddress || '');
+    setIsAddressEditing(true);
+  };
+
+  const cancelEditAddress = () => {
+    setAddressDraft('');
+    setIsAddressEditing(false);
+  };
+
+  const saveCustomAddress = () => {
+    const next = String(addressDraft || '').trim();
+    if (!next) {
+      Alert.alert('Address required', 'Please enter a valid address.');
+      return;
+    }
+    setCustomDeliveryAddress(next);
+    setIsAddressEditing(false);
+  };
+
+  const useDefaultAddress = () => {
+    setCustomDeliveryAddress('');
+    setAddressDraft('');
+    setIsAddressEditing(false);
+  };
 
   const handlePlaceOrder = async () => {
     if (!user?.token) {
@@ -140,7 +171,8 @@ const HomeFourScreen = ({ onBack }) => {
           menuItemId: i.menuItemId,
           quantity: i.quantity || 1,
         })),
-        deliveryAddress: deliveryNotes.trim() || user?.address || undefined,
+        deliveryAddress: selectedDeliveryAddress || undefined,
+        notes: restaurantNote.trim() || undefined,
         ...(appliedPromotion?.promoCode && {
           promoCode: appliedPromotion.promoCode,
           promotionId: appliedPromotion.id,
@@ -182,6 +214,53 @@ const HomeFourScreen = ({ onBack }) => {
         <Text style={styles.deliverySub} numberOfLines={2}>
           {deliveryAddress}
         </Text>
+        <View style={styles.addressMetaRow}>
+          <Text style={styles.addressMetaLabel}>
+            {customDeliveryAddress ? 'Custom' : 'Default'} Address:{' '}
+            {selectedDeliveryAddress || 'Not set'}
+          </Text>
+          <TouchableOpacity onPress={startEditAddress} activeOpacity={0.8}>
+            <Text style={styles.addressEditText}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+        {customDeliveryAddress ? (
+          <TouchableOpacity
+            onPress={useDefaultAddress}
+            activeOpacity={0.8}
+            style={styles.useDefaultBtn}
+          >
+            <Text style={styles.useDefaultText}>Use default address</Text>
+          </TouchableOpacity>
+        ) : null}
+        {isAddressEditing ? (
+          <View style={styles.customAddressCard}>
+            <Text style={styles.customAddressTitle}>Custom address for this order</Text>
+            <TextInput
+              style={styles.customAddressInput}
+              placeholder="Enter delivery address"
+              placeholderTextColor="#999"
+              multiline
+              value={addressDraft}
+              onChangeText={setAddressDraft}
+            />
+            <View style={styles.customAddressActions}>
+              <TouchableOpacity
+                onPress={cancelEditAddress}
+                style={styles.addressCancelBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addressCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={saveCustomAddress}
+                style={styles.addressSaveBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addressSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.itemsCard}>
           {hasItems ? (
@@ -262,8 +341,8 @@ const HomeFourScreen = ({ onBack }) => {
             style={styles.noteInput}
             placeholder="Add a note for the restaurant"
             placeholderTextColor="#999"
-            value={deliveryNotes}
-            onChangeText={setDeliveryNotes}
+            value={restaurantNote}
+            onChangeText={setRestaurantNote}
           />
         </TouchableOpacity>
 
@@ -439,6 +518,57 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   deliverySub: { fontSize: 13, color: '#777', marginTop: 4, marginBottom: 20 },
+  addressMetaRow: {
+    marginTop: -10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addressMetaLabel: { flex: 1, fontSize: 12, color: '#98A2B3', marginRight: 8 },
+  addressEditText: { color: '#F5A623', fontWeight: '700', fontSize: 13 },
+  useDefaultBtn: { alignSelf: 'flex-start', marginBottom: 12 },
+  useDefaultText: { color: '#667085', fontSize: 12, fontWeight: '600' },
+  customAddressCard: {
+    borderWidth: 1,
+    borderColor: '#EEE',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    backgroundColor: '#FAFAFA',
+  },
+  customAddressTitle: {
+    fontSize: 13,
+    color: '#344054',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  customAddressInput: {
+    minHeight: 70,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#1A1A1A',
+    textAlignVertical: 'top',
+  },
+  customAddressActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  addressCancelBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+  addressCancelText: { color: '#667085', fontWeight: '600' },
+  addressSaveBtn: {
+    backgroundColor: '#F5A623',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginLeft: 8,
+  },
+  addressSaveText: { color: '#FFF', fontWeight: '700' },
   itemsCard: {
     backgroundColor: '#F2F6F8',
     borderRadius: 15,
