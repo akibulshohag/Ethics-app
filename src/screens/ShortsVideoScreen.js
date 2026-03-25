@@ -671,7 +671,12 @@ const VideoItem = ({
           <View style={styles.audioRow}>
             <Icon name="music" size={18} color="#FFF" />
             <Text
-              style={[styles.audioText, styles.audioTitleFlex]}
+              style={[
+                styles.audioText,
+                !currentUser?.token || item.creatorRole === 'owner'
+                  ? styles.audioTitleFlex
+                  : styles.audioTitleInline,
+              ]}
               numberOfLines={1}
             >
               Original Sound
@@ -692,37 +697,35 @@ const VideoItem = ({
               </Text>
             </TouchableOpacity>
           </View>
-          {(item.creatorRole === 'owner' || item.user?.id || item.userId) &&
-            (!currentUser?.token ? (
-              <TouchableOpacity
-                style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
-                onPress={() => {
-                  const ownerId = item.user?.id ?? item.userId ?? null;
-                  onLoginPress?.({ returnToOrder: true, ownerUserId: ownerId });
-                }}
-              >
-                <Text style={styles.resOrderText}>Login</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
-                onPress={() => {
-                  const ownerId = item.user?.id ?? item.userId ?? null;
-                  if (ownerId) {
-                    onOrderNow?.({
-                      ownerId,
-                      ownerName: item.user?.username || '',
-                      title: item.description || item.user?.username || '',
-                      location: item.location || '',
-                    });
-                  } else {
-                    onOrderNow?.({});
-                  }
-                }}
-              >
-                <Text style={styles.resOrderText}>Order Now</Text>
-              </TouchableOpacity>
-            ))}
+          {!currentUser?.token ? (
+            <TouchableOpacity
+              style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
+              onPress={() => {
+                onLoginPress?.();
+              }}
+            >
+              <Text style={styles.resOrderText}>Login</Text>
+            </TouchableOpacity>
+          ) : item.creatorRole === 'owner' ? (
+            <TouchableOpacity
+              style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
+              onPress={() => {
+                const ownerId = item.user?.id ?? item.userId ?? null;
+                if (ownerId) {
+                  onOrderNow?.({
+                    ownerId,
+                    ownerName: item.user?.username || '',
+                    title: item.description || item.user?.username || '',
+                    location: item.location || '',
+                  });
+                } else {
+                  onOrderNow?.({});
+                }
+              }}
+            >
+              <Text style={styles.resOrderText}>Order Now</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {/* bottom arrow removed */}
       </View>
@@ -2125,6 +2128,10 @@ const styles = StyleSheet.create({
     minWidth: 0,
     marginLeft: 5,
     marginRight: 4,
+  },
+  audioTitleInline: {
+    marginLeft: 5,
+    marginRight: 8,
   },
   muteToggle: {
     flexDirection: 'row',

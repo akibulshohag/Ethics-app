@@ -250,9 +250,8 @@ const ProductShortsVideo = () => {
     madeForKids: null,
     ageRestricted: null,
   });
-  const [editShortComments, setEditShortComments] = useState(
-    'Allow all comments',
-  );
+  const [editShortComments, setEditShortComments] =
+    useState('Allow all comments');
   const [editShortScheduleDate, setEditShortScheduleDate] = useState(null);
   const [editVisibilityModalVisible, setEditVisibilityModalVisible] =
     useState(false);
@@ -1001,7 +1000,13 @@ const ProductShortsVideo = () => {
               <View style={styles.audioRow}>
                 <Icon name="music" size={18} color="#FFF" />
                 <Text
-                  style={[styles.audioText, styles.audioTitleFlex]}
+                  style={[
+                    styles.audioText,
+                    !user?.id ||
+                    String(item?.userObj?.role || '').toLowerCase() === 'owner'
+                      ? styles.audioTitleFlex
+                      : styles.audioTitleInline,
+                  ]}
                   numberOfLines={1}
                 >
                   {item.audio || 'Original Sound'}
@@ -1029,7 +1034,8 @@ const ProductShortsVideo = () => {
                 >
                   <Text style={styles.orderNowText}>Login</Text>
                 </TouchableOpacity>
-              ) : (
+              ) : String(item?.userObj?.role || '').toLowerCase() ===
+                'owner' ? (
                 <TouchableOpacity
                   style={styles.orderNowBtnFooter}
                   onPress={() => {
@@ -1048,7 +1054,7 @@ const ProductShortsVideo = () => {
                 >
                   <Text style={styles.orderNowText}>Order Now</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
             </View>
           </View>
         </View>
@@ -1279,7 +1285,10 @@ const ProductShortsVideo = () => {
       setEditShortVisible(false);
       setEditShortTargetId(null);
     } catch (e) {
-      Toast.show({ type: 'error', text1: e?.message || 'Failed to update short' });
+      Toast.show({
+        type: 'error',
+        text1: e?.message || 'Failed to update short',
+      });
     } finally {
       setEditShortSubmitting(false);
     }
@@ -1543,7 +1552,9 @@ const ProductShortsVideo = () => {
                   <Text style={styles.editOptionLabel}>Visibility</Text>
                 </View>
                 <View style={styles.editOptionRight}>
-                  <Text style={styles.editOptionValue}>{editShortVisibility}</Text>
+                  <Text style={styles.editOptionValue}>
+                    {editShortVisibility}
+                  </Text>
                   <Ionicons name="chevron-forward" size={18} color="#333" />
                 </View>
               </TouchableOpacity>
@@ -1876,6 +1887,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   audioTitleFlex: { flex: 1, minWidth: 0, marginLeft: 5 },
+  audioTitleInline: { marginLeft: 5, marginRight: 8 },
   /** Sits left of the right Reels column so it doesn’t overlap icons */
   orderNowBtnFooter: {
     backgroundColor: '#F5A623',

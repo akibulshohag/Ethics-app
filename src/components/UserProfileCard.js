@@ -53,6 +53,26 @@ const UserProfileCard = ({
     (profile?.channelAbout && String(profile.channelAbout).trim()) ||
     'Hi! Welcome to this profile.';
   const isSubscribed = !!profile?.isSubscribed;
+  const averageRatingRaw =
+    profile?.averageRating ??
+    profile?.ratingAverage ??
+    profile?.ratingAvg ??
+    profile?.rating;
+
+  const reviewCountRaw =
+    profile?.reviewCount ??
+    profile?.reviewsCount ??
+    profile?.totalReviews ??
+    profile?.ratingCount;
+  const averageRating = Number.isFinite(Number(averageRatingRaw))
+    ? Math.max(0, Math.min(5, Number(averageRatingRaw)))
+    : 0;
+  const reviewCount = Number.isFinite(Number(reviewCountRaw))
+    ? Math.max(0, Math.floor(Number(reviewCountRaw)))
+    : 0;
+  const averageRatingLabel = averageRating.toFixed(1).replace(/\.0$/, '');
+  const roundedRating = Math.round(averageRating);
+  const stars = [1, 2, 3, 4, 5];
 
   return (
     <View style={styles.cardContainer}>
@@ -84,15 +104,39 @@ const UserProfileCard = ({
               </View>
 
               <View style={styles.profileTextGroup}>
-                <Text style={styles.businessNameHeading} numberOfLines={1}>
-                  {loading ? 'Loading...' : displayName}
-                </Text>
-                <View style={styles.verifiedIndicatorRow}>
-                  <Icon name="check-circle-outline" size={15} color="#fff" />
-                  <Text style={styles.verifiedAccountLabel}>
-                    verified account
+                <View style={styles.nameAndRatingRow}>
+                  <Text style={styles.businessNameHeading} numberOfLines={1}>
+                    {loading ? 'Loading...' : displayName}
                   </Text>
-                  <View style={styles.faintDotSeparator} />
+                  <View style={styles.ratingInlineRow}>
+                    <Text style={styles.ratingValueText}>
+                      {averageRatingLabel}
+                    </Text>
+                    <View style={styles.ratingStarsRow}>
+                      {stars.map(star => (
+                        <Icon
+                          key={star}
+                          name={star <= roundedRating ? 'star' : 'star-outline'}
+                          size={13}
+                          color={
+                            star <= roundedRating ? '#FFE082' : '#FFFFFFA6'
+                          }
+                          style={styles.ratingStarIcon}
+                        />
+                      ))}
+                    </View>
+                    <Text style={styles.ratingCountText}>
+                      ({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.verifiedIndicatorRow}>
+                  <View style={styles.verifiedLeftRow}>
+                    <Icon name="check-circle-outline" size={15} color="#fff" />
+                    <Text style={styles.verifiedAccountLabel}>
+                      verified account
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -140,7 +184,11 @@ const UserProfileCard = ({
                   activeOpacity={0.8}
                 >
                   <Text style={styles.subscribeBtnText}>
-                    {subscribeLoading ? '...' : isSubscribed ? 'Subscribed' : 'Subscribe'}
+                    {subscribeLoading
+                      ? '...'
+                      : isSubscribed
+                      ? 'Subscribed'
+                      : 'Subscribe'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -269,15 +317,51 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
+  nameAndRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   verifiedIndicatorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
   },
+  ratingInlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  verifiedLeftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
   verifiedAccountLabel: {
     color: '#fff',
     fontSize: 12,
     marginLeft: 6,
+    opacity: 0.95,
+  },
+  ratingValueText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+    marginRight: 4,
+  },
+  ratingStarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  ratingStarIcon: {
+    marginHorizontal: 0.5,
+  },
+  ratingCountText: {
+    color: '#fff',
+    fontSize: 11,
     opacity: 0.95,
   },
   faintDotSeparator: {

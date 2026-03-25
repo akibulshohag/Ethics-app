@@ -1277,7 +1277,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const deleteItemFromActions = useCallback(() => {
     const target = itemActionTarget;
     const userId = currentUser?.id;
-    if (!target?.item?.id || !userId) return;
+    if (!target?.item || !userId) return;
     const { kind, item } = target;
     const label =
       kind === 'promotion'

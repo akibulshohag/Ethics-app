@@ -273,7 +273,8 @@ const UserViewsScreen = ({ navigation }) => {
     const postItems = (rawPosts || []).map(p => {
       const media = String(p?.mediaUrl || p?.thumbnailUrl || '').trim();
       const mt = String(p?.mediaType || '').toLowerCase();
-      const isVideo = mt === 'video' || /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+      const isVideo =
+        mt === 'video' || /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
       return {
         id: `post-${p.id}`,
         originId: p.id,
@@ -707,7 +708,9 @@ const UserViewsScreen = ({ navigation }) => {
       partnerName:
         profile?.channelName || profile?.nickname || profile?.name || 'User',
       partnerAvatar: safeImageUri(
-        profile?.channelAvatar || profile?.photos?.[0]?.src || profile?.photos?.[0],
+        profile?.channelAvatar ||
+          profile?.photos?.[0]?.src ||
+          profile?.photos?.[0],
       ),
     });
   }, [profileUserId, currentUser?.id, navigation, profile]);
@@ -835,9 +838,9 @@ const UserViewsScreen = ({ navigation }) => {
             <Text style={styles.backText}>Back</Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.moreIcon}>
+        {/* <TouchableOpacity style={styles.moreIcon}>
           <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       <UserProfileCard
@@ -1251,7 +1254,9 @@ const UserViewsScreen = ({ navigation }) => {
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        numColumns={activeTab === 'Gallery' || activeTab === 'Instagram' ? 3 : 1}
+        numColumns={
+          activeTab === 'Gallery' || activeTab === 'Instagram' ? 3 : 1
+        }
         columnWrapperStyle={
           activeTab === 'Gallery' || activeTab === 'Instagram'
             ? styles.gridColumnWrapper
