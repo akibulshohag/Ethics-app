@@ -48,7 +48,11 @@ import {
   uploadGallery,
   deleteGalleryPhoto,
 } from '../../services/channelService';
-import { getUserVideos, updateVideo, deleteVideo } from '../../services/videoService';
+import {
+  getUserVideos,
+  updateVideo,
+  deleteVideo,
+} from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
 import { getNotificationsByUserId } from '../../services/notificationService';
 import {
@@ -331,7 +335,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [editLatitude, setEditLatitude] = useState(null);
   const [editLongitude, setEditLongitude] = useState(null);
   const [editSocialLinks, setEditSocialLinks] = useState([]);
-  const [editOpeningHours, setEditOpeningHours] = useState(DEFAULT_OPENING_HOURS);
+  const [editOpeningHours, setEditOpeningHours] = useState(
+    DEFAULT_OPENING_HOURS,
+  );
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -1014,11 +1020,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setPostMediaPreviewVisible(true);
   }, []);
 
-  const openPostActions = useCallback(post => {
-    if (!isOwnProfile || !post?.id) return;
-    setPostActionTarget(post);
-    setPostActionVisible(true);
-  }, [isOwnProfile]);
+  const openPostActions = useCallback(
+    post => {
+      if (!isOwnProfile || !post?.id) return;
+      setPostActionTarget(post);
+      setPostActionVisible(true);
+    },
+    [isOwnProfile],
+  );
 
   const openPostEdit = useCallback(() => {
     const t = postActionTarget;
@@ -1028,7 +1037,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setPostEditDescription(String(t.description || '').trim());
     setPostEditWebsite(String(t.website || '').trim());
     setPostEditHashtags(
-      Array.isArray(t.hashtags) ? t.hashtags.join(' ') : String(t.hashtags || ''),
+      Array.isArray(t.hashtags)
+        ? t.hashtags.join(' ')
+        : String(t.hashtags || ''),
     );
     setPostEditThumbnailUri(String(t.thumbnail || '').trim());
     setPostEditVideoUri(
@@ -1136,11 +1147,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     ]);
   }, [postActionTarget, currentUser?.id]);
 
-  const openItemActions = useCallback((kind, item) => {
-    if (!isOwnProfile || !item?.id) return;
-    setItemActionTarget({ kind, item });
-    setItemActionVisible(true);
-  }, [isOwnProfile]);
+  const openItemActions = useCallback(
+    (kind, item) => {
+      if (!isOwnProfile || !item?.id) return;
+      setItemActionTarget({ kind, item });
+      setItemActionVisible(true);
+    },
+    [isOwnProfile],
+  );
 
   const openItemEdit = useCallback(() => {
     const target = itemActionTarget;
@@ -1167,7 +1181,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     } else {
       setItemEditTitle(String(item.title || '').trim());
       setItemEditDescription(String(item.description || '').trim());
-      setItemEditThumbnailUri(String(item.thumbnail || item.thumbnailUrl || '').trim());
+      setItemEditThumbnailUri(
+        String(item.thumbnail || item.thumbnailUrl || '').trim(),
+      );
       setItemEditVideoUri(String(item.videoUrl || item.mediaUrl || '').trim());
     }
     setItemEditVisible(true);
@@ -1247,7 +1263,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           itemName: itemEditTitle.trim() || undefined,
           description: itemEditDescription.trim() || undefined,
           price:
-            itemEditPrice.trim() === '' ? undefined : Number(itemEditPrice.trim()),
+            itemEditPrice.trim() === ''
+              ? undefined
+              : Number(itemEditPrice.trim()),
           imageUrl: itemEditThumbnailUri.trim() || undefined,
         };
         await updateMenuItem(currentUser?.token, item.id, payload);
@@ -1288,42 +1306,46 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         ? 'menu file'
         : 'video';
     setItemActionVisible(false);
-    Alert.alert(`Delete ${label}`, `Are you sure you want to delete this ${label}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            if (kind === 'promotion') {
-              await deletePromotion(item.id, userId);
-              setPromotions(prev => prev.filter(p => p.id !== item.id));
-            } else if (kind === 'video') {
-              if (String(item._type || '').toLowerCase() === 'short') {
-                await shortsService.deleteShort(item.id, userId);
-              } else {
-                await deleteVideo(item.id, userId);
+    Alert.alert(
+      `Delete ${label}`,
+      `Are you sure you want to delete this ${label}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (kind === 'promotion') {
+                await deletePromotion(item.id, userId);
+                setPromotions(prev => prev.filter(p => p.id !== item.id));
+              } else if (kind === 'video') {
+                if (String(item._type || '').toLowerCase() === 'short') {
+                  await shortsService.deleteShort(item.id, userId);
+                } else {
+                  await deleteVideo(item.id, userId);
+                }
+                setOwnerVideos(prev => prev.filter(v => v.id !== item.id));
+              } else if (kind === 'menu') {
+                await deleteMenuItem(currentUser?.token, item.id);
+                setMenuItems(prev => prev.filter(m => m.id !== item.id));
+              } else if (kind === 'menuFile') {
+                const fileId = item.fileId || item.id;
+                if (!fileId || String(fileId).startsWith('file-')) {
+                  throw new Error('Menu file id is missing');
+                }
+                await deleteMenuFile(currentUser?.token, fileId);
+                setMenuFiles(prev =>
+                  prev.filter(f => String(f.id) !== String(fileId)),
+                );
               }
-              setOwnerVideos(prev => prev.filter(v => v.id !== item.id));
-            } else if (kind === 'menu') {
-              await deleteMenuItem(currentUser?.token, item.id);
-              setMenuItems(prev => prev.filter(m => m.id !== item.id));
-            } else if (kind === 'menuFile') {
-              const fileId = item.fileId || item.id;
-              if (!fileId || String(fileId).startsWith('file-')) {
-                throw new Error('Menu file id is missing');
-              }
-              await deleteMenuFile(currentUser?.token, fileId);
-              setMenuFiles(prev =>
-                prev.filter(f => String(f.id) !== String(fileId)),
-              );
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to delete item');
             }
-          } catch (e) {
-            Alert.alert('Error', e?.message || 'Failed to delete item');
-          }
+          },
         },
-      },
-    ]);
+      ],
+    );
   }, [itemActionTarget, currentUser?.id, currentUser?.token]);
 
   const renderHeader = () => (
@@ -1343,9 +1365,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <Text style={styles.backText}>Back</Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.moreIcon}>
+        {/* <TouchableOpacity style={styles.moreIcon}>
           <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       <BusinessProfileCard
@@ -1457,8 +1479,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <TouchableOpacity
             onPress={() => navigation?.navigate('MenuManageScreen')}
           >
-          <MaterialCommunityIcons name="plus" size={24} color="#333" />
-        </TouchableOpacity>
+            <MaterialCommunityIcons name="plus" size={24} color="#333" />
+          </TouchableOpacity>
         ) : activeTab === 'Posts' && profileUserId === currentUser?.id ? (
           <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
@@ -1696,7 +1718,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       }
       if (item.type === 'menuFile') {
         const url = String(item.fileUrl || '').trim();
-        const isPdf = /\.pdf(\?|$)/i.test(url) || item.fileType === 'application/pdf';
+        const isPdf =
+          /\.pdf(\?|$)/i.test(url) || item.fileType === 'application/pdf';
         return (
           <TouchableOpacity
             style={styles.menuRowItem}
@@ -1733,7 +1756,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 />
               </TouchableOpacity>
             ) : (
-              <MaterialCommunityIcons name="open-in-new" size={20} color="#666" />
+              <MaterialCommunityIcons
+                name="open-in-new"
+                size={20}
+                color="#666"
+              />
             )}
           </TouchableOpacity>
         );
@@ -1797,7 +1824,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 size={18}
                 color="#fff"
               />
-        </View>
+            </View>
           ) : null}
         </TouchableOpacity>
       );
@@ -2040,7 +2067,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               onPress={deletePostFromActions}
               activeOpacity={0.85}
             >
-              <Text style={[styles.postActionText, styles.postActionDeleteText]}>
+              <Text
+                style={[styles.postActionText, styles.postActionDeleteText]}
+              >
                 Delete
               </Text>
             </TouchableOpacity>
@@ -2100,7 +2129,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 style={styles.postEditMediaBtn}
                 onPress={pickPostThumbnail}
               >
-                <Text style={styles.postEditMediaBtnText}>Change Thumbnail</Text>
+                <Text style={styles.postEditMediaBtnText}>
+                  Change Thumbnail
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.postEditMediaBtn}
@@ -2154,7 +2185,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               onPress={deleteItemFromActions}
               activeOpacity={0.85}
             >
-              <Text style={[styles.postActionText, styles.postActionDeleteText]}>
+              <Text
+                style={[styles.postActionText, styles.postActionDeleteText]}
+              >
                 Delete
               </Text>
             </TouchableOpacity>
@@ -2238,7 +2271,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 style={styles.postEditMediaBtn}
                 onPress={pickItemThumbnail}
               >
-                <Text style={styles.postEditMediaBtnText}>Change Thumbnail</Text>
+                <Text style={styles.postEditMediaBtnText}>
+                  Change Thumbnail
+                </Text>
               </TouchableOpacity>
               {itemActionTarget?.kind !== 'menu' ? (
                 <TouchableOpacity
@@ -2602,36 +2637,44 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     Opening Hours
                   </Text>
                   <View style={styles.openingHoursCard}>
-                    {(editOpeningHours || DEFAULT_OPENING_HOURS).map((h, idx) => (
-                      <View
-                        key={`${h.day || idx}-${idx}`}
-                        style={[
-                          styles.openingHoursRow,
-                          idx === (editOpeningHours || DEFAULT_OPENING_HOURS).length - 1 &&
-                            styles.openingHoursRowLast,
-                        ]}
-                      >
-                        <Text style={styles.openingDay} numberOfLines={1}>
-                          {h.day}
-                        </Text>
-                        <TextInput
-                          style={styles.openingTimeInput}
-                          value={h.open}
-                          onChangeText={v => updateOpeningHour(idx, { open: v })}
-                          placeholder="Open"
-                          placeholderTextColor="#999"
-                          autoCapitalize="none"
-                        />
-                        <TextInput
-                          style={styles.openingTimeInput}
-                          value={h.close}
-                          onChangeText={v => updateOpeningHour(idx, { close: v })}
-                          placeholder="Close"
-                          placeholderTextColor="#999"
-                          autoCapitalize="none"
-                        />
-                      </View>
-                    ))}
+                    {(editOpeningHours || DEFAULT_OPENING_HOURS).map(
+                      (h, idx) => (
+                        <View
+                          key={`${h.day || idx}-${idx}`}
+                          style={[
+                            styles.openingHoursRow,
+                            idx ===
+                              (editOpeningHours || DEFAULT_OPENING_HOURS)
+                                .length -
+                                1 && styles.openingHoursRowLast,
+                          ]}
+                        >
+                          <Text style={styles.openingDay} numberOfLines={1}>
+                            {h.day}
+                          </Text>
+                          <TextInput
+                            style={styles.openingTimeInput}
+                            value={h.open}
+                            onChangeText={v =>
+                              updateOpeningHour(idx, { open: v })
+                            }
+                            placeholder="Open"
+                            placeholderTextColor="#999"
+                            autoCapitalize="none"
+                          />
+                          <TextInput
+                            style={styles.openingTimeInput}
+                            value={h.close}
+                            onChangeText={v =>
+                              updateOpeningHour(idx, { close: v })
+                            }
+                            placeholder="Close"
+                            placeholderTextColor="#999"
+                            autoCapitalize="none"
+                          />
+                        </View>
+                      ),
+                    )}
                   </View>
                 </>
               ) : null}
@@ -2711,7 +2754,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           ) : null}
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 };

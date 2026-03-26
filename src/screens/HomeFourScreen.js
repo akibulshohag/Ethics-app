@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -12,7 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import {
+  CommonActions,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Toast from 'react-native-toast-message';
 import { createRestaurantOrder } from '../services/orderService';
@@ -23,6 +27,7 @@ const HomeFourScreen = ({ onBack }) => {
   const route = useRoute();
   const user = useSelector(state => state.app?.user) || {};
   const { ownerId, items: paramItems = [], ownerName } = route.params || {};
+  const returnToKey = route.params?.returnToKey;
   const initialItems = Array.isArray(paramItems) ? paramItems : [];
 
   const [items, setItems] = useState(
@@ -38,14 +43,39 @@ const HomeFourScreen = ({ onBack }) => {
   const [promoApplyError, setPromoApplyError] = useState('');
   const [applyingPromo, setApplyingPromo] = useState(false);
 
+  const syncAndBackToMenu = useCallback(() => {
+    const syncParams = {
+      syncedCheckoutItems: items,
+      syncedOwnerId: ownerId || null,
+      syncedAt: Date.now(),
+    };
+    if (returnToKey) {
+      try {
+        navigation.dispatch({
+          ...CommonActions.setParams(syncParams),
+          source: returnToKey,
+        });
+      } catch (_) {
+        // no-op fallback; still goBack below
+      }
+    }
+    navigation.goBack();
+  }, [navigation, items, ownerId, returnToKey]);
+
   const updateItemQty = (index, delta) => {
-    setItems(prev =>
-      prev.map((it, i) =>
-        i === index
-          ? { ...it, quantity: Math.max(1, (it.quantity || 1) + delta) }
-          : it,
-      ),
-    );
+    setItems(prev => {
+      const next = Array.isArray(prev) ? [...prev] : [];
+      const row = next[index];
+      if (!row) return prev;
+      const currentQty = Math.max(1, Number(row.quantity) || 1);
+      const nextQty = currentQty + delta;
+      if (nextQty <= 0) {
+        next.splice(index, 1);
+      } else {
+        next[index] = { ...row, quantity: nextQty };
+      }
+      return next;
+    });
   };
 
   const subtotal = items.reduce(
@@ -196,7 +226,7 @@ const HomeFourScreen = ({ onBack }) => {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
-            onPress={() => (onBack ? onBack() : navigation.goBack())}
+            onPress={() => (onBack ? onBack() : syncAndBackToMenu())}
             style={styles.backBtn}
           >
             <Icon name="chevron-left" size={18} color="#FFF" />
@@ -206,7 +236,7 @@ const HomeFourScreen = ({ onBack }) => {
             {restaurantName}
           </Text>
         </View>
-        <Icon name="dots-vertical" size={24} color="#999" />
+        {/* <Icon name="dots-vertical" size={24} color="#999" /> */}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
@@ -234,7 +264,9 @@ const HomeFourScreen = ({ onBack }) => {
         ) : null}
         {isAddressEditing ? (
           <View style={styles.customAddressCard}>
-            <Text style={styles.customAddressTitle}>Custom address for this order</Text>
+            <Text style={styles.customAddressTitle}>
+              Custom address for this order
+            </Text>
             <TextInput
               style={styles.customAddressInput}
               placeholder="Enter delivery address"
@@ -267,7 +299,6 @@ const HomeFourScreen = ({ onBack }) => {
             items.map((item, index) => {
               const qty = item.quantity || 1;
               const price = Number(item.price) || 0;
-              const lineTotal = price * qty;
               return (
                 <View key={item.menuItemId || index} style={styles.itemRow}>
                   <View style={styles.itemInfo}>
@@ -285,16 +316,8 @@ const HomeFourScreen = ({ onBack }) => {
                     <TouchableOpacity
                       style={styles.stepperBtn}
                       onPress={() => updateItemQty(index, -1)}
-                      disabled={qty <= 1}
                     >
-                      <Text
-                        style={[
-                          styles.stepperChar,
-                          qty <= 1 && styles.stepperCharDisabled,
-                        ]}
-                      >
-                        —
-                      </Text>
+                      <Text style={styles.stepperChar}>—</Text>
                     </TouchableOpacity>
                     <Text style={styles.stepperVal}>{qty}</Text>
                     <TouchableOpacity
@@ -329,7 +352,7 @@ const HomeFourScreen = ({ onBack }) => {
 
           <TouchableOpacity
             style={styles.addItemsBtn}
-            onPress={() => navigation.goBack()}
+            onPress={syncAndBackToMenu}
           >
             <Text style={styles.addItemsText}>+ Add items</Text>
           </TouchableOpacity>

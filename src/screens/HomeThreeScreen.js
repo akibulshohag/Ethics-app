@@ -14,7 +14,10 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
@@ -106,8 +109,28 @@ const HomeThreeScreen = ({ onBack }) => {
   const [quickFilter, setQuickFilter] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [openingHours, setOpeningHours] = useState([]);
+  const [restaurantAvgRating, setRestaurantAvgRating] = useState(0);
+  const [restaurantReviewCount, setRestaurantReviewCount] = useState(0);
   const [nowTick, setNowTick] = useState(0);
   const insets = useSafeAreaInsets();
+
+  // Sync cart qty from checkout screen (HomeFour) when coming back.
+  useEffect(() => {
+    const syncedAt = route.params?.syncedAt;
+    const syncedOwnerId = route.params?.syncedOwnerId;
+    const syncedItems = route.params?.syncedCheckoutItems;
+    if (!syncedAt) return;
+    if (!ownerId || String(syncedOwnerId || '') !== String(ownerId)) return;
+    if (!Array.isArray(syncedItems)) return;
+
+    const nextSelected = {};
+    syncedItems.forEach(it => {
+      const id = it?.menuItemId;
+      const q = Math.max(0, Number(it?.quantity) || 0);
+      if (id && q > 0) nextSelected[id] = q;
+    });
+    setSelectedItems(nextSelected);
+  }, [route.params?.syncedAt, route.params?.syncedOwnerId, ownerId]);
 
   useEffect(() => {
     // Tick every minute so the banner updates automatically
@@ -121,9 +144,39 @@ const HomeThreeScreen = ({ onBack }) => {
     getChannelProfile(ownerId, viewerId)
       .then(p => {
         setOpeningHours(normalizeOpeningHours(p?.openingHours));
+        const avgRaw =
+          p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
+        const countRaw =
+          p?.reviewCount ??
+          p?.reviewsCount ??
+          p?.totalReviews ??
+          p?.ratingCount;
+        const avg = Number(avgRaw);
+        const count = Number(countRaw);
+        setRestaurantAvgRating(Number.isFinite(avg) ? Math.max(0, avg) : 0);
+        setRestaurantReviewCount(
+          Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0,
+        );
       })
-      .catch(() => setOpeningHours([]));
+      .catch(() => {
+        setOpeningHours([]);
+        setRestaurantAvgRating(0);
+        setRestaurantReviewCount(0);
+      });
   }, [ownerId, user?.id]);
+
+  const ratingText = useMemo(
+    () => (restaurantAvgRating > 0 ? restaurantAvgRating.toFixed(1) : '0.0'),
+    [restaurantAvgRating],
+  );
+  const ratingCountText = useMemo(() => {
+    const c = restaurantReviewCount;
+    if (c >= 1000000)
+      return `${(c / 1000000).toFixed(1).replace(/\.0$/, '')}M ratings`;
+    if (c >= 1000)
+      return `${(c / 1000).toFixed(1).replace(/\.0$/, '')}k ratings`;
+    return `${c} rating${c === 1 ? '' : 's'}`;
+  }, [restaurantReviewCount]);
 
   const openCloseBannerText = useMemo(() => {
     // depend on nowTick so it refreshes
@@ -228,7 +281,12 @@ const HomeThreeScreen = ({ onBack }) => {
     item => {
       const cid = item.categoryId || item.category?.id;
       const cat = (menuCategoriesFromApi || []).find(c => c.id === cid);
-      if (cat && /dessert|sweets?|pastry|cake|pudding|mousse/i.test(String(cat.name || ''))) {
+      if (
+        cat &&
+        /dessert|sweets?|pastry|cake|pudding|mousse/i.test(
+          String(cat.name || ''),
+        )
+      ) {
         return true;
       }
       const n = String(item.itemName || '').toLowerCase();
@@ -256,9 +314,7 @@ const HomeThreeScreen = ({ onBack }) => {
       list = list.filter(isDessertItem);
     }
     if (appliedDietary !== 'all') {
-      list = list.filter(
-        it => String(it.dietaryType || '') === appliedDietary,
-      );
+      list = list.filter(it => String(it.dietaryType || '') === appliedDietary);
     }
     if (appliedHighlyReordered) {
       const ordered = list.filter(it => (Number(it.timesOrdered) || 0) > 0);
@@ -273,10 +329,8 @@ const HomeThreeScreen = ({ onBack }) => {
       if (br !== ar) return br - ar;
       return (Number(b.ratingCount) || 0) - (Number(a.ratingCount) || 0);
     };
-    const byPriceLo = (a, b) =>
-      Number(a.price || 0) - Number(b.price || 0);
-    const byPriceHi = (a, b) =>
-      Number(b.price || 0) - Number(a.price || 0);
+    const byPriceLo = (a, b) => Number(a.price || 0) - Number(b.price || 0);
+    const byPriceHi = (a, b) => Number(b.price || 0) - Number(a.price || 0);
     const bySortOrder = (a, b) =>
       (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
 
@@ -621,8 +675,8 @@ const HomeThreeScreen = ({ onBack }) => {
             quantity,
             currency: 'GBP',
             imageUrl: menuItem?.imageUrl,
-        };
-      });
+          };
+        });
     }
     if (ownerId) {
       return [];
@@ -642,14 +696,13 @@ const HomeThreeScreen = ({ onBack }) => {
   const displayCount = hasDynamicMenu
     ? totalCount
     : ownerId
-      ? totalCount
-      : staticTotal;
+    ? totalCount
+    : staticTotal;
   const cartBarDisabled = ownerHasNoMenu;
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
-
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => (onBack ? onBack() : navigation.goBack())}
@@ -658,9 +711,8 @@ const HomeThreeScreen = ({ onBack }) => {
           <Icon name="chevron-left" size={20} color="#FFF" />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Icon name="dots-vertical" size={24} color="#666" />
+        {/* <Icon name="dots-vertical" size={24} color="#666" /> */}
       </View>
-
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.resInfoSection}>
           <View style={styles.resTitleRow}>
@@ -672,10 +724,10 @@ const HomeThreeScreen = ({ onBack }) => {
             {/* Right side container to stack badge and text */}
             <View style={styles.ratingContainer}>
               <View style={styles.ratingBadge}>
-                <Text style={styles.ratingText}>4.5</Text>
+                <Text style={styles.ratingText}>{ratingText}</Text>
                 <Icon name="star" size={14} color="#FFF" />
               </View>
-              <Text style={styles.ratingCount}>12k rating</Text>
+              <Text style={styles.ratingCount}>{ratingCountText}</Text>
             </View>
           </View>
           <View style={styles.divider} />
@@ -705,10 +757,10 @@ const HomeThreeScreen = ({ onBack }) => {
                   {quickFilter === 'desserts'
                     ? 'No dessert-style items here. Use “Menu” to browse all categories, or clear Desserts.'
                     : appliedHighlyReordered
-                      ? 'No items with order history yet. Try turning off “Highly reordered”.'
-                      : appliedDietary !== 'all'
-                        ? 'No items match this dietary filter.'
-                        : 'No items in this category.'}
+                    ? 'No items with order history yet. Try turning off “Highly reordered”.'
+                    : appliedDietary !== 'all'
+                    ? 'No items match this dietary filter.'
+                    : 'No items in this category.'}
                 </Text>
               </View>
             ) : null}
@@ -857,6 +909,7 @@ const HomeThreeScreen = ({ onBack }) => {
               ownerId: hasDynamicMenu ? ownerId : null,
               items: itemsForCheckout,
               ownerName: resTitle,
+              returnToKey: route.key,
             });
           }}
         >
@@ -869,8 +922,8 @@ const HomeThreeScreen = ({ onBack }) => {
             {ownerHasNoMenu
               ? '0 item added'
               : displayCount > 0
-                ? `${displayCount} item${displayCount !== 1 ? 's' : ''} added`
-                : 'Add to Cart'}
+              ? `${displayCount} item${displayCount !== 1 ? 's' : ''} added`
+              : 'Add to Cart'}
           </Text>
           <View style={styles.cartIconCircle}>
             <Icon name="arrow-right" size={18} color="#F5A623" />
@@ -986,9 +1039,7 @@ const HomeThreeScreen = ({ onBack }) => {
                       draftSort === opt.id && styles.filterOptionChipOn,
                     ]}
                     onPress={() => {
-                      setDraftSort(
-                        draftSort === opt.id ? 'default' : opt.id,
-                      );
+                      setDraftSort(draftSort === opt.id ? 'default' : opt.id);
                       if (opt.id) setDraftHighlyReordered(false);
                     }}
                   >
@@ -1017,7 +1068,12 @@ const HomeThreeScreen = ({ onBack }) => {
                     icon: 'circle',
                     iconColor: '#2E7D32',
                   },
-                  { id: 'egg', label: 'Egg', icon: 'egg', iconColor: '#C4A000' },
+                  {
+                    id: 'egg',
+                    label: 'Egg',
+                    icon: 'egg',
+                    iconColor: '#C4A000',
+                  },
                   {
                     id: 'non_veg',
                     label: 'Non-veg',
@@ -1032,22 +1088,19 @@ const HomeThreeScreen = ({ onBack }) => {
                       draftDietary === opt.id && styles.filterOptionChipOn,
                     ]}
                     onPress={() =>
-                      setDraftDietary(
-                        draftDietary === opt.id ? 'all' : opt.id,
-                      )
+                      setDraftDietary(draftDietary === opt.id ? 'all' : opt.id)
                     }
                   >
                     <Icon
                       name={opt.icon}
                       size={18}
-                      color={
-                        draftDietary === opt.id ? '#FFF' : opt.iconColor
-                      }
+                      color={draftDietary === opt.id ? '#FFF' : opt.iconColor}
                     />
                     <Text
                       style={[
                         styles.filterOptionChipText,
-                        draftDietary === opt.id && styles.filterOptionChipTextOn,
+                        draftDietary === opt.id &&
+                          styles.filterOptionChipTextOn,
                       ]}
                     >
                       {opt.label}
@@ -1135,6 +1188,10 @@ const styles = StyleSheet.create({
   },
   resTitle: { fontSize: 24, fontWeight: 'bold', color: '#222' },
   resSubTitle: { fontSize: 14, color: '#666', marginTop: 4 },
+  ratingContainer: {
+    alignItems: 'flex-end',
+    marginLeft: 10,
+  },
   ratingBadge: {
     backgroundColor: '#10793F',
     flexDirection: 'row',

@@ -4,12 +4,12 @@ import {
   View,
   Text,
   ScrollView,
-  SafeAreaView,
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -177,8 +177,7 @@ export default function EarningsScreen() {
                 Total Earning
               </Text>
               <Text style={styles.summaryValue}>
-                {data?.currency || 'GBP'}{' '}
-                {Number(data?.totalEarning ?? 0).toFixed(2)}
+                €{Number(data?.totalEarning ?? 0).toFixed(2)}
               </Text>
             </View>
           </View>

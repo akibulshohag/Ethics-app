@@ -16,6 +16,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { getConversations } from '../services/chatService';
+import { safeImageUri } from '../utils/helper';
 
 function formatTime(iso) {
   if (!iso) return '';
@@ -77,6 +78,13 @@ export default function MessageListScreen() {
     : conversations;
 
   const storyPartners = filtered.slice(0, 8);
+  const getAvatarForPartner = (partnerName, partnerAvatar) =>
+    safeImageUri(
+      partnerAvatar,
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        partnerName || 'User',
+      )}&background=111&color=fff`,
+    );
 
   if (!user?.token) {
     return (
@@ -121,7 +129,7 @@ export default function MessageListScreen() {
                 <View style={styles.storyRing}>
                   <Image
                     source={{
-                      uri: c.partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.partnerName || '')}&background=111&color=fff`,
+                      uri: getAvatarForPartner(c.partnerName, c.partnerAvatar),
                     }}
                     style={styles.storyImage}
                   />
@@ -158,7 +166,10 @@ export default function MessageListScreen() {
               >
                 <Image
                   source={{
-                    uri: item.partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.partnerName || '')}&background=111&color=fff`,
+                    uri: getAvatarForPartner(
+                      item.partnerName,
+                      item.partnerAvatar,
+                    ),
                   }}
                   style={styles.avatar}
                 />
