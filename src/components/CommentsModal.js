@@ -375,6 +375,7 @@ const CommentsModal = ({
   onCommentDeleted,
   contentType = 'video',
   contentId,
+  totalComments,
 }) => {
   const isShort = contentType === 'short';
   const isPost = contentType === 'post';
@@ -387,6 +388,13 @@ const CommentsModal = ({
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const headerCountRaw =
+    totalComments != null
+      ? Number(totalComments)
+      : video?.topLevelCommentCount ?? video?.commentCount;
+  const headerCount = Number.isFinite(headerCountRaw)
+    ? Math.max(0, headerCountRaw)
+    : null;
 
   const rawUserPhoto = user?.photos?.[0] ?? (Array.isArray(user?.photos) && user?.photos[0]);
   const userAvatarRaw = safeImageUri(
@@ -612,7 +620,9 @@ const CommentsModal = ({
 
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>
-                  Comments {video ? `(${video.topLevelCommentCount ?? video.commentCount ?? 0})` : ''}
+                  {headerCount != null
+                    ? `Comments (${formatCount(headerCount)})`
+                    : 'Comments'}
                 </Text>
                 <TouchableOpacity onPress={onClose}>
                   <MaterialCommunityIcons

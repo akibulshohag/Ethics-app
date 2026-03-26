@@ -218,6 +218,10 @@ const UserViewsScreen = ({ navigation }) => {
   const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
   const [instagramPreviewVisible, setInstagramPreviewVisible] = useState(false);
   const [instagramPreviewItem, setInstagramPreviewItem] = useState(null);
+  const [galleryPostDetailVisible, setGalleryPostDetailVisible] = useState(false);
+  const [galleryPostDetailItem, setGalleryPostDetailItem] = useState(null);
+  const [galleryPostVideoVisible, setGalleryPostVideoVisible] = useState(false);
+  const [galleryPostImageVisible, setGalleryPostImageVisible] = useState(false);
 
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -287,6 +291,7 @@ const UserViewsScreen = ({ navigation }) => {
         originId: p.id,
         sourceType: 'post',
         title: p?.title || 'Post',
+        description: String(p?.description || p?.caption || '').trim(),
         subtitle: timeAgo(p?.publishedAt || p?.createdAt),
         mediaType: isVideo ? 'video' : 'image',
         mediaUrl: media,
@@ -311,6 +316,8 @@ const UserViewsScreen = ({ navigation }) => {
         v?.thumbnailUrl || v?.videoUrl,
         'https://via.placeholder.com/600',
       ),
+      type: v?.type || v?._type || v?.contentType || '',
+      isShort: Boolean(v?.isShort),
       createdAt:
         new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
     }));
@@ -649,6 +656,55 @@ const UserViewsScreen = ({ navigation }) => {
     setInstagramPreviewVisible(true);
   };
 
+  const openGalleryItem = item => {
+    if (!item?.mediaUrl) return;
+    const sourceType = String(item?.sourceType || '').toLowerCase();
+    if (sourceType === 'post') {
+      setGalleryPostDetailItem(item);
+      setGalleryPostDetailVisible(true);
+      return;
+    }
+    if (sourceType === 'video') {
+      const rawType = String(
+        item?.type || item?._type || item?.contentType || '',
+      ).toLowerCase();
+      const isShortByType = rawType === 'short' || rawType === 'shorts';
+      const isShortByUrl = /\/shorts?\//i.test(String(item?.mediaUrl || ''));
+      const isShort = Boolean(item?.isShort) || isShortByType || isShortByUrl;
+      const targetId = item?.originId || item?.id;
+      if (!targetId) return;
+      navigateToHomeOneLibraryDetail(
+        navigation,
+        { id: targetId, type: isShort ? 'short' : 'video' },
+        { returnTo: 'user_views', returnUserId: profileUserId },
+      );
+      return;
+    }
+    openInstagramPreview(item);
+  };
+
+  const selectedGalleryPost = useMemo(() => {
+    const id = galleryPostDetailItem?.originId;
+    if (!id) return null;
+    const source = (rawPosts || []).find(p => String(p.id) === String(id));
+    if (!source) return null;
+    return mapPostToCard(source, profile);
+  }, [galleryPostDetailItem?.originId, rawPosts, profile]);
+
+  const activePostCommentCount = useMemo(() => {
+    if (!activePostId) return 0;
+    const p = (rawPosts || []).find(x => String(x.id) === String(activePostId));
+    if (p?.commentCount != null) return Number(p.commentCount) || 0;
+    if (
+      selectedGalleryPost &&
+      String(selectedGalleryPost.postId || selectedGalleryPost.id) ===
+        String(activePostId)
+    ) {
+      return Number(selectedGalleryPost.commentCount || 0) || 0;
+    }
+    return 0;
+  }, [activePostId, rawPosts, selectedGalleryPost]);
+
   const loadProfile = useCallback(async () => {
     if (!profileUserId) return;
     setProfileLoading(true);
@@ -819,7 +875,11 @@ const UserViewsScreen = ({ navigation }) => {
   useEffect(() => {
     if (!profileUserId) return;
     if (activeTab === 'Posts') loadPosts();
-    if (activeTab === 'Gallery') loadGallery();
+    if (activeTab === 'Gallery') {
+      loadGallery();
+      loadPosts();
+      loadVideos();
+    }
     if (activeTab === 'Videos') loadVideos();
     if (activeTab === 'Instagram') {
       loadPosts();
@@ -1182,7 +1242,7 @@ const UserViewsScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.gridImageContainer}
           activeOpacity={0.85}
-          onPress={() => openInstagramPreview(item)}
+          onPress={() => openGalleryItem(item)}
         >
           <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
           {item.mediaType === 'video' ? (
@@ -1287,7 +1347,8 @@ const UserViewsScreen = ({ navigation }) => {
             (activeTab === 'Home' && videosLoading) ||
             (activeTab === 'Videos' && videosLoading) ||
             (activeTab === 'Posts' && postsLoading) ||
-            (activeTab === 'Gallery' && galleryLoading) ||
+            (activeTab === 'Gallery' &&
+              (galleryLoading || postsLoading || videosLoading)) ||
             (activeTab === 'Instagram' &&
               (postsLoading || videosLoading || galleryLoading)) ||
             (activeTab === 'Playlists' && playlistsLoading);
@@ -1384,12 +1445,23 @@ const UserViewsScreen = ({ navigation }) => {
         user={currentUser}
         contentType="post"
         contentId={activePostId}
+        totalComments={activePostCommentCount}
         onCommentAdded={() => {
           if (!activePostId) return;
           updatePostLocal(activePostId, p => ({
             ...p,
             commentCount: (p.commentCount ?? 0) + 1,
           }));
+          setGalleryPostDetailItem(prev => {
+            if (!prev) return prev;
+            if (String(prev.originId || prev.id) !== String(activePostId)) {
+              return prev;
+            }
+            return {
+              ...prev,
+              commentCount: (prev.commentCount ?? 0) + 1,
+            };
+          });
         }}
         onCommentDeleted={(wasTopLevel, deletedCount) => {
           if (!activePostId) return;
@@ -1399,6 +1471,16 @@ const UserViewsScreen = ({ navigation }) => {
             ...p,
             commentCount: Math.max(0, (p.commentCount ?? 0) - dec),
           }));
+          setGalleryPostDetailItem(prev => {
+            if (!prev) return prev;
+            if (String(prev.originId || prev.id) !== String(activePostId)) {
+              return prev;
+            }
+            return {
+              ...prev,
+              commentCount: Math.max(0, (prev.commentCount ?? 0) - dec),
+            };
+          });
         }}
       />
 
@@ -1446,6 +1528,222 @@ const UserViewsScreen = ({ navigation }) => {
               {instagramPreviewItem?.subtitle || 'Recently'}
             </Text>
           </View>
+        </View>
+      </Modal>
+
+      {/* Gallery post details modal (1st modal) */}
+      <Modal
+        visible={galleryPostDetailVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGalleryPostDetailVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setGalleryPostDetailVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.galleryPostDetailCard}>
+            <ScrollView
+              style={styles.galleryPostDetailScroll}
+              contentContainerStyle={styles.galleryPostDetailContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.galleryPostDetailType}>Post</Text>
+              <Text style={styles.galleryPostDetailTitle}>
+                {selectedGalleryPost?.title || galleryPostDetailItem?.title || 'Post'}
+              </Text>
+              {(selectedGalleryPost?.description ||
+                galleryPostDetailItem?.description) ? (
+                <Text style={styles.galleryPostDetailDesc}>
+                  {selectedGalleryPost?.description ||
+                    galleryPostDetailItem?.description}
+                </Text>
+              ) : null}
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.galleryPostMediaWrap}
+                onPress={() => {
+                  if (
+                    String(
+                      selectedGalleryPost?.mediaType ||
+                        galleryPostDetailItem?.mediaType ||
+                        '',
+                    ).toLowerCase() === 'video'
+                  ) {
+                    setGalleryPostVideoVisible(true);
+                  } else {
+                    setGalleryPostImageVisible(true);
+                  }
+                }}
+              >
+                {String(
+                  selectedGalleryPost?.mediaType ||
+                    galleryPostDetailItem?.mediaType ||
+                    '',
+                ).toLowerCase() === 'video' ? (
+                  <>
+                    <Image
+                      source={{
+                        uri:
+                          selectedGalleryPost?.thumbnail ||
+                          galleryPostDetailItem?.thumbnail,
+                      }}
+                      style={styles.galleryPostDetailMedia}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.galleryPostPlayBadge}>
+                      <MaterialCommunityIcons
+                        name="play-circle"
+                        size={48}
+                        color="#fff"
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <Image
+                    source={{
+                      uri:
+                        selectedGalleryPost?.mediaUrl ||
+                        galleryPostDetailItem?.mediaUrl,
+                    }}
+                    style={styles.galleryPostDetailMedia}
+                    resizeMode="cover"
+                  />
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.galleryPostActionsRow}>
+                <TouchableOpacity
+                  style={styles.galleryPostActionBtn}
+                  onPress={() =>
+                    selectedGalleryPost && handlePostLike(selectedGalleryPost)
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name={
+                      selectedGalleryPost?.isLiked
+                        ? 'thumb-up'
+                        : 'thumb-up-outline'
+                    }
+                    size={20}
+                    color={selectedGalleryPost?.isLiked ? '#FF7F0B' : '#333'}
+                  />
+                  <Text style={styles.galleryPostActionText}>
+                    {formatCount(selectedGalleryPost?.likeCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.galleryPostActionBtn}
+                  onPress={() =>
+                    selectedGalleryPost && handlePostDislike(selectedGalleryPost)
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name={
+                      selectedGalleryPost?.isDisliked
+                        ? 'thumb-down'
+                        : 'thumb-down-outline'
+                    }
+                    size={20}
+                    color={selectedGalleryPost?.isDisliked ? '#FF7F0B' : '#333'}
+                  />
+                  <Text style={styles.galleryPostActionText}>
+                    {formatCount(selectedGalleryPost?.dislikeCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.galleryPostActionBtn}
+                  onPress={() =>
+                    selectedGalleryPost && openPostComments(selectedGalleryPost)
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="comment-text-outline"
+                    size={20}
+                    color="#333"
+                  />
+                  <Text style={styles.galleryPostActionText}>
+                    {formatCount(selectedGalleryPost?.commentCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.galleryPostActionBtn}
+                  onPress={() =>
+                    selectedGalleryPost && handlePostShare(selectedGalleryPost)
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="share-outline"
+                    size={20}
+                    color="#333"
+                  />
+                  <Text style={styles.galleryPostActionText}>
+                    {formatCount(selectedGalleryPost?.shareCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Gallery post video player modal (2nd modal) */}
+      <Modal
+        visible={galleryPostVideoVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGalleryPostVideoVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setGalleryPostVideoVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {(selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl) ? (
+            <Video
+              source={{
+                uri: selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl,
+              }}
+              style={styles.previewVideo}
+              controls
+              paused={false}
+              repeat
+              resizeMode="contain"
+              ignoreSilentSwitch="ignore"
+            />
+          ) : null}
+        </View>
+      </Modal>
+
+      {/* Gallery post image viewer modal (2nd modal for image) */}
+      <Modal
+        visible={galleryPostImageVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGalleryPostImageVisible(false)}
+      >
+        <View style={styles.previewBackdrop}>
+          <TouchableOpacity
+            style={styles.previewCloseBtn}
+            onPress={() => setGalleryPostImageVisible(false)}
+          >
+            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          {(selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl) ? (
+            <Image
+              source={{
+                uri: selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl,
+              }}
+              style={styles.previewImage}
+              resizeMode="contain"
+            />
+          ) : null}
         </View>
       </Modal>
 
@@ -2087,6 +2385,72 @@ const styles = StyleSheet.create({
     color: '#ddd',
     fontSize: 12,
     marginTop: 2,
+  },
+  galleryPostDetailCard: {
+    width: '90%',
+    maxHeight: '82%',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  galleryPostDetailScroll: {
+    flexGrow: 0,
+  },
+  galleryPostDetailContent: {
+    paddingBottom: 8,
+  },
+  galleryPostDetailType: {
+    color: '#FFAD33',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  galleryPostDetailTitle: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  galleryPostDetailDesc: {
+    color: '#444',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  galleryPostMediaWrap: {
+    marginTop: 12,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    aspectRatio: 1.1,
+  },
+  galleryPostDetailMedia: {
+    width: '100%',
+    height: '100%',
+  },
+  galleryPostPlayBadge: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  galleryPostActionsRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  galleryPostActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  galleryPostActionText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
   },
   videoModalContainer: {
     flex: 1,

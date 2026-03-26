@@ -922,7 +922,20 @@ const ProductShortsVideo = () => {
                   } catch (_) {}
                   return;
                 }
-                navigation.navigate('UserViewsScreen', { userId: ownerId });
+                const targetRole = String(
+                  item?.creatorRole || item?.userObj?.role || item?.user?.role || '',
+                ).toLowerCase();
+                if (targetRole === 'user') {
+                  navigation.navigate('Root', {
+                    screen: 'Home1',
+                    params: {
+                      screen: 'PromotionScreen',
+                      params: { userId: ownerId },
+                    },
+                  });
+                } else {
+                  navigation.navigate('UserViewsScreen', { userId: ownerId });
+                }
               }}
             >
               <View style={styles.ownerAvatarWrap}>

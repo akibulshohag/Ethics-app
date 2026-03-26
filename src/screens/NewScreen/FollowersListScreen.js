@@ -104,6 +104,7 @@ export default function FollowersListScreen({ navigation }) {
           shorts: '0',
           isSubscribed: !!it.isSubscribed,
           isMessage: true,
+          role: String(it.role || '').toLowerCase(),
         }));
 
         // Enrich each follower with their own videos + shorts counts
@@ -125,12 +126,14 @@ export default function FollowersListScreen({ navigation }) {
                     typeof profile?.shortCount === 'number'
                       ? String(profile.shortCount)
                       : '0',
+                  role: String(profile?.role || ch.role || '').toLowerCase(),
                 };
               } catch {
                 return {
                   id: ch.id,
                   videos: ch.videos,
                   shorts: ch.shorts,
+                  role: ch.role,
                 };
               }
             }),
@@ -145,6 +148,7 @@ export default function FollowersListScreen({ navigation }) {
             ...ch,
             videos: byId[ch.id]?.videos ?? ch.videos,
             shorts: byId[ch.id]?.shorts ?? ch.shorts,
+            role: byId[ch.id]?.role ?? ch.role,
           }));
         } catch {
           // ignore enrichment errors; keep base list
@@ -210,6 +214,17 @@ export default function FollowersListScreen({ navigation }) {
 
   const handleViewChannel = follower => {
     if (!follower?.userId) return;
+    const targetRole = String(follower?.role || '').toLowerCase();
+    if (targetRole === 'user') {
+      nav.navigate('Root', {
+        screen: 'Home1',
+        params: {
+          screen: 'PromotionScreen',
+          params: { userId: follower.userId },
+        },
+      });
+      return;
+    }
     nav.navigate('UserViewsScreen', { userId: follower.userId });
   };
 

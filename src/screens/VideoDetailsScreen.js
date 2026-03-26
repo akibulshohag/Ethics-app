@@ -989,9 +989,9 @@ const VideoDetailsScreen = () => {
               }}
               style={styles.channelAvatar}
             />
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={styles.channelName}>
+            <View style={styles.channelMeta}>
+              <View style={styles.channelNameRow}>
+                <Text style={styles.channelName} numberOfLines={1}>
                   {currentVideo.channelName}
                 </Text>
                 <MaterialCommunityIcons
@@ -1000,28 +1000,28 @@ const VideoDetailsScreen = () => {
                   color="#3ea6ff"
                   style={{ marginLeft: 4 }}
                 />
-                <View style={styles.channelRatingRow}>
-                  {[1, 2, 3, 4, 5].map(star => (
-                    <MaterialCommunityIcons
-                      key={`video-rating-star-${star}`}
-                      name={
-                        star <= Math.round(channelRating.average)
-                          ? 'star'
-                          : 'star-outline'
-                      }
-                      size={12}
-                      color={
-                        star <= Math.round(channelRating.average)
-                          ? '#FFE082'
-                          : '#BDBDBD'
-                      }
-                    />
-                  ))}
-                  <Text style={styles.channelRatingText}>
-                    ({channelRating.reviewCount}{' '}
-                    {channelRating.reviewCount === 1 ? 'review' : 'reviews'})
-                  </Text>
-                </View>
+              </View>
+              <View style={styles.channelRatingRow}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <MaterialCommunityIcons
+                    key={`video-rating-star-${star}`}
+                    name={
+                      star <= Math.round(channelRating.average)
+                        ? 'star'
+                        : 'star-outline'
+                    }
+                    size={12}
+                    color={
+                      star <= Math.round(channelRating.average)
+                        ? '#FFE082'
+                        : '#BDBDBD'
+                    }
+                  />
+                ))}
+                <Text style={styles.channelRatingText}>
+                  ({channelRating.reviewCount}{' '}
+                  {channelRating.reviewCount === 1 ? 'review' : 'reviews'})
+                </Text>
               </View>
               <Text style={styles.subscriberCount}>
                 {channelSubscription.subscriberCount > 0
@@ -1418,6 +1418,15 @@ const styles = StyleSheet.create({
   channelInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    paddingRight: 10,
+  },
+  channelMeta: {
+    flex: 1,
+  },
+  channelNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   channelAvatar: {
     width: 40,
@@ -1430,13 +1439,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#212121',
+    flexShrink: 1,
   },
   subscriberCount: {
     fontSize: 12,
     color: '#424242',
   },
   channelRatingRow: {
-    marginLeft: 8,
+    marginTop: 3,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 1,

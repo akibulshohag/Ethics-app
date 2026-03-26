@@ -20,7 +20,7 @@ import {
 import Video from 'react-native-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -201,6 +201,7 @@ const SOCIAL_TYPES = [
 
 const PromotionScreen = ({ onBack }) => {
   const navigation = useNavigation();
+  const route = useRoute();
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.app?.user);
 
@@ -251,15 +252,23 @@ const PromotionScreen = ({ onBack }) => {
   const [editVideoUri, setEditVideoUri] = useState('');
   const [itemEditSaving, setItemEditSaving] = useState(false);
 
-  const userId = currentUser?.id;
+  const userId = route.params?.userId || currentUser?.id;
+  const isOwnProfile =
+    !!currentUser?.id && !!userId && String(currentUser.id) === String(userId);
+  const visiblePromoTabs = useMemo(
+    () => (isOwnProfile ? PROMO_PROFILE_TABS : ['Posts', 'Gallery', 'Video']),
+    [isOwnProfile],
+  );
   const displayName =
     profile?.nickname ||
     profile?.name ||
-    currentUser?.nickname ||
-    currentUser?.name ||
+    (isOwnProfile ? currentUser?.nickname : null) ||
+    (isOwnProfile ? currentUser?.name : null) ||
     'User';
-  const displayLocation = profile?.address || currentUser?.address || '';
-  const bio = profile?.channelAbout || currentUser?.channelAbout || '';
+  const displayLocation =
+    profile?.address || (isOwnProfile ? currentUser?.address : '') || '';
+  const bio =
+    profile?.channelAbout || (isOwnProfile ? currentUser?.channelAbout : '') || '';
   const followersCount = formatCountTab(
     profile?.subscriberCount ?? profile?.followersCount ?? 0,
   );
@@ -268,9 +277,12 @@ const PromotionScreen = ({ onBack }) => {
   const avatarUri =
     profile?.channelAvatar ||
     profile?.photos?.[0]?.src ||
-    currentUser?.photos?.[0]?.src ||
-    (Array.isArray(currentUser?.photos) && currentUser?.photos[0]?.src) ||
-    (currentUser?.photos?.[0] &&
+    (isOwnProfile ? currentUser?.photos?.[0]?.src : null) ||
+    (isOwnProfile &&
+      Array.isArray(currentUser?.photos) &&
+      currentUser?.photos[0]?.src) ||
+    (isOwnProfile &&
+      currentUser?.photos?.[0] &&
       (typeof currentUser.photos[0] === 'string'
         ? currentUser.photos[0]
         : currentUser.photos[0]?.src));
@@ -470,6 +482,12 @@ const PromotionScreen = ({ onBack }) => {
       setNotifTabLoading(false);
     }
   }, [userId]);
+
+  useEffect(() => {
+    if (!visiblePromoTabs.includes(activePromoTab)) {
+      setActivePromoTab(visiblePromoTabs[0] || 'Posts');
+    }
+  }, [activePromoTab, visiblePromoTabs]);
 
   useEffect(() => {
     if (!userId) return;
@@ -858,6 +876,7 @@ const PromotionScreen = ({ onBack }) => {
   ]);
 
   const openEditProfile = () => {
+    if (!isOwnProfile) return;
     const links = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
     const linkMap = Array.isArray(links)
       ? links.reduce((acc, l) => ({ ...acc, [l.type]: l.url || '' }), {})
@@ -878,6 +897,7 @@ const PromotionScreen = ({ onBack }) => {
   };
 
   const saveProfile = async () => {
+    if (!isOwnProfile) return;
     if (!userId) return;
     setSavingProfile(true);
     try {
@@ -1015,6 +1035,7 @@ const PromotionScreen = ({ onBack }) => {
   );
 
   const handleCoverPress = () => {
+    if (!isOwnProfile) return;
     if (!userId || uploadingCover) return;
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
       if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
@@ -1036,6 +1057,7 @@ const PromotionScreen = ({ onBack }) => {
   };
 
   const handleAvatarPress = () => {
+    if (!isOwnProfile) return;
     if (!userId || uploadingAvatar) return;
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
       if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
@@ -1152,7 +1174,7 @@ const PromotionScreen = ({ onBack }) => {
                 <TouchableOpacity
                   style={styles.avatarBorder}
                   onPress={handleAvatarPress}
-                  disabled={uploadingAvatar}
+                  disabled={uploadingAvatar || !isOwnProfile}
                 >
                   {uploadingAvatar ? (
                     <ActivityIndicator
@@ -1172,9 +1194,11 @@ const PromotionScreen = ({ onBack }) => {
                       style={styles.avatarImage}
                     />
                   )}
-                  <View style={styles.avatarEditBadge}>
-                    <Icon name="pencil-outline" size={12} color="#666" />
-                  </View>
+                  {isOwnProfile ? (
+                    <View style={styles.avatarEditBadge}>
+                      <Icon name="pencil-outline" size={12} color="#666" />
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
               </View>
 
@@ -1219,32 +1243,36 @@ const PromotionScreen = ({ onBack }) => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.actionButtonGroup}>
-              <TouchableOpacity
-                style={styles.editProfileButton}
-                onPress={openEditProfile}
-              >
-                <Text style={styles.editProfileText}>Edit Profile</Text>
-                <Icon name="pencil-box-outline" size={22} color="#333" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.iconIconButton}>
-                <Icon name="camera-outline" size={24} color="#333" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.iconIconButton}
-                onPress={handleMessagePress}
-              >
-                <Icon name="message-outline" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
+            {isOwnProfile ? (
+              <View style={styles.actionButtonGroup}>
+                <TouchableOpacity
+                  style={styles.editProfileButton}
+                  onPress={openEditProfile}
+                >
+                  <Text style={styles.editProfileText}>Edit Profile</Text>
+                  <Icon name="pencil-box-outline" size={22} color="#333" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconIconButton}>
+                  <Icon name="camera-outline" size={24} color="#333" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconIconButton}
+                  onPress={handleMessagePress}
+                >
+                  <Icon name="message-outline" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
 
           {/* Bio Section */}
           <View style={styles.bioBox}>
             <Text style={styles.bioText}>{bio || 'No description yet.'}</Text>
-            <TouchableOpacity onPress={openEditProfile}>
-              <Icon name="square-edit-outline" size={20} color="#999" />
-            </TouchableOpacity>
+            {isOwnProfile ? (
+              <TouchableOpacity onPress={openEditProfile}>
+                <Icon name="square-edit-outline" size={20} color="#999" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 
@@ -1255,7 +1283,7 @@ const PromotionScreen = ({ onBack }) => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.promoTabBarScroll}
           >
-            {PROMO_PROFILE_TABS.map(tab => {
+            {visiblePromoTabs.map(tab => {
               const isGrid = tab === 'Gallery';
               const active = activePromoTab === tab;
               return (
@@ -1294,12 +1322,14 @@ const PromotionScreen = ({ onBack }) => {
               <>
                 <View style={styles.promoTabGalleryHeader}>
                   <Text style={styles.promoTabSectionTitle}>Posts</Text>
-                  <TouchableOpacity
-                    onPress={() => setCreatePostTabVisible(true)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Icon name="plus" size={24} color="#333" />
-                  </TouchableOpacity>
+                  {isOwnProfile ? (
+                    <TouchableOpacity
+                      onPress={() => setCreatePostTabVisible(true)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Icon name="plus" size={24} color="#333" />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
                 {postsTabLoading && postsTab.length === 0 ? (
                   <View style={styles.promoTabLoading}>
@@ -1310,7 +1340,7 @@ const PromotionScreen = ({ onBack }) => {
                   </View>
                 ) : postsTab.length === 0 ? (
                   <Text style={styles.promoTabEmpty}>
-                    No posts yet. Tap + to create.
+                    {isOwnProfile ? 'No posts yet. Tap + to create.' : 'No posts yet.'}
                   </Text>
                 ) : (
                   postsTab.map(item => {
@@ -1347,19 +1377,22 @@ const PromotionScreen = ({ onBack }) => {
                         }}
                         postId={postId}
                         onPress={() => openPostMediaPreview(item)}
-                        onMenuPress={() =>
-                          openItemActions({
-                            kind: 'post',
-                            id: postId,
-                            title: item?.title || '',
-                            description: item?.description || '',
-                            website: item?.website || '',
-                            hashtags: item?.hashtags || [],
-                            thumbnail: item?.thumbnail || item?.mediaUrl || '',
-                            mediaUrl: item?.mediaUrl || '',
-                            videoUrl: item?.videoUrl || '',
-                            mediaType: item?.mediaType || '',
-                          })
+                        onMenuPress={
+                          isOwnProfile
+                            ? () =>
+                                openItemActions({
+                                  kind: 'post',
+                                  id: postId,
+                                  title: item?.title || '',
+                                  description: item?.description || '',
+                                  website: item?.website || '',
+                                  hashtags: item?.hashtags || [],
+                                  thumbnail: item?.thumbnail || item?.mediaUrl || '',
+                                  mediaUrl: item?.mediaUrl || '',
+                                  videoUrl: item?.videoUrl || '',
+                                  mediaType: item?.mediaType || '',
+                                })
+                            : undefined
                         }
                         onLike={
                           currentUser?.id
@@ -1384,16 +1417,18 @@ const PromotionScreen = ({ onBack }) => {
               <>
                 <View style={styles.promoTabGalleryHeader}>
                   <Text style={styles.promoTabSectionTitle}>Gallery</Text>
-                  <TouchableOpacity
-                    onPress={handleGalleryTabUpload}
-                    disabled={galleryTabUploading}
-                  >
-                    <Icon
-                      name="plus"
-                      size={24}
-                      color={galleryTabUploading ? '#999' : '#333'}
-                    />
-                  </TouchableOpacity>
+                  {isOwnProfile ? (
+                    <TouchableOpacity
+                      onPress={handleGalleryTabUpload}
+                      disabled={galleryTabUploading}
+                    >
+                      <Icon
+                        name="plus"
+                        size={24}
+                        color={galleryTabUploading ? '#999' : '#333'}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
                 {galleryTabLoading && galleryTab.length === 0 ? (
                   <View style={styles.promoTabLoading}>
@@ -1406,7 +1441,9 @@ const PromotionScreen = ({ onBack }) => {
                   <View style={styles.promoTabGalleryGrid}>
                     {galleryTab.length === 0 ? (
                       <Text style={styles.promoTabEmpty}>
-                        No photos yet. Tap + to upload.
+                        {isOwnProfile
+                          ? 'No photos yet. Tap + to upload.'
+                          : 'No photos yet.'}
                       </Text>
                     ) : (
                       galleryTab.map(photo => (
@@ -1417,18 +1454,20 @@ const PromotionScreen = ({ onBack }) => {
                             { width: PROMO_TAB_GRID_W },
                           ]}
                         >
-                          <TouchableOpacity
-                            style={styles.galleryItemMenuBtn}
-                            onPress={() =>
-                              openItemActions({
-                                kind: 'gallery',
-                                id: photo.id,
-                                title: 'Gallery photo',
-                              })
-                            }
-                          >
-                            <Icon name="dots-vertical" size={16} color="#fff" />
-                          </TouchableOpacity>
+                          {isOwnProfile ? (
+                            <TouchableOpacity
+                              style={styles.galleryItemMenuBtn}
+                              onPress={() =>
+                                openItemActions({
+                                  kind: 'gallery',
+                                  id: photo.id,
+                                  title: 'Gallery photo',
+                                })
+                              }
+                            >
+                              <Icon name="dots-vertical" size={16} color="#fff" />
+                            </TouchableOpacity>
+                          ) : null}
                           <TouchableOpacity
                             onPress={() => {
                               setGalleryPreviewUri(safeImageUri(photo.src));
@@ -1463,25 +1502,27 @@ const PromotionScreen = ({ onBack }) => {
                 ) : (
                   myVideos.map(item => (
                     <View key={String(item.id)} style={styles.itemCardWrap}>
-                      <TouchableOpacity
-                        style={styles.itemMenuBtn}
-                        onPress={() =>
-                          openItemActions({
-                            kind: item?.type === 'short' ? 'short' : 'video',
-                            id: item.id,
-                            title: item?.title || '',
-                            description: item?.description || item?.desc || '',
-                            website: item?.website || '',
-                            hashtags: item?.hashtags || [],
-                            thumbnail:
-                              item?.thumbnail || item?.thumbnailUrl || item?.coverUrl || '',
-                            mediaUrl: item?.mediaUrl || '',
-                            videoUrl: item?.videoUrl || '',
-                          })
-                        }
-                      >
-                        <Icon name="dots-vertical" size={18} color="#333" />
-                      </TouchableOpacity>
+                      {isOwnProfile ? (
+                        <TouchableOpacity
+                          style={styles.itemMenuBtn}
+                          onPress={() =>
+                            openItemActions({
+                              kind: item?.type === 'short' ? 'short' : 'video',
+                              id: item.id,
+                              title: item?.title || '',
+                              description: item?.description || item?.desc || '',
+                              website: item?.website || '',
+                              hashtags: item?.hashtags || [],
+                              thumbnail:
+                                item?.thumbnail || item?.thumbnailUrl || item?.coverUrl || '',
+                              mediaUrl: item?.mediaUrl || '',
+                              videoUrl: item?.videoUrl || '',
+                            })
+                          }
+                        >
+                          <Icon name="dots-vertical" size={18} color="#333" />
+                        </TouchableOpacity>
+                      ) : null}
                       <BusinessVideoTabCard
                         item={{
                           ...item,
@@ -1649,6 +1690,7 @@ const PromotionScreen = ({ onBack }) => {
           loading={myVideosLoading}
           onItemPress={openLibraryMedia}
           rightAccessory={
+            isOwnProfile ? (
             <TouchableOpacity
               onPress={openMyVideosCreateFlow}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1656,6 +1698,7 @@ const PromotionScreen = ({ onBack }) => {
             >
               <Icon name="plus" size={24} color="#000" />
             </TouchableOpacity>
+            ) : null
           }
         />
 

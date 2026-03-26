@@ -84,6 +84,7 @@ export default function FollowingListScreen({ navigation }) {
           subs: '0',
           videos: '0',
           shorts: '0',
+          role: String(it.role || '').toLowerCase(),
         }));
 
         // Enrich each followed channel with its own subscriberCount and videos/shorts counts
@@ -109,6 +110,7 @@ export default function FollowingListScreen({ navigation }) {
                     typeof profile?.shortCount === 'number'
                       ? String(profile.shortCount)
                       : '0',
+                  role: String(profile?.role || ch.role || '').toLowerCase(),
                 };
               } catch {
                 return {
@@ -116,6 +118,7 @@ export default function FollowingListScreen({ navigation }) {
                   subs: ch.subs,
                   videos: ch.videos,
                   shorts: ch.shorts,
+                  role: ch.role,
                 };
               }
             }),
@@ -129,6 +132,7 @@ export default function FollowingListScreen({ navigation }) {
             subs: byId[ch.id]?.subs ?? ch.subs,
             videos: byId[ch.id]?.videos ?? ch.videos,
             shorts: byId[ch.id]?.shorts ?? ch.shorts,
+            role: byId[ch.id]?.role ?? ch.role,
           }));
         } catch {
           // ignore enrichment errors; keep base list
@@ -160,6 +164,17 @@ export default function FollowingListScreen({ navigation }) {
 
   const handleViewChannel = channel => {
     if (!channel?.userId) return;
+    const targetRole = String(channel?.role || '').toLowerCase();
+    if (targetRole === 'user') {
+      nav.navigate('Root', {
+        screen: 'Home1',
+        params: {
+          screen: 'PromotionScreen',
+          params: { userId: channel.userId },
+        },
+      });
+      return;
+    }
     nav.navigate('UserViewsScreen', { userId: channel.userId });
   };
 
@@ -277,4 +292,3 @@ const styles = StyleSheet.create({
   },
   actionBtnText: { color: '#F6A623', fontWeight: '600' },
 });
-

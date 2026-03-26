@@ -68,7 +68,7 @@ const BusinessVideoCard = ({
             <Text style={styles.timeAgo}>{video.publishedAt}</Text>
           </View>
         </View>
-        {!hideMenuButton ? (
+        {!hideMenuButton && !!onMenuPress ? (
           <TouchableOpacity
             style={styles.menuButton}
             onPress={onMenuPress}

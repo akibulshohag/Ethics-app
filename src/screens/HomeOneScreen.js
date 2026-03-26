@@ -540,7 +540,6 @@ const HomeOneScreen = () => {
       radiusKm: 50,
       excludeSponsored: true,
       excludeFeatured: true,
-      ...(searchTerm && { search: searchTerm }),
     };
     const shortParams = {
       ...baseParams,
@@ -548,7 +547,6 @@ const HomeOneScreen = () => {
       nearbyLat: lat,
       nearbyLng: lng,
       radiusKm: 50,
-      ...(searchTerm && { search: searchTerm }),
     };
 
     // Featured + sponsored: direct GET /featured and GET /sponsored (no location check)
@@ -576,7 +574,7 @@ const HomeOneScreen = () => {
         getVideos(videoParams),
         shortsService.getShorts(shortParams),
       ]);
-      const videos = (videosRes?.videos || []).map(v =>
+      const mappedVideos = (videosRes?.videos || []).map(v =>
         mapToDisplayItem(v, 'video'),
       );
       const rawShorts = (shortsRes?.shorts || []).filter(
@@ -618,7 +616,7 @@ const HomeOneScreen = () => {
           }
         }),
       );
-      const shorts = rawShorts.map(s => {
+      const mappedShorts = rawShorts.map(s => {
         const oid = String(s?.userId || s?.user?.id || '');
         const p = oid ? ownerProfileById[oid] : null;
         if (!p) return mapToDisplayItem(s, 'short');
@@ -661,8 +659,28 @@ const HomeOneScreen = () => {
           'short',
         );
       });
-      setFeedVideos(videos);
-      setFeedShorts(shorts);
+      const q = String(searchTerm || '')
+        .toLowerCase()
+        .trim();
+      const matchesSearch = item => {
+        if (!q) return true;
+        const haystack = [
+          item?.title,
+          item?.description,
+          item?.channelName,
+          item?.location,
+          item?.creatorAddress,
+          item?.user?.nickname,
+          item?.user?.name,
+          item?.user?.address,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(q);
+      };
+      setFeedVideos(mappedVideos.filter(matchesSearch));
+      setFeedShorts(mappedShorts.filter(matchesSearch));
     } catch (e) {
       console.error('HomeOne load feed:', e);
       setFeedVideos([]);
@@ -2038,9 +2056,18 @@ const HomeOneScreen = () => {
                     const ownerId =
                       selectedItem?.user?.id ?? selectedItem?.userId ?? null;
                     if (ownerId) {
-                      navigation.navigate('UserViewsScreen', {
-                        userId: ownerId,
-                      });
+                      const targetRole = String(
+                        selectedItem?.creatorRole || selectedItem?.user?.role || '',
+                      ).toLowerCase();
+                      if (targetRole === 'user') {
+                        navigation.navigate('PromotionScreen', {
+                          userId: ownerId,
+                        });
+                      } else {
+                        navigation.navigate('UserViewsScreen', {
+                          userId: ownerId,
+                        });
+                      }
                     }
                   }}
                   disabled={!(selectedItem?.user?.id || selectedItem?.userId)}
@@ -3407,13 +3434,13 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   resNameRatingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     maxWidth: 220,
   },
   resMainTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   resRatingRow: {
-    marginLeft: 8,
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
   },

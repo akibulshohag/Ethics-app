@@ -469,13 +469,32 @@ const VideoItem = ({
         <TouchableOpacity
           style={styles.ownerProfileAction}
           activeOpacity={0.85}
-          onPress={() => {
+          onPress={async () => {
             if (!ownerId) return;
             if (showFollowPlus) {
               onSubscribe?.(item);
               return;
             }
-            navigation.navigate('UserViewsScreen', { userId: ownerId });
+            let targetRole = String(
+              item?.creatorRole || item?.user?.role || '',
+            ).toLowerCase();
+            if (!targetRole) {
+              try {
+                const p = await getChannelProfile(ownerId, user?.id);
+                targetRole = String(p?.role || '').toLowerCase();
+              } catch (_) {}
+            }
+            if (targetRole === 'user') {
+              navigation.navigate('Root', {
+                screen: 'Home1',
+                params: {
+                  screen: 'PromotionScreen',
+                  params: { userId: ownerId },
+                },
+              });
+            } else {
+              navigation.navigate('UserViewsScreen', { userId: ownerId });
+            }
           }}
         >
           <View style={styles.ownerAvatarWrap}>
@@ -565,10 +584,29 @@ const VideoItem = ({
       >
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => {
+          onPress={async () => {
             const ownerId = item.user?.id ?? item.userId ?? null;
             if (ownerId) {
-              navigation.navigate('UserViewsScreen', { userId: ownerId });
+              let targetRole = String(
+                item?.creatorRole || item?.user?.role || '',
+              ).toLowerCase();
+              if (!targetRole) {
+                try {
+                  const p = await getChannelProfile(ownerId, user?.id);
+                  targetRole = String(p?.role || '').toLowerCase();
+                } catch (_) {}
+              }
+              if (targetRole === 'user') {
+                navigation.navigate('Root', {
+                  screen: 'Home1',
+                  params: {
+                    screen: 'PromotionScreen',
+                    params: { userId: ownerId },
+                  },
+                });
+              } else {
+                navigation.navigate('UserViewsScreen', { userId: ownerId });
+              }
             }
           }}
           disabled={!(item.user?.id || item.userId)}
@@ -878,9 +916,8 @@ const ShortsVideoScreen = ({ navigation }) => {
     madeForKids: null,
     ageRestricted: null,
   });
-  const [editShortComments, setEditShortComments] = useState(
-    'Allow all comments',
-  );
+  const [editShortComments, setEditShortComments] =
+    useState('Allow all comments');
   const [editShortScheduleDate, setEditShortScheduleDate] = useState(null);
   const [editVisibilityModalVisible, setEditVisibilityModalVisible] =
     useState(false);
@@ -1307,8 +1344,8 @@ const ShortsVideoScreen = ({ navigation }) => {
       String(t?.commentSetting || '').toLowerCase() === 'disable'
         ? 'Disable comments'
         : String(t?.commentSetting || '').toLowerCase() === 'hold'
-          ? 'Hold potentially inappropriate comments'
-          : 'Allow all comments',
+        ? 'Hold potentially inappropriate comments'
+        : 'Allow all comments',
     );
     setEditShortAudience({
       madeForKids:
@@ -1687,10 +1724,33 @@ const ShortsVideoScreen = ({ navigation }) => {
                     activeOpacity={0.85}
                     onPress={() => {
                       setSubsModalOpen(false);
-                      if (u?.id)
-                        navigation.navigate('UserViewsScreen', {
-                          userId: u.id,
-                        });
+                      if (u?.id) {
+                        const go = async () => {
+                          let targetRole = String(
+                            u?.role || u?.user?.role || '',
+                          ).toLowerCase();
+                          if (!targetRole) {
+                            try {
+                              const p = await getChannelProfile(u.id, user?.id);
+                              targetRole = String(p?.role || '').toLowerCase();
+                            } catch (_) {}
+                          }
+                          if (targetRole === 'user') {
+                            navigation.navigate('Root', {
+                              screen: 'Home1',
+                              params: {
+                                screen: 'PromotionScreen',
+                                params: { userId: u.id },
+                              },
+                            });
+                          } else {
+                            navigation.navigate('UserViewsScreen', {
+                              userId: u.id,
+                            });
+                          }
+                        };
+                        go();
+                      }
                     }}
                   >
                     <Image source={{ uri: avatar }} style={styles.subsAvatar} />
@@ -1812,7 +1872,9 @@ const ShortsVideoScreen = ({ navigation }) => {
                   <Text style={styles.editOptionLabel}>Visibility</Text>
                 </View>
                 <View style={styles.editOptionRight}>
-                  <Text style={styles.editOptionValue}>{editShortVisibility}</Text>
+                  <Text style={styles.editOptionValue}>
+                    {editShortVisibility}
+                  </Text>
                   <Ionicons name="chevron-forward" size={18} color="#333" />
                 </View>
               </TouchableOpacity>
