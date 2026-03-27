@@ -3010,11 +3010,17 @@ const FoodCard = ({ title, location, isSponsored, img, onPress }) => (
     </View>
     <View style={styles.cardInfo}>
       <View>
-        <Text style={styles.cardTitle}>{title}</Text>
+        <Text style={styles.cardTitle}>
+           {title.length > 35 
+    ? `${title.substring(0, 35)}...` 
+    : title}
+        </Text>
         <Text
           numberOfLines={1}
-          style={{ width: 150, color: '#666', fontSize: 12 }}
+          ellipsizeMode="tail"
+          style={{ width: 150, color: '#666', fontSize: 11 }}
         >
+         
           {location}
         </Text>
       </View>
@@ -3282,11 +3288,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#222' },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
   cardLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   cardLocText: { color: '#666', fontSize: 13, marginLeft: 5 },
   cardStats: { alignItems: 'flex-end' },
-  statSmall: { fontSize: 12, color: '#999' },
+  statSmall: { fontSize: 11, color: '#999' },
 
   // Video Detail (short full-screen)
   videoBackground: {
