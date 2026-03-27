@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, SHADOWS } from '../constants/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { safeImageUri } from '../utils/helper';
+import { getMenuByUserId } from '../services/menuService';
 
 const DEFAULT_IMAGE =
   'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
@@ -23,6 +24,8 @@ const CartDetailsScreen = () => {
   const route = useRoute();
   const { ownerId, items: paramItems = [] } = route.params || {};
   const [items, setItems] = useState(Array.isArray(paramItems) ? paramItems : []);
+  const [suggestedItems, setSuggestedItems] = useState([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
 
   const { total, currency } = useMemo(() => {
     const t = (items || []).reduce(
@@ -66,6 +69,63 @@ const CartDetailsScreen = () => {
       return next;
     });
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSuggestions = async () => {
+      if (!ownerId) {
+        setSuggestedItems([]);
+        return;
+      }
+      setSuggestedLoading(true);
+      try {
+        const res = await getMenuByUserId(ownerId);
+        if (!mounted) return;
+        const menu = Array.isArray(res?.menu) ? res.menu : [];
+        setSuggestedItems(menu.slice(0, 12));
+      } catch (_) {
+        if (mounted) setSuggestedItems([]);
+      } finally {
+        if (mounted) setSuggestedLoading(false);
+      }
+    };
+    loadSuggestions();
+    return () => {
+      mounted = false;
+    };
+  }, [ownerId]);
+
+  const addSuggestedItem = menuItem => {
+    if (!menuItem?.id) return;
+    const key = String(menuItem.id);
+    setItems(prev => {
+      const next = (prev || []).map(i => ({ ...i }));
+      const idx = next.findIndex(i => String(i.menuItemId || i.id) === key);
+      if (idx >= 0) {
+        next[idx].quantity = (next[idx].quantity || 1) + 1;
+        return next;
+      }
+      next.push({
+        menuItemId: key,
+        itemName: menuItem.itemName || menuItem.name || 'Item',
+        price: Number(menuItem.price) || 0,
+        quantity: 1,
+        currency: menuItem.currency || '€',
+        imageUrl: menuItem.imageUrl || menuItem.thumbnailUrl || null,
+      });
+      return next;
+    });
+  };
+
+  const cartItemKeySet = useMemo(
+    () => new Set((items || []).map(i => String(i.menuItemId || i.id))),
+    [items],
+  );
+  const addMoreItems = useMemo(
+    () =>
+      (suggestedItems || []).filter(it => !cartItemKeySet.has(String(it?.id || ''))),
+    [suggestedItems, cartItemKeySet],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -153,6 +213,52 @@ const CartDetailsScreen = () => {
                   {currency} {total.toFixed(2)}
                 </Text>
               </View>
+            </View>
+            <View style={styles.addMoreSection}>
+              <Text style={styles.addMoreHeading}>Add more items</Text>
+              <Text style={styles.addMoreSubheading}>
+                Popular from {route.params?.ownerName || 'this restaurant'}
+              </Text>
+              {suggestedLoading ? (
+                <Text style={styles.addMoreLoadingText}>Loading items...</Text>
+              ) : addMoreItems.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.addMoreScroll}
+                >
+                  {addMoreItems.map(it => (
+                    <View key={String(it.id)} style={styles.addMoreCard}>
+                      <Image
+                        source={{
+                          uri: safeImageUri(
+                            it.imageUrl || it.thumbnailUrl,
+                            DEFAULT_IMAGE,
+                          ),
+                        }}
+                        style={styles.addMoreImage}
+                      />
+                      <Text style={styles.addMoreItemName} numberOfLines={1}>
+                        {it.itemName || it.name || 'Item'}
+                      </Text>
+                      <View style={styles.addMorePriceRow}>
+                        <Text style={styles.addMorePrice}>
+                          {(it.currency || '€') + ' ' + (Number(it.price) || 0).toFixed(2)}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.addMorePlusBtn}
+                          onPress={() => addSuggestedItem(it)}
+                          activeOpacity={0.85}
+                        >
+                          <Icon name="plus" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={styles.addMoreLoadingText}>No more items available</Text>
+              )}
             </View>
             <View style={{ height: 140 }} />
           </>
@@ -484,6 +590,66 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     marginBottom: 20,
+  },
+  addMoreSection: {
+    marginBottom: 24,
+  },
+  addMoreHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.gray900 || COLORS.black,
+  },
+  addMoreSubheading: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginTop: 3,
+    marginBottom: 12,
+  },
+  addMoreLoadingText: {
+    fontSize: 13,
+    color: COLORS.gray500,
+  },
+  addMoreScroll: {
+    paddingRight: 8,
+  },
+  addMoreCard: {
+    width: 150,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 12,
+    padding: 8,
+    marginRight: 10,
+  },
+  addMoreImage: {
+    width: '100%',
+    height: 84,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  addMoreItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.gray800,
+    marginBottom: 8,
+  },
+  addMorePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addMorePrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primaryOrange,
+  },
+  addMorePlusBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primaryOrange,
   },
   summaryRow: {
     flexDirection: 'row',

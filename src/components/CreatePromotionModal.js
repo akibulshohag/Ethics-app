@@ -140,6 +140,9 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
           type: asset.type || 'image/jpeg',
           name: asset.fileName || 'thumbnail.jpg',
         });
+        // Single-media behavior: thumbnail and video are mutually exclusive.
+        setVideo(null);
+        setVideoDuration(0);
       }
     });
   };
@@ -163,6 +166,8 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
             type: asset.type || 'video/mp4',
             name: asset.fileName || 'video.mp4',
           });
+          // Single-media behavior: thumbnail and video are mutually exclusive.
+          setThumbnail(null);
         }
       },
     );
@@ -194,8 +199,11 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
       Alert.alert('Title required', 'Please enter a title for your promotion.');
       return;
     }
-    if (!thumbnail?.uri) {
-      Alert.alert('Thumbnail required', 'Please add a thumbnail image.');
+    if (!thumbnail?.uri && !video?.uri) {
+      Alert.alert(
+        'Media required',
+        'Please add a thumbnail image or select a video.',
+      );
       return;
     }
     const amount = parseFloat(promoAmount);
@@ -235,7 +243,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
     }
     setUploading(true);
     try {
-      await uploadPromotion({
+      const payload = {
         userId,
         token,
         title: trimmedTitle,
@@ -245,14 +253,24 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
         startDate: startD.toISOString(),
         expireDate: expireD.toISOString(),
         menuItemIds: selectedMenuIds.length > 0 ? selectedMenuIds : undefined,
-        thumbnailUri: thumbnail.uri,
-        thumbnailType: thumbnail.type,
-        thumbnailName: thumbnail.name,
-        videoUri: video?.uri,
-        videoType: video?.type,
-        videoName: video?.name,
-        duration: video ? videoDuration : undefined,
-      });
+        ...(thumbnail?.uri
+          ? {
+              thumbnailUri: thumbnail.uri,
+              thumbnailType: thumbnail.type,
+              thumbnailName: thumbnail.name,
+            }
+          : {}),
+        ...(video?.uri
+          ? {
+              videoUri: video.uri,
+              videoType: video.type,
+              videoName: video.name,
+              duration: video ? videoDuration : undefined,
+            }
+          : {}),
+      };
+
+      await uploadPromotion(payload);
       reset();
       onClose?.();
       onSuccess?.();
@@ -302,10 +320,17 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.label}>Thumbnail *</Text>
+            <Text style={styles.label}>Thumbnail / Video Upload</Text>
             <TouchableOpacity
               style={styles.mediaBox}
-              onPress={pickThumbnail}
+              onPress={() => {
+                if (uploading) return;
+                Alert.alert('Choose media type', 'Select one option:', [
+                  { text: 'Image (thumbnail)', onPress: pickThumbnail },
+                  { text: 'Video', onPress: pickVideo },
+                  { text: 'Cancel', style: 'cancel' },
+                ]);
+              }}
               disabled={uploading}
             >
               {thumbnail?.uri ? (
@@ -326,27 +351,7 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
                     />
                   </TouchableOpacity>
                 </View>
-              ) : (
-                <View style={styles.placeholder}>
-                  <MaterialCommunityIcons
-                    name="image-plus"
-                    size={48}
-                    color="#999"
-                  />
-                  <Text style={styles.placeholderText}>
-                    Tap to add thumbnail
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <Text style={styles.label}>Video (optional)</Text>
-            <TouchableOpacity
-              style={styles.mediaBox}
-              onPress={pickVideo}
-              disabled={uploading}
-            >
-              {video?.uri ? (
+              ) : video?.uri ? (
                 <View style={styles.mediaPreview}>
                   <View style={styles.videoPreviewPlaceholder}>
                     <MaterialCommunityIcons
@@ -383,11 +388,13 @@ const CreatePromotionModal = ({ visible, onClose, onSuccess, userId }) => {
               ) : (
                 <View style={styles.placeholder}>
                   <MaterialCommunityIcons
-                    name="video-plus"
+                    name="image-video"
                     size={48}
                     color="#999"
                   />
-                  <Text style={styles.placeholderText}>Tap to add video</Text>
+                  <Text style={styles.placeholderText}>
+                    Tap to add thumbnail or video
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>

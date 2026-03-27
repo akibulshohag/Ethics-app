@@ -218,7 +218,8 @@ const UserViewsScreen = ({ navigation }) => {
   const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
   const [instagramPreviewVisible, setInstagramPreviewVisible] = useState(false);
   const [instagramPreviewItem, setInstagramPreviewItem] = useState(null);
-  const [galleryPostDetailVisible, setGalleryPostDetailVisible] = useState(false);
+  const [galleryPostDetailVisible, setGalleryPostDetailVisible] =
+    useState(false);
   const [galleryPostDetailItem, setGalleryPostDetailItem] = useState(null);
   const [galleryPostVideoVisible, setGalleryPostVideoVisible] = useState(false);
   const [galleryPostImageVisible, setGalleryPostImageVisible] = useState(false);
@@ -1229,6 +1230,8 @@ const UserViewsScreen = ({ navigation }) => {
             comments: formatCount(item.commentCount ?? 0),
             shares: formatCount(item.shareCount ?? 0),
           }}
+          avatarSize={45}
+          avatarMarginRight={8}
           hideMenuButton
           onPress={() => openPostMediaPreview(item)}
           onLike={() => handlePostLike(item)}
@@ -1553,10 +1556,12 @@ const UserViewsScreen = ({ navigation }) => {
             >
               <Text style={styles.galleryPostDetailType}>Post</Text>
               <Text style={styles.galleryPostDetailTitle}>
-                {selectedGalleryPost?.title || galleryPostDetailItem?.title || 'Post'}
+                {selectedGalleryPost?.title ||
+                  galleryPostDetailItem?.title ||
+                  'Post'}
               </Text>
-              {(selectedGalleryPost?.description ||
-                galleryPostDetailItem?.description) ? (
+              {selectedGalleryPost?.description ||
+              galleryPostDetailItem?.description ? (
                 <Text style={styles.galleryPostDetailDesc}>
                   {selectedGalleryPost?.description ||
                     galleryPostDetailItem?.description}
@@ -1639,7 +1644,8 @@ const UserViewsScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={styles.galleryPostActionBtn}
                   onPress={() =>
-                    selectedGalleryPost && handlePostDislike(selectedGalleryPost)
+                    selectedGalleryPost &&
+                    handlePostDislike(selectedGalleryPost)
                   }
                 >
                   <MaterialCommunityIcons
@@ -1705,10 +1711,12 @@ const UserViewsScreen = ({ navigation }) => {
           >
             <MaterialCommunityIcons name="close" size={28} color="#fff" />
           </TouchableOpacity>
-          {(selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl) ? (
+          {selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl ? (
             <Video
               source={{
-                uri: selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl,
+                uri:
+                  selectedGalleryPost?.mediaUrl ||
+                  galleryPostDetailItem?.mediaUrl,
               }}
               style={styles.previewVideo}
               controls
@@ -1735,10 +1743,12 @@ const UserViewsScreen = ({ navigation }) => {
           >
             <MaterialCommunityIcons name="close" size={28} color="#fff" />
           </TouchableOpacity>
-          {(selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl) ? (
+          {selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl ? (
             <Image
               source={{
-                uri: selectedGalleryPost?.mediaUrl || galleryPostDetailItem?.mediaUrl,
+                uri:
+                  selectedGalleryPost?.mediaUrl ||
+                  galleryPostDetailItem?.mediaUrl,
               }}
               style={styles.previewImage}
               resizeMode="contain"

@@ -20,6 +20,9 @@ const BusinessVideoCard = ({
   onShare,
   onMenuPress,
   hideMenuButton = false,
+  avatarSize = 45,
+  avatarInitialsFontSize,
+  avatarMarginRight = 8,
 }) => {
   const [avatarError, setAvatarError] = useState(false);
   const avatarUri =
@@ -51,15 +54,42 @@ const BusinessVideoCard = ({
       <View style={styles.headerContainer}>
         <View style={styles.headerLeft}>
           {showAvatarFallback ? (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitials}>
+            <View
+              style={[
+                styles.avatar,
+                {
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                  marginRight: avatarMarginRight,
+                },
+                styles.avatarFallback,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.avatarInitials,
+                  {
+                    fontSize:
+                      avatarInitialsFontSize ?? (avatarSize <= 40 ? 14 : 20),
+                  },
+                ]}
+              >
                 {getInitials(video.channelName)}
               </Text>
             </View>
           ) : (
             <Image
               source={{ uri: avatarUri }}
-              style={styles.avatar}
+              style={[
+                styles.avatar,
+                {
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                  marginRight: avatarMarginRight,
+                },
+              ]}
               onError={() => setAvatarError(true)}
             />
           )}
@@ -74,7 +104,11 @@ const BusinessVideoCard = ({
             onPress={onMenuPress}
             disabled={!onMenuPress}
           >
-            <MaterialCommunityIcons name="dots-vertical" size={24} color="#333" />
+            <MaterialCommunityIcons
+              name="dots-vertical"
+              size={24}
+              color="#333"
+            />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -175,10 +209,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 50,
-    marginRight: 12,
     backgroundColor: '#222', // Match dark avatar placeholder style
   },
   avatarFallback: {

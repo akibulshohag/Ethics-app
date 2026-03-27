@@ -89,19 +89,21 @@ export const uploadPromotion = async (data) => {
   if (!data?.title?.trim()) {
     throw new Error('Title is required.');
   }
-  if (!data?.thumbnailUri) {
-    throw new Error('Thumbnail image is required.');
+  if (!data?.thumbnailUri && !data?.videoUri) {
+    throw new Error('Either thumbnail image or video is required.');
   }
   if (data?.promoAmount == null || data?.promoCode?.trim() === '' || !data?.startDate || !data?.expireDate) {
     throw new Error('Promo amount, code, start date and expire date are required.');
   }
   const formData = new FormData();
-  formData.append('files', {
-    uri: data.thumbnailUri,
-    type: data.thumbnailType || 'image/jpeg',
-    name: data.thumbnailName || 'thumbnail.jpg',
-  });
-  if (data.videoUri) {
+  if (data?.thumbnailUri) {
+    formData.append('files', {
+      uri: data.thumbnailUri,
+      type: data.thumbnailType || 'image/jpeg',
+      name: data.thumbnailName || 'thumbnail.jpg',
+    });
+  }
+  if (data?.videoUri) {
     formData.append('files', {
       uri: data.videoUri,
       type: data.videoType || 'video/mp4',

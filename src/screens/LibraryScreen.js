@@ -64,7 +64,9 @@ const formatCount = n => {
 };
 
 const safeUri = val =>
-  typeof val === 'string' && val.trim().length > 0 ? val.trim() : 'https://via.placeholder.com/100';
+  typeof val === 'string' && val.trim().length > 0
+    ? val.trim()
+    : 'https://via.placeholder.com/100';
 
 const formatDuration = seconds => {
   if (!seconds || seconds < 0) return '0:00';
@@ -82,7 +84,8 @@ const formatTimeAgo = dateStr => {
   const diffMonths = Math.floor(diffDays / 30);
   const diffYears = Math.floor(diffDays / 365);
   if (diffYears > 0) return `${diffYears} year${diffYears > 1 ? 's' : ''} ago`;
-  if (diffMonths > 0) return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
+  if (diffMonths > 0)
+    return `${diffMonths} month${diffMonths > 1 ? 's' : ''} ago`;
   if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   return 'Recently';
 };
@@ -99,7 +102,9 @@ const mapVideoApiToDisplay = v => {
     channelName,
     views: `${formatCount(viewCount)} views`,
     publishedAt: formatTimeAgo(pubAt),
-    thumbnail: safeUri(v.thumbnailUrl || v.videoUrl) || 'https://via.placeholder.com/300',
+    thumbnail:
+      safeUri(v.thumbnailUrl || v.videoUrl) ||
+      'https://via.placeholder.com/300',
     duration: formatDuration(v.duration),
   };
 };
@@ -112,11 +117,15 @@ const mapShortApiToDisplay = s => {
   return {
     id: s.id,
     type: 'short',
-    title: (s.title || 'Untitled').slice(0, 80) + (s.title?.length > 80 ? '...' : ''),
+    title:
+      (s.title || 'Untitled').slice(0, 80) +
+      (s.title?.length > 80 ? '...' : ''),
     channelName,
     views: `${formatCount(viewCount)} views`,
     publishedAt: formatTimeAgo(pubAt),
-    thumbnail: safeUri(s.thumbnailUrl || s.videoUrl) || 'https://via.placeholder.com/300',
+    thumbnail:
+      safeUri(s.thumbnailUrl || s.videoUrl) ||
+      'https://via.placeholder.com/300',
     duration: s.duration ? formatDuration(s.duration) : 'SHORT',
   };
 };
@@ -134,7 +143,8 @@ const mapVideoApiToModal = (v = {}) => {
     id: v.id,
     title: v.title || 'Untitled',
     videoUrl: v.videoUrl,
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+    thumbnail:
+      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
     durationSeconds: v.duration ?? 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? 0,
@@ -226,7 +236,10 @@ const LibraryScreen = ({ navigation }) => {
   const [videoModalError, setVideoModalError] = useState(null);
   const [modalVideo, setModalVideo] = useState(null);
   const [modalPaused, setModalPaused] = useState(true);
-  const [modalProgress, setModalProgress] = useState({ currentTime: 0, duration: 0 });
+  const [modalProgress, setModalProgress] = useState({
+    currentTime: 0,
+    duration: 0,
+  });
   const [modalIsSliding, setModalIsSliding] = useState(false);
   const [modalSlidingValue, setModalSlidingValue] = useState(0);
   const modalVideoRef = useRef(null);
@@ -234,7 +247,10 @@ const LibraryScreen = ({ navigation }) => {
   const progressUpdateRef = useRef(0);
   const [saveVisible, setSaveVisible] = useState(false);
   const [videoCommentsVisible, setVideoCommentsVisible] = useState(false);
-  const [channelSub, setChannelSub] = useState({ isSubscribed: false, subscriberCount: 0 });
+  const [channelSub, setChannelSub] = useState({
+    isSubscribed: false,
+    subscriberCount: 0,
+  });
   const [subLoading, setSubLoading] = useState(false);
 
   const loadYourVideos = useCallback(async () => {
@@ -415,7 +431,9 @@ const LibraryScreen = ({ navigation }) => {
     return `${m}:${String(s).padStart(2, '0')}`;
   }, []);
 
-  const modalDisplayTime = modalIsSliding ? modalSlidingValue : modalProgress.currentTime;
+  const modalDisplayTime = modalIsSliding
+    ? modalSlidingValue
+    : modalProgress.currentTime;
 
   const handleModalLike = useCallback(async () => {
     if (requireLogin()) return;
@@ -430,7 +448,9 @@ const LibraryScreen = ({ navigation }) => {
         isDisliked: isLiked ? false : wasDisliked,
         likeCount: Math.max(0, prev.likeCount + (isLiked ? 1 : -1)),
         dislikeCount:
-          isLiked && wasDisliked ? Math.max(0, prev.dislikeCount - 1) : prev.dislikeCount,
+          isLiked && wasDisliked
+            ? Math.max(0, prev.dislikeCount - 1)
+            : prev.dislikeCount,
       };
     });
     try {
@@ -441,7 +461,9 @@ const LibraryScreen = ({ navigation }) => {
             ? {
                 ...prev,
                 ...(res.likeCount != null && { likeCount: res.likeCount }),
-                ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+                ...(res.dislikeCount != null && {
+                  dislikeCount: res.dislikeCount,
+                }),
                 ...(res.isLiked != null && { isLiked: res.isLiked }),
                 ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
               }
@@ -464,7 +486,9 @@ const LibraryScreen = ({ navigation }) => {
         isLiked: isDisliked ? false : wasLiked,
         dislikeCount: Math.max(0, prev.dislikeCount + (isDisliked ? 1 : -1)),
         likeCount:
-          isDisliked && wasLiked ? Math.max(0, prev.likeCount - 1) : prev.likeCount,
+          isDisliked && wasLiked
+            ? Math.max(0, prev.likeCount - 1)
+            : prev.likeCount,
       };
     });
     try {
@@ -475,7 +499,9 @@ const LibraryScreen = ({ navigation }) => {
             ? {
                 ...prev,
                 ...(res.likeCount != null && { likeCount: res.likeCount }),
-                ...(res.dislikeCount != null && { dislikeCount: res.dislikeCount }),
+                ...(res.dislikeCount != null && {
+                  dislikeCount: res.dislikeCount,
+                }),
                 ...(res.isLiked != null && { isLiked: res.isLiked }),
                 ...(res.isDisliked != null && { isDisliked: res.isDisliked }),
               }
@@ -521,8 +547,8 @@ const LibraryScreen = ({ navigation }) => {
           subscriberCount: (p.subscriberCount ?? 0) + 1,
         }));
       }
-    } catch (_) {}
-    finally {
+    } catch (_) {
+    } finally {
       setSubLoading(false);
     }
   }, [
@@ -574,7 +600,10 @@ const LibraryScreen = ({ navigation }) => {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    if ((currentView === 'history' || currentView === 'library') && currentUser?.id) {
+    if (
+      (currentView === 'history' || currentView === 'library') &&
+      currentUser?.id
+    ) {
       if (currentView === 'history') {
         setHistoryLoading(true);
       }
@@ -598,12 +627,13 @@ const LibraryScreen = ({ navigation }) => {
     }
     setPlaylistCountsLoading(true);
     try {
-      const [watchLaterRes, likedVRes, likedSRes, favoritesRes] = await Promise.all([
-        getWatchLater(currentUser.id, 1, 500),
-        getLikedVideos(currentUser.id, 1, 500),
-        shortsService.getLikedShorts(currentUser.id, 1, 500),
-        getFavorites(currentUser.id, 1, 500),
-      ]);
+      const [watchLaterRes, likedVRes, likedSRes, favoritesRes] =
+        await Promise.all([
+          getWatchLater(currentUser.id, 1, 500),
+          getLikedVideos(currentUser.id, 1, 500),
+          shortsService.getLikedShorts(currentUser.id, 1, 500),
+          getFavorites(currentUser.id, 1, 500),
+        ]);
       const wlV = watchLaterRes?.videos?.length ?? 0;
       const wlS = watchLaterRes?.shorts?.length ?? 0;
       setWatchLaterCount(wlV + wlS);
@@ -726,9 +756,9 @@ const LibraryScreen = ({ navigation }) => {
               <Text style={styles.backText}>Back</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.moreIcon}>
+          {/* <TouchableOpacity style={styles.moreIcon}>
             <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </>
     );
@@ -860,21 +890,37 @@ const LibraryScreen = ({ navigation }) => {
               contentContainerStyle={styles.filterScroll}
             >
               <TouchableOpacity
-                style={filter === 'Videos' ? styles.filterChipActive : styles.filterChip}
+                style={
+                  filter === 'Videos'
+                    ? styles.filterChipActive
+                    : styles.filterChip
+                }
                 onPress={() => setFilter?.('Videos')}
               >
                 <Text
-                  style={filter === 'Videos' ? styles.filterTextActive : styles.filterText}
+                  style={
+                    filter === 'Videos'
+                      ? styles.filterTextActive
+                      : styles.filterText
+                  }
                 >
                   Videos ({userVideos.length})
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={filter === 'Shorts' ? styles.filterChipActive : styles.filterChip}
+                style={
+                  filter === 'Shorts'
+                    ? styles.filterChipActive
+                    : styles.filterChip
+                }
                 onPress={() => setFilter?.('Shorts')}
               >
                 <Text
-                  style={filter === 'Shorts' ? styles.filterTextActive : styles.filterText}
+                  style={
+                    filter === 'Shorts'
+                      ? styles.filterTextActive
+                      : styles.filterText
+                  }
                 >
                   Shorts ({userShorts.length})
                 </Text>
@@ -906,15 +952,12 @@ const LibraryScreen = ({ navigation }) => {
               listData.length === 0 ? (
                 <View style={styles.emptyState}>
                   <MaterialCommunityIcons
-                    name={
-                      emptyTitle ? 'download-outline' : 'video-outline'
-                    }
+                    name={emptyTitle ? 'download-outline' : 'video-outline'}
                     size={64}
                     color="#ccc"
                   />
                   <Text style={styles.emptyStateText}>
-                    {emptyTitle ||
-                      `No ${filter.toLowerCase()} yet`}
+                    {emptyTitle || `No ${filter.toLowerCase()} yet`}
                   </Text>
                   <Text style={styles.emptyStateSubtext}>
                     {emptySubtitle ||
@@ -948,8 +991,15 @@ const LibraryScreen = ({ navigation }) => {
     >
       <SafeAreaView style={styles.videoModalContainer} edges={['top']}>
         <View style={styles.videoModalHeader}>
-          <TouchableOpacity onPress={closeVideoModal} style={styles.videoModalHeaderBtn}>
-            <MaterialCommunityIcons name="chevron-down" size={30} color="#fff" />
+          <TouchableOpacity
+            onPress={closeVideoModal}
+            style={styles.videoModalHeaderBtn}
+          >
+            <MaterialCommunityIcons
+              name="chevron-down"
+              size={30}
+              color="#fff"
+            />
           </TouchableOpacity>
           <Text style={styles.videoModalHeaderTitle} numberOfLines={1}>
             {modalVideo?.title || 'Video'}
@@ -965,7 +1015,11 @@ const LibraryScreen = ({ navigation }) => {
             </View>
           ) : videoModalError ? (
             <View style={styles.videoErrorOverlay}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={44} color="#fff" />
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={44}
+                color="#fff"
+              />
               <Text style={styles.videoErrorText}>{videoModalError}</Text>
               <TouchableOpacity
                 style={styles.videoRetryBtn}
@@ -991,7 +1045,10 @@ const LibraryScreen = ({ navigation }) => {
                 playWhenInactive={false}
                 ignoreSilentSwitch="ignore"
                 onLoad={data => {
-                  setModalProgress(p => ({ ...p, duration: data?.duration || 0 }));
+                  setModalProgress(p => ({
+                    ...p,
+                    duration: data?.duration || 0,
+                  }));
                   setModalPaused(false);
                 }}
                 onProgress={data => {
@@ -1001,7 +1058,8 @@ const LibraryScreen = ({ navigation }) => {
                   progressUpdateRef.current = now;
                   setModalProgress(p => ({
                     currentTime: data?.currentTime ?? p.currentTime,
-                    duration: data?.seekableDuration || data?.duration || p.duration,
+                    duration:
+                      data?.seekableDuration || data?.duration || p.duration,
                   }));
                 }}
                 onError={() =>
@@ -1015,7 +1073,9 @@ const LibraryScreen = ({ navigation }) => {
                 onPress={() => setModalPaused(p => !p)}
               >
                 <MaterialCommunityIcons
-                  name={modalPaused ? 'play-circle-outline' : 'pause-circle-outline'}
+                  name={
+                    modalPaused ? 'play-circle-outline' : 'pause-circle-outline'
+                  }
                   size={74}
                   color="rgba(255,255,255,0.9)"
                 />
@@ -1040,7 +1100,10 @@ const LibraryScreen = ({ navigation }) => {
                       setModalIsSliding(false);
                       return;
                     }
-                    const clamped = Math.max(0, Math.min(val, modalProgress.duration));
+                    const clamped = Math.max(
+                      0,
+                      Math.min(val, modalProgress.duration),
+                    );
                     seekingRef.current = true;
                     modalVideoRef.current.seek(clamped);
                     setModalProgress(p => ({ ...p, currentTime: clamped }));
@@ -1052,7 +1115,8 @@ const LibraryScreen = ({ navigation }) => {
                   }}
                 />
                 <Text style={styles.videoTimeText}>
-                  {formatTime(modalDisplayTime)} / {formatTime(modalProgress.duration)}
+                  {formatTime(modalDisplayTime)} /{' '}
+                  {formatTime(modalProgress.duration)}
                 </Text>
               </View>
             </>
@@ -1063,9 +1127,15 @@ const LibraryScreen = ({ navigation }) => {
           )}
         </View>
 
-        <ScrollView style={styles.videoModalBody} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.videoModalBody}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.videoActionsRow}>
-            <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalLike}>
+            <TouchableOpacity
+              style={styles.videoActionBtn}
+              onPress={handleModalLike}
+            >
               <MaterialCommunityIcons
                 name={modalVideo?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
                 size={22}
@@ -1075,9 +1145,14 @@ const LibraryScreen = ({ navigation }) => {
                 {formatCount(modalVideo?.likeCount ?? 0)}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalDislike}>
+            <TouchableOpacity
+              style={styles.videoActionBtn}
+              onPress={handleModalDislike}
+            >
               <MaterialCommunityIcons
-                name={modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'}
+                name={
+                  modalVideo?.isDisliked ? 'thumb-down' : 'thumb-down-outline'
+                }
                 size={22}
                 color={modalVideo?.isDisliked ? '#FF7F0B' : '#222'}
               />
@@ -1092,13 +1167,24 @@ const LibraryScreen = ({ navigation }) => {
                 setVideoCommentsVisible(true);
               }}
             >
-              <MaterialCommunityIcons name="comment-text-outline" size={22} color="#222" />
+              <MaterialCommunityIcons
+                name="comment-text-outline"
+                size={22}
+                color="#222"
+              />
               <Text style={styles.videoActionText}>
                 {formatCount(modalVideo?.commentCount ?? 0)}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.videoActionBtn} onPress={handleModalShare}>
-              <MaterialCommunityIcons name="share-outline" size={22} color="#222" />
+            <TouchableOpacity
+              style={styles.videoActionBtn}
+              onPress={handleModalShare}
+            >
+              <MaterialCommunityIcons
+                name="share-outline"
+                size={22}
+                color="#222"
+              />
               <Text style={styles.videoActionText}>
                 {formatCount(modalVideo?.shareCount ?? 0)}
               </Text>
@@ -1110,14 +1196,21 @@ const LibraryScreen = ({ navigation }) => {
                 setSaveVisible(true);
               }}
             >
-              <MaterialCommunityIcons name="bookmark-outline" size={22} color="#222" />
+              <MaterialCommunityIcons
+                name="bookmark-outline"
+                size={22}
+                color="#222"
+              />
               <Text style={styles.videoActionText}>Save</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.channelRow}>
             <View style={styles.channelLeft}>
-              <Image source={{ uri: modalVideo?.channelAvatar }} style={styles.channelAvatar} />
+              <Image
+                source={{ uri: modalVideo?.channelAvatar }}
+                style={styles.channelAvatar}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={styles.channelName} numberOfLines={1}>
                   {modalVideo?.channelName || 'Channel'}
@@ -1166,7 +1259,11 @@ const LibraryScreen = ({ navigation }) => {
                   });
                 }}
               >
-                <MaterialCommunityIcons name="message-text-outline" size={18} color="#fff" />
+                <MaterialCommunityIcons
+                  name="message-text-outline"
+                  size={18}
+                  color="#fff"
+                />
                 <Text style={styles.messageBtnText}>Message</Text>
               </TouchableOpacity>
             )}
@@ -1181,7 +1278,9 @@ const LibraryScreen = ({ navigation }) => {
                     onPress={() => {
                       const url = (l.url || '').trim();
                       if (!url) return;
-                      Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
+                      Linking.openURL(
+                        url.startsWith('http') ? url : `https://${url}`,
+                      );
                     }}
                   >
                     <MaterialCommunityIcons
@@ -1204,7 +1303,9 @@ const LibraryScreen = ({ navigation }) => {
           onCommentAdded={() => {
             if (!modalVideo?.id) return;
             setModalVideo(prev =>
-              prev ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 } : prev,
+              prev
+                ? { ...prev, commentCount: (prev.commentCount ?? 0) + 1 }
+                : prev,
             );
           }}
           onCommentDeleted={(wasTopLevel, deletedCount) => {
@@ -1212,7 +1313,10 @@ const LibraryScreen = ({ navigation }) => {
             if (dec <= 0) return;
             setModalVideo(prev =>
               prev
-                ? { ...prev, commentCount: Math.max(0, (prev.commentCount ?? 0) - dec) }
+                ? {
+                    ...prev,
+                    commentCount: Math.max(0, (prev.commentCount ?? 0) - dec),
+                  }
                 : prev,
             );
           }}
@@ -1233,8 +1337,8 @@ const LibraryScreen = ({ navigation }) => {
       historyFilter === 'Videos'
         ? watchHistory.filter(i => i.type === 'video')
         : historyFilter === 'Shorts'
-          ? watchHistory.filter(i => i.type === 'short')
-          : watchHistory;
+        ? watchHistory.filter(i => i.type === 'short')
+        : watchHistory;
     const videoCount = watchHistory.filter(i => i.type === 'video').length;
     const shortCount = watchHistory.filter(i => i.type === 'short').length;
 
@@ -1251,13 +1355,17 @@ const LibraryScreen = ({ navigation }) => {
           >
             <TouchableOpacity
               style={
-                historyFilter === 'All' ? styles.filterChipActive : styles.filterChip
+                historyFilter === 'All'
+                  ? styles.filterChipActive
+                  : styles.filterChip
               }
               onPress={() => setHistoryFilter('All')}
             >
               <Text
                 style={
-                  historyFilter === 'All' ? styles.filterTextActive : styles.filterText
+                  historyFilter === 'All'
+                    ? styles.filterTextActive
+                    : styles.filterText
                 }
               >
                 All
@@ -1265,13 +1373,17 @@ const LibraryScreen = ({ navigation }) => {
             </TouchableOpacity>
             <TouchableOpacity
               style={
-                historyFilter === 'Videos' ? styles.filterChipActive : styles.filterChip
+                historyFilter === 'Videos'
+                  ? styles.filterChipActive
+                  : styles.filterChip
               }
               onPress={() => setHistoryFilter('Videos')}
             >
               <Text
                 style={
-                  historyFilter === 'Videos' ? styles.filterTextActive : styles.filterText
+                  historyFilter === 'Videos'
+                    ? styles.filterTextActive
+                    : styles.filterText
                 }
               >
                 Videos ({videoCount})
@@ -1279,13 +1391,17 @@ const LibraryScreen = ({ navigation }) => {
             </TouchableOpacity>
             <TouchableOpacity
               style={
-                historyFilter === 'Shorts' ? styles.filterChipActive : styles.filterChip
+                historyFilter === 'Shorts'
+                  ? styles.filterChipActive
+                  : styles.filterChip
               }
               onPress={() => setHistoryFilter('Shorts')}
             >
               <Text
                 style={
-                  historyFilter === 'Shorts' ? styles.filterTextActive : styles.filterText
+                  historyFilter === 'Shorts'
+                    ? styles.filterTextActive
+                    : styles.filterText
                 }
               >
                 Shorts ({shortCount})
@@ -1321,7 +1437,9 @@ const LibraryScreen = ({ navigation }) => {
                     size={64}
                     color="#ccc"
                   />
-                  <Text style={styles.emptyStateText}>No watch history yet</Text>
+                  <Text style={styles.emptyStateText}>
+                    No watch history yet
+                  </Text>
                   <Text style={styles.emptyStateSubtext}>
                     Videos and shorts you watch will appear here
                   </Text>
@@ -1365,7 +1483,9 @@ const LibraryScreen = ({ navigation }) => {
   }
 
   const isOwnVideo =
-    !!currentUser?.id && !!modalVideo?.userId && String(currentUser.id) === String(modalVideo.userId);
+    !!currentUser?.id &&
+    !!modalVideo?.userId &&
+    String(currentUser.id) === String(modalVideo.userId);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1377,9 +1497,23 @@ const LibraryScreen = ({ navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>History</Text>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7BB5B', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 }} onPress={() => setCurrentView('history')}>
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#F7BB5B',
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 5,
+            }}
+            onPress={() => setCurrentView('history')}
+          >
             <Text style={styles.viewAllText}>{'View All'} </Text>
-            <MaterialCommunityIcons name="chevron-right" size={14} color="#000" />
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={14}
+              color="#000"
+            />
           </TouchableOpacity>
         </View>
         <ScrollView
@@ -1405,22 +1539,50 @@ const LibraryScreen = ({ navigation }) => {
                   </View> */}
                 </View>
                 <View style={styles.historyInfo}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                     <Text style={styles.historyTitle} numberOfLines={1}>
                       {item.title}
                     </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
                       <Text style={{ fontSize: 12, color: '#666' }}>100k</Text>
-                      <MaterialCommunityIcons name="eye" size={16} color="#666" />
+                      <MaterialCommunityIcons
+                        name="eye"
+                        size={16}
+                        color="#666"
+                      />
                     </View>
                   </View>
                   <View style={styles.historyMetaRow}>
                     {/* <Text style={styles.historyChannel}>
                       {item.channelName || 'Channel'} • {item.publishedAt}
                     </Text> */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                      <MaterialCommunityIcons name="map-marker" size={16} color="#666" />
-                      <Text style={{ fontSize: 12, color: '#666' }}>Birmingham, UK</Text>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 2,
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name="map-marker"
+                        size={16}
+                        color="#666"
+                      />
+                      <Text style={{ fontSize: 12, color: '#666' }}>
+                        Birmingham, UK
+                      </Text>
                     </View>
                     <TouchableOpacity>
                       {/* <MaterialCommunityIcons
@@ -1433,7 +1595,8 @@ const LibraryScreen = ({ navigation }) => {
                   </View>
                 </View>
               </TouchableOpacity>
-            ))}
+            ),
+          )}
         </ScrollView>
 
         <View style={styles.divider} />
@@ -1507,7 +1670,9 @@ const LibraryScreen = ({ navigation }) => {
             <Text style={styles.subText}>
               {playlistCountsLoading
                 ? '...'
-                : `${watchLaterCount} unwatched video${watchLaterCount !== 1 ? 's' : ''}`}
+                : `${watchLaterCount} unwatched video${
+                    watchLaterCount !== 1 ? 's' : ''
+                  }`}
             </Text>
           </View>
         </TouchableOpacity>
@@ -1522,7 +1687,9 @@ const LibraryScreen = ({ navigation }) => {
           <View>
             <Text style={styles.menuText}>Liked Videos</Text>
             <Text style={styles.subText}>
-              {playlistCountsLoading ? '...' : `${likedCount} video${likedCount !== 1 ? 's' : ''}`}
+              {playlistCountsLoading
+                ? '...'
+                : `${likedCount} video${likedCount !== 1 ? 's' : ''}`}
             </Text>
           </View>
         </TouchableOpacity>
@@ -1541,7 +1708,9 @@ const LibraryScreen = ({ navigation }) => {
           <View>
             <Text style={styles.menuText}>My Favorite Songs</Text>
             <Text style={styles.subText}>
-              {playlistCountsLoading ? '...' : `${favoritesCount} video${favoritesCount !== 1 ? 's' : ''}`}
+              {playlistCountsLoading
+                ? '...'
+                : `${favoritesCount} video${favoritesCount !== 1 ? 's' : ''}`}
             </Text>
           </View>
         </TouchableOpacity>
@@ -1589,7 +1758,9 @@ const LibraryScreen = ({ navigation }) => {
               style={[styles.playlistItem, styles.logoutButton]}
               onPress={handleLogout}
             >
-              <View style={[styles.menuIconContainer, styles.logoutIconContainer]}>
+              <View
+                style={[styles.menuIconContainer, styles.logoutIconContainer]}
+              >
                 <MaterialCommunityIcons
                   name="logout"
                   size={24}
@@ -1719,7 +1890,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 10,
     alignItems: 'center',
-    marginBottom: 10
+    marginBottom: 10,
   },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1a1a1a' },
   viewAllText: { color: '#424242', fontWeight: '600', fontSize: 10 },
@@ -1767,8 +1938,20 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   menuText: { fontSize: 16, fontWeight: '600', color: '#333' },
-  recentlyAdded: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7BB5B', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 },
-  sortText: { color: '#424242', fontWeight: '600', marginRight: 4, fontSize: 12 },
+  recentlyAdded: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7BB5B',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 5,
+  },
+  sortText: {
+    color: '#424242',
+    fontWeight: '600',
+    marginRight: 4,
+    fontSize: 12,
+  },
   playlistItem: {
     flexDirection: 'row',
     alignItems: 'center',
