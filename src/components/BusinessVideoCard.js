@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatar: {
-    backgroundColor: '#222', // Match dark avatar placeholder style
+    backgroundColor: '#222', //  sMatch dark avatar placeholder style
   },
   avatarFallback: {
     justifyContent: 'center',
