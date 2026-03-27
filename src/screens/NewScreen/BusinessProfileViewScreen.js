@@ -396,6 +396,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
   const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
   const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
+  const tabsScrollRef = useRef(null);
+  const tabLayoutsRef = useRef({});
+  const tabsViewportWidthRef = useRef(0);
+
+  const scrollActiveTabIntoView = useCallback(tab => {
+    const layout = tabLayoutsRef.current?.[tab];
+    const viewportWidth = tabsViewportWidthRef.current || 0;
+    if (!layout || !viewportWidth || !tabsScrollRef.current?.scrollTo) return;
+
+    const centeredX = layout.x - (viewportWidth - layout.width) / 2;
+    tabsScrollRef.current.scrollTo({ x: Math.max(0, centeredX), animated: true });
+  }, []);
 
   const loadPosts = useCallback(
     async (refresh = false) => {
@@ -603,6 +615,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   useEffect(() => {
     if (activeTab === 'Menus' && profileUserId) loadMenu();
   }, [activeTab, profileUserId, loadMenu]);
+
+  useEffect(() => {
+    const t = setTimeout(() => scrollActiveTabIntoView(activeTab), 0);
+    return () => clearTimeout(t);
+  }, [activeTab, isOwnProfile, isOwnerOrVendor, scrollActiveTabIntoView]);
 
   // Refetch menu when screen gains focus (e.g. returning from MenuManageScreen) so Menus tab shows updated data
   useFocusEffect(
@@ -1381,7 +1398,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <ScrollView
+          ref={tabsScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          onLayout={e => {
+            tabsViewportWidthRef.current = e?.nativeEvent?.layout?.width || 0;
+            scrollActiveTabIntoView(activeTab);
+          }}
+        >
           {(isOwnProfile && isOwnerOrVendor
             ? ['Posts', 'Promotions', 'Menus', 'Grid', 'Video', 'Notification']
             : BASE_TABS
@@ -1396,7 +1421,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   styles.tabItem,
                   activeTab === tab && styles.activeTabItem,
                 ]}
-                onPress={() => setActiveTab(tab)}
+                onLayout={e => {
+                  const l = e?.nativeEvent?.layout;
+                  if (l) tabLayoutsRef.current[tab] = { x: l.x, width: l.width };
+                }}
+                onPress={() => {
+                  setActiveTab(tab);
+                  scrollActiveTabIntoView(tab);
+                }}
               >
                 {isGrid ? (
                   <MaterialCommunityIcons
