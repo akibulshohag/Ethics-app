@@ -59,6 +59,8 @@ import BusinessVideoTabCard from '../components/BusinessVideoTabCard';
 import CommentsModal from '../components/CommentsModal';
 import CreatePostModal from '../components/CreatePostModal';
 
+const { width } = Dimensions.get('window');
+
 const VideoSection = ({
   title,
   items = [],
@@ -1215,33 +1217,7 @@ const PromotionScreen = ({ onBack }) => {
             <Text style={styles.profileName}>{displayName}</Text>
             <Text style={styles.profileLocation}>{displayLocation || '—'}</Text>
 
-            <View style={styles.profileStatsRow}>
-              <TouchableOpacity
-                style={styles.profileStatItem}
-                activeOpacity={0.8}
-                onPress={() =>
-                  navigation.navigate('FollowersListScreen', {
-                    profileId: profile?.id || userId,
-                  })
-                }
-              >
-                <Text style={styles.profileStatValue}>{followersCount}</Text>
-                <Text style={styles.profileStatLabel}>Followers</Text>
-              </TouchableOpacity>
-              <View style={styles.profileStatDivider} />
-              <TouchableOpacity
-                style={styles.profileStatItem}
-                activeOpacity={0.8}
-                onPress={() =>
-                  navigation.navigate('FollowingListScreen', {
-                    profileId: profile?.id || userId,
-                  })
-                }
-              >
-                <Text style={styles.profileStatValue}>{followingCount}</Text>
-                <Text style={styles.profileStatLabel}>Following</Text>
-              </TouchableOpacity>
-            </View>
+            
 
             {isOwnProfile ? (
               <View style={styles.actionButtonGroup}>
@@ -1274,7 +1250,47 @@ const PromotionScreen = ({ onBack }) => {
               </TouchableOpacity>
             ) : null}
           </View>
+          
         </View>
+        
+        <View style={styles.statsContainer}>
+          <View style={styles.profileStatsRow}>
+                <TouchableOpacity
+                  style={styles.profileStatItem}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    navigation.navigate('FollowersListScreen', {
+                      profileId: profile?.id || userId,
+                    })
+                  }
+                >
+                  <Text style={styles.profileStatValue}>{followersCount}</Text>
+                  <Text style={styles.profileStatLabel}>Followers</Text>
+                </TouchableOpacity>
+                <View style={styles.profileStatDivider} />
+                <TouchableOpacity
+                  style={styles.profileStatItem}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    navigation.navigate('FollowingListScreen', {
+                      profileId: profile?.id || userId,
+                    })
+                  }
+                >
+                  <Text style={styles.profileStatValue}>{followingCount}</Text>
+                  <Text style={styles.profileStatLabel}>Following</Text>
+                </TouchableOpacity>
+
+                <View style={styles.profileStatItem}>
+                  <Text style={styles.profileStatValue}>{followingCount || '0'}</Text>
+                  <Text style={styles.profileStatLabel}>MSG</Text>
+                </View>
+          </View>
+        </View>
+         
+        <TouchableOpacity style={styles.subscribeBtn}>
+          <Text style={styles.subscribeText}>Subscribe</Text>
+        </TouchableOpacity>    
 
         {/* Same tab pattern as Business profile: Posts, Gallery, Video, Notification (no Promotions/Menus) */}
         <View style={styles.promoProfileTabsSection}>
@@ -2147,28 +2163,40 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   profileLocation: { color: '#BDC3C7', fontSize: 13, marginBottom: 18 },
+  statsContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    width: '100%',
+    marginTop: 10,
+  },
   profileStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    justifyContent: 'space-around',
+    backgroundColor: '#E0E0E0', // Light gray background
+    borderRadius: 20,
+    paddingVertical: 15,
+    width: '100%',
+    marginBottom: 15,
   },
   profileStatItem: {
     alignItems: 'center',
     minWidth: 78,
   },
   profileStatValue: {
-    color: '#FFF',
+    color: '#111',
     fontSize: 18,
     fontWeight: '800',
     lineHeight: 20,
   },
   profileStatLabel: {
-    color: '#D2DAE2',
-    fontSize: 12,
+    color: '#666',
+    fontSize: 14,
     marginTop: 2,
-    fontWeight: '600',
   },
+   // Subscribe Button
+  subscribeBtn: { backgroundColor: '#F5A623', width: width * 0.45, alignSelf: 'center', marginBottom: 10, paddingVertical: 12, borderRadius: 20, alignItems: 'center', elevation: 2 },
+  subscribeText: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
   profileStatDivider: {
     width: 1,
     height: 26,
