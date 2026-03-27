@@ -20,11 +20,7 @@ import {
   updateRestaurantOrderStatus,
 } from '../services/orderService';
 
-const TAB_STATUS = {
-  New: 'pending',
-  Accepted: 'completed',
-  'In Progress': 'preparing',
-};
+const TABS = ['In Progress', 'Accepted', 'Rejected'];
 
 function formatItems(items) {
   if (!Array.isArray(items) || items.length === 0) return 'No items';
@@ -76,7 +72,7 @@ export default function LiveOrdersScreen() {
     'superadmin',
     'super_admin',
   ].includes(role);
-  const [activeTab, setActiveTab] = useState('New');
+  const [activeTab, setActiveTab] = useState('In Progress');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,12 +88,24 @@ export default function LiveOrdersScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       try {
-        const status = TAB_STATUS[activeTab];
-        const res = await getRestaurantOrders(user.token, {
-          status,
-          limit: 50,
+        const res = await getRestaurantOrders(user.token, { limit: 100 });
+        const all = res?.orders || [];
+        const filtered = all.filter(o => {
+          const s = String(o?.status || '').toLowerCase();
+          if (activeTab === 'In Progress') {
+            // "All new orders" (requested): pending
+            return s === 'pending';
+          }
+          if (activeTab === 'Accepted') {
+            // Accepted flow
+            return s === 'confirmed' || s === 'preparing' || s === 'completed';
+          }
+          if (activeTab === 'Rejected') {
+            return s === 'cancelled';
+          }
+          return true;
         });
-        setOrders(res?.orders || []);
+        setOrders(filtered);
       } catch (e) {
         setOrders([]);
       } finally {
@@ -186,7 +194,7 @@ export default function LiveOrdersScreen() {
         </View>
 
         <View style={styles.tabBar}>
-          {['New', 'Accepted', 'In Progress'].map(tab => (
+          {TABS.map(tab => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
@@ -278,7 +286,7 @@ export default function LiveOrdersScreen() {
                     <Text style={styles.detailLabel}>
                       Order ID :{' '}
                       <Text style={styles.detailValue}>
-                        #{String(order.id).slice(0, 12)}
+                        #{String(order.id)}
                       </Text>
                     </Text>
                     <Text style={styles.detailLabel}>

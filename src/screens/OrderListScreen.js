@@ -11,6 +11,7 @@ import {
   Pressable,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -24,6 +25,7 @@ import {
   deleteRestaurantOrderReview,
 } from '../services/orderService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { safeImageUri } from '../utils/helper';
 
 const formatDate = dateStr => {
   if (!dateStr) return '';
@@ -228,6 +230,13 @@ const OrderListScreen = ({ navigation }) => {
       item.owner?.name ||
       item.owner?.email ||
       'Restaurant';
+    const ownerId = item?.ownerId || item?.owner?.id || null;
+    const ownerAvatarUri = safeImageUri(
+      item?.owner?.photos?.[0],
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        ownerName,
+      )}&background=333&color=fff`,
+    );
     const itemCount = (item.items || []).reduce(
       (s, i) => s + (i.quantity || 0),
       0,
@@ -252,9 +261,19 @@ const OrderListScreen = ({ navigation }) => {
           </View>
         </View>
         {isUser && (
-          <Text style={styles.cardRestaurant} numberOfLines={2}>
-            Restaurant: {ownerName}
-          </Text>
+          <TouchableOpacity
+            style={styles.cardRestaurantRow}
+            activeOpacity={0.8}
+            disabled={!ownerId}
+            onPress={() =>
+              ownerId && navigation.navigate('UserViewsScreen', { userId: ownerId })
+            }
+          >
+            <Image source={{ uri: ownerAvatarUri }} style={styles.cardRestaurantAvatar} />
+            <Text style={styles.cardRestaurant} numberOfLines={2}>
+              Restaurant: {ownerName}
+            </Text>
+          </TouchableOpacity>
         )}
         {role !== 'user' && (
           <Text style={styles.cardCustomer}>
@@ -574,6 +593,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: 4,
+    flex: 1,
+  },
+  cardRestaurantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  cardRestaurantAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
   },
   badge: {
     paddingHorizontal: 8,
