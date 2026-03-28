@@ -239,7 +239,7 @@ export default function FollowersListScreen({ navigation }) {
         >
           <Text style={styles.backText}>◀ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.moreIcon}>⋮</Text>
+        {/* <Text style={styles.moreIcon}>⋮</Text> */}
       </View>
 
       <Text style={styles.title}>Followers</Text>
@@ -355,8 +355,8 @@ const styles = StyleSheet.create({
   actionBtn: {
     borderWidth: 1.5,
     borderColor: '#F6A623',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 20,
     flex: 1,
     alignItems: 'center',

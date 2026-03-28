@@ -3266,10 +3266,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   subscribeBtnSubscribed: {
-    backgroundColor: '#333',
+    backgroundColor: '#111',
+
   },
   subscribeBtnDisabled: {
-    opacity: 0.55,
+    opacity: 0.9,
   },
   subscribeText: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
   profileStatDivider: {
