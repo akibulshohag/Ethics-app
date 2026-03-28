@@ -3,6 +3,18 @@
  * returnContext: { returnTo: 'watch_later'|'liked'|'favorites'|'library'|'user_views'|'business_profile'|'promotion', returnUserId?: string }
  * For returnTo 'promotion', pass returnUserId so back returns to that user's Promotion profile.
  */
+import { recordView } from '../services/videoService';
+import { shortsService } from '../services/shortsService';
+
+function getViewerId() {
+  try {
+    const { store } = require('../redux');
+    return store.getState()?.app?.user?.id;
+  } catch {
+    return undefined;
+  }
+}
+
 function findTabNavigation(navigation) {
   let parent = navigation?.getParent?.();
   while (parent) {
@@ -31,9 +43,11 @@ export function navigateToHomeOneLibraryDetail(navigation, item, returnContext) 
   const id = item?.id;
   if (!id) return;
   const contentType = item?.type === 'short' ? 'short' : 'video';
+  const viewerId = getViewerId();
 
   if (contentType === 'short') {
     const sid = String(id);
+    shortsService.recordView(sid, viewerId, 0, false).catch(() => {});
     const initialShortItem = {
       ...item,
       id: sid,
@@ -73,6 +87,8 @@ export function navigateToHomeOneLibraryDetail(navigation, item, returnContext) 
       }
       nav = nav.getParent?.();
     }
+  } else {
+    recordView(String(id), viewerId).catch(() => {});
   }
 
   const openLibraryDetail = {

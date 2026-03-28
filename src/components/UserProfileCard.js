@@ -31,6 +31,9 @@ const UserProfileCard = ({
   showSubscribe = true,
   /** Opens this channel’s restaurant menu / order flow (HomeThreeScreen via Root) */
   onOrderNowPress,
+  /** Same as BusinessProfileCard: open lists for this profile */
+  onPressFollowers,
+  onPressFollowing,
 }) => {
   const navigation = useNavigation();
   const coverUri =
@@ -227,14 +230,24 @@ const UserProfileCard = ({
           <View style={styles.bottomBlock}>
             {/* Opaque Stats Bar */}
             <View style={styles.statsOpaqueBar}>
-              <View style={styles.statColumn}>
+              <TouchableOpacity
+                style={styles.statColumn}
+                onPress={onPressFollowers}
+                disabled={!onPressFollowers}
+                activeOpacity={0.75}
+              >
                 <Text style={styles.statValMain}>{followers}</Text>
                 <Text style={styles.statLabelMain}>Followers</Text>
-              </View>
-              <View style={styles.statColumn}>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.statColumn}
+                onPress={onPressFollowing}
+                disabled={!onPressFollowing}
+                activeOpacity={0.75}
+              >
                 <Text style={styles.statValMain}>{following}</Text>
                 <Text style={styles.statLabelMain}>Following</Text>
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.statColumn}
                 onPress={onMessagePress}

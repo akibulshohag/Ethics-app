@@ -46,6 +46,7 @@ import {
   toggleLike as toggleVideoLike,
   toggleDislike as toggleVideoDislike,
   recordShare as recordVideoShare,
+  recordView as recordVideoView,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import {
@@ -860,7 +861,17 @@ const HomeOneScreen = () => {
     if (item?.id && (item?.type === 'video' || !item?.type)) {
       getVideoById(item.id, user?.id, user?.role || 'user')
         .then(res => {
-          const full = mapToDisplayItem(res, item?.type || 'video');
+          recordVideoView(item.id, user?.id || null).catch(() => {});
+          const rawDisplay = mapToDisplayItem(res, item?.type || 'video');
+          const vc = (rawDisplay.viewCount ?? 0) + 1;
+          const full = {
+            ...rawDisplay,
+            viewCount: vc,
+            views:
+              vc >= 1000
+                ? `${(vc / 1000).toFixed(1)}K views`
+                : `${vc} views`,
+          };
           const videoDescriptionRaw =
             (res?.description != null && String(res.description).trim()) ||
             (full.description != null && String(full.description).trim()) ||
@@ -980,7 +991,7 @@ const HomeOneScreen = () => {
       setResDetailRating({ average: 0, reviewCount: 0 });
       return;
     }
-    if (!videoChannelOwnerId || isOwnChannelVideo) {
+    if (!videoChannelOwnerId) {
       setResDetailSubscribe({
         isSubscribed: false,
         loading: false,
@@ -989,42 +1000,53 @@ const HomeOneScreen = () => {
       setResDetailRating({ average: 0, reviewCount: 0 });
       return;
     }
+    /** Own channel: hide subscribe, but still load rating/review counts from API */
+    if (isOwnChannelVideo) {
+      setResDetailSubscribe({
+        isSubscribed: false,
+        loading: false,
+        toggling: false,
+      });
+    } else {
+      setResDetailSubscribe(s => ({ ...s, loading: true, toggling: false }));
+    }
     let cancelled = false;
-    setResDetailSubscribe(s => ({ ...s, loading: true, toggling: false }));
     getChannelProfile(videoChannelOwnerId, user?.id)
       .then(p => {
-        if (!cancelled) {
-          const avgRaw =
-            p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
-          const countRaw =
-            p?.reviewCount ??
-            p?.reviewsCount ??
-            p?.totalReviews ??
-            p?.ratingCount;
-          const avg = Number(avgRaw);
-          const count = Number(countRaw);
+        if (cancelled) return;
+        const avgRaw =
+          p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
+        const countRaw =
+          p?.reviewCount ??
+          p?.reviewsCount ??
+          p?.totalReviews ??
+          p?.ratingCount;
+        const avg = Number(avgRaw);
+        const count = Number(countRaw);
+        if (!isOwnChannelVideo) {
           setResDetailSubscribe({
             isSubscribed: !!p?.isSubscribed,
             loading: false,
             toggling: false,
           });
-          setResDetailRating({
-            average: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
-            reviewCount: Number.isFinite(count)
-              ? Math.max(0, Math.floor(count))
-              : 0,
-          });
         }
+        setResDetailRating({
+          average: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
+          reviewCount: Number.isFinite(count)
+            ? Math.max(0, Math.floor(count))
+            : 0,
+        });
       })
       .catch(() => {
-        if (!cancelled) {
+        if (cancelled) return;
+        if (!isOwnChannelVideo) {
           setResDetailSubscribe({
             isSubscribed: false,
             loading: false,
             toggling: false,
           });
-          setResDetailRating({ average: 0, reviewCount: 0 });
         }
+        setResDetailRating({ average: 0, reviewCount: 0 });
       });
     return () => {
       cancelled = true;

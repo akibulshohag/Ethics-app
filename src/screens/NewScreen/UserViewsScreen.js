@@ -934,9 +934,13 @@ const UserViewsScreen = ({ navigation }) => {
         Boolean(item?.isShort) || isShortByType || isShortByUrl;
       const targetId = item?.originId ?? item?.id;
       if (!targetId) return;
+      if (isShort) {
+        navigateToShortsVideoScreen(String(targetId), item);
+        return;
+      }
       setGalleryVideoModal({
         contentId: String(targetId),
-        kind: isShort ? 'short' : 'video',
+        kind: 'video',
       });
       return;
     }
@@ -1106,6 +1110,128 @@ const UserViewsScreen = ({ navigation }) => {
     });
   }, [profileUserId, profile, currentUser?.token, navigation]);
 
+  /** Followers / Following lists live on Home1 stack (same as BusinessProfileCard) */
+  const handlePressFollowers = useCallback(() => {
+    if (!profileUserId) return;
+    navigation.navigate('Root', {
+      screen: 'Home1',
+      params: {
+        screen: 'FollowersListScreen',
+        params: {
+          profileId: profileUserId,
+          userId: profileUserId,
+        },
+      },
+    });
+  }, [profileUserId, navigation]);
+
+  const handlePressFollowing = useCallback(() => {
+    if (!profileUserId) return;
+    navigation.navigate('Root', {
+      screen: 'Home1',
+      params: {
+        screen: 'FollowingListScreen',
+        params: {
+          profileId: profileUserId,
+          userId: profileUserId,
+        },
+      },
+    });
+  }, [profileUserId, navigation]);
+
+  /**
+   * Shorts → Shorts tab ShortsVideoScreen (same as PromotionScreen `openLibraryMedia`).
+   * recordView here counts an open; ShortsVideoScreen may also fire on visibility.
+   */
+  const navigateToShortsVideoScreen = useCallback(
+    (shortId, feedItem) => {
+      if (!shortId) return;
+      const sid = String(shortId);
+      shortsService
+        .recordView(sid, currentUser?.id, 0, false)
+        .catch(() => {});
+      const raw =
+        (rawVideos || []).find(
+          v =>
+            String(v.id) === sid &&
+            (v.type === 'short' ||
+              String(v.type || '').toLowerCase() === 'short'),
+        ) || null;
+      const fallbackName =
+        raw?.user?.nickname ||
+        raw?.user?.name ||
+        profile?.nickname ||
+        profile?.name ||
+        currentUser?.nickname ||
+        currentUser?.name ||
+        'User';
+      const initialShortItem = raw
+        ? {
+            ...raw,
+            userId: raw?.userId || raw?.user?.id || profileUserId,
+            user: {
+              ...(raw.user && typeof raw.user === 'object' ? raw.user : {}),
+              id: raw?.user?.id || raw?.userId || profileUserId,
+              nickname: raw?.user?.nickname || fallbackName,
+              name: raw?.user?.name || fallbackName,
+            },
+          }
+        : feedItem && typeof feedItem === 'object'
+        ? {
+            ...feedItem,
+            id: sid,
+            userId: profileUserId,
+            user: {
+              id: profileUserId,
+              nickname: fallbackName,
+              name: fallbackName,
+            },
+          }
+        : {
+            id: sid,
+            userId: profileUserId,
+            user: {
+              id: profileUserId,
+              nickname: fallbackName,
+              name: fallbackName,
+            },
+          };
+
+      let nav = navigation;
+      for (let i = 0; i < 16 && nav; i++) {
+        const names = nav.getState?.()?.routeNames;
+        if (Array.isArray(names) && names.includes('Shorts')) {
+          nav.navigate('Shorts', {
+            screen: 'ShortsVideoScreen',
+            params: { shortId: sid, initialShortItem },
+          });
+          return;
+        }
+        nav = nav.getParent?.();
+      }
+      nav = navigation;
+      for (let i = 0; i < 16 && nav; i++) {
+        const names = nav.getState?.()?.routeNames;
+        if (Array.isArray(names) && names.includes('Library')) {
+          nav.navigate('Library', {
+            screen: 'ShortsVideoScreen',
+            params: { shortId: sid, initialShortItem },
+          });
+          return;
+        }
+        nav = nav.getParent?.();
+      }
+      navigation.navigate('Root', {
+        screen: 'Shorts',
+        params: {
+          screen: 'ShortsVideoScreen',
+          params: { shortId: sid, initialShortItem },
+        },
+      });
+    },
+    [navigation, rawVideos, profileUserId, profile, currentUser],
+  );
+
   const loadVideos = useCallback(async () => {
     if (!profileUserId) return;
     setVideosLoading(true);
@@ -1252,6 +1378,8 @@ const UserViewsScreen = ({ navigation }) => {
         onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
         onOrderNowPress={handleChannelOrderNow}
+        onPressFollowers={handlePressFollowers}
+        onPressFollowing={handlePressFollowing}
         onPressReviews={() => {
           if (!profileUserId) return;
           navigation.navigate('ChannelReviewsScreen', {
@@ -1612,7 +1740,7 @@ const UserViewsScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.instaGridImageContainer}
           activeOpacity={0.85}
-          onPress={() => openInstagramPreview(item)}
+          onPress={() => openGalleryItem(item)}
         >
           <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
           {item.mediaType === 'video' ? (
@@ -1632,9 +1760,13 @@ const UserViewsScreen = ({ navigation }) => {
               v => String(v.id) === String(item.id),
             );
             const isShort = vid?.type === 'short';
+            if (isShort) {
+              navigateToShortsVideoScreen(String(item.id), vid);
+              return;
+            }
             setGalleryVideoModal({
               contentId: String(item.id),
-              kind: isShort ? 'short' : 'video',
+              kind: 'video',
             });
           }}
         />

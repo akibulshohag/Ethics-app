@@ -664,6 +664,84 @@ const PromotionScreen = ({ onBack }) => {
     );
   }, [postsTabRaw, myVideos, galleryTab]);
 
+  /**
+   * Video tab / library row: full video → HomeOne detail; short → ShortsVideoScreen.
+   * Declared before Gallery combined opener so first tab can reuse it.
+   */
+  const openLibraryMedia = useCallback(
+    item => {
+      if (!item?.id) return;
+      const isShort =
+        item.type === 'short' || String(item.type).toLowerCase() === 'short';
+      if (isShort) {
+        const sid = String(item.id);
+        const bumpShortView = () => {
+          shortsService
+            .recordView(sid, currentUser?.id, 0, false)
+            .catch(() => {});
+        };
+        const fallbackName =
+          item?.user?.nickname ||
+          item?.user?.name ||
+          profile?.nickname ||
+          profile?.name ||
+          currentUser?.nickname ||
+          currentUser?.name ||
+          'User';
+        const initialShortItem = {
+          ...item,
+          userId: item?.userId || item?.user?.id || userId,
+          user: {
+            ...(item?.user && typeof item.user === 'object' ? item.user : {}),
+            id: item?.user?.id || item?.userId || userId,
+            nickname: item?.user?.nickname || fallbackName,
+            name: item?.user?.name || fallbackName,
+          },
+        };
+        let nav = navigation;
+        for (let i = 0; i < 16 && nav; i++) {
+          const names = nav.getState?.()?.routeNames;
+          if (Array.isArray(names) && names.includes('Shorts')) {
+            bumpShortView();
+            nav.navigate('Shorts', {
+              screen: 'ShortsVideoScreen',
+              params: { shortId: sid, initialShortItem },
+            });
+            return;
+          }
+          nav = nav.getParent?.();
+        }
+        nav = navigation;
+        for (let i = 0; i < 16 && nav; i++) {
+          const names = nav.getState?.()?.routeNames;
+          if (Array.isArray(names) && names.includes('Library')) {
+            bumpShortView();
+            nav.navigate('Library', {
+              screen: 'ShortsVideoScreen',
+              params: { shortId: sid, initialShortItem },
+            });
+            return;
+          }
+          nav = nav.getParent?.();
+        }
+        return;
+      }
+      navigateToHomeOneLibraryDetail(navigation, item, {
+        returnTo: 'promotion',
+        returnUserId: userId,
+      });
+    },
+    [
+      navigation,
+      userId,
+      profile?.nickname,
+      profile?.name,
+      currentUser?.nickname,
+      currentUser?.name,
+      currentUser?.id,
+    ],
+  );
+
   const openCombinedGalleryItem = useCallback(
     item => {
       const sourceType = String(item?.sourceType || '').toLowerCase();
@@ -684,9 +762,36 @@ const PromotionScreen = ({ onBack }) => {
           Boolean(item?.isShort) || isShortByType || isShortByUrl;
         const targetId = item?.originId ?? item?.id;
         if (!targetId) return;
+        if (isShort) {
+          const raw = (myVideos || []).find(
+            v =>
+              String(v.id) === String(targetId) &&
+              (v.type === 'short' ||
+                String(v.type || '').toLowerCase() === 'short'),
+          );
+          if (raw) {
+            openLibraryMedia(raw);
+          } else if (targetId) {
+            openLibraryMedia({
+              id: String(targetId),
+              type: 'short',
+              videoUrl: String(item?.mediaUrl || '').trim(),
+              userId,
+              user: profile
+                ? {
+                    id: userId,
+                    nickname:
+                      profile?.nickname || profile?.channelName || profile?.name,
+                    name: profile?.name || profile?.nickname,
+                  }
+                : undefined,
+            });
+          }
+          return;
+        }
         setPromoGalleryVideoModal({
           contentId: String(targetId),
-          kind: isShort ? 'short' : 'video',
+          kind: 'video',
         });
         return;
       }
@@ -727,7 +832,14 @@ const PromotionScreen = ({ onBack }) => {
         setPromoIgPreviewVisible(true);
       })();
     },
-    [userId, currentUser?.id, galleryTab],
+    [
+      userId,
+      currentUser?.id,
+      galleryTab,
+      myVideos,
+      profile,
+      openLibraryMedia,
+    ],
   );
 
   const openPhotosTabPreview = useCallback(
@@ -1429,76 +1541,6 @@ const PromotionScreen = ({ onBack }) => {
       nav = nav.getParent?.();
     }
   }, [navigation, currentUser?.id]);
-
-  /**
-   * Videos → HomeOne full detail (same as Library Your videos). Back → PromotionScreen.
-   * Shorts → Shorts tab ShortsVideoScreen.
-   */
-  const openLibraryMedia = useCallback(
-    item => {
-      if (!item?.id) return;
-      const isShort =
-        item.type === 'short' || String(item.type).toLowerCase() === 'short';
-      if (isShort) {
-        const sid = String(item.id);
-        const fallbackName =
-          item?.user?.nickname ||
-          item?.user?.name ||
-          profile?.nickname ||
-          profile?.name ||
-          currentUser?.nickname ||
-          currentUser?.name ||
-          'User';
-        const initialShortItem = {
-          ...item,
-          userId: item?.userId || item?.user?.id || userId,
-          user: {
-            ...(item?.user && typeof item.user === 'object' ? item.user : {}),
-            id: item?.user?.id || item?.userId || userId,
-            nickname: item?.user?.nickname || fallbackName,
-            name: item?.user?.name || fallbackName,
-          },
-        };
-        let nav = navigation;
-        for (let i = 0; i < 16 && nav; i++) {
-          const names = nav.getState?.()?.routeNames;
-          if (Array.isArray(names) && names.includes('Shorts')) {
-            nav.navigate('Shorts', {
-              screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem },
-            });
-            return;
-          }
-          nav = nav.getParent?.();
-        }
-        nav = navigation;
-        for (let i = 0; i < 16 && nav; i++) {
-          const names = nav.getState?.()?.routeNames;
-          if (Array.isArray(names) && names.includes('Library')) {
-            nav.navigate('Library', {
-              screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem },
-            });
-            return;
-          }
-          nav = nav.getParent?.();
-        }
-        return;
-      }
-      navigateToHomeOneLibraryDetail(navigation, item, {
-        returnTo: 'promotion',
-        returnUserId: userId,
-      });
-    },
-    [
-      navigation,
-      userId,
-      profile?.nickname,
-      profile?.name,
-      currentUser?.nickname,
-      currentUser?.name,
-    ],
-  );
 
   const handleCoverPress = () => {
     if (!isOwnProfile) return;
