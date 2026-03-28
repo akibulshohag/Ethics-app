@@ -87,7 +87,7 @@ const UserProfileCard = ({
         imageStyle={{ borderRadius: 12 }}
       >
         <View style={styles.contentOverlay}>
-          {/* Order Now & Book Now Buttons - Right Side (Like BusinessProfileCard) */}
+          {/* Order Now / Book Now — same split pill as BusinessProfileCard Orders / Wallet */}
           <View style={styles.badgeContainer}>
             <TouchableOpacity
               style={styles.twoPartBadge}
@@ -98,23 +98,27 @@ const UserProfileCard = ({
               }
               activeOpacity={0.7}
             >
-              {/* <View style={styles.badgeIconPart}>
-                <Icon name="cart-outline" size={16} color="#fff" />
-              </View> */}
+              <View style={styles.badgeIconPart}>
+                <Icon name="clipboard-list-outline" size={16} color="#222" />
+              </View>
               <View style={styles.badgeTextPart}>
-                <Text style={styles.badgeText}>Order Now</Text>
+                <Text style={styles.badgeText} numberOfLines={1}>
+                  Order Now
+                </Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.twoPartBadge, { marginTop: 10 }]}
+              style={[styles.twoPartBadge, styles.twoPartBadgeSecond]}
               onPress={() => {}}
               activeOpacity={0.7}
             >
-              {/* <View style={styles.badgeIconPart}>
-                <Icon name="calendar-check-outline" size={16} color="#F39C12" />
-              </View> */}
-              <View style={[styles.badgeTextPart, { backgroundColor: '#fff' }]}>
-                <Text style={[styles.badgeText, { color: '#F39C12' }]}>
+              <View style={styles.badgeIconPart}>
+                <Icon name="calendar-clock-outline" size={16} color="#222" />
+              </View>
+              <View
+                style={[styles.badgeTextPart, styles.badgeTextPartWalletTone]}
+              >
+                <Text style={styles.badgeText} numberOfLines={1}>
                   Book Now
                 </Text>
               </View>
@@ -334,42 +338,60 @@ const styles = StyleSheet.create({
   },
   bgImage: {
     width: '100%',
-    height: 410,
+    height: 430,
   },
   contentOverlay: {
     flex: 1,
     justifyContent: 'space-between',
   },
+  /** Same position as before — only inner pill visuals match BusinessProfileCard */
   badgeContainer: {
     position: 'absolute',
     top: 20,
     right: 15,
     zIndex: 10,
+    alignItems: 'flex-end',
   },
+  /** Mirrors BusinessProfileCard twoPartBadge */
   twoPartBadge: {
+    height: 28,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    gap: 4,
+    alignItems: 'stretch',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  twoPartBadgeSecond: {
+    marginTop: 10,
   },
   badgeIconPart: {
-    backgroundColor: '#F39C12',
-    padding: 4,
-    borderRadius: 4,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+  /** Orders-style label (#F39C12); wider for “Order Now” vs “Orders” */
   badgeTextPart: {
     backgroundColor: '#F39C12',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+    paddingLeft: 5,
+    paddingRight: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 82,
+  },
+  /** Wallet-style label (#FFa31A) */
+  badgeTextPartWalletTone: {
+    backgroundColor: '#FFa31A',
   },
   badgeText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   amberOverlayBox: {
     backgroundColor: 'rgba(215, 137, 20, 0.85)',
