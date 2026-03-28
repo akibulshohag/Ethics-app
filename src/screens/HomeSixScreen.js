@@ -5,8 +5,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ImageBackground,
-  SafeAreaView,
   StatusBar,
   Dimensions,
   Alert,
@@ -14,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
@@ -22,6 +21,8 @@ import { config } from '../../config';
 import { getRolesList } from '../services/roleService';
 
 const { width, height } = Dimensions.get('window');
+
+const LOGIN_SCREEN_YELLOW = '#F5A623';
 
 /** UI label → API role name */
 const ROLE_MAP = {
@@ -45,7 +46,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
 
   useEffect(() => {
     getRolesList()
-      .then((res) => {
+      .then(res => {
         setRoles(res?.roles || []);
       })
       .catch(() => setRoles([]))
@@ -55,7 +56,9 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
   const getRoleIdForUserType = () => {
     const roleName = ROLE_MAP[userType];
     if (!roleName || !roles.length) return null;
-    const role = roles.find((r) => String(r.name).toLowerCase() === roleName.toLowerCase());
+    const role = roles.find(
+      r => String(r.name).toLowerCase() === roleName.toLowerCase(),
+    );
     return role ? role.id : null;
   };
 
@@ -153,12 +156,11 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
   );
 
   return (
-    <ImageBackground
-      source={{ uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' }}
-      style={styles.backgroundImage}
-      blurRadius={1}
-    >
-      <StatusBar barStyle="light-content" transparent backgroundColor="transparent" />
+    <View style={styles.screenRoot}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={LOGIN_SCREEN_YELLOW}
+      />
       <SafeAreaView style={styles.overlay}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
@@ -171,10 +173,10 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
               onPress={() => (onBack ? onBack() : navigation.goBack())}
               style={styles.backBtn}
             >
-              <Icon name="chevron-left" size={18} color="#FFF" />
+              <Icon name="chevron-left" size={18} color="#1A1A1A" />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
-            <Icon name="dots-vertical" size={26} color="#FFF" />
+            {/* <Icon name="dots-vertical" size={26} color="#1A1A1A" /> */}
           </View>
 
           <View style={styles.centerContainer}>
@@ -198,7 +200,12 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
 
                 {/* Email */}
                 <View style={styles.inputWrapper}>
-                  <Icon name="email-outline" size={20} color="#FFF" style={styles.inputIcon} />
+                  <Icon
+                    name="email-outline"
+                    size={20}
+                    color="#FFF"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     placeholder="Enter your email"
                     placeholderTextColor="rgba(255,255,255,0.7)"
@@ -213,7 +220,12 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
 
                 {/* Password */}
                 <View style={styles.inputWrapper}>
-                  <Icon name="lock-outline" size={20} color="#FFF" style={styles.inputIcon} />
+                  <Icon
+                    name="lock-outline"
+                    size={20}
+                    color="#FFF"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     placeholder="Password"
                     placeholderTextColor="rgba(255,255,255,0.7)"
@@ -237,7 +249,12 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
 
                 {/* Confirm Password */}
                 <View style={styles.inputWrapper}>
-                  <Icon name="lock-outline" size={20} color="#FFF" style={styles.inputIcon} />
+                  <Icon
+                    name="lock-outline"
+                    size={20}
+                    color="#FFF"
+                    style={styles.inputIcon}
+                  />
                   <TextInput
                     placeholder="Confirm Password"
                     placeholderTextColor="rgba(255,255,255,0.7)"
@@ -248,7 +265,9 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
                     editable={!loading}
                   />
                   <TouchableOpacity
-                    onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                    onPress={() =>
+                      setConfirmPasswordVisible(!confirmPasswordVisible)
+                    }
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Icon
@@ -298,13 +317,18 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  backgroundImage: { flex: 1, width: width, height: height },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  screenRoot: {
+    flex: 1,
+    width,
+    height,
+    backgroundColor: LOGIN_SCREEN_YELLOW,
+  },
+  overlay: { flex: 1, backgroundColor: 'transparent' },
   keyboardView: { flex: 1 },
   navHeader: {
     flexDirection: 'row',
@@ -315,12 +339,12 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
   },
-  backText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
+  backText: { color: '#1A1A1A', fontSize: 13, fontWeight: 'bold' },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -334,11 +358,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 8,
   },
-  cardHeader: { backgroundColor: '#F5A623', paddingVertical: 18, alignItems: 'center' },
+  cardHeader: {
+    backgroundColor: '#F5A623',
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#1A1A1A' },
   cardBody: { padding: 20 },
   radioGroup: { marginBottom: 20 },
-  radioRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
+  radioRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
   radioRowCenter: { alignItems: 'center' },
   radioButton: {
     flexDirection: 'row',
@@ -361,7 +393,11 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, color: '#FFF', fontSize: 15 },
-  buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
   actionBtn: {
     backgroundColor: '#F5A623',
     width: '46%',
@@ -375,7 +411,12 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
   socialContainer: { alignItems: 'center', marginTop: 30 },
-  socialTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
+  socialTitle: {
+    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
   socialPill: {
     flexDirection: 'row',
     backgroundColor: '#FFF',

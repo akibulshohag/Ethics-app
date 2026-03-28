@@ -5,37 +5,38 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ImageBackground,
   SafeAreaView,
   StatusBar,
-  Dimensions
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
+const LOGIN_SCREEN_YELLOW = '#F5A623';
 
 const HomeTwoScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const [rememberMe, setRememberMe] = useState(false);
 
   return (
-    <ImageBackground 
-      source={{ uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd' }} 
-      style={styles.backgroundImage}
-      blurRadius={2}
-    >
-      <StatusBar barStyle="light-content" transparent backgroundColor="transparent" />
+    <View style={styles.screenRoot}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={LOGIN_SCREEN_YELLOW}
+      />
       <SafeAreaView style={styles.overlay}>
-        
         {/* Top Navigation */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => (onBack ? onBack() : navigation.goBack())} style={styles.backBtn}>
-            <Icon name="chevron-left" size={20} color="#FFF" />
+          <TouchableOpacity
+            onPress={() => (onBack ? onBack() : navigation.goBack())}
+            style={styles.backBtn}
+          >
+            <Icon name="chevron-left" size={20} color="#1A1A1A" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <TouchableOpacity>
-            <Icon name="dots-vertical" size={26} color="#FFF" />
+            <Icon name="dots-vertical" size={26} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
 
@@ -49,9 +50,14 @@ const HomeTwoScreen = ({ onBack }) => {
             <View style={styles.cardBody}>
               {/* Email/Placeholder Input */}
               <View style={styles.inputContainer}>
-                <Icon name="email-outline" size={22} color="#FFF" style={styles.inputIcon} />
-                <TextInput 
-                  placeholder="Placeholder" 
+                <Icon
+                  name="email-outline"
+                  size={22}
+                  color="#FFF"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  placeholder="Placeholder"
                   placeholderTextColor="rgba(255,255,255,0.8)"
                   style={styles.input}
                 />
@@ -59,9 +65,14 @@ const HomeTwoScreen = ({ onBack }) => {
 
               {/* Password Input */}
               <View style={styles.inputContainer}>
-                <Icon name="lock-outline" size={22} color="#FFF" style={styles.inputIcon} />
-                <TextInput 
-                  placeholder="Password" 
+                <Icon
+                  name="lock-outline"
+                  size={22}
+                  color="#FFF"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  placeholder="Password"
                   placeholderTextColor="rgba(255,255,255,0.8)"
                   secureTextEntry
                   style={styles.input}
@@ -70,14 +81,16 @@ const HomeTwoScreen = ({ onBack }) => {
 
               {/* Remember Me & Forgot Password */}
               <View style={styles.row}>
-                <TouchableOpacity 
-                  style={styles.checkboxRow} 
+                <TouchableOpacity
+                  style={styles.checkboxRow}
                   onPress={() => setRememberMe(!rememberMe)}
                 >
-                  <Icon 
-                    name={rememberMe ? "checkbox-marked" : "checkbox-blank-outline"} 
-                    size={20} 
-                    color="#555" 
+                  <Icon
+                    name={
+                      rememberMe ? 'checkbox-marked' : 'checkbox-blank-outline'
+                    }
+                    size={20}
+                    color="#555"
                   />
                   <Text style={styles.rememberText}>Remember me</Text>
                 </TouchableOpacity>
@@ -114,21 +127,21 @@ const HomeTwoScreen = ({ onBack }) => {
             </View>
           </View>
         </View>
-
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  backgroundImage: {
+  screenRoot: {
     flex: 1,
-    width: width,
-    height: height,
+    width,
+    height,
+    backgroundColor: LOGIN_SCREEN_YELLOW,
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',
@@ -140,13 +153,13 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
   },
   backText: {
-    color: '#FFF',
+    color: '#1A1A1A',
     fontSize: 12,
     fontWeight: 'bold',
     marginLeft: 4,
@@ -236,7 +249,7 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
   socialLabel: {
-    color: '#FFF',
+    color: '#1A1A1A',
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 15,
@@ -250,7 +263,7 @@ const styles = StyleSheet.create({
   },
   socialCircle: {
     marginHorizontal: 15,
-  }
+  },
 });
 
 export default HomeTwoScreen;

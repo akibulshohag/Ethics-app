@@ -772,12 +772,28 @@ const VideoItem = ({
   );
 };
 
+/** Prefer UI-mapped fields so re-merge (after optimistic updates) does not reset counts */
 const mapShortToItem = s => {
-  const likesCount = s._count?.likes ?? s.likeCount ?? 0;
-  const dislikesCount = s.dislikeCount ?? 0;
-  const commentsCount = s._count?.comments ?? s.commentCount ?? 0;
-  const sharesCount = s.shareCount ?? 0;
-  const viewCount = s.viewCount ?? s._count?.views ?? 0;
+  const likesCount =
+    s._likeCount != null && Number.isFinite(Number(s._likeCount))
+      ? Number(s._likeCount)
+      : (s._count?.likes ?? s.likeCount ?? 0);
+  const dislikesCount =
+    s._dislikeCount != null && Number.isFinite(Number(s._dislikeCount))
+      ? Number(s._dislikeCount)
+      : (s.dislikeCount ?? 0);
+  const commentsCount =
+    s._commentCount != null && Number.isFinite(Number(s._commentCount))
+      ? Number(s._commentCount)
+      : (s._count?.comments ?? s.commentCount ?? 0);
+  const sharesCount =
+    s._shareCount != null && Number.isFinite(Number(s._shareCount))
+      ? Number(s._shareCount)
+      : (s.shareCount ?? 0);
+  const viewCount =
+    s._viewCount != null && Number.isFinite(Number(s._viewCount))
+      ? Number(s._viewCount)
+      : (s.viewCount ?? s._count?.views ?? 0);
   const user = s.user || {};
   const firstPhoto =
     Array.isArray(user.photos) && user.photos.length > 0
@@ -866,7 +882,59 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const hasAppliedInitialShort = useRef(false);
+  /** Dedupes recordView between the initial-short effect and onViewableItemsChanged */
+  const viewRecordedIdsRef = useRef(new Set());
   const [commentsVisible, setCommentsVisible] = useState(false);
+
+  const applyViewIncrement = useCallback(shortId => {
+    if (!shortId) return;
+    setVideos(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(v => {
+        if (String(v.id) !== String(shortId)) return v;
+        const newCount = (v._viewCount ?? 0) + 1;
+        return {
+          ...v,
+          _viewCount: newCount,
+          viewsDisplay: formatCount(newCount),
+        };
+      });
+    });
+  }, []);
+
+  const applyViewDecrement = useCallback(shortId => {
+    if (!shortId) return;
+    setVideos(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(v => {
+        if (String(v.id) !== String(shortId)) return v;
+        const newCount = Math.max(0, (v._viewCount ?? 0) - 1);
+        return {
+          ...v,
+          _viewCount: newCount,
+          viewsDisplay: formatCount(newCount),
+        };
+      });
+    });
+  }, []);
+
+  /** Optimistic +1 immediately; server call in background; revert on failure */
+  const recordShortViewAndBumpUI = useCallback(
+    shortId => {
+      if (!shortId) return;
+      const sid = String(shortId);
+      if (viewRecordedIdsRef.current.has(sid)) return;
+      viewRecordedIdsRef.current.add(sid);
+      applyViewIncrement(sid);
+      shortsService
+        .recordView(sid, user?.id || null, 0, false)
+        .catch(() => {
+          viewRecordedIdsRef.current.delete(sid);
+          applyViewDecrement(sid);
+        });
+    },
+    [user?.id, applyViewIncrement, applyViewDecrement],
+  );
 
   // HomeThreeScreen/HomeSevenScreen live in Home1 stack (tab). Use root ref so navigation works from any nested stack.
   const navigateToHomeScreen = (screenName, params) => {
@@ -888,11 +956,14 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
-  // When user navigates away, pause all shorts so they don't keep playing in background
+  // When user navigates away, pause playback and reset view dedupe so the next open records again
   useFocusEffect(
     React.useCallback(() => {
       setIsScreenFocused(true);
-      return () => setIsScreenFocused(false);
+      return () => {
+        setIsScreenFocused(false);
+        viewRecordedIdsRef.current.clear();
+      };
     }, []),
   );
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -1017,16 +1088,25 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   const screenHeight = windowHeight;
   const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
+  const firstRowShortId = videos[0]?.id;
 
   useEffect(() => {
     loadShorts();
   }, []);
 
-  // When opened from Home with a specific short, put that short first
+  // When opened from Home with a specific short, put that short first (only reset when id changes — not when initialShortItem identity changes)
   useEffect(() => {
     if (!initialShortId) return;
     hasAppliedInitialShort.current = false;
-  }, [initialShortId, initialShortItem]);
+  }, [initialShortId]);
+
+  /** Record view once the target short is the first row (after merge); bump UI when API succeeds */
+  useEffect(() => {
+    if (!initialShortId || loading) return;
+    const sid = String(initialShortId);
+    if (!firstRowShortId || String(firstRowShortId) !== sid) return;
+    recordShortViewAndBumpUI(sid);
+  }, [initialShortId, loading, firstRowShortId, recordShortViewAndBumpUI]);
 
   useEffect(() => {
     if (
@@ -1542,31 +1622,18 @@ const ShortsVideoScreen = ({ navigation }) => {
       .catch(() => {});
   }, [activeVideoIndex, displayVideos, user?.id]);
 
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems && viewableItems.length > 0) {
-      const { index, item } = viewableItems[0];
-      setActiveVideoIndex(index);
-      if (item?.id) {
-        shortsService
-          .recordView(item.id, user?.id || null)
-          .then(() => {
-            setVideos(prev => {
-              if (prev.length === 0) return prev;
-              return prev.map(v => {
-                if (v.id !== item.id) return v;
-                const newCount = (v._viewCount ?? 0) + 1;
-                return {
-                  ...v,
-                  _viewCount: newCount,
-                  viewsDisplay: formatCount(newCount),
-                };
-              });
-            });
-          })
-          .catch(() => {});
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }) => {
+      if (viewableItems && viewableItems.length > 0) {
+        const { index, item } = viewableItems[0];
+        setActiveVideoIndex(index);
+        if (item?.id) {
+          recordShortViewAndBumpUI(item.id);
+        }
       }
-    }
-  }).current;
+    },
+    [recordShortViewAndBumpUI],
+  );
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 80,
@@ -1814,13 +1881,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
             <Text style={styles.editHeaderTitle}>Add Details</Text>
-            <TouchableOpacity style={styles.editHeaderBtn}>
-              <Ionicons
-                name="ellipsis-horizontal-circle-outline"
-                size={24}
-                color="#000"
-              />
-            </TouchableOpacity>
+            <View style={styles.editHeaderBtn} />
           </View>
           <View style={styles.editContent}>
             <View style={styles.editTopSection}>

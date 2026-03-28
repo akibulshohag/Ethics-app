@@ -511,6 +511,19 @@ const ProductShortsVideo = () => {
     userRef.current = user;
   }, [user]);
 
+  const initialShortViewRecordedRef = useRef(false);
+  useEffect(() => {
+    initialShortViewRecordedRef.current = false;
+  }, [currentShortId]);
+  useEffect(() => {
+    if (!currentShortId || loading) return;
+    if (initialShortViewRecordedRef.current) return;
+    initialShortViewRecordedRef.current = true;
+    shortsService
+      .recordView(String(currentShortId), user?.id || null, 0, false)
+      .catch(() => {});
+  }, [currentShortId, loading, user?.id]);
+
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems && viewableItems.length > 0) {
       const { index, item } = viewableItems[0];
@@ -1022,7 +1035,7 @@ const ProductShortsVideo = () => {
                       },
                     });
                   } else {
-                    navigation.navigate('UserViewsScreen', { userId: ownerId });
+                  navigation.navigate('UserViewsScreen', { userId: ownerId });
                   }
                 }
               }}
@@ -1060,7 +1073,7 @@ const ProductShortsVideo = () => {
                   }}
                 >
                   {descText}
-                </Text>
+            </Text>
               ) : null}
               {!descLayoutDone ? (
                 <Text
@@ -1613,13 +1626,7 @@ const ProductShortsVideo = () => {
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
             <Text style={styles.editHeaderTitle}>Add Details</Text>
-            <TouchableOpacity style={styles.editHeaderBtn}>
-              <Ionicons
-                name="ellipsis-horizontal-circle-outline"
-                size={24}
-                color="#000"
-              />
-            </TouchableOpacity>
+            <View style={styles.editHeaderBtn} />
           </View>
           <View style={styles.editContent}>
             <View style={styles.editTopSection}>
@@ -1871,9 +1878,9 @@ const ProductShortsVideo = () => {
                             },
                           });
                         } else {
-                          navigation.navigate('UserViewsScreen', {
-                            userId: u.id,
-                          });
+                        navigation.navigate('UserViewsScreen', {
+                          userId: u.id,
+                        });
                         }
                       }
                     }}

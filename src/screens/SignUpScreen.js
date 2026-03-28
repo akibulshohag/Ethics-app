@@ -20,9 +20,6 @@ import {
   FONTS,
   SPACING,
   BORDER_RADIUS,
-  SHADOWS,
-  DIMENSIONS,
-  COMMON_STYLES,
 } from '../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -128,7 +125,7 @@ const SignUpScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFCC00" />
 
       {/* Orange Header */}
       <View style={styles.header}>
@@ -284,7 +281,10 @@ const SignUpScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: COMMON_STYLES.container,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFCC00',
+  },
   header: {
     backgroundColor: COLORS.primaryOrange,
     paddingHorizontal: SPACING.xxl,

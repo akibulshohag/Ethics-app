@@ -211,6 +211,10 @@ const VideoUploadSettings = ({
           scheduledPublishDate.toISOString();
       }
 
+      if (selectedPlaylistIds.length > 0) {
+        videoData.customPlaylistId = selectedPlaylistIds[0];
+      }
+
       console.log('Uploading video:', videoData);
 
       // Upload video
@@ -219,12 +223,21 @@ const VideoUploadSettings = ({
       console.log('Upload successful:', result);
 
       const videoId = result?.id || result?.video?.id;
-      if (videoId && plIds.length > 1) {
-        for (let i = 1; i < plIds.length; i++) {
+      if (videoId && selectedPlaylistIds.length > 1) {
+        for (let i = 1; i < selectedPlaylistIds.length; i++) {
           try {
-            await setCustomPlaylistItem(plIds[i], 'video', videoId, true);
+            await setCustomPlaylistItem(
+              selectedPlaylistIds[i],
+              'video',
+              videoId,
+              true,
+            );
           } catch (e) {
-            console.warn('Add to playlist', plIds[i], e?.message);
+            console.warn(
+              'Add to playlist',
+              selectedPlaylistIds[i],
+              e?.message,
+            );
           }
         }
       }

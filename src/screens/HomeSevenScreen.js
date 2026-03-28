@@ -5,7 +5,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ImageBackground,
   StatusBar,
   Dimensions,
   Alert,
@@ -23,6 +22,9 @@ import { config } from '../../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
+
+/** Full-screen login backdrop (no photo) */
+const LOGIN_SCREEN_YELLOW = '#F5A623';
 
 const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -176,17 +178,10 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   };
 
   return (
-    <ImageBackground
-      source={{
-        uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-      }}
-      style={styles.backgroundImage}
-      resizeMode="cover"
-    >
+    <View style={styles.screenRoot}>
       <StatusBar
-        barStyle="light-content"
-        transparent
-        backgroundColor="transparent"
+        barStyle="dark-content"
+        backgroundColor={LOGIN_SCREEN_YELLOW}
       />
       <SafeAreaView style={styles.overlay}>
         <KeyboardAvoidingView
@@ -200,10 +195,10 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
               onPress={() => (onBack ? onBack() : navigation.goBack())}
               style={styles.backBtn}
             >
-              <Icon name="chevron-left" size={18} color="#FFF" />
+              <Icon name="chevron-left" size={18} color="#1A1A1A" />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
-            <Icon name="dots-vertical" size={26} color="#FFF" />
+            {/* <Icon name="dots-vertical" size={26} color="#1A1A1A" /> */}
           </View>
 
           <View style={styles.centerContainer}>
@@ -343,13 +338,18 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  backgroundImage: { flex: 1, width: width, height: height },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+  screenRoot: {
+    flex: 1,
+    width,
+    height,
+    backgroundColor: LOGIN_SCREEN_YELLOW,
+  },
+  overlay: { flex: 1, backgroundColor: 'transparent' },
   keyboardView: { flex: 1 },
   navHeader: {
     flexDirection: 'row',
@@ -360,12 +360,12 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
   },
-  backText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
+  backText: { color: '#1A1A1A', fontSize: 13, fontWeight: 'bold' },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   socialContainer: { alignItems: 'center', marginTop: 35 },
   socialTitle: {
-    color: '#FFF',
+    color: '#1A1A1A',
     fontSize: 18,
     fontWeight: '500',
     marginBottom: 12,

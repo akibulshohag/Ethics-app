@@ -1141,15 +1141,12 @@ const UserViewsScreen = ({ navigation }) => {
 
   /**
    * Shorts → Shorts tab ShortsVideoScreen (same as PromotionScreen `openLibraryMedia`).
-   * recordView here counts an open; ShortsVideoScreen may also fire on visibility.
+   * View is recorded once in ShortsVideoScreen (deduped) so the count updates in the player UI.
    */
   const navigateToShortsVideoScreen = useCallback(
     (shortId, feedItem) => {
       if (!shortId) return;
       const sid = String(shortId);
-      shortsService
-        .recordView(sid, currentUser?.id, 0, false)
-        .catch(() => {});
       const raw =
         (rawVideos || []).find(
           v =>

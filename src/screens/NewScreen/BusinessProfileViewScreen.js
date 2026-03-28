@@ -833,16 +833,31 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       if (!item?.id) return;
       const itemType = String(item.type || item._type || '').toLowerCase();
       if (itemType === 'short') {
+        shortsService
+          .recordView(String(item.id), currentUser?.id, 0, false)
+          .catch(() => {});
+        const initialShortItem = {
+          ...item,
+          id: String(item.id),
+          type: 'short',
+          userId: item?.userId || profileUserId,
+          user: item?.user || {
+            id: profileUserId,
+            nickname:
+              profile?.nickname || profile?.channelName || profile?.name || 'User',
+            name: profile?.name || profile?.nickname,
+          },
+        };
         // Open shorts player inside Shorts tab stack
         try {
           navigation?.navigate('Shorts', {
             screen: 'ShortsVideoScreen',
-            params: { shortId: item.id },
+            params: { shortId: item.id, initialShortItem },
           });
         } catch (_) {
           navigation?.getParent()?.navigate('Shorts', {
             screen: 'ShortsVideoScreen',
-            params: { shortId: item.id },
+            params: { shortId: item.id, initialShortItem },
           });
         }
         return;
@@ -856,7 +871,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
       }
     },
-    [navigation],
+    [navigation, currentUser?.id, profileUserId, profile],
   );
 
   const openEditProfile = () => {
@@ -1352,9 +1367,79 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           item?.isShort || rawType === 'short' || rawType === 'shorts';
         const targetId = item?.originId ?? item?.id;
         if (!targetId) return;
+        if (isShort) {
+          const sid = String(targetId);
+          const raw = (ownerVideos || []).find(
+            v =>
+              String(v.id) === sid &&
+              (v._type === 'short' ||
+                String(v._type || '').toLowerCase() === 'short'),
+          );
+          const fallbackName =
+            profile?.nickname ||
+            profile?.channelName ||
+            profile?.name ||
+            'User';
+          const initialShortItem = raw
+            ? {
+                ...raw,
+                id: sid,
+                type: 'short',
+                userId: raw.userId || profileUserId,
+                videoUrl: raw.videoUrl || String(item?.mediaUrl || '').trim(),
+                user: {
+                  id: profileUserId,
+                  nickname: fallbackName,
+                  name: profile?.name || fallbackName,
+                },
+              }
+            : {
+                id: sid,
+                type: 'short',
+                videoUrl: String(item?.mediaUrl || '').trim(),
+                userId: profileUserId,
+                user: {
+                  id: profileUserId,
+                  nickname: fallbackName,
+                  name: profile?.name || fallbackName,
+                },
+              };
+          let nav = navigation;
+          for (let i = 0; i < 16 && nav; i++) {
+            const names = nav.getState?.()?.routeNames;
+            if (Array.isArray(names) && names.includes('Shorts')) {
+              nav.navigate('Shorts', {
+                screen: 'ShortsVideoScreen',
+                params: { shortId: sid, initialShortItem },
+              });
+              return;
+            }
+            nav = nav.getParent?.();
+          }
+          nav = navigation;
+          for (let i = 0; i < 16 && nav; i++) {
+            const names = nav.getState?.()?.routeNames;
+            if (Array.isArray(names) && names.includes('Library')) {
+              nav.navigate('Library', {
+                screen: 'ShortsVideoScreen',
+                params: { shortId: sid, initialShortItem },
+              });
+              return;
+            }
+            nav = nav.getParent?.();
+          }
+          navigation.navigate('Root', {
+            screen: 'Shorts',
+            params: {
+              screen: 'ShortsVideoScreen',
+              params: { shortId: sid, initialShortItem },
+            },
+          });
+          return;
+        }
         setGalleryVideoModal({
           contentId: String(targetId),
-          kind: isShort ? 'short' : 'video',
+          kind: 'video',
         });
         return;
       }
@@ -1397,7 +1482,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         })();
       }
     },
-    [posts, galleryPhotos, openPostMediaPreview, profileUserId, currentUser?.id],
+    [
+      posts,
+      galleryPhotos,
+      openPostMediaPreview,
+      profileUserId,
+      currentUser?.id,
+      ownerVideos,
+      profile,
+      navigation,
+    ],
   );
 
   const openPhotosTabPreviewBP = useCallback(

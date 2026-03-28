@@ -4,7 +4,6 @@
  * For returnTo 'promotion', pass returnUserId so back returns to that user's Promotion profile.
  */
 import { recordView } from '../services/videoService';
-import { shortsService } from '../services/shortsService';
 
 function getViewerId() {
   try {
@@ -47,7 +46,6 @@ export function navigateToHomeOneLibraryDetail(navigation, item, returnContext) 
 
   if (contentType === 'short') {
     const sid = String(id);
-    shortsService.recordView(sid, viewerId, 0, false).catch(() => {});
     const initialShortItem = {
       ...item,
       id: sid,

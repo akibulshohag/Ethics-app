@@ -1105,16 +1105,31 @@ const HomeOneScreen = () => {
     async item => {
       if (!user?.id || item?.type !== 'short' || !item?.id) return;
       try {
-        await shortsService.toggleLike(item.id, user.id);
+        const res = await shortsService.toggleLike(item.id, user.id);
+        const nowLiked = res?.liked === true;
         setSelectedItem(prev => {
           if (!prev || prev.id !== item.id) return prev;
-          const newLiked = !prev.isLiked;
-          const delta = newLiked ? 1 : -1;
-          const newCount = Math.max(0, (prev.likeCount ?? 0) + delta);
+          const wasLiked = !!prev.isLiked;
+          const wasDisliked = !!prev.isDisliked;
+          let likeCount = Number(prev.likeCount ?? 0) || 0;
+          let dislikeCount = Number(prev.dislikeCount ?? 0) || 0;
+          if (nowLiked) {
+            if (!wasLiked) likeCount += 1;
+            if (wasDisliked) dislikeCount = Math.max(0, dislikeCount - 1);
+            return {
+              ...prev,
+              isLiked: true,
+              isDisliked: false,
+              likeCount,
+              dislikeCount,
+            };
+          }
+          if (wasLiked) likeCount = Math.max(0, likeCount - 1);
           return {
             ...prev,
-            isLiked: newLiked,
-            likeCount: newCount,
+            isLiked: false,
+            likeCount,
+            dislikeCount,
           };
         });
       } catch (e) {}
@@ -1146,23 +1161,38 @@ const HomeOneScreen = () => {
       navigation.navigate('HomeSevenScreen');
       return;
     }
+    const targetId = selectedItem.id;
     const isShort = selectedItem?.type === 'short';
     try {
-      if (isShort) {
-        await shortsService.toggleLike(selectedItem.id, user.id);
-      } else {
-        await toggleVideoLike(selectedItem.id, user.id);
-      }
+      const res = isShort
+        ? await shortsService.toggleLike(targetId, user.id)
+        : await toggleVideoLike(targetId, user.id);
+      const nowLiked = res?.liked === true;
       setSelectedItem(prev => {
-        if (!prev || prev.id !== selectedItem.id) return prev;
-        const newLiked = !prev.isLiked;
-        const delta = newLiked ? 1 : -1;
-        const newCount = Math.max(0, (prev.likeCount ?? 0) + delta);
+        if (!prev || prev.id !== targetId) return prev;
+        const wasLiked = !!prev.isLiked;
+        const wasDisliked = !!prev.isDisliked;
+        let likeCount = Number(prev.likeCount ?? 0) || 0;
+        let dislikeCount = Number(prev.dislikeCount ?? 0) || 0;
+        if (nowLiked) {
+          if (!wasLiked) likeCount += 1;
+          if (wasDisliked) {
+            dislikeCount = Math.max(0, dislikeCount - 1);
+          }
+          return {
+            ...prev,
+            isLiked: true,
+            isDisliked: false,
+            likeCount,
+            dislikeCount,
+          };
+        }
+        if (wasLiked) likeCount = Math.max(0, likeCount - 1);
         return {
           ...prev,
-          isLiked: newLiked,
-          likeCount: newCount,
-          ...(isShort && newLiked ? { isDisliked: false } : {}),
+          isLiked: false,
+          likeCount,
+          dislikeCount,
         };
       });
     } catch {}
@@ -1173,23 +1203,36 @@ const HomeOneScreen = () => {
       navigation.navigate('HomeSevenScreen');
       return;
     }
+    const targetId = selectedItem.id;
     const isShort = selectedItem?.type === 'short';
     try {
-      if (isShort) {
-        await shortsService.toggleDislike(selectedItem.id, user.id);
-      } else {
-        await toggleVideoDislike(selectedItem.id, user.id);
-      }
+      const res = isShort
+        ? await shortsService.toggleDislike(targetId, user.id)
+        : await toggleVideoDislike(targetId, user.id);
+      const nowDisliked = res?.disliked === true;
       setSelectedItem(prev => {
-        if (!prev || prev.id !== selectedItem.id) return prev;
-        const newDisliked = !prev.isDisliked;
-        const delta = newDisliked ? 1 : -1;
-        const newCount = Math.max(0, (prev.dislikeCount ?? 0) + delta);
+        if (!prev || prev.id !== targetId) return prev;
+        const wasLiked = !!prev.isLiked;
+        const wasDisliked = !!prev.isDisliked;
+        let likeCount = Number(prev.likeCount ?? 0) || 0;
+        let dislikeCount = Number(prev.dislikeCount ?? 0) || 0;
+        if (nowDisliked) {
+          if (!wasDisliked) dislikeCount += 1;
+          if (wasLiked) likeCount = Math.max(0, likeCount - 1);
+          return {
+            ...prev,
+            isDisliked: true,
+            isLiked: false,
+            likeCount,
+            dislikeCount,
+          };
+        }
+        if (wasDisliked) dislikeCount = Math.max(0, dislikeCount - 1);
         return {
           ...prev,
-          isDisliked: newDisliked,
-          dislikeCount: newCount,
-          ...(isShort && newDisliked ? { isLiked: false } : {}),
+          isDisliked: false,
+          likeCount,
+          dislikeCount,
         };
       });
     } catch {}

@@ -46,7 +46,11 @@ import {
   toggleGalleryPhotoDislike,
   recordGalleryPhotoShare,
 } from '../services/channelService';
-import { getUserVideos, updateVideo, deleteVideo } from '../services/videoService';
+import {
+  getUserVideos,
+  updateVideo,
+  deleteVideo,
+} from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import { getWatchLater } from '../services/playlistService';
 import { getNearbyPromotions } from '../services/promotionService';
@@ -135,7 +139,13 @@ const PROMO_PREVIEW_CARD_W = (SCREEN_W - 32 - 10) / 2;
 const PROMO_PREVIEW_BG = ['#F9A825', '#2C3E50'];
 
 /** Gallery = combined feed; Photos = uploaded gallery images (owner manage / others view). */
-const PROMO_PROFILE_TABS = ['Gallery', 'Photos', 'Posts', 'Video', 'Notification'];
+const PROMO_PROFILE_TABS = [
+  'Gallery',
+  'Photos',
+  'Posts',
+  'Video',
+  'Notification',
+];
 
 const formatCountTab = n => {
   const num = Number(n || 0);
@@ -315,7 +325,9 @@ const PromotionScreen = ({ onBack }) => {
   const displayLocation =
     profile?.address || (isOwnProfile ? currentUser?.address : '') || '';
   const bio =
-    profile?.channelAbout || (isOwnProfile ? currentUser?.channelAbout : '') || '';
+    profile?.channelAbout ||
+    (isOwnProfile ? currentUser?.channelAbout : '') ||
+    '';
   const followersCount = formatCountTab(
     profile?.subscriberCount ?? profile?.followersCount ?? 0,
   );
@@ -564,9 +576,7 @@ const PromotionScreen = ({ onBack }) => {
 
   const patchGalleryPhoto = useCallback((photoId, updater) => {
     setGalleryTab(prev =>
-      prev.map(p =>
-        String(p.id) === String(photoId) ? updater(p) : p,
-      ),
+      prev.map(p => (String(p.id) === String(photoId) ? updater(p) : p)),
     );
   }, []);
 
@@ -675,11 +685,6 @@ const PromotionScreen = ({ onBack }) => {
         item.type === 'short' || String(item.type).toLowerCase() === 'short';
       if (isShort) {
         const sid = String(item.id);
-        const bumpShortView = () => {
-          shortsService
-            .recordView(sid, currentUser?.id, 0, false)
-            .catch(() => {});
-        };
         const fallbackName =
           item?.user?.nickname ||
           item?.user?.name ||
@@ -702,7 +707,6 @@ const PromotionScreen = ({ onBack }) => {
         for (let i = 0; i < 16 && nav; i++) {
           const names = nav.getState?.()?.routeNames;
           if (Array.isArray(names) && names.includes('Shorts')) {
-            bumpShortView();
             nav.navigate('Shorts', {
               screen: 'ShortsVideoScreen',
               params: { shortId: sid, initialShortItem },
@@ -715,7 +719,6 @@ const PromotionScreen = ({ onBack }) => {
         for (let i = 0; i < 16 && nav; i++) {
           const names = nav.getState?.()?.routeNames;
           if (Array.isArray(names) && names.includes('Library')) {
-            bumpShortView();
             nav.navigate('Library', {
               screen: 'ShortsVideoScreen',
               params: { shortId: sid, initialShortItem },
@@ -724,6 +727,13 @@ const PromotionScreen = ({ onBack }) => {
           }
           nav = nav.getParent?.();
         }
+        navigation.navigate('Root', {
+          screen: 'Shorts',
+          params: {
+            screen: 'ShortsVideoScreen',
+            params: { shortId: sid, initialShortItem },
+          },
+        });
         return;
       }
       navigateToHomeOneLibraryDetail(navigation, item, {
@@ -758,8 +768,7 @@ const PromotionScreen = ({ onBack }) => {
         ).toLowerCase();
         const isShortByType = rawType === 'short' || rawType === 'shorts';
         const isShortByUrl = /\/shorts?\//i.test(String(item?.mediaUrl || ''));
-        const isShort =
-          Boolean(item?.isShort) || isShortByType || isShortByUrl;
+        const isShort = Boolean(item?.isShort) || isShortByType || isShortByUrl;
         const targetId = item?.originId ?? item?.id;
         if (!targetId) return;
         if (isShort) {
@@ -781,7 +790,9 @@ const PromotionScreen = ({ onBack }) => {
                 ? {
                     id: userId,
                     nickname:
-                      profile?.nickname || profile?.channelName || profile?.name,
+                      profile?.nickname ||
+                      profile?.channelName ||
+                      profile?.name,
                     name: profile?.name || profile?.nickname,
                   }
                 : undefined,
@@ -808,17 +819,16 @@ const PromotionScreen = ({ onBack }) => {
             if (fresh) raw = fresh;
           } catch (_) {}
         }
-        const base =
-          raw || {
-            id: pid,
-            src: item?.mediaUrl,
-            likeCount: item?.likeCount ?? 0,
-            dislikeCount: item?.dislikeCount ?? 0,
-            commentCount: item?.commentCount ?? 0,
-            shareCount: item?.shareCount ?? 0,
-            isLiked: item?.isLiked ?? false,
-            isDisliked: item?.isDisliked ?? false,
-          };
+        const base = raw || {
+          id: pid,
+          src: item?.mediaUrl,
+          likeCount: item?.likeCount ?? 0,
+          dislikeCount: item?.dislikeCount ?? 0,
+          commentCount: item?.commentCount ?? 0,
+          shareCount: item?.shareCount ?? 0,
+          isLiked: item?.isLiked ?? false,
+          isDisliked: item?.isDisliked ?? false,
+        };
         setGalleryEngagePhoto(base);
         setPromoIgPreviewItem({
           ...item,
@@ -832,14 +842,7 @@ const PromotionScreen = ({ onBack }) => {
         setPromoIgPreviewVisible(true);
       })();
     },
-    [
-      userId,
-      currentUser?.id,
-      galleryTab,
-      myVideos,
-      profile,
-      openLibraryMedia,
-    ],
+    [userId, currentUser?.id, galleryTab, myVideos, profile, openLibraryMedia],
   );
 
   const openPhotosTabPreview = useCallback(
@@ -881,9 +884,7 @@ const PromotionScreen = ({ onBack }) => {
   const selectedPromoGalleryPost = useMemo(() => {
     const id = promoGalleryPostDetailItem?.originId;
     if (!id) return null;
-    return (
-      postsTab.find(p => String(p.postId || p.id) === String(id)) || null
-    );
+    return postsTab.find(p => String(p.postId || p.id) === String(id)) || null;
   }, [promoGalleryPostDetailItem?.originId, postsTab]);
 
   const openPromoGalleryPostComments = useCallback(() => {
@@ -980,10 +981,7 @@ const PromotionScreen = ({ onBack }) => {
         updatePostTab(commentsModalPostId, p => ({
           ...p,
           comments: String(Number(p.comments || 0) + delta),
-          commentCount: Math.max(
-            0,
-            Number(p.commentCount ?? 0) + delta,
-          ),
+          commentCount: Math.max(0, Number(p.commentCount ?? 0) + delta),
         }));
       }
     },
@@ -1002,10 +1000,7 @@ const PromotionScreen = ({ onBack }) => {
         ge && String(ge.id) === String(pid)
           ? {
               ...ge,
-              commentCount: Math.max(
-                0,
-                Number(ge.commentCount ?? 0) + delta,
-              ),
+              commentCount: Math.max(0, Number(ge.commentCount ?? 0) + delta),
             }
           : ge,
       );
@@ -1013,10 +1008,7 @@ const PromotionScreen = ({ onBack }) => {
         it && String(it.originId) === String(pid)
           ? {
               ...it,
-              commentCount: Math.max(
-                0,
-                Number(it.commentCount ?? 0) + delta,
-              ),
+              commentCount: Math.max(0, Number(it.commentCount ?? 0) + delta),
             }
           : it,
       );
@@ -1113,9 +1105,7 @@ const PromotionScreen = ({ onBack }) => {
     const pid = galleryEngagePhoto.id;
     patchGalleryPhoto(pid, p => applyGalleryToggleDislike(p));
     setGalleryEngagePhoto(ge =>
-      ge && String(ge.id) === String(pid)
-        ? applyGalleryToggleDislike(ge)
-        : ge,
+      ge && String(ge.id) === String(pid) ? applyGalleryToggleDislike(ge) : ge,
     );
     setPromoIgPreviewItem(it =>
       it && String(it.originId) === String(pid)
@@ -1277,7 +1267,9 @@ const PromotionScreen = ({ onBack }) => {
               if (actionTarget.kind === 'post') {
                 await deletePost(actionTarget.id, userId);
                 setPostsTab(prev =>
-                  prev.filter(p => String(p.id || p.postId) !== String(actionTarget.id)),
+                  prev.filter(
+                    p => String(p.id || p.postId) !== String(actionTarget.id),
+                  ),
                 );
               } else if (actionTarget.kind === 'video') {
                 await deleteVideo(actionTarget.id, userId);
@@ -1307,24 +1299,27 @@ const PromotionScreen = ({ onBack }) => {
   const handleSaveEditTarget = useCallback(async () => {
     if (!actionTarget || !userId) return;
     if (actionTarget.kind === 'gallery') {
-      launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, async res => {
-        if (res.didCancel || res.errorCode || !res.assets?.length) return;
-        try {
-          const a = res.assets[0];
-          await uploadGallery(userId, [
-            {
-              uri: a.uri,
-              type: a.type || 'image/jpeg',
-              name: a.fileName || 'photo.jpg',
-            },
-          ]);
-          await deleteGalleryPhoto(userId, actionTarget.id);
-          await loadGalleryTab();
-          setItemEditVisible(false);
-        } catch (e) {
-          Alert.alert('Error', e?.message || 'Failed to update photo');
-        }
-      });
+      launchImageLibrary(
+        { mediaType: 'photo', selectionLimit: 1 },
+        async res => {
+          if (res.didCancel || res.errorCode || !res.assets?.length) return;
+          try {
+            const a = res.assets[0];
+            await uploadGallery(userId, [
+              {
+                uri: a.uri,
+                type: a.type || 'image/jpeg',
+                name: a.fileName || 'photo.jpg',
+              },
+            ]);
+            await deleteGalleryPhoto(userId, actionTarget.id);
+            await loadGalleryTab();
+            setItemEditVisible(false);
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to update photo');
+          }
+        },
+      );
       return;
     }
     const payload = {
@@ -1780,8 +1775,6 @@ const PromotionScreen = ({ onBack }) => {
             <Text style={styles.profileName}>{displayName}</Text>
             <Text style={styles.profileLocation}>{displayLocation || '—'}</Text>
 
-            
-
             {isOwnProfile ? (
               <View style={styles.actionButtonGroup}>
                 <TouchableOpacity
@@ -1813,9 +1806,8 @@ const PromotionScreen = ({ onBack }) => {
               </TouchableOpacity>
             ) : null}
           </View>
-          
         </View>
-        
+
         <View style={styles.statsContainer}>
           <View style={styles.profileStatsRow}>
             <TouchableOpacity
@@ -1941,7 +1933,9 @@ const PromotionScreen = ({ onBack }) => {
                   </View>
                 ) : postsTab.length === 0 ? (
                   <Text style={styles.promoTabEmpty}>
-                    {isOwnProfile ? 'No posts yet. Tap + to create.' : 'No posts yet.'}
+                    {isOwnProfile
+                      ? 'No posts yet. Tap + to create.'
+                      : 'No posts yet.'}
                   </Text>
                 ) : (
                   postsTab.map(item => {
@@ -1988,7 +1982,8 @@ const PromotionScreen = ({ onBack }) => {
                                   description: item?.description || '',
                                   website: item?.website || '',
                                   hashtags: item?.hashtags || [],
-                                  thumbnail: item?.thumbnail || item?.mediaUrl || '',
+                                  thumbnail:
+                                    item?.thumbnail || item?.mediaUrl || '',
                                   mediaUrl: item?.mediaUrl || '',
                                   videoUrl: item?.videoUrl || '',
                                   mediaType: item?.mediaType || '',
@@ -2174,11 +2169,15 @@ const PromotionScreen = ({ onBack }) => {
                               kind: item?.type === 'short' ? 'short' : 'video',
                               id: item.id,
                               title: item?.title || '',
-                              description: item?.description || item?.desc || '',
+                              description:
+                                item?.description || item?.desc || '',
                               website: item?.website || '',
                               hashtags: item?.hashtags || [],
                               thumbnail:
-                                item?.thumbnail || item?.thumbnailUrl || item?.coverUrl || '',
+                                item?.thumbnail ||
+                                item?.thumbnailUrl ||
+                                item?.coverUrl ||
+                                '',
                               mediaUrl: item?.mediaUrl || '',
                               videoUrl: item?.videoUrl || '',
                             })
@@ -2355,13 +2354,13 @@ const PromotionScreen = ({ onBack }) => {
           onItemPress={openLibraryMedia}
           rightAccessory={
             isOwnProfile ? (
-            <TouchableOpacity
-              onPress={openMyVideosCreateFlow}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              activeOpacity={0.7}
-            >
-              <Icon name="plus" size={24} color="#000" />
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={openMyVideosCreateFlow}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.7}
+              >
+                <Icon name="plus" size={24} color="#000" />
+              </TouchableOpacity>
             ) : null
           }
         />
@@ -2382,8 +2381,7 @@ const PromotionScreen = ({ onBack }) => {
           commentsModalPostId
             ? Number(
                 postsTab.find(
-                  p =>
-                    String(p.postId || p.id) === String(commentsModalPostId),
+                  p => String(p.postId || p.id) === String(commentsModalPostId),
                 )?.commentCount ?? 0,
               )
             : undefined
@@ -2404,8 +2402,7 @@ const PromotionScreen = ({ onBack }) => {
           commentsModalGalleryPhotoId
             ? Number(
                 galleryTab.find(
-                  g =>
-                    String(g.id) === String(commentsModalGalleryPhotoId),
+                  g => String(g.id) === String(commentsModalGalleryPhotoId),
                 )?.commentCount ?? 0,
               )
             : undefined
@@ -2426,7 +2423,9 @@ const PromotionScreen = ({ onBack }) => {
         visible={!!promoGalleryVideoModal}
         onClose={() => setPromoGalleryVideoModal(null)}
         contentId={promoGalleryVideoModal?.contentId}
-        contentKind={promoGalleryVideoModal?.kind === 'short' ? 'short' : 'video'}
+        contentKind={
+          promoGalleryVideoModal?.kind === 'short' ? 'short' : 'video'
+        }
         profileUserId={userId}
         currentUser={currentUser}
         navigation={navigation}
@@ -2480,93 +2479,104 @@ const PromotionScreen = ({ onBack }) => {
               )
             ) : null}
           </View>
-            <View style={styles.promoIgEngageCard}>
-              <Text style={styles.promoIgPreviewMetaType}>Photo</Text>
-              <Text style={styles.promoGalleryEngageMetaSub}>
-                {promoIgPreviewItem?.subtitle || 'Recently'}
-              </Text>
-              <View style={styles.promoGalleryEngageRow}>
-                <TouchableOpacity
-                  style={styles.promoGalleryEngageCell}
-                  onPress={handleGalleryEngageLike}
+          <View style={styles.promoIgEngageCard}>
+            <Text style={styles.promoIgPreviewMetaType}>Photo</Text>
+            <Text style={styles.promoGalleryEngageMetaSub}>
+              {promoIgPreviewItem?.subtitle || 'Recently'}
+            </Text>
+            <View style={styles.promoGalleryEngageRow}>
+              <TouchableOpacity
+                style={styles.promoGalleryEngageCell}
+                onPress={handleGalleryEngageLike}
+              >
+                <Icon
+                  name={
+                    galleryEngagePhoto?.isLiked ?? promoIgPreviewItem?.isLiked
+                      ? 'thumb-up'
+                      : 'thumb-up-outline'
+                  }
+                  size={18}
+                  color={
+                    galleryEngagePhoto?.isLiked ?? promoIgPreviewItem?.isLiked
+                      ? '#FF7F0B'
+                      : '#333'
+                  }
+                />
+                <Text
+                  style={styles.promoGalleryEngageCellLabel}
+                  numberOfLines={1}
                 >
-                  <Icon
-                    name={
-                      (galleryEngagePhoto?.isLiked ??
-                        promoIgPreviewItem?.isLiked)
-                        ? 'thumb-up'
-                        : 'thumb-up-outline'
-                    }
-                    size={18}
-                    color={
-                      galleryEngagePhoto?.isLiked ?? promoIgPreviewItem?.isLiked
-                        ? '#FF7F0B'
-                        : '#333'
-                    }
-                  />
-                  <Text style={styles.promoGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCountTab(
-                      galleryEngagePhoto?.likeCount ??
-                        promoIgPreviewItem?.likeCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.promoGalleryEngageCell}
-                  onPress={handleGalleryEngageDislike}
+                  {formatCountTab(
+                    galleryEngagePhoto?.likeCount ??
+                      promoIgPreviewItem?.likeCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.promoGalleryEngageCell}
+                onPress={handleGalleryEngageDislike}
+              >
+                <Icon
+                  name={
+                    galleryEngagePhoto?.isDisliked ??
+                    promoIgPreviewItem?.isDisliked
+                      ? 'thumb-down'
+                      : 'thumb-down-outline'
+                  }
+                  size={18}
+                  color={
+                    galleryEngagePhoto?.isDisliked ??
+                    promoIgPreviewItem?.isDisliked
+                      ? '#FF7F0B'
+                      : '#333'
+                  }
+                />
+                <Text
+                  style={styles.promoGalleryEngageCellLabel}
+                  numberOfLines={1}
                 >
-                  <Icon
-                    name={
-                      (galleryEngagePhoto?.isDisliked ??
-                        promoIgPreviewItem?.isDisliked)
-                        ? 'thumb-down'
-                        : 'thumb-down-outline'
-                    }
-                    size={18}
-                    color={
-                      galleryEngagePhoto?.isDisliked ??
-                      promoIgPreviewItem?.isDisliked
-                        ? '#FF7F0B'
-                        : '#333'
-                    }
-                  />
-                  <Text style={styles.promoGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCountTab(
-                      galleryEngagePhoto?.dislikeCount ??
-                        promoIgPreviewItem?.dislikeCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.promoGalleryEngageCell}
-                  onPress={openGalleryPhotoCommentsModal}
+                  {formatCountTab(
+                    galleryEngagePhoto?.dislikeCount ??
+                      promoIgPreviewItem?.dislikeCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.promoGalleryEngageCell}
+                onPress={openGalleryPhotoCommentsModal}
+              >
+                <Icon name="comment-text-outline" size={18} color="#333" />
+                <Text
+                  style={styles.promoGalleryEngageCellLabel}
+                  numberOfLines={1}
                 >
-                  <Icon name="comment-text-outline" size={18} color="#333" />
-                  <Text style={styles.promoGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCountTab(
-                      galleryEngagePhoto?.commentCount ??
-                        promoIgPreviewItem?.commentCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.promoGalleryEngageCell}
-                  onPress={handleGalleryEngageShare}
+                  {formatCountTab(
+                    galleryEngagePhoto?.commentCount ??
+                      promoIgPreviewItem?.commentCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.promoGalleryEngageCell}
+                onPress={handleGalleryEngageShare}
+              >
+                <Icon name="share-outline" size={18} color="#333" />
+                <Text
+                  style={styles.promoGalleryEngageCellLabel}
+                  numberOfLines={1}
                 >
-                  <Icon name="share-outline" size={18} color="#333" />
-                  <Text style={styles.promoGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCountTab(
-                      galleryEngagePhoto?.shareCount ??
-                        promoIgPreviewItem?.shareCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                  {formatCountTab(
+                    galleryEngagePhoto?.shareCount ??
+                      promoIgPreviewItem?.shareCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
             </View>
+          </View>
         </SafeAreaView>
       </Modal>
 
@@ -2687,9 +2697,7 @@ const PromotionScreen = ({ onBack }) => {
                   />
                   <Text style={styles.promoGalleryPostActionText}>
                     {selectedPromoGalleryPost?.likes ??
-                      formatCountTab(
-                        selectedPromoGalleryPost?.likeCount ?? 0,
-                      )}
+                      formatCountTab(selectedPromoGalleryPost?.likeCount ?? 0)}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -2710,9 +2718,7 @@ const PromotionScreen = ({ onBack }) => {
                     }
                     size={20}
                     color={
-                      selectedPromoGalleryPost?.isDisliked
-                        ? '#FF7F0B'
-                        : '#333'
+                      selectedPromoGalleryPost?.isDisliked ? '#FF7F0B' : '#333'
                     }
                   />
                   <Text style={styles.promoGalleryPostActionText}>
@@ -2747,9 +2753,7 @@ const PromotionScreen = ({ onBack }) => {
                   <Icon name="share-outline" size={20} color="#333" />
                   <Text style={styles.promoGalleryPostActionText}>
                     {selectedPromoGalleryPost?.shares ??
-                      formatCountTab(
-                        selectedPromoGalleryPost?.shareCount ?? 0,
-                      )}
+                      formatCountTab(selectedPromoGalleryPost?.shareCount ?? 0)}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2904,7 +2908,9 @@ const PromotionScreen = ({ onBack }) => {
           <View style={styles.editModalBox}>
             <View style={styles.editModalHeader}>
               <Text style={styles.editModalTitle}>
-                {actionTarget?.kind === 'gallery' ? 'Edit Gallery Photo' : 'Edit'}
+                {actionTarget?.kind === 'gallery'
+                  ? 'Edit Gallery Photo'
+                  : 'Edit'}
               </Text>
               <TouchableOpacity
                 onPress={() => !itemEditSaving && setItemEditVisible(false)}
@@ -3267,7 +3273,6 @@ const styles = StyleSheet.create({
   },
   subscribeBtnSubscribed: {
     backgroundColor: '#111',
-
   },
   subscribeBtnDisabled: {
     opacity: 0.9,
