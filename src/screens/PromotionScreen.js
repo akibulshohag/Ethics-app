@@ -3261,11 +3261,11 @@ const styles = StyleSheet.create({
   // Subscribe Button
   subscribeBtn: {
     backgroundColor: '#F5A623',
-    width: width * 0.45,
+    width: width * 0.35,
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 30,
     paddingVertical: 12,
-    borderRadius: 20,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
