@@ -20,7 +20,8 @@ import {
   updateRestaurantOrderStatus,
 } from '../services/orderService';
 
-const TABS = ['In Progress', 'Accepted', 'Rejected'];
+/** Shown in tab bar only; pending orders use top-left "Live Order" control. */
+const TAB_ITEMS = ['In Progress', 'Complete', 'Rejected'];
 
 function formatItems(items) {
   if (!Array.isArray(items) || items.length === 0) return 'No items';
@@ -35,7 +36,7 @@ function statusToLabel(status) {
     case 'pending':
       return 'Pending';
     case 'confirmed':
-      return 'Accepted';
+      return 'In Progress';
     case 'cancelled':
       return 'Rejected';
     case 'preparing':
@@ -72,7 +73,7 @@ export default function LiveOrdersScreen() {
     'superadmin',
     'super_admin',
   ].includes(role);
-  const [activeTab, setActiveTab] = useState('In Progress');
+  const [activeTab, setActiveTab] = useState('Pending');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,13 +93,14 @@ export default function LiveOrdersScreen() {
         const all = res?.orders || [];
         const filtered = all.filter(o => {
           const s = String(o?.status || '').toLowerCase();
-          if (activeTab === 'In Progress') {
-            // "All new orders" (requested): pending
+          if (activeTab === 'Pending') {
             return s === 'pending';
           }
-          if (activeTab === 'Accepted') {
-            // Accepted flow
-            return s === 'confirmed' || s === 'preparing' || s === 'completed';
+          if (activeTab === 'In Progress') {
+            return s === 'confirmed' || s === 'preparing';
+          }
+          if (activeTab === 'Complete') {
+            return s === 'completed';
           }
           if (activeTab === 'Rejected') {
             return s === 'cancelled';
@@ -153,10 +155,26 @@ export default function LiveOrdersScreen() {
   const handleAccept = async order => {
     setUpdatingId(order.id);
     try {
-      await updateRestaurantOrderStatus(user.token, order.id, 'completed');
-      setOrders(prev => prev.filter(o => o.id !== order.id));
+      await updateRestaurantOrderStatus(user.token, order.id, 'confirmed');
+      setOrders(prev =>
+        prev.map(o => (o.id === order.id ? { ...o, status: 'confirmed' } : o)),
+      );
+      setActiveTab('In Progress');
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to accept');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleComplete = async order => {
+    setUpdatingId(order.id);
+    try {
+      await updateRestaurantOrderStatus(user.token, order.id, 'completed');
+      setOrders(prev => prev.filter(o => o.id !== order.id));
+      setActiveTab('Complete');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to complete');
     } finally {
       setUpdatingId(null);
     }
@@ -185,16 +203,41 @@ export default function LiveOrdersScreen() {
             <Icon name="chevron-left" size={20} color="white" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
-          <View style={styles.liveLabelContainer}>
-            <View style={styles.orangeCircle}>
-              <View style={styles.innerPlay} />
+          <TouchableOpacity
+            style={[
+              styles.liveOrderBtn,
+              activeTab === 'Pending' && styles.liveOrderBtnActive,
+            ]}
+            onPress={() => setActiveTab('Pending')}
+            activeOpacity={0.75}
+          >
+            <View
+              style={[
+                styles.orangeCircle,
+                activeTab === 'Pending' && styles.orangeCircleOnLiveActive,
+              ]}
+            >
+              <View
+                style={[
+                  styles.innerPlay,
+                  activeTab === 'Pending' && styles.innerPlayOnLiveActive,
+                ]}
+              />
             </View>
-            <Text style={styles.liveOrdersText}>Live Orders</Text>
-          </View>
+            <Text
+              style={[
+                styles.liveOrderBtnText,
+                activeTab === 'Pending' && styles.liveOrderBtnTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              Live Order
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.tabBar}>
-          {TABS.map(tab => (
+        <View style={styles.tabBarRow}>
+          {TAB_ITEMS.map(tab => (
             <TouchableOpacity
               key={tab}
               onPress={() => setActiveTab(tab)}
@@ -202,12 +245,14 @@ export default function LiveOrdersScreen() {
                 styles.tabItem,
                 activeTab === tab && styles.activeTabItem,
               ]}
+              activeOpacity={0.85}
             >
               <Text
                 style={[
                   styles.tabText,
                   activeTab === tab && styles.activeTabText,
                 ]}
+                numberOfLines={2}
               >
                 {tab}
               </Text>
@@ -234,15 +279,27 @@ export default function LiveOrdersScreen() {
         >
           {orders.length === 0 ? (
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No orders in this tab</Text>
+              <Text style={styles.emptyText}>
+                {activeTab === 'Pending'
+                  ? 'No pending orders'
+                  : activeTab === 'In Progress'
+                  ? 'No orders in progress'
+                  : activeTab === 'Complete'
+                  ? 'No completed orders yet'
+                  : activeTab === 'Rejected'
+                  ? 'No rejected orders'
+                  : 'No orders in this tab'}
+              </Text>
             </View>
           ) : (
             orders.map(order => {
               const customerName =
                 order.user?.name || order.user?.email || 'Customer';
               const isUpdating = updatingId === order.id;
-              const isPending =
-                String(order.status || '').toLowerCase() === 'pending';
+              const orderStatus = String(order.status || '').toLowerCase();
+              const isPending = orderStatus === 'pending';
+              const isInProgress =
+                orderStatus === 'confirmed' || orderStatus === 'preparing';
               return (
                 <View key={order.id} style={styles.orderCard}>
                   <View style={styles.cardHeader}>
@@ -317,7 +374,7 @@ export default function LiveOrdersScreen() {
                     >
                       <Text style={styles.viewBtnText}>View Order</Text>
                     </TouchableOpacity>
-                    {canAcceptReject && isPending ? (
+                    {canAcceptReject && activeTab === 'Pending' && isPending ? (
                       <>
                         <TouchableOpacity
                           style={[styles.actionButton, styles.rejectBtn]}
@@ -338,6 +395,20 @@ export default function LiveOrdersScreen() {
                           <Text style={styles.btnText}>Accept</Text>
                         </TouchableOpacity>
                       </>
+                    ) : canAcceptReject &&
+                      activeTab === 'In Progress' &&
+                      isInProgress ? (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.completeBtn]}
+                        onPress={() => handleComplete(order)}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.btnText}>Complete</Text>
+                        )}
+                      </TouchableOpacity>
                     ) : null}
                   </View>
                 </View>
@@ -368,6 +439,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
+  liveOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    backgroundColor: '#fff',
+    flexShrink: 0,
+    maxWidth: '58%',
+  },
+  liveOrderBtnActive: {
+    backgroundColor: '#FDB022',
+    borderColor: '#FDB022',
+  },
+  liveOrderBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#667085',
+    marginLeft: 6,
+  },
+  liveOrderBtnTextActive: {
+    color: '#fff',
+  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -377,7 +473,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   backText: { color: 'white', fontWeight: '600', fontSize: 13, marginLeft: 2 },
-  liveLabelContainer: { flexDirection: 'row', alignItems: 'center' },
   orangeCircle: {
     width: 24,
     height: 24,
@@ -386,7 +481,10 @@ const styles = StyleSheet.create({
     borderColor: '#FDB022',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 0,
+  },
+  orangeCircleOnLiveActive: {
+    borderColor: '#fff',
   },
   innerPlay: {
     width: 0,
@@ -399,14 +497,25 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
     marginLeft: 2,
   },
-  liveOrdersText: { fontSize: 18, fontWeight: '700', color: '#DF485E' },
-  tabBar: { flexDirection: 'row', marginTop: 10 },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 15,
-    alignItems: 'center',
+  innerPlayOnLiveActive: {
+    borderLeftColor: '#fff',
+  },
+  tabBarRow: {
+    flexDirection: 'row',
+    width: '100%',
+    alignSelf: 'stretch',
+    marginTop: 8,
+    paddingHorizontal: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#E4E7EC',
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   activeTabItem: {
     backgroundColor: '#FDB022',
@@ -414,7 +523,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
   },
-  tabText: { fontSize: 16, color: '#667085', fontWeight: '500' },
+  tabText: {
+    fontSize: 12,
+    color: '#667085',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   activeTabText: { color: 'white', fontWeight: 'bold' },
   listContainer: { padding: 15 },
   orderCard: {
@@ -465,6 +579,7 @@ const styles = StyleSheet.create({
   viewBtn: { borderWidth: 1, borderColor: '#FDB022' },
   rejectBtn: { backgroundColor: '#DF485E' },
   acceptBtn: { backgroundColor: '#FDB022' },
+  completeBtn: { backgroundColor: '#22c55e' },
   viewBtnText: { color: '#FDB022', fontWeight: '600' },
   btnText: { color: 'white', fontWeight: '600' },
 });

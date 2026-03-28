@@ -26,6 +26,8 @@ import {
 import { safeImageUri } from '../utils/helper';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
+const ORDER_NOTE_MARKER = '||NOTE||';
+
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -270,6 +272,21 @@ export default function OrderDetailsScreen() {
   const displayOrderId = order.id ? `#${String(order.id)}` : '—';
   const orderStatus = String(order?.status || '').toLowerCase();
   const isPendingOrder = orderStatus === 'pending';
+  const rawDeliveryAddress = String(order?.deliveryAddress || '');
+  const hasNoteMarker = rawDeliveryAddress.includes(ORDER_NOTE_MARKER);
+  const [deliveryAddressRaw, noteRaw] = hasNoteMarker
+    ? rawDeliveryAddress.split(ORDER_NOTE_MARKER)
+    : [rawDeliveryAddress, ''];
+  const deliveryAddressText = String(deliveryAddressRaw || '').trim();
+  const restaurantNoteText = String(noteRaw || '').trim();
+  const deliveryTimeRaw =
+    order?.deliveryTime ||
+    order?.estimatedDeliveryTime ||
+    order?.deliveryAt ||
+    order?.scheduledAt ||
+    order?.updatedAt ||
+    order?.createdAt;
+  const deliveryTimeText = formatDate(deliveryTimeRaw);
 
   const buildInvoiceHtml = () => {
     const invoiceDate = formatDate(order?.createdAt);
@@ -317,7 +334,14 @@ export default function OrderDetailsScreen() {
                 <h4>Customer</h4>
                 <div>${escapeHtml(customerName)}</div>
                 <div>${escapeHtml(phone || '—')}</div>
-                <div>${escapeHtml(order?.deliveryAddress || '—')}</div>
+                <div>${escapeHtml(deliveryAddressText || '—')}</div>
+                ${
+                  restaurantNoteText
+                    ? `<div><strong>Restaurant note:</strong> ${escapeHtml(
+                        restaurantNoteText,
+                      )}</div>`
+                    : ''
+                }
               </div>
               <div class="col mid">
                 <h4>Date</h4>
@@ -476,12 +500,6 @@ export default function OrderDetailsScreen() {
                     </Text>
                   </View>
                 </View>
-                {phone ? (
-                  <View style={styles.phoneRow}>
-                    <Icon name="phone" size={14} color="white" />
-                    <Text style={styles.phoneText}>{phone}</Text>
-                  </View>
-                ) : null}
               </View>
               {/* <View style={styles.actionIcons}>
                 <TouchableOpacity style={styles.iconCircle} onPress={openChat}>
@@ -536,14 +554,22 @@ export default function OrderDetailsScreen() {
             </View>
             <Text style={styles.sectionLabel}>Delivery Address</Text>
             <Text style={styles.addressText}>
-              {order.deliveryAddress || '—'}
+              {deliveryAddressText || '—'}
             </Text>
+            {restaurantNoteText ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 12 }]}>
+                  Restaurant Note
+                </Text>
+                <Text style={styles.addressText}>{restaurantNoteText}</Text>
+              </>
+            ) : null}
             <Text style={[styles.sectionLabel, { marginTop: 15 }]}>
               Delivery Time
             </Text>
             <View style={styles.timeRow}>
               <Icon name="truck-delivery-outline" size={20} color="#1A1C1E" />
-              <Text style={styles.timeText}>{formatDate(order.createdAt)}</Text>
+              <Text style={styles.timeText}>{deliveryTimeText}</Text>
             </View>
           </View>
         </View>

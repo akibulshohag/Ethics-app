@@ -354,7 +354,12 @@ const HomeOneScreen = () => {
     }
 
     if (t.returnTo === 'promotion') {
-      navigation.navigate('PromotionScreen');
+      navigation.navigate(
+        'PromotionScreen',
+        t.returnUserId != null && t.returnUserId !== ''
+          ? { userId: String(t.returnUserId) }
+          : undefined,
+      );
       return;
     }
 

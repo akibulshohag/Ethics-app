@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   StyleSheet,
   Text,
@@ -47,6 +53,9 @@ import {
   getGallery,
   uploadGallery,
   deleteGalleryPhoto,
+  toggleGalleryPhotoLike,
+  toggleGalleryPhotoDislike,
+  recordGalleryPhotoShare,
 } from '../../services/channelService';
 import {
   getUserVideos,
@@ -79,7 +88,7 @@ import {
 import CreatePromotionModal from '../../components/CreatePromotionModal';
 import Video from 'react-native-video';
 import { getSocialIcon } from '../../constants/socialLinks';
-import { navigateToHomeOneLibraryDetail } from '../../utils/navigateHomeLibraryDetail';
+import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 
 const { width } = Dimensions.get('window');
 
@@ -126,13 +135,15 @@ const mapPostToCard = (post, user) => {
           post.duration % 60,
         ).padStart(2, '0')}`
       : '';
+  const createdAt = post.publishedAt || post.createdAt;
   return {
     id: post.id,
     postId: post.id,
     title: post.title || 'Untitled',
     channelName,
     channelAvatar,
-    publishedAt: formatTimeAgo(post.publishedAt || post.createdAt),
+    publishedAt: formatTimeAgo(createdAt),
+    sortTime: new Date(createdAt || 0).getTime() || Date.now(),
     thumbnail:
       post.thumbnailUrl || post.mediaUrl || 'https://via.placeholder.com/300',
     duration,
@@ -148,8 +159,14 @@ const mapPostToCard = (post, user) => {
   };
 };
 
-const BASE_TABS = ['Posts', 'Promotions', 'Grid', 'Video', 'Notification'];
-// ... (I will handle the rest in the next edit chunk for the render function to avoid giant replaces)
+const BASE_TABS = [
+  'Gallery',
+  'Posts',
+  'Promotions',
+  'Video',
+  'Photos',
+  'Notification',
+];
 
 const DEFAULT_OPENING_HOURS = [
   { day: 'Sunday', open: '12.00PM', close: '12.00PM' },
@@ -318,7 +335,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const profileUserId = route.params?.userId ?? currentUser?.id;
   const isOwnProfile = profileUserId === currentUser?.id;
 
-  const [activeTab, setActiveTab] = useState('Posts');
+  const [activeTab, setActiveTab] = useState('Gallery');
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsRefreshing, setPostsRefreshing] = useState(false);
@@ -345,6 +362,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryUploading, setGalleryUploading] = useState(false);
+  const [galleryVideoModal, setGalleryVideoModal] = useState(null);
+  const [galleryEngagePhoto, setGalleryEngagePhoto] = useState(null);
+  const [galleryPreviewVisible, setGalleryPreviewVisible] = useState(false);
+  const [galleryPreviewItem, setGalleryPreviewItem] = useState(null);
+  const [commentsModalGalleryPhotoId, setCommentsModalGalleryPhotoId] =
+    useState(null);
   const [ownerVideos, setOwnerVideos] = useState([]);
   const [ownerVideosLoading, setOwnerVideosLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -370,8 +393,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [menuFiles, setMenuFiles] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
 
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewImageUri, setPreviewImageUri] = useState(null);
   const [postActionVisible, setPostActionVisible] = useState(false);
   const [postEditVisible, setPostEditVisible] = useState(false);
   const [postActionTarget, setPostActionTarget] = useState(null);
@@ -441,14 +462,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setGalleryLoading(true);
     try {
-      const res = await getGallery(profileUserId);
+      const res = await getGallery(profileUserId, currentUser?.id);
       setGalleryPhotos(res?.photos ?? []);
     } catch (e) {
       setGalleryPhotos([]);
     } finally {
       setGalleryLoading(false);
     }
-  }, [profileUserId]);
+  }, [profileUserId, currentUser?.id]);
 
   const loadOwnerVideos = useCallback(async () => {
     if (!profileUserId) return;
@@ -493,6 +514,101 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       setOwnerVideosLoading(false);
     }
   }, [profileUserId]);
+
+  const combinedGalleryFeed = useMemo(() => {
+    const postItems = (posts || []).map(p => {
+      const media = String(p?.mediaUrl || '').trim();
+      const mt = String(p?.mediaType || '').toLowerCase();
+      const isVideo =
+        mt === 'video' || /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+      return {
+        id: `post-${p.id}`,
+        originId: p.id,
+        sourceType: 'post',
+        title: p?.title || 'Post',
+        description: String(p?.description || '').trim(),
+        subtitle: p.publishedAt,
+        mediaType: isVideo ? 'video' : 'image',
+        mediaUrl: media,
+        thumbnail: safeImageUri(
+          p?.thumbnail || p.mediaUrl,
+          'https://via.placeholder.com/600',
+        ),
+        createdAt: p.sortTime || Date.now(),
+      };
+    });
+    const videoItems = (ownerVideos || []).map(v => ({
+      id: `video-${v.id}`,
+      originId: v.id,
+      sourceType: 'video',
+      title: v?.title || 'Video',
+      subtitle: '',
+      mediaType: 'video',
+      mediaUrl: String(v?.videoUrl || '').trim(),
+      thumbnail: safeImageUri(
+        v?.thumbnail || v?.thumbnailUrl,
+        'https://via.placeholder.com/600',
+      ),
+      type: v?._type || '',
+      isShort: v?._type === 'short',
+      createdAt:
+        new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
+    }));
+    const galleryItems = (galleryPhotos || []).map(g => ({
+      id: `gallery-${g.id}`,
+      originId: g.id,
+      sourceType: 'gallery',
+      title: 'Photo',
+      subtitle: formatTimeAgo(g?.createdAt),
+      mediaType: 'image',
+      mediaUrl: String(g?.src || '').trim(),
+      thumbnail: safeImageUri(g?.src, 'https://via.placeholder.com/600'),
+      createdAt: new Date(g?.createdAt || 0).getTime() || Date.now(),
+      likeCount: g.likeCount ?? 0,
+      dislikeCount: g.dislikeCount ?? 0,
+      commentCount: g.commentCount ?? 0,
+      shareCount: g.shareCount ?? 0,
+      isLiked: g.isLiked ?? false,
+      isDisliked: g.isDisliked ?? false,
+    }));
+    return [...postItems, ...videoItems, ...galleryItems].sort(
+      (a, b) => b.createdAt - a.createdAt,
+    );
+  }, [posts, ownerVideos, galleryPhotos]);
+
+  const patchGalleryPhoto = useCallback((photoId, updater) => {
+    setGalleryPhotos(prev =>
+      prev.map(p => (String(p.id) === String(photoId) ? updater(p) : p)),
+    );
+  }, []);
+
+  const syncBPGalleryEngageFromServer = useCallback(
+    async pid => {
+      if (!profileUserId || !pid) return;
+      try {
+        const res = await getGallery(profileUserId, currentUser?.id);
+        const photos = res?.photos ?? [];
+        setGalleryPhotos(photos);
+        const fresh = photos.find(g => String(g.id) === String(pid));
+        if (!fresh) return;
+        setGalleryEngagePhoto(fresh);
+        setGalleryPreviewItem(it =>
+          it && String(it.originId) === String(pid)
+            ? {
+                ...it,
+                likeCount: fresh.likeCount,
+                dislikeCount: fresh.dislikeCount,
+                commentCount: fresh.commentCount,
+                shareCount: fresh.shareCount,
+                isLiked: fresh.isLiked,
+                isDisliked: fresh.isDisliked,
+              }
+            : it,
+        );
+      } catch (_) {}
+    },
+    [profileUserId, currentUser?.id],
+  );
 
   const loadNotifications = useCallback(async () => {
     if (!profileUserId) return;
@@ -563,8 +679,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   );
 
   useEffect(() => {
-    if (activeTab === 'Grid' && profileUserId) loadGallery();
+    if (activeTab === 'Photos' && profileUserId) loadGallery();
   }, [activeTab, profileUserId, loadGallery]);
+
+  useEffect(() => {
+    if (activeTab === 'Gallery' && profileUserId) {
+      loadGallery();
+      loadPosts();
+      loadOwnerVideos();
+    }
+  }, [activeTab, profileUserId, loadGallery, loadPosts, loadOwnerVideos]);
 
   useEffect(() => {
     if (activeTab === 'Video' && profileUserId) loadOwnerVideos();
@@ -1037,6 +1161,281 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setPostMediaPreviewVisible(true);
   }, []);
 
+  const applyGLLike = useCallback(p => {
+    const nextLiked = !p.isLiked;
+    let lc = Number(p.likeCount ?? 0);
+    let dc = Number(p.dislikeCount ?? 0);
+    if (nextLiked) {
+      lc += 1;
+      if (p.isDisliked) dc = Math.max(0, dc - 1);
+    } else {
+      lc = Math.max(0, lc - 1);
+    }
+    return {
+      ...p,
+      isLiked: nextLiked,
+      isDisliked: false,
+      likeCount: lc,
+      dislikeCount: dc,
+    };
+  }, []);
+
+  const applyGLDislike = useCallback(p => {
+    const nextDis = !p.isDisliked;
+    let lc = Number(p.likeCount ?? 0);
+    let dc = Number(p.dislikeCount ?? 0);
+    if (nextDis) {
+      dc += 1;
+      if (p.isLiked) lc = Math.max(0, lc - 1);
+    } else {
+      dc = Math.max(0, dc - 1);
+    }
+    return {
+      ...p,
+      isDisliked: nextDis,
+      isLiked: false,
+      likeCount: lc,
+      dislikeCount: dc,
+    };
+  }, []);
+
+  const handleBPGalleryLike = useCallback(async () => {
+    if (!currentUser?.id) {
+      Alert.alert('Login required', 'Please login to continue.');
+      return;
+    }
+    if (!profileUserId || !galleryEngagePhoto?.id) return;
+    const pid = galleryEngagePhoto.id;
+    patchGalleryPhoto(pid, p => applyGLLike(p));
+    setGalleryEngagePhoto(ge =>
+      ge && String(ge.id) === String(pid) ? applyGLLike(ge) : ge,
+    );
+    setGalleryPreviewItem(it =>
+      it && String(it.originId) === String(pid) ? applyGLLike(it) : it,
+    );
+    try {
+      await toggleGalleryPhotoLike(profileUserId, pid, currentUser.id);
+      await syncBPGalleryEngageFromServer(pid);
+    } catch {
+      getGallery(profileUserId, currentUser?.id)
+        .then(r => setGalleryPhotos(r?.photos ?? []))
+        .catch(() => {});
+    }
+  }, [
+    profileUserId,
+    galleryEngagePhoto?.id,
+    patchGalleryPhoto,
+    applyGLLike,
+    currentUser?.id,
+    syncBPGalleryEngageFromServer,
+  ]);
+
+  const handleBPGalleryDislike = useCallback(async () => {
+    if (!currentUser?.id) {
+      Alert.alert('Login required', 'Please login to continue.');
+      return;
+    }
+    if (!profileUserId || !galleryEngagePhoto?.id) return;
+    const pid = galleryEngagePhoto.id;
+    patchGalleryPhoto(pid, p => applyGLDislike(p));
+    setGalleryEngagePhoto(ge =>
+      ge && String(ge.id) === String(pid) ? applyGLDislike(ge) : ge,
+    );
+    setGalleryPreviewItem(it =>
+      it && String(it.originId) === String(pid) ? applyGLDislike(it) : it,
+    );
+    try {
+      await toggleGalleryPhotoDislike(profileUserId, pid, currentUser.id);
+      await syncBPGalleryEngageFromServer(pid);
+    } catch {
+      getGallery(profileUserId, currentUser?.id)
+        .then(r => setGalleryPhotos(r?.photos ?? []))
+        .catch(() => {});
+    }
+  }, [
+    profileUserId,
+    galleryEngagePhoto?.id,
+    patchGalleryPhoto,
+    applyGLDislike,
+    currentUser?.id,
+    syncBPGalleryEngageFromServer,
+  ]);
+
+  const handleBPGalleryShare = useCallback(async () => {
+    if (!profileUserId || !galleryEngagePhoto?.id) return;
+    const pid = galleryEngagePhoto.id;
+    try {
+      await Share.share({
+        message: `Photo\neatix://user/${profileUserId}/gallery/${pid}`,
+        title: 'Photo',
+      });
+      await recordGalleryPhotoShare(profileUserId, pid);
+      patchGalleryPhoto(pid, p => ({
+        ...p,
+        shareCount: (p.shareCount ?? 0) + 1,
+      }));
+      setGalleryEngagePhoto(ge =>
+        ge && String(ge.id) === String(pid)
+          ? { ...ge, shareCount: (ge.shareCount ?? 0) + 1 }
+          : ge,
+      );
+      setGalleryPreviewItem(it =>
+        it && String(it.originId) === String(pid)
+          ? { ...it, shareCount: (it.shareCount ?? 0) + 1 }
+          : it,
+      );
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        /* ignore */
+      }
+    }
+  }, [profileUserId, galleryEngagePhoto?.id, patchGalleryPhoto]);
+
+  const handleBPGalleryCommentAdded = useCallback(
+    (_, delta = 1) => {
+      if (!commentsModalGalleryPhotoId) return;
+      const pid = commentsModalGalleryPhotoId;
+      patchGalleryPhoto(pid, p => ({
+        ...p,
+        commentCount: Math.max(0, Number(p.commentCount ?? 0) + delta),
+      }));
+      setGalleryEngagePhoto(ge =>
+        ge && String(ge.id) === String(pid)
+          ? {
+              ...ge,
+              commentCount: Math.max(
+                0,
+                Number(ge.commentCount ?? 0) + delta,
+              ),
+            }
+          : ge,
+      );
+      setGalleryPreviewItem(it =>
+        it && String(it.originId) === String(pid)
+          ? {
+              ...it,
+              commentCount: Math.max(
+                0,
+                Number(it.commentCount ?? 0) + delta,
+              ),
+            }
+          : it,
+      );
+      syncBPGalleryEngageFromServer(pid);
+    },
+    [commentsModalGalleryPhotoId, patchGalleryPhoto, syncBPGalleryEngageFromServer],
+  );
+
+  const openBPGalleryComments = useCallback(() => {
+    if (!currentUser?.id) {
+      Alert.alert('Login required', 'Please login to continue.');
+      return;
+    }
+    if (!galleryEngagePhoto?.id) return;
+    setCommentsModalGalleryPhotoId(galleryEngagePhoto.id);
+  }, [currentUser?.id, galleryEngagePhoto?.id]);
+
+  const openCombinedGalleryItem = useCallback(
+    item => {
+      if (!item?.mediaUrl && !item?.thumbnail) return;
+      const sourceType = String(item?.sourceType || '').toLowerCase();
+      if (sourceType === 'post') {
+        const post = posts.find(
+          p => String(p.id) === String(item.originId),
+        );
+        if (post) openPostMediaPreview(post);
+        return;
+      }
+      if (sourceType === 'video') {
+        const rawType = String(item?.type || '').toLowerCase();
+        const isShort =
+          item?.isShort || rawType === 'short' || rawType === 'shorts';
+        const targetId = item?.originId ?? item?.id;
+        if (!targetId) return;
+        setGalleryVideoModal({
+          contentId: String(targetId),
+          kind: isShort ? 'short' : 'video',
+        });
+        return;
+      }
+      if (sourceType === 'gallery') {
+        const pid = item?.originId;
+        if (!pid) return;
+        (async () => {
+          let raw = galleryPhotos.find(g => String(g.id) === String(pid));
+          if (profileUserId) {
+            try {
+              const res = await getGallery(profileUserId, currentUser?.id);
+              const photos = res?.photos ?? [];
+              setGalleryPhotos(photos);
+              const fresh = photos.find(g => String(g.id) === String(pid));
+              if (fresh) raw = fresh;
+            } catch (_) {}
+          }
+          const base =
+            raw || {
+              id: pid,
+              src: item?.mediaUrl,
+              likeCount: item?.likeCount ?? 0,
+              dislikeCount: item?.dislikeCount ?? 0,
+              commentCount: item?.commentCount ?? 0,
+              shareCount: item?.shareCount ?? 0,
+              isLiked: item?.isLiked ?? false,
+              isDisliked: item?.isDisliked ?? false,
+            };
+          setGalleryEngagePhoto(base);
+          setGalleryPreviewItem({
+            ...item,
+            likeCount: base.likeCount ?? item?.likeCount ?? 0,
+            dislikeCount: base.dislikeCount ?? item?.dislikeCount ?? 0,
+            commentCount: base.commentCount ?? item?.commentCount ?? 0,
+            shareCount: base.shareCount ?? item?.shareCount ?? 0,
+            isLiked: base.isLiked ?? item?.isLiked ?? false,
+            isDisliked: base.isDisliked ?? item?.isDisliked ?? false,
+          });
+          setGalleryPreviewVisible(true);
+        })();
+      }
+    },
+    [posts, galleryPhotos, openPostMediaPreview, profileUserId, currentUser?.id],
+  );
+
+  const openPhotosTabPreviewBP = useCallback(
+    async photo => {
+      if (!photo?.src && !photo?.id) return;
+      let p = photo;
+      if (profileUserId && photo?.id) {
+        try {
+          const res = await getGallery(profileUserId, currentUser?.id);
+          const photos = res?.photos ?? [];
+          setGalleryPhotos(photos);
+          const fresh = photos.find(g => String(g.id) === String(photo.id));
+          if (fresh) p = fresh;
+        } catch (_) {}
+      }
+      const feedItem = {
+        id: `gallery-${p.id}`,
+        originId: p.id,
+        sourceType: 'gallery',
+        title: 'Photo',
+        subtitle: formatTimeAgo(p?.createdAt),
+        mediaType: 'image',
+        mediaUrl: String(p?.src || '').trim(),
+        thumbnail: safeImageUri(p?.src, 'https://via.placeholder.com/600'),
+        likeCount: p.likeCount ?? 0,
+        dislikeCount: p.dislikeCount ?? 0,
+        commentCount: p.commentCount ?? 0,
+        shareCount: p.shareCount ?? 0,
+        isLiked: p.isLiked ?? false,
+        isDisliked: p.isDisliked ?? false,
+      };
+      setGalleryEngagePhoto(p);
+      setGalleryPreviewItem(feedItem);
+      setGalleryPreviewVisible(true);
+    },
+    [profileUserId, currentUser?.id],
+  );
+
   const openPostActions = useCallback(
     post => {
       if (!isOwnProfile || !post?.id) return;
@@ -1408,10 +1807,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           }}
         >
           {(isOwnProfile && isOwnerOrVendor
-            ? ['Posts', 'Promotions', 'Menus', 'Grid', 'Video', 'Notification']
+            ? [
+                'Gallery',
+                'Posts',
+                'Promotions',
+                'Menus',
+                'Video',
+                'Photos',
+                'Notification',
+              ]
             : BASE_TABS
           ).map(tab => {
-            const isGrid = tab === 'Grid';
+            const isGrid = tab === 'Gallery';
             const isActive = activeTab === tab;
 
             return (
@@ -1493,8 +1900,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       {/* Section Header */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
-          {activeTab === 'Grid'
+          {activeTab === 'Gallery'
             ? 'Gallery'
+            : activeTab === 'Photos'
+            ? 'Photos'
             : activeTab === 'Video'
             ? 'Videos'
             : activeTab === 'Notification'
@@ -1537,7 +1946,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           >
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
-        ) : activeTab === 'Grid' && isOwnProfile ? (
+        ) : activeTab === 'Photos' && isOwnProfile ? (
           <TouchableOpacity
             onPress={handleGalleryUpload}
             disabled={galleryUploading}
@@ -1576,8 +1985,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           views: formatCount(p.viewCount),
         }));
       }
-      case 'Grid':
-        return galleryPhotos.map(p => ({ id: p.id, image: p.src }));
+      case 'Gallery':
+        return combinedGalleryFeed;
+      case 'Photos':
+        return galleryPhotos.map(p => ({
+          ...p,
+          id: p.id,
+          image: p.src,
+        }));
       case 'Menus': {
         const result = [];
         const files = Array.isArray(menuFiles) ? menuFiles : [];
@@ -1832,14 +2247,27 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       );
     }
-    if (activeTab === 'Grid') {
+    if (activeTab === 'Gallery') {
       return (
         <TouchableOpacity
           style={styles.gridImageContainer}
-          onPress={() => {
-            setPreviewImageUri(safeImageUri(item.image));
-            setPreviewVisible(true);
-          }}
+          activeOpacity={0.85}
+          onPress={() => openCombinedGalleryItem(item)}
+        >
+          <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
+          {item.mediaType === 'video' ? (
+            <View style={styles.galleryVideoBadge}>
+              <MaterialCommunityIcons name="play" size={14} color="#fff" />
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      );
+    }
+    if (activeTab === 'Photos') {
+      return (
+        <TouchableOpacity
+          style={styles.gridImageContainer}
+          onPress={() => openPhotosTabPreviewBP(item)}
           onLongPress={() =>
             isOwnProfile && item.id && handleDeleteGalleryPhoto(item.id)
           }
@@ -1876,17 +2304,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             }}
             onPress={() => {
               if (!item?.id || !profileUserId) return;
-              navigateToHomeOneLibraryDetail(
-                navigation,
-                {
-                  id: item.id,
-                  type: item._type === 'short' ? 'short' : 'video',
-                },
-                {
-                  returnTo: 'business_profile',
-                  returnUserId: profileUserId,
-                },
-              );
+              setGalleryVideoModal({
+                contentId: String(item.id),
+                kind: item._type === 'short' ? 'short' : 'video',
+              });
             }}
           />
           {isOwnProfile && item.id ? (
@@ -1946,7 +2367,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading posts...</Text>
         </View>
       ) : null}
-      {activeTab === 'Grid' && galleryLoading && galleryPhotos.length === 0 ? (
+      {activeTab === 'Gallery' &&
+      (galleryLoading || postsLoading || ownerVideosLoading) &&
+      combinedGalleryFeed.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading gallery...</Text>
+        </View>
+      ) : null}
+      {activeTab === 'Photos' && galleryLoading && galleryPhotos.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading gallery...</Text>
@@ -1992,8 +2421,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       ) : null}
       <FlatList
         key={
-          activeTab === 'Grid'
-            ? 'grid-3-col'
+          activeTab === 'Gallery' || activeTab === 'Photos'
+            ? `grid-3-col-${activeTab}`
             : activeTab === 'Menus'
             ? 'menus'
             : `list-1-col-${activeTab}`
@@ -2004,9 +2433,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        numColumns={activeTab === 'Grid' ? 3 : 1}
+        numColumns={
+          activeTab === 'Gallery' || activeTab === 'Photos' ? 3 : 1
+        }
         columnWrapperStyle={
-          activeTab === 'Grid' ? styles.gridColumnWrapper : undefined
+          activeTab === 'Gallery' || activeTab === 'Photos'
+            ? styles.gridColumnWrapper
+            : undefined
         }
         refreshControl={
           activeTab === 'Posts' && profileUserId ? (
@@ -2016,7 +2449,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
-          ) : activeTab === 'Grid' ? (
+          ) : activeTab === 'Gallery' ? (
+            <RefreshControl
+              refreshing={
+                galleryLoading || postsLoading || ownerVideosLoading
+              }
+              onRefresh={() => {
+                loadGallery();
+                loadPosts(true);
+                loadOwnerVideos();
+              }}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
+          ) : activeTab === 'Photos' ? (
             <RefreshControl
               refreshing={galleryLoading}
               onRefresh={loadGallery}
@@ -2078,6 +2524,38 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         onClose={() => setCreatePostModalVisible(false)}
         onSuccess={() => loadPosts(true)}
         userId={currentUser?.id}
+      />
+      <CommentsModal
+        visible={!!commentsModalGalleryPhotoId}
+        onClose={() => setCommentsModalGalleryPhotoId(null)}
+        contentType="gallery_photo"
+        contentId={commentsModalGalleryPhotoId}
+        galleryChannelUserId={profileUserId}
+        user={currentUser}
+        totalComments={
+          commentsModalGalleryPhotoId
+            ? Number(
+                galleryPhotos.find(
+                  g =>
+                    String(g.id) === String(commentsModalGalleryPhotoId),
+                )?.commentCount ?? 0,
+              )
+            : undefined
+        }
+        onCommentAdded={handleBPGalleryCommentAdded}
+        onCommentDeleted={(_top, count) =>
+          handleBPGalleryCommentAdded(null, -(count || 1))
+        }
+      />
+      <GalleryVideoDetailModal
+        visible={!!galleryVideoModal}
+        onClose={() => setGalleryVideoModal(null)}
+        contentId={galleryVideoModal?.contentId}
+        contentKind={galleryVideoModal?.kind === 'short' ? 'short' : 'video'}
+        profileUserId={profileUserId}
+        currentUser={currentUser}
+        navigation={navigation}
+        siblingItems={ownerVideos}
       />
       <Modal
         visible={postActionVisible}
@@ -2727,28 +3205,138 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Gallery image preview modal */}
+      {/* Profile gallery photo — full screen */}
       <Modal
-        visible={previewVisible}
+        visible={galleryPreviewVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setPreviewVisible(false)}
+        onRequestClose={() => {
+          setGalleryPreviewVisible(false);
+          setGalleryEngagePhoto(null);
+          setCommentsModalGalleryPhotoId(null);
+        }}
       >
-        <View style={styles.previewBackdrop}>
+        <SafeAreaView
+          style={styles.galleryPhotoModalRoot}
+          edges={['top', 'bottom', 'left', 'right']}
+        >
           <TouchableOpacity
-            style={styles.previewCloseBtn}
-            onPress={() => setPreviewVisible(false)}
+            style={styles.galleryPhotoModalClose}
+            onPress={() => {
+              setGalleryPreviewVisible(false);
+              setGalleryEngagePhoto(null);
+              setCommentsModalGalleryPhotoId(null);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+            <MaterialCommunityIcons name="close" size={24} color="#fff" />
           </TouchableOpacity>
-          {previewImageUri ? (
-            <Image
-              source={{ uri: previewImageUri }}
-              style={styles.previewImage}
-              resizeMode="contain"
-            />
-          ) : null}
-        </View>
+          <View style={styles.galleryPhotoModalMediaWrap}>
+            {galleryPreviewItem?.mediaUrl ? (
+              <Image
+                source={{ uri: galleryPreviewItem.mediaUrl }}
+                style={styles.galleryPhotoModalMediaFill}
+                resizeMode="contain"
+              />
+            ) : null}
+          </View>
+            <View style={styles.bpIgEngageCard}>
+              <Text style={styles.previewMetaType}>Photo</Text>
+              <Text style={styles.bpGalleryEngageMetaSub}>
+                {galleryPreviewItem?.subtitle || 'Recently'}
+              </Text>
+              <View style={styles.bpGalleryEngageRow}>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={handleBPGalleryLike}
+                >
+                  <MaterialCommunityIcons
+                    name={
+                      (galleryEngagePhoto?.isLiked ??
+                        galleryPreviewItem?.isLiked)
+                        ? 'thumb-up'
+                        : 'thumb-up-outline'
+                    }
+                    size={18}
+                    color={
+                      galleryEngagePhoto?.isLiked ??
+                      galleryPreviewItem?.isLiked
+                        ? '#FF7F0B'
+                        : '#333'
+                    }
+                  />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {formatCount(
+                      galleryEngagePhoto?.likeCount ??
+                        galleryPreviewItem?.likeCount ??
+                        0,
+                    )}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={handleBPGalleryDislike}
+                >
+                  <MaterialCommunityIcons
+                    name={
+                      (galleryEngagePhoto?.isDisliked ??
+                        galleryPreviewItem?.isDisliked)
+                        ? 'thumb-down'
+                        : 'thumb-down-outline'
+                    }
+                    size={18}
+                    color={
+                      galleryEngagePhoto?.isDisliked ??
+                      galleryPreviewItem?.isDisliked
+                        ? '#FF7F0B'
+                        : '#333'
+                    }
+                  />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {formatCount(
+                      galleryEngagePhoto?.dislikeCount ??
+                        galleryPreviewItem?.dislikeCount ??
+                        0,
+                    )}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={openBPGalleryComments}
+                >
+                  <MaterialCommunityIcons
+                    name="comment-text-outline"
+                    size={18}
+                    color="#333"
+                  />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {formatCount(
+                      galleryEngagePhoto?.commentCount ??
+                        galleryPreviewItem?.commentCount ??
+                        0,
+                    )}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={handleBPGalleryShare}
+                >
+                  <MaterialCommunityIcons
+                    name="share-outline"
+                    size={18}
+                    color="#333"
+                  />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {formatCount(
+                      galleryEngagePhoto?.shareCount ??
+                        galleryPreviewItem?.shareCount ??
+                        0,
+                    )}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Post media preview modal (image/video) */}
@@ -3115,6 +3703,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: 24,
     height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  galleryVideoBadge: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -3494,9 +4093,119 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  bpIgEngageScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  bpIgEngageScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 28,
+    alignItems: 'center',
+    width: '100%',
+  },
+  bpIgEngageImage: {
+    width: Dimensions.get('window').width,
+    maxHeight: Dimensions.get('window').height * 0.62,
+    minHeight: 220,
+  },
+  bpIgEngageCard: {
+    width: '100%',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    backgroundColor: '#fff',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ececec',
+  },
+  galleryPhotoModalRoot: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  galleryPhotoModalClose: {
+    position: 'absolute',
+    top: 8,
+    right: 12,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryPhotoModalMediaWrap: {
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
+    backgroundColor: '#000',
+  },
+  galleryPhotoModalMediaFill: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  bpGalleryEngageMetaSub: {
+    color: '#666',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  bpGalleryEngageRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    flexWrap: 'nowrap',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eee',
+    paddingTop: 10,
+  },
+  bpGalleryEngageCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 6,
+  },
+  bpGalleryEngageCellLabel: {
+    fontSize: 10,
+    marginTop: 4,
+    color: '#333',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  previewMetaType: {
+    color: '#FF7F0B',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  previewMetaSub: {
+    color: '#ddd',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  galleryPostActionsRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'nowrap',
+  },
+  galleryPostActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  galleryPostActionText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
   previewBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },

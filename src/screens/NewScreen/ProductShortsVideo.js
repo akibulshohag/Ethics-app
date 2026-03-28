@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react';
 import {
   StyleSheet,
   View,
@@ -770,7 +776,7 @@ const ProductShortsVideo = () => {
       <View style={[styles.videoContainer, { height: height }]}>
         <Video
           ref={videoRef}
-            source={videoSource}
+          source={videoSource}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
           repeat={true}
@@ -923,7 +929,10 @@ const ProductShortsVideo = () => {
                   return;
                 }
                 const targetRole = String(
-                  item?.creatorRole || item?.userObj?.role || item?.user?.role || '',
+                  item?.creatorRole ||
+                    item?.userObj?.role ||
+                    item?.user?.role ||
+                    '',
                 ).toLowerCase();
                 if (targetRole === 'user') {
                   navigation.navigate('Root', {
@@ -998,7 +1007,23 @@ const ProductShortsVideo = () => {
               onPress={() => {
                 const ownerId = item?.userObj?.id ?? item?.userId ?? null;
                 if (ownerId) {
-                  navigation.navigate('UserViewsScreen', { userId: ownerId });
+                  const targetRole = String(
+                    item?.creatorRole ||
+                      item?.userObj?.role ||
+                      item?.user?.role ||
+                      '',
+                  ).toLowerCase();
+                  if (targetRole === 'user') {
+                    navigation.navigate('Root', {
+                      screen: 'Home1',
+                      params: {
+                        screen: 'PromotionScreen',
+                        params: { userId: ownerId },
+                      },
+                    });
+                  } else {
+                    navigation.navigate('UserViewsScreen', { userId: ownerId });
+                  }
                 }
               }}
               disabled={!(item?.userObj?.id || item?.userId)}
@@ -1833,9 +1858,22 @@ const ProductShortsVideo = () => {
                     onPress={() => {
                       setSubsModalOpen(false);
                       if (u?.id) {
-                        navigation.navigate('UserViewsScreen', {
-                          userId: u.id,
-                        });
+                        const targetRole = String(
+                          u?.role || u?.userRole || u?.creatorRole || '',
+                        ).toLowerCase();
+                        if (targetRole === 'user') {
+                          navigation.navigate('Root', {
+                            screen: 'Home1',
+                            params: {
+                              screen: 'PromotionScreen',
+                              params: { userId: u.id },
+                            },
+                          });
+                        } else {
+                          navigation.navigate('UserViewsScreen', {
+                            userId: u.id,
+                          });
+                        }
                       }
                     }}
                   >

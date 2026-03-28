@@ -46,11 +46,15 @@ import {
   getGallery,
   subscribeToChannel,
   unsubscribeFromChannel,
+  toggleGalleryPhotoLike,
+  toggleGalleryPhotoDislike,
+  recordGalleryPhotoShare,
 } from '../../services/channelService';
+import { shortsService } from '../../services/shortsService';
 import CommentsModal from '../../components/CommentsModal';
 import SaveModal from '../../components/SaveModal';
+import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 import { getSocialIcon } from '../../constants/socialLinks';
-import { navigateToHomeOneLibraryDetail } from '../../utils/navigateHomeLibraryDetail';
 import { listCustomPlaylists } from '../../services/playlistService';
 
 const { width } = Dimensions.get('window');
@@ -60,7 +64,7 @@ const TABS = [
   'Home',
   'Posts',
   'Videos',
-  // 'Instagram', // kept for future use
+  'Photos',
   'Playlists',
 ];
 
@@ -239,6 +243,10 @@ const UserViewsScreen = ({ navigation }) => {
 
   const [galleryPhotos, setGalleryPhotos] = useState([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryVideoModal, setGalleryVideoModal] = useState(null);
+  const [galleryEngagePhoto, setGalleryEngagePhoto] = useState(null);
+  const [commentsModalGalleryPhotoId, setCommentsModalGalleryPhotoId] =
+    useState(null);
 
   const [postCommentsVisible, setPostCommentsVisible] = useState(false);
   const [activePostId, setActivePostId] = useState(null);
@@ -318,7 +326,7 @@ const UserViewsScreen = ({ navigation }) => {
         'https://via.placeholder.com/600',
       ),
       type: v?.type || v?._type || v?.contentType || '',
-      isShort: Boolean(v?.isShort),
+      isShort: v?.type === 'short' || Boolean(v?.isShort),
       createdAt:
         new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
     }));
@@ -327,12 +335,18 @@ const UserViewsScreen = ({ navigation }) => {
       id: `gallery-${g.id}`,
       originId: g.id,
       sourceType: 'gallery',
-      title: 'Gallery',
+      title: 'Photo',
       subtitle: timeAgo(g?.createdAt),
       mediaType: 'image',
       mediaUrl: String(g?.src || '').trim(),
       thumbnail: safeImageUri(g?.src, 'https://via.placeholder.com/600'),
       createdAt: new Date(g?.createdAt || 0).getTime() || Date.now(),
+      likeCount: g.likeCount ?? 0,
+      dislikeCount: g.dislikeCount ?? 0,
+      commentCount: g.commentCount ?? 0,
+      shareCount: g.shareCount ?? 0,
+      isLiked: g.isLiked ?? false,
+      isDisliked: g.isDisliked ?? false,
     }));
 
     return [...postItems, ...videoItems, ...galleryItems].sort(
@@ -657,6 +671,250 @@ const UserViewsScreen = ({ navigation }) => {
     setInstagramPreviewVisible(true);
   };
 
+  const patchGalleryPhoto = useCallback((photoId, updater) => {
+    setGalleryPhotos(prev =>
+      prev.map(p => (String(p.id) === String(photoId) ? updater(p) : p)),
+    );
+  }, []);
+
+  /** Re-fetch gallery so like/comment counts match server after toggles or reopening preview. */
+  const syncGalleryEngageFromServer = useCallback(
+    async pid => {
+      if (!profileUserId || !pid) return;
+      try {
+        const res = await getGallery(profileUserId, currentUser?.id);
+        const photos = res?.photos ?? [];
+        setGalleryPhotos(photos);
+        const fresh = photos.find(g => String(g.id) === String(pid));
+        if (!fresh) return;
+        setGalleryEngagePhoto(fresh);
+        setInstagramPreviewItem(it =>
+          it && String(it.originId) === String(pid)
+            ? {
+                ...it,
+                likeCount: fresh.likeCount,
+                dislikeCount: fresh.dislikeCount,
+                commentCount: fresh.commentCount,
+                shareCount: fresh.shareCount,
+                isLiked: fresh.isLiked,
+                isDisliked: fresh.isDisliked,
+              }
+            : it,
+        );
+      } catch (_) {}
+    },
+    [profileUserId, currentUser?.id],
+  );
+
+  const applyGalleryToggleLike = useCallback(p => {
+    const nextLiked = !p.isLiked;
+    let lc = Number(p.likeCount ?? 0);
+    let dc = Number(p.dislikeCount ?? 0);
+    if (nextLiked) {
+      lc += 1;
+      if (p.isDisliked) dc = Math.max(0, dc - 1);
+    } else {
+      lc = Math.max(0, lc - 1);
+    }
+    return {
+      ...p,
+      isLiked: nextLiked,
+      isDisliked: false,
+      likeCount: lc,
+      dislikeCount: dc,
+    };
+  }, []);
+
+  const applyGalleryToggleDislike = useCallback(p => {
+    const nextDis = !p.isDisliked;
+    let lc = Number(p.likeCount ?? 0);
+    let dc = Number(p.dislikeCount ?? 0);
+    if (nextDis) {
+      dc += 1;
+      if (p.isLiked) lc = Math.max(0, lc - 1);
+    } else {
+      dc = Math.max(0, dc - 1);
+    }
+    return {
+      ...p,
+      isDisliked: nextDis,
+      isLiked: false,
+      likeCount: lc,
+      dislikeCount: dc,
+    };
+  }, []);
+
+  const handleGalleryEngageLike = useCallback(async () => {
+    if (requireLogin()) return;
+    if (!profileUserId || !galleryEngagePhoto?.id) return;
+    const pid = galleryEngagePhoto.id;
+    patchGalleryPhoto(pid, p => applyGalleryToggleLike(p));
+    setGalleryEngagePhoto(ge =>
+      ge && String(ge.id) === String(pid) ? applyGalleryToggleLike(ge) : ge,
+    );
+    setInstagramPreviewItem(it =>
+      it && String(it.originId) === String(pid) ? applyGalleryToggleLike(it) : it,
+    );
+    try {
+      await toggleGalleryPhotoLike(profileUserId, pid, currentUser.id);
+      await syncGalleryEngageFromServer(pid);
+    } catch {
+      if (profileUserId) {
+        getGallery(profileUserId, currentUser?.id)
+          .then(r => setGalleryPhotos(r?.photos ?? []))
+          .catch(() => {});
+      }
+    }
+  }, [
+    profileUserId,
+    galleryEngagePhoto?.id,
+    patchGalleryPhoto,
+    applyGalleryToggleLike,
+    currentUser?.id,
+    syncGalleryEngageFromServer,
+  ]);
+
+  const handleGalleryEngageDislike = useCallback(async () => {
+    if (requireLogin()) return;
+    if (!profileUserId || !galleryEngagePhoto?.id) return;
+    const pid = galleryEngagePhoto.id;
+    patchGalleryPhoto(pid, p => applyGalleryToggleDislike(p));
+    setGalleryEngagePhoto(ge =>
+      ge && String(ge.id) === String(pid)
+        ? applyGalleryToggleDislike(ge)
+        : ge,
+    );
+    setInstagramPreviewItem(it =>
+      it && String(it.originId) === String(pid)
+        ? applyGalleryToggleDislike(it)
+        : it,
+    );
+    try {
+      await toggleGalleryPhotoDislike(profileUserId, pid, currentUser.id);
+      await syncGalleryEngageFromServer(pid);
+    } catch {
+      if (profileUserId) {
+        getGallery(profileUserId, currentUser?.id)
+          .then(r => setGalleryPhotos(r?.photos ?? []))
+          .catch(() => {});
+      }
+    }
+  }, [
+    profileUserId,
+    galleryEngagePhoto?.id,
+    patchGalleryPhoto,
+    applyGalleryToggleDislike,
+    currentUser?.id,
+    syncGalleryEngageFromServer,
+  ]);
+
+  const handleGalleryEngageShare = useCallback(async () => {
+    if (!profileUserId || !galleryEngagePhoto?.id) return;
+    const pid = galleryEngagePhoto.id;
+    try {
+      await Share.share({
+        message: `Photo\neatix://user/${profileUserId}/gallery/${pid}`,
+        title: 'Photo',
+      });
+      await recordGalleryPhotoShare(profileUserId, pid);
+      patchGalleryPhoto(pid, p => ({
+        ...p,
+        shareCount: (p.shareCount ?? 0) + 1,
+      }));
+      setGalleryEngagePhoto(ge =>
+        ge && String(ge.id) === String(pid)
+          ? { ...ge, shareCount: (ge.shareCount ?? 0) + 1 }
+          : ge,
+      );
+      setInstagramPreviewItem(it =>
+        it && String(it.originId) === String(pid)
+          ? { ...it, shareCount: (it.shareCount ?? 0) + 1 }
+          : it,
+      );
+    } catch (e) {
+      if (e?.message !== 'User did not share') {
+        /* ignore */
+      }
+    }
+  }, [profileUserId, galleryEngagePhoto?.id, patchGalleryPhoto]);
+
+  const handleGalleryCommentAdded = useCallback(
+    (_, delta = 1) => {
+      if (!commentsModalGalleryPhotoId) return;
+      const pid = commentsModalGalleryPhotoId;
+      patchGalleryPhoto(pid, p => ({
+        ...p,
+        commentCount: Math.max(0, Number(p.commentCount ?? 0) + delta),
+      }));
+      setGalleryEngagePhoto(ge =>
+        ge && String(ge.id) === String(pid)
+          ? {
+              ...ge,
+              commentCount: Math.max(
+                0,
+                Number(ge.commentCount ?? 0) + delta,
+              ),
+            }
+          : ge,
+      );
+      setInstagramPreviewItem(it =>
+        it && String(it.originId) === String(pid)
+          ? {
+              ...it,
+              commentCount: Math.max(
+                0,
+                Number(it.commentCount ?? 0) + delta,
+              ),
+            }
+          : it,
+      );
+      syncGalleryEngageFromServer(pid);
+    },
+    [commentsModalGalleryPhotoId, patchGalleryPhoto, syncGalleryEngageFromServer],
+  );
+
+  const openGalleryPhotoCommentsModal = useCallback(() => {
+    if (requireLogin()) return;
+    if (!galleryEngagePhoto?.id) return;
+    setCommentsModalGalleryPhotoId(galleryEngagePhoto.id);
+  }, [galleryEngagePhoto?.id]);
+
+  const openPhotosTabPreview = useCallback(
+    async photo => {
+      if (!photo?.src && !photo?.id) return;
+      let p = photo;
+      if (profileUserId && photo?.id) {
+        try {
+          const res = await getGallery(profileUserId, currentUser?.id);
+          const photos = res?.photos ?? [];
+          setGalleryPhotos(photos);
+          const fresh = photos.find(g => String(g.id) === String(photo.id));
+          if (fresh) p = fresh;
+        } catch (_) {}
+      }
+      const feedItem = {
+        id: `gallery-${p.id}`,
+        originId: p.id,
+        sourceType: 'gallery',
+        title: 'Photo',
+        subtitle: timeAgo(p?.createdAt),
+        mediaType: 'image',
+        mediaUrl: String(p?.src || '').trim(),
+        thumbnail: safeImageUri(p?.src, 'https://via.placeholder.com/600'),
+        likeCount: p.likeCount ?? 0,
+        dislikeCount: p.dislikeCount ?? 0,
+        commentCount: p.commentCount ?? 0,
+        shareCount: p.shareCount ?? 0,
+        isLiked: p.isLiked ?? false,
+        isDisliked: p.isDisliked ?? false,
+      };
+      setGalleryEngagePhoto(p);
+      setInstagramPreviewItem(feedItem);
+      setInstagramPreviewVisible(true);
+    },
+    [profileUserId, currentUser?.id],
+  );
+
   const openGalleryItem = item => {
     if (!item?.mediaUrl) return;
     const sourceType = String(item?.sourceType || '').toLowerCase();
@@ -666,19 +924,58 @@ const UserViewsScreen = ({ navigation }) => {
       return;
     }
     if (sourceType === 'video') {
+      setGalleryEngagePhoto(null);
       const rawType = String(
         item?.type || item?._type || item?.contentType || '',
       ).toLowerCase();
       const isShortByType = rawType === 'short' || rawType === 'shorts';
       const isShortByUrl = /\/shorts?\//i.test(String(item?.mediaUrl || ''));
-      const isShort = Boolean(item?.isShort) || isShortByType || isShortByUrl;
-      const targetId = item?.originId || item?.id;
+      const isShort =
+        Boolean(item?.isShort) || isShortByType || isShortByUrl;
+      const targetId = item?.originId ?? item?.id;
       if (!targetId) return;
-      navigateToHomeOneLibraryDetail(
-        navigation,
-        { id: targetId, type: isShort ? 'short' : 'video' },
-        { returnTo: 'user_views', returnUserId: profileUserId },
-      );
+      setGalleryVideoModal({
+        contentId: String(targetId),
+        kind: isShort ? 'short' : 'video',
+      });
+      return;
+    }
+    if (sourceType === 'gallery') {
+      const pid = item?.originId;
+      if (!pid) return;
+      (async () => {
+        let raw = (galleryPhotos || []).find(g => String(g.id) === String(pid));
+        if (profileUserId) {
+          try {
+            const res = await getGallery(profileUserId, currentUser?.id);
+            const photos = res?.photos ?? [];
+            setGalleryPhotos(photos);
+            const fresh = photos.find(g => String(g.id) === String(pid));
+            if (fresh) raw = fresh;
+          } catch (_) {}
+        }
+        const base = raw || {
+          id: pid,
+          src: item?.mediaUrl,
+          likeCount: item?.likeCount ?? 0,
+          dislikeCount: item?.dislikeCount ?? 0,
+          commentCount: item?.commentCount ?? 0,
+          shareCount: item?.shareCount ?? 0,
+          isLiked: item?.isLiked ?? false,
+          isDisliked: item?.isDisliked ?? false,
+        };
+        setGalleryEngagePhoto(base);
+        setInstagramPreviewItem({
+          ...item,
+          likeCount: base.likeCount ?? item?.likeCount ?? 0,
+          dislikeCount: base.dislikeCount ?? item?.dislikeCount ?? 0,
+          commentCount: base.commentCount ?? item?.commentCount ?? 0,
+          shareCount: base.shareCount ?? item?.shareCount ?? 0,
+          isLiked: base.isLiked ?? item?.isLiked ?? false,
+          isDisliked: base.isDisliked ?? item?.isDisliked ?? false,
+        });
+        setInstagramPreviewVisible(true);
+      })();
       return;
     }
     openInstagramPreview(item);
@@ -765,8 +1062,12 @@ const UserViewsScreen = ({ navigation }) => {
 
   const handleProfileMessagePress = useCallback(() => {
     if (requireLogin()) return;
-    if (!profileUserId) return;
-    if (String(profileUserId) === String(currentUser?.id)) return;
+    if (!profileUserId || !currentUser?.id) return;
+    const isOwn = String(profileUserId) === String(currentUser.id);
+    if (isOwn) {
+      navigation.navigate('MessageList');
+      return;
+    }
     navigation.navigate('ChatScreen', {
       partnerId: profileUserId,
       partnerName:
@@ -779,12 +1080,43 @@ const UserViewsScreen = ({ navigation }) => {
     });
   }, [profileUserId, currentUser?.id, navigation, profile]);
 
+  const handleChannelOrderNow = useCallback(() => {
+    if (!profileUserId) return;
+    const ownerName =
+      profile?.channelName || profile?.nickname || profile?.name || '';
+    const location = profile?.address || '';
+    const goOrderFlow = (screen, params) => {
+      navigation.navigate('Root', {
+        screen: 'Home1',
+        params: { screen, params },
+      });
+    };
+    if (!currentUser?.token) {
+      goOrderFlow('HomeSevenScreen', {
+        returnToOrder: true,
+        ownerUserId: profileUserId,
+      });
+      return;
+    }
+    goOrderFlow('HomeThreeScreen', {
+      ownerId: profileUserId,
+      ownerName,
+      title: ownerName,
+      location,
+    });
+  }, [profileUserId, profile, currentUser?.token, navigation]);
+
   const loadVideos = useCallback(async () => {
     if (!profileUserId) return;
     setVideosLoading(true);
     try {
-      const res = await getUserVideos(profileUserId, 1, 50);
-      setRawVideos(res?.videos || []);
+      const [vRes, sRes] = await Promise.all([
+        getUserVideos(profileUserId, 1, 100),
+        shortsService.getUserShorts(profileUserId, 1, 100),
+      ]);
+      const videos = (vRes?.videos ?? []).map(v => ({ ...v, type: 'video' }));
+      const shorts = (sRes?.shorts ?? []).map(s => ({ ...s, type: 'short' }));
+      setRawVideos([...videos, ...shorts]);
     } catch (e) {
       setRawVideos([]);
     } finally {
@@ -809,14 +1141,14 @@ const UserViewsScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setGalleryLoading(true);
     try {
-      const res = await getGallery(profileUserId);
+      const res = await getGallery(profileUserId, currentUser?.id);
       setGalleryPhotos(res?.photos ?? []);
     } catch (e) {
       setGalleryPhotos([]);
     } finally {
       setGalleryLoading(false);
     }
-  }, [profileUserId]);
+  }, [profileUserId, currentUser?.id]);
 
   const loadPlaylists = useCallback(async () => {
     if (!profileUserId) return;
@@ -881,6 +1213,7 @@ const UserViewsScreen = ({ navigation }) => {
       loadPosts();
       loadVideos();
     }
+    if (activeTab === 'Photos') loadGallery();
     if (activeTab === 'Videos') loadVideos();
     if (activeTab === 'Instagram') {
       loadPosts();
@@ -918,6 +1251,7 @@ const UserViewsScreen = ({ navigation }) => {
         onSubscribe={handleProfileSubscribe}
         onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
+        onOrderNowPress={handleChannelOrderNow}
         onPressReviews={() => {
           if (!profileUserId) return;
           navigation.navigate('ChannelReviewsScreen', {
@@ -1049,6 +1383,12 @@ const UserViewsScreen = ({ navigation }) => {
         return posts;
       case 'Gallery':
         return instagramFeedItems;
+      case 'Photos':
+        return (galleryPhotos || []).map(p => ({
+          ...p,
+          id: p.id,
+          thumbnail: safeImageUri(p.src, 'https://via.placeholder.com/600'),
+        }));
       case 'Videos':
         return videos;
       case 'Instagram':
@@ -1256,6 +1596,17 @@ const UserViewsScreen = ({ navigation }) => {
         </TouchableOpacity>
       );
     }
+    if (activeTab === 'Photos') {
+      return (
+        <TouchableOpacity
+          style={styles.gridImageContainer}
+          activeOpacity={0.85}
+          onPress={() => openPhotosTabPreview(item)}
+        >
+          <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
+        </TouchableOpacity>
+      );
+    }
     if (activeTab === 'Instagram') {
       return (
         <TouchableOpacity
@@ -1276,16 +1627,16 @@ const UserViewsScreen = ({ navigation }) => {
       return (
         <CompactVideoCard
           video={item}
-          onPress={() =>
-            navigateToHomeOneLibraryDetail(
-              navigation,
-              { id: item.id, type: 'video' },
-              {
-                returnTo: 'user_views',
-                returnUserId: profileUserId,
-              },
-            )
-          }
+          onPress={() => {
+            const vid = rawVideos.find(
+              v => String(v.id) === String(item.id),
+            );
+            const isShort = vid?.type === 'short';
+            setGalleryVideoModal({
+              contentId: String(item.id),
+              kind: isShort ? 'short' : 'video',
+            });
+          }}
         />
       );
     if (activeTab === 'Playlists')
@@ -1327,7 +1678,9 @@ const UserViewsScreen = ({ navigation }) => {
       ) : null}
       <FlatList
         key={
-          activeTab === 'Gallery' || activeTab === 'Instagram'
+          activeTab === 'Gallery' ||
+          activeTab === 'Photos' ||
+          activeTab === 'Instagram'
             ? `grid-3-col-${activeTab}`
             : `list-1-col-${activeTab}`
         }
@@ -1338,10 +1691,16 @@ const UserViewsScreen = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         numColumns={
-          activeTab === 'Gallery' || activeTab === 'Instagram' ? 3 : 1
+          activeTab === 'Gallery' ||
+          activeTab === 'Photos' ||
+          activeTab === 'Instagram'
+            ? 3
+            : 1
         }
         columnWrapperStyle={
-          activeTab === 'Gallery' || activeTab === 'Instagram'
+          activeTab === 'Gallery' ||
+          activeTab === 'Photos' ||
+          activeTab === 'Instagram'
             ? styles.gridColumnWrapper
             : undefined
         }
@@ -1352,6 +1711,7 @@ const UserViewsScreen = ({ navigation }) => {
             (activeTab === 'Posts' && postsLoading) ||
             (activeTab === 'Gallery' &&
               (galleryLoading || postsLoading || videosLoading)) ||
+            (activeTab === 'Photos' && galleryLoading) ||
             (activeTab === 'Instagram' &&
               (postsLoading || videosLoading || galleryLoading)) ||
             (activeTab === 'Playlists' && playlistsLoading);
@@ -1487,51 +1847,199 @@ const UserViewsScreen = ({ navigation }) => {
         }}
       />
 
-      {/* Instagram mixed-feed preview modal */}
+      <CommentsModal
+        visible={!!commentsModalGalleryPhotoId}
+        onClose={() => setCommentsModalGalleryPhotoId(null)}
+        contentType="gallery_photo"
+        contentId={commentsModalGalleryPhotoId}
+        galleryChannelUserId={profileUserId}
+        user={currentUser}
+        totalComments={
+          commentsModalGalleryPhotoId
+            ? Number(
+                galleryPhotos.find(
+                  g =>
+                    String(g.id) === String(commentsModalGalleryPhotoId),
+                )?.commentCount ?? 0,
+              )
+            : undefined
+        }
+        onCommentAdded={handleGalleryCommentAdded}
+        onCommentDeleted={(_top, count) =>
+          handleGalleryCommentAdded(null, -(count || 1))
+        }
+      />
+
+      <GalleryVideoDetailModal
+        visible={!!galleryVideoModal}
+        onClose={() => setGalleryVideoModal(null)}
+        contentId={galleryVideoModal?.contentId}
+        contentKind={galleryVideoModal?.kind === 'short' ? 'short' : 'video'}
+        profileUserId={profileUserId}
+        currentUser={currentUser}
+        navigation={navigation}
+        siblingItems={rawVideos}
+      />
+
+      {/* Instagram / Gallery photo preview — full screen */}
       <Modal
         visible={instagramPreviewVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setInstagramPreviewVisible(false)}
+        onRequestClose={() => {
+          setInstagramPreviewVisible(false);
+          setGalleryEngagePhoto(null);
+          setCommentsModalGalleryPhotoId(null);
+        }}
       >
-        <View style={styles.previewBackdrop}>
+        <SafeAreaView
+          style={styles.galleryPhotoModalRoot}
+          edges={['top', 'bottom', 'left', 'right']}
+        >
           <TouchableOpacity
-            style={styles.previewCloseBtn}
-            onPress={() => setInstagramPreviewVisible(false)}
+            style={styles.galleryPhotoModalClose}
+            onPress={() => {
+              setInstagramPreviewVisible(false);
+              setGalleryEngagePhoto(null);
+              setCommentsModalGalleryPhotoId(null);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <MaterialCommunityIcons name="close" size={28} color="#fff" />
+            <MaterialCommunityIcons name="close" size={24} color="#fff" />
           </TouchableOpacity>
-          {instagramPreviewItem?.mediaUrl ? (
-            instagramPreviewItem.mediaType === 'video' ? (
-              <Video
-                source={{ uri: instagramPreviewItem.mediaUrl }}
-                style={styles.previewVideo}
-                controls
-                paused={false}
-                repeat
-                resizeMode="contain"
-                ignoreSilentSwitch="ignore"
-              />
-            ) : (
-              <Image
-                source={{ uri: instagramPreviewItem.mediaUrl }}
-                style={styles.previewImage}
-                resizeMode="contain"
-              />
-            )
-          ) : null}
-          <View style={styles.instagramPreviewMeta}>
-            <Text style={styles.instagramPreviewMetaType}>
-              {instagramPreviewItem?.sourceType || ''}
-            </Text>
-            <Text style={styles.instagramPreviewMetaTitle} numberOfLines={2}>
-              {instagramPreviewItem?.title || 'Post'}
-            </Text>
-            <Text style={styles.instagramPreviewMetaSub} numberOfLines={1}>
-              {instagramPreviewItem?.subtitle || 'Recently'}
-            </Text>
+          <View style={styles.galleryPhotoModalMediaWrap}>
+            {instagramPreviewItem?.mediaUrl ? (
+              instagramPreviewItem.mediaType === 'video' ? (
+                <Video
+                  source={{ uri: instagramPreviewItem.mediaUrl }}
+                  style={styles.galleryPhotoModalMediaFill}
+                  controls
+                  paused={false}
+                  repeat
+                  resizeMode="contain"
+                  ignoreSilentSwitch="ignore"
+                />
+              ) : (
+                <Image
+                  source={{ uri: instagramPreviewItem.mediaUrl }}
+                  style={styles.galleryPhotoModalMediaFill}
+                  resizeMode="contain"
+                />
+              )
+            ) : null}
           </View>
-        </View>
+            {String(instagramPreviewItem?.sourceType || '').toLowerCase() ===
+            'gallery' ? (
+              <View style={styles.uvIgEngageCard}>
+                <Text style={styles.instagramPreviewMetaType}>Photo</Text>
+                <Text style={styles.galleryEngageMetaSub}>
+                  {instagramPreviewItem?.subtitle || 'Recently'}
+                </Text>
+                <View style={styles.galleryEngageRowSingle}>
+                  <TouchableOpacity
+                    style={styles.galleryEngageCell}
+                    onPress={handleGalleryEngageLike}
+                  >
+                    <MaterialCommunityIcons
+                      name={
+                        (galleryEngagePhoto?.isLiked ??
+                          instagramPreviewItem?.isLiked)
+                          ? 'thumb-up'
+                          : 'thumb-up-outline'
+                      }
+                      size={18}
+                      color={
+                        galleryEngagePhoto?.isLiked ??
+                        instagramPreviewItem?.isLiked
+                          ? '#FF7F0B'
+                          : '#333'
+                      }
+                    />
+                    <Text style={styles.galleryEngageCellLabel} numberOfLines={1}>
+                      {formatCount(
+                        galleryEngagePhoto?.likeCount ??
+                          instagramPreviewItem?.likeCount ??
+                          0,
+                      )}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.galleryEngageCell}
+                    onPress={handleGalleryEngageDislike}
+                  >
+                    <MaterialCommunityIcons
+                      name={
+                        (galleryEngagePhoto?.isDisliked ??
+                          instagramPreviewItem?.isDisliked)
+                          ? 'thumb-down'
+                          : 'thumb-down-outline'
+                      }
+                      size={18}
+                      color={
+                        galleryEngagePhoto?.isDisliked ??
+                        instagramPreviewItem?.isDisliked
+                          ? '#FF7F0B'
+                          : '#333'
+                      }
+                    />
+                    <Text style={styles.galleryEngageCellLabel} numberOfLines={1}>
+                      {formatCount(
+                        galleryEngagePhoto?.dislikeCount ??
+                          instagramPreviewItem?.dislikeCount ??
+                          0,
+                      )}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.galleryEngageCell}
+                    onPress={openGalleryPhotoCommentsModal}
+                  >
+                    <MaterialCommunityIcons
+                      name="comment-text-outline"
+                      size={18}
+                      color="#333"
+                    />
+                    <Text style={styles.galleryEngageCellLabel} numberOfLines={1}>
+                      {formatCount(
+                        galleryEngagePhoto?.commentCount ??
+                          instagramPreviewItem?.commentCount ??
+                          0,
+                      )}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.galleryEngageCell}
+                    onPress={handleGalleryEngageShare}
+                  >
+                    <MaterialCommunityIcons
+                      name="share-outline"
+                      size={18}
+                      color="#333"
+                    />
+                    <Text style={styles.galleryEngageCellLabel} numberOfLines={1}>
+                      {formatCount(
+                        galleryEngagePhoto?.shareCount ??
+                          instagramPreviewItem?.shareCount ??
+                          0,
+                      )}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.galleryPhotoModalPostMeta}>
+                <Text style={styles.instagramPreviewMetaType}>
+                  {instagramPreviewItem?.sourceType || ''}
+                </Text>
+                <Text style={styles.galleryPhotoModalPostTitle} numberOfLines={2}>
+                  {instagramPreviewItem?.title || 'Post'}
+                </Text>
+                <Text style={styles.galleryPhotoModalPostSub} numberOfLines={1}>
+                  {instagramPreviewItem?.subtitle || 'Recently'}
+                </Text>
+              </View>
+            )}
+        </SafeAreaView>
       </Modal>
 
       {/* Gallery post details modal (1st modal) */}
@@ -2351,9 +2859,53 @@ const styles = StyleSheet.create({
   emptyText: { marginTop: 6, color: '#666' },
   previewBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.92)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  galleryPhotoModalRoot: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  galleryPhotoModalClose: {
+    position: 'absolute',
+    top: 8,
+    right: 12,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryPhotoModalMediaWrap: {
+    flex: 1,
+    width: '100%',
+    minHeight: 0,
+    backgroundColor: '#000',
+  },
+  galleryPhotoModalMediaFill: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  galleryPhotoModalPostMeta: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#1c1c1c',
+  },
+  galleryPhotoModalPostTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  galleryPhotoModalPostSub: {
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    marginTop: 4,
   },
   previewCloseBtn: {
     position: 'absolute',
@@ -2369,6 +2921,61 @@ const styles = StyleSheet.create({
   previewVideo: {
     width: '100%',
     height: '85%',
+  },
+  uvIgEngageScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  uvIgEngageScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 28,
+    alignItems: 'center',
+    width: '100%',
+  },
+  uvIgEngageImage: {
+    width: Dimensions.get('window').width,
+    maxHeight: Dimensions.get('window').height * 0.62,
+    minHeight: 220,
+  },
+  uvIgEngageCard: {
+    width: '100%',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    backgroundColor: '#fff',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ececec',
+  },
+  galleryEngageMetaSub: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  galleryEngageRowSingle: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    flexWrap: 'nowrap',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eee',
+    paddingTop: 10,
+  },
+  galleryEngageCell: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 0,
+  },
+  galleryEngageCellLabel: {
+    fontSize: 10,
+    marginTop: 4,
+    color: '#333',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   instagramPreviewMeta: {
     position: 'absolute',

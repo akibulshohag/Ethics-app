@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -45,11 +45,10 @@ const statusToLabel = status => {
     case 'pending':
       return 'Pending';
     case 'confirmed':
-      return 'Accepted';
+    case 'preparing':
+      return 'In Progress';
     case 'cancelled':
       return 'Rejected';
-    case 'preparing':
-      return 'Preparing';
     case 'completed':
       return 'Completed';
     default:
@@ -80,6 +79,8 @@ const OrderListScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 20;
+  const [activeTab, setActiveTab] = useState('All');
+  const ORDER_TABS = ['All', 'Pending', 'In Progress', 'Complete', 'Rejected'];
 
   const isUser = role === 'user';
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -137,6 +138,18 @@ const OrderListScreen = ({ navigation }) => {
   );
 
   const onRefresh = () => load(true);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      const s = String(o?.status || '').toLowerCase();
+      if (activeTab === 'All') return true;
+      if (activeTab === 'Pending') return s === 'pending';
+      if (activeTab === 'In Progress') return s === 'confirmed' || s === 'preparing';
+      if (activeTab === 'Complete') return s === 'completed';
+      if (activeTab === 'Rejected') return s === 'cancelled';
+      return true;
+    });
+  }, [orders, activeTab]);
 
   const updateStatus = async (orderId, newStatus) => {
     if (!user?.token) return;
@@ -411,13 +424,27 @@ const OrderListScreen = ({ navigation }) => {
         <Text style={styles.headerTitle}>{title}</Text>
         <View style={{ width: 24 }} />
       </View>
+      <View style={styles.tabsRow}>
+        {ORDER_TABS.map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
+            onPress={() => setActiveTab(tab)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
       {loading && orders.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primaryOrange} />
         </View>
       ) : (
         <FlatList
-          data={orders}
+          data={filteredOrders}
           keyExtractor={o => o.id}
           renderItem={renderOrder}
           contentContainerStyle={styles.listContent}
@@ -431,7 +458,9 @@ const OrderListScreen = ({ navigation }) => {
           ListEmptyComponent={
             <View style={styles.centered}>
               <Icon name="cart-outline" size={64} color={COLORS.gray400} />
-              <Text style={styles.emptyText}>No orders yet</Text>
+              <Text style={styles.emptyText}>
+                {activeTab === 'All' ? 'No orders yet' : `No ${activeTab} orders`}
+              </Text>
             </View>
           }
         />
@@ -551,6 +580,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.textPrimary,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+    backgroundColor: COLORS.white,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: COLORS.primaryOrange,
+    backgroundColor: '#FFF7ED',
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.gray500,
+    textAlign: 'center',
+  },
+  tabTextActive: {
+    color: COLORS.primaryOrange,
   },
   listContent: {
     padding: SPACING.md,

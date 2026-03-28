@@ -22,6 +22,8 @@ import Toast from 'react-native-toast-message';
 import { createRestaurantOrder } from '../services/orderService';
 import { getPromotionsByUser } from '../services/promotionService';
 
+const ORDER_NOTE_MARKER = '||NOTE||';
+
 const HomeFourScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -195,14 +197,19 @@ const HomeFourScreen = ({ onBack }) => {
     }
     setPlacing(true);
     try {
+      const noteText = String(restaurantNote || '').trim();
+      const addressText = String(selectedDeliveryAddress || '').trim();
+      const deliveryAddressPayload = noteText
+        ? `${addressText}${ORDER_NOTE_MARKER}${noteText}`
+        : addressText || undefined;
+
       await createRestaurantOrder(user.token, {
         ownerId,
         items: items.map(i => ({
           menuItemId: i.menuItemId,
           quantity: i.quantity || 1,
         })),
-        deliveryAddress: selectedDeliveryAddress || undefined,
-        notes: restaurantNote.trim() || undefined,
+        deliveryAddress: deliveryAddressPayload,
         ...(appliedPromotion?.promoCode && {
           promoCode: appliedPromotion.promoCode,
           promotionId: appliedPromotion.id,

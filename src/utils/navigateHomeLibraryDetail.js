@@ -1,6 +1,7 @@
 /**
  * Opens HomeOneScreen full video detail. Pass returnContext so Back returns to the right place.
  * returnContext: { returnTo: 'watch_later'|'liked'|'favorites'|'library'|'user_views'|'business_profile'|'promotion', returnUserId?: string }
+ * For returnTo 'promotion', pass returnUserId so back returns to that user's Promotion profile.
  */
 function findTabNavigation(navigation) {
   let parent = navigation?.getParent?.();

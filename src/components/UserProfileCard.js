@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation } from '@react-navigation/native';
 import { safeImageUri } from '../utils/helper';
 
 const formatCount = n => {
@@ -28,7 +29,10 @@ const UserProfileCard = ({
   onPressReviews,
   subscribeLoading = false,
   showSubscribe = true,
+  /** Opens this channel’s restaurant menu / order flow (HomeThreeScreen via Root) */
+  onOrderNowPress,
 }) => {
+  const navigation = useNavigation();
   const coverUri =
     profile?.coverUrl ||
     profile?.coverImage ||
@@ -83,6 +87,40 @@ const UserProfileCard = ({
         imageStyle={{ borderRadius: 12 }}
       >
         <View style={styles.contentOverlay}>
+          {/* Order Now & Book Now Buttons - Right Side (Like BusinessProfileCard) */}
+          <View style={styles.badgeContainer}>
+            <TouchableOpacity
+              style={styles.twoPartBadge}
+              onPress={() =>
+                onOrderNowPress
+                  ? onOrderNowPress()
+                  : navigation.navigate('OrdersList')
+              }
+              activeOpacity={0.7}
+            >
+              {/* <View style={styles.badgeIconPart}>
+                <Icon name="cart-outline" size={16} color="#fff" />
+              </View> */}
+              <View style={styles.badgeTextPart}>
+                <Text style={styles.badgeText}>Order Now</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.twoPartBadge, { marginTop: 10 }]}
+              onPress={() => {}}
+              activeOpacity={0.7}
+            >
+              {/* <View style={styles.badgeIconPart}>
+                <Icon name="calendar-check-outline" size={16} color="#F39C12" />
+              </View> */}
+              <View style={[styles.badgeTextPart, { backgroundColor: '#fff' }]}>
+                <Text style={[styles.badgeText, { color: '#F39C12' }]}>
+                  Book Now
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+
           {/* Amber Profile Box Overlay */}
           <View style={styles.amberOverlayBox}>
             <View style={styles.profileHeaderRow}>
@@ -301,6 +339,37 @@ const styles = StyleSheet.create({
   contentOverlay: {
     flex: 1,
     justifyContent: 'space-between',
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 15,
+    zIndex: 10,
+  },
+  twoPartBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    gap: 4,
+  },
+  badgeIconPart: {
+    backgroundColor: '#F39C12',
+    padding: 4,
+    borderRadius: 4,
+  },
+  badgeTextPart: {
+    backgroundColor: '#F39C12',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   amberOverlayBox: {
     backgroundColor: 'rgba(215, 137, 20, 0.85)',

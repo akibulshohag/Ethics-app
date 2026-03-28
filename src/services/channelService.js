@@ -277,12 +277,80 @@ export const uploadCoverImage = async (userId, file) => {
 };
 
 /**
- * Get user gallery photos
+ * Get user gallery photos (optional viewerId for isLiked / isDisliked)
  */
-export const getGallery = async userId => {
+export const getGallery = async (userId, viewerId) => {
+  const params = viewerId ? { viewerId } : {};
   const response = await axios.get(`${API_URL}/${userId}/gallery`, {
+    params,
     headers: getAuthHeaders(),
   });
+  return response.data;
+};
+
+export const toggleGalleryPhotoLike = async (channelUserId, photoId, userId) => {
+  const response = await axios.post(
+    `${API_URL}/${channelUserId}/gallery/${photoId}/like`,
+    { userId },
+    { headers: { 'Content-Type': 'application/json', ...getAuthHeaders() } },
+  );
+  return response.data;
+};
+
+export const toggleGalleryPhotoDislike = async (
+  channelUserId,
+  photoId,
+  userId,
+) => {
+  const response = await axios.post(
+    `${API_URL}/${channelUserId}/gallery/${photoId}/dislike`,
+    { userId },
+    { headers: { 'Content-Type': 'application/json', ...getAuthHeaders() } },
+  );
+  return response.data;
+};
+
+export const recordGalleryPhotoShare = async (channelUserId, photoId) => {
+  const response = await axios.post(
+    `${API_URL}/${channelUserId}/gallery/${photoId}/share`,
+    {},
+    { headers: getAuthHeaders() },
+  );
+  return response.data;
+};
+
+export const getGalleryPhotoComments = async (
+  channelUserId,
+  photoId,
+  page = 1,
+  limit = 20,
+) => {
+  const response = await axios.get(
+    `${API_URL}/${channelUserId}/gallery/${photoId}/comments`,
+    { params: { page, limit }, headers: getAuthHeaders() },
+  );
+  return response.data;
+};
+
+export const addGalleryPhotoComment = async (
+  channelUserId,
+  photoId,
+  userId,
+  content,
+) => {
+  const response = await axios.post(
+    `${API_URL}/${channelUserId}/gallery/${photoId}/comments`,
+    { userId, content },
+    { headers: { 'Content-Type': 'application/json', ...getAuthHeaders() } },
+  );
+  return response.data;
+};
+
+export const deleteGalleryPhotoComment = async commentId => {
+  const response = await axios.delete(
+    `${API_URL}/gallery-comment/${commentId}`,
+    { headers: getAuthHeaders() },
+  );
   return response.data;
 };
 
