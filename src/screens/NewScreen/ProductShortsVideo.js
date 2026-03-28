@@ -1349,10 +1349,6 @@ const ProductShortsVideo = () => {
     if (!editShortTargetId || !user?.id) return;
     const nextTitle = String(editShortTitle || '').trim();
     const nextText = String(editShortText || '').trim();
-    if (!nextTitle && !nextText) {
-      Toast.show({ type: 'info', text1: 'Add title or description' });
-      return;
-    }
     try {
       setEditShortSubmitting(true);
       await shortsService.updateShort(editShortTargetId, user.id, {
@@ -1408,9 +1404,14 @@ const ProductShortsVideo = () => {
       setEditShortVisible(false);
       setEditShortTargetId(null);
     } catch (e) {
+      const apiMsg =
+        e?.response?.data?.message ||
+        (typeof e?.response?.data?.errors === 'object'
+          ? 'Validation failed'
+          : null);
       Toast.show({
         type: 'error',
-        text1: e?.message || 'Failed to update short',
+        text1: apiMsg || e?.message || 'Failed to update short',
       });
     } finally {
       setEditShortSubmitting(false);
@@ -1546,7 +1547,7 @@ const ProductShortsVideo = () => {
           setMoreMenuItem(itemIn);
           setMoreMenuVisible(true);
         }}
-        isScreenFocused={isScreenFocused}
+        isScreenFocused={isScreenFocused && !editShortVisible}
         subscribersOrderLine={line}
       />
     );
@@ -1913,7 +1914,7 @@ const ProductShortsVideo = () => {
         maxToRenderPerBatch={3}
         windowSize={10}
         removeClippedSubviews={false}
-        extraData={currentIndex}
+        extraData={{ currentIndex, editShortVisible }}
       />
     </View>
   );

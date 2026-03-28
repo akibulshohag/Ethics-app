@@ -1383,10 +1383,6 @@ const ShortsVideoScreen = ({ navigation }) => {
     if (!editShortTargetId || !user?.id) return;
     const nextTitle = String(editShortTitle || '').trim();
     const nextText = String(editShortText || '').trim();
-    if (!nextTitle && !nextText) {
-      Toast.show({ type: 'info', text1: 'Add title or description' });
-      return;
-    }
     try {
       setEditShortSubmitting(true);
       await shortsService.updateShort(editShortTargetId, user.id, {
@@ -1441,9 +1437,14 @@ const ShortsVideoScreen = ({ navigation }) => {
       setEditShortVisible(false);
       setEditShortTargetId(null);
     } catch (e) {
+      const apiMsg =
+        e?.response?.data?.message ||
+        (typeof e?.response?.data?.errors === 'object'
+          ? 'Validation failed'
+          : null);
       Toast.show({
         type: 'error',
-        text1: e?.message || 'Failed to update short',
+        text1: apiMsg || e?.message || 'Failed to update short',
       });
     } finally {
       setEditShortSubmitting(false);
@@ -1588,7 +1589,11 @@ const ShortsVideoScreen = ({ navigation }) => {
           renderItem={({ item, index }) => (
             <VideoItem
               item={item}
-              isActive={isScreenFocused && activeVideoIndex === index}
+              isActive={
+                isScreenFocused &&
+                activeVideoIndex === index &&
+                !editShortVisible
+              }
               index={index}
               screenHeight={screenHeight}
               onBack={() => navigation.goBack()}
@@ -1637,7 +1642,7 @@ const ShortsVideoScreen = ({ navigation }) => {
           maxToRenderPerBatch={3} // Increased
           windowSize={10} // Increased to keep more videos ready
           removeClippedSubviews={false} // Disabled for Android reliability
-          extraData={activeVideoIndex}
+          extraData={{ activeVideoIndex, editShortVisible }}
           getItemLayout={(data, index) => ({
             length: screenHeight,
             offset: screenHeight * index,
