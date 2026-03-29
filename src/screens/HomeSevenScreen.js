@@ -192,13 +192,16 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           {/* UPDATED: Nav Header Style */}
+          
           <View style={styles.navHeader}>
             <TouchableOpacity
               onPress={() => (onBack ? onBack() : navigation.goBack())}
               style={styles.backBtn}
             >
-              <Icon name="chevron-left" size={24} color="#333" />
+              <Icon name="chevron-left" size={18} color="#1A1A1A" />
+              <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
+            {/* <Icon name="dots-vertical" size={26} color="#1A1A1A" /> */}
           </View>
 
           <View style={styles.centerContainer}>
@@ -351,15 +354,22 @@ const styles = StyleSheet.create({
   },
   overlay: { flex: 1 },
   keyboardView: { flex: 1 },
-  navHeader: { padding: 15 },
-  backBtn: {
-    width: 38,
-    height: 38,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    justifyContent: 'center',
+  navHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 15,
     alignItems: 'center',
-    borderRadius: 10,
   },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  backText: { color: '#1A1A1A', fontSize: 13, fontWeight: 'bold' },
+
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -367,7 +377,7 @@ const styles = StyleSheet.create({
   },
   loginCard: {
     width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.45)', // Glass effect
+    backgroundColor: '#F5A623',
     borderRadius: 25,
     paddingVertical: 20,
     paddingHorizontal: 10,
@@ -391,14 +401,15 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: '#fff',
     borderRadius: 12,
     height: 52,
     paddingHorizontal: 15,
     marginBottom: 15,
   },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: '#333', fontSize: 16 },
+  input: { flex: 1, color: '#333', fontSize: 15 },
+
   utilityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -424,12 +435,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.7)',
   },
   btnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  signUpText: { color: '#8B4513', fontSize: 18, fontWeight: 'bold' },
+  signUpText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   socialContainer: { alignItems: 'center', marginTop: 25 },
   socialTitle: { color: '#333', fontSize: 14, marginBottom: 15 },
   socialPill: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: '#fff',
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 25,
