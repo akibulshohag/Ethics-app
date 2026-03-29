@@ -745,7 +745,7 @@ const VideoItem = ({
                 onLoginPress?.();
               }}
             >
-              <Text style={styles.resOrderText}>Login</Text>
+              <Text style={styles.resOrderText}>Order Now</Text>
             </TouchableOpacity>
           ) : item.creatorRole === 'owner' ? (
             <TouchableOpacity
@@ -779,23 +779,23 @@ const mapShortToItem = s => {
   const likesCount =
     s._likeCount != null && Number.isFinite(Number(s._likeCount))
       ? Number(s._likeCount)
-      : (s._count?.likes ?? s.likeCount ?? 0);
+      : s._count?.likes ?? s.likeCount ?? 0;
   const dislikesCount =
     s._dislikeCount != null && Number.isFinite(Number(s._dislikeCount))
       ? Number(s._dislikeCount)
-      : (s.dislikeCount ?? 0);
+      : s.dislikeCount ?? 0;
   const commentsCount =
     s._commentCount != null && Number.isFinite(Number(s._commentCount))
       ? Number(s._commentCount)
-      : (s._count?.comments ?? s.commentCount ?? 0);
+      : s._count?.comments ?? s.commentCount ?? 0;
   const sharesCount =
     s._shareCount != null && Number.isFinite(Number(s._shareCount))
       ? Number(s._shareCount)
-      : (s.shareCount ?? 0);
+      : s.shareCount ?? 0;
   const viewCount =
     s._viewCount != null && Number.isFinite(Number(s._viewCount))
       ? Number(s._viewCount)
-      : (s.viewCount ?? s._count?.views ?? 0);
+      : s.viewCount ?? s._count?.views ?? 0;
   const user = s.user || {};
   const firstPhoto =
     Array.isArray(user.photos) && user.photos.length > 0
@@ -930,12 +930,10 @@ const ShortsVideoScreen = ({ navigation }) => {
       if (viewRecordedIdsRef.current.has(sid)) return;
       viewRecordedIdsRef.current.add(sid);
       applyViewIncrement(sid);
-      shortsService
-        .recordView(sid, user?.id || null, 0, false)
-        .catch(() => {
-          viewRecordedIdsRef.current.delete(sid);
-          applyViewDecrement(sid);
-        });
+      shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
+        viewRecordedIdsRef.current.delete(sid);
+        applyViewDecrement(sid);
+      });
     },
     [user?.id, applyViewIncrement, applyViewDecrement],
   );
@@ -946,11 +944,9 @@ const ShortsVideoScreen = ({ navigation }) => {
       if (!item?.id) return;
       const sid = String(item.id);
       applyViewIncrement(sid);
-      shortsService
-        .recordView(sid, user?.id || null, 0, false)
-        .catch(() => {
-          applyViewDecrement(sid);
-        });
+      shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
+        applyViewDecrement(sid);
+      });
     },
     [user?.id, applyViewIncrement, applyViewDecrement],
   );

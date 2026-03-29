@@ -1035,7 +1035,7 @@ const ProductShortsVideo = () => {
                       },
                     });
                   } else {
-                  navigation.navigate('UserViewsScreen', { userId: ownerId });
+                    navigation.navigate('UserViewsScreen', { userId: ownerId });
                   }
                 }
               }}
@@ -1073,7 +1073,7 @@ const ProductShortsVideo = () => {
                   }}
                 >
                   {descText}
-            </Text>
+                </Text>
               ) : null}
               {!descLayoutDone ? (
                 <Text
@@ -1166,7 +1166,7 @@ const ProductShortsVideo = () => {
                   style={styles.orderNowBtnFooter}
                   onPress={() => navigation.navigate('HomeSevenScreen')}
                 >
-                  <Text style={styles.orderNowText}>Login</Text>
+                  <Text style={styles.orderNowText}>Order Now</Text>
                 </TouchableOpacity>
               ) : String(item?.userObj?.role || '').toLowerCase() ===
                 'owner' ? (
@@ -1878,9 +1878,9 @@ const ProductShortsVideo = () => {
                             },
                           });
                         } else {
-                        navigation.navigate('UserViewsScreen', {
-                          userId: u.id,
-                        });
+                          navigation.navigate('UserViewsScreen', {
+                            userId: u.id,
+                          });
                         }
                       }
                     }}
