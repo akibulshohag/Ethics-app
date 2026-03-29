@@ -13,7 +13,9 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
+import { navigateToRootRoute } from '../utils/navigateToRootRoute';
 import { appSetUser } from '../redux/actions/appSlice';
 import {
   getRoles,
@@ -34,11 +36,7 @@ import {
   createSponsored,
   deleteSponsored,
 } from '../services/sponsoredService';
-import {
-  getFeaturedList,
-  createFeatured,
-  deleteFeatured,
-} from '../services/featuredService';
+import { getFeaturedList, deleteFeatured } from '../services/featuredService';
 import {
   getVendorFeaturedList,
   createVendorFeatured,
@@ -69,6 +67,7 @@ const SIDEBAR_WIDTH = 140;
 
 const AdminScreen = () => {
   const dispatch = useDispatch();
+  const navigation = useNavigation();
   const { user } = useSelector(s => s.app) || {};
   const roleNorm = String(user?.role || '').toLowerCase();
   const isAdminUser =
@@ -117,31 +116,6 @@ const AdminScreen = () => {
   const [myOwnerProfileLoading, setMyOwnerProfileLoading] = useState(false);
 
   const [featuredList, setFeaturedList] = useState([]);
-  const [featuredForm, setFeaturedForm] = useState({
-    ownerId: '',
-    title: '',
-    areaName: '',
-    latitude: '',
-    longitude: '',
-    radiusKm: '2',
-    startDate: '',
-    endDate: '',
-    amountPaid: '0',
-    currency: 'GBP',
-  });
-  const [featuredVideoFile, setFeaturedVideoFile] = useState(null);
-  const [featuredThumbnailFile, setFeaturedThumbnailFile] = useState(null);
-  const [featuredOwnerSearchQuery, setFeaturedOwnerSearchQuery] = useState('');
-  const [featuredOwnerSearchResults, setFeaturedOwnerSearchResults] = useState(
-    [],
-  );
-  const [featuredOwnerSearchLoading, setFeaturedOwnerSearchLoading] =
-    useState(false);
-  const [selectedFeaturedOwner, setSelectedFeaturedOwner] = useState(null);
-  const featuredOwnerSearchTimeoutRef = useRef(null);
-  const [myFeaturedProfile, setMyFeaturedProfile] = useState(null);
-  const [myFeaturedProfileLoading, setMyFeaturedProfileLoading] =
-    useState(false);
   const [ordersList, setOrdersList] = useState([]);
   const [appRatings, setAppRatings] = useState([]);
   const [editingAppRating, setEditingAppRating] = useState(null);
@@ -461,35 +435,6 @@ const AdminScreen = () => {
     };
   }, [modalOpen, isOwnerUser, user?.id]);
 
-  const searchFeaturedOwners = useCallback(async query => {
-    setFeaturedOwnerSearchLoading(true);
-    try {
-      const res = await getUsers({
-        role: 'owner',
-        search: query && query.trim() ? query.trim() : undefined,
-        getAll: true,
-      });
-      setFeaturedOwnerSearchResults(res?.data || []);
-    } catch (e) {
-      setFeaturedOwnerSearchResults([]);
-    } finally {
-      setFeaturedOwnerSearchLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (modalOpen !== 'featured' || !isAdminUser) return;
-    if (featuredOwnerSearchTimeoutRef.current)
-      clearTimeout(featuredOwnerSearchTimeoutRef.current);
-    featuredOwnerSearchTimeoutRef.current = setTimeout(() => {
-      searchFeaturedOwners(featuredOwnerSearchQuery);
-    }, 400);
-    return () => {
-      if (featuredOwnerSearchTimeoutRef.current)
-        clearTimeout(featuredOwnerSearchTimeoutRef.current);
-    };
-  }, [modalOpen, featuredOwnerSearchQuery, isAdminUser, searchFeaturedOwners]);
-
   // Vendor Featured: show vendor search list when modal opens and when query changes – same as owner search in Featured
   useEffect(() => {
     if (modalOpen !== 'vendorFeatured') return;
@@ -520,39 +465,6 @@ const AdminScreen = () => {
     }
   }, [modalOpen, vendorSponsoredSearchQuery, searchVendorUsersForSponsored]);
 
-  useEffect(() => {
-    if (modalOpen !== 'featured' || !isOwnerUser || !user?.id) return;
-    let cancelled = false;
-    setMyFeaturedProfileLoading(true);
-    getUser(user.id)
-      .then(res => {
-        const profile = res?.user || res;
-        if (cancelled) return;
-        setMyFeaturedProfile(profile || null);
-        setFeaturedForm(p => ({
-          ...p,
-          areaName: profile?.address
-            ? String(profile.address).trim()
-            : p.areaName,
-          latitude:
-            profile?.latitude != null ? String(profile.latitude) : p.latitude,
-          longitude:
-            profile?.longitude != null
-              ? String(profile.longitude)
-              : p.longitude,
-        }));
-      })
-      .catch(() => {
-        if (!cancelled) setMyFeaturedProfile(null);
-      })
-      .finally(() => {
-        if (!cancelled) setMyFeaturedProfileLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [modalOpen, isOwnerUser, user?.id]);
-
   const openAddSponsored = () => {
     const isOwner = isOwnerUser;
     setSponsoredForm({
@@ -578,27 +490,7 @@ const AdminScreen = () => {
   };
 
   const openAddFeatured = () => {
-    const isOwner = isOwnerUser;
-    setFeaturedForm({
-      ownerId: '',
-      title: '',
-      areaName: isOwner && user?.address ? String(user.address).trim() : '',
-      latitude: isOwner && user?.latitude != null ? String(user.latitude) : '',
-      longitude:
-        isOwner && user?.longitude != null ? String(user.longitude) : '',
-      radiusKm: '2',
-      startDate: '',
-      endDate: '',
-      amountPaid: '0',
-      currency: 'GBP',
-    });
-    setFeaturedVideoFile(null);
-    setFeaturedThumbnailFile(null);
-    setFeaturedOwnerSearchQuery('');
-    setFeaturedOwnerSearchResults([]);
-    setSelectedFeaturedOwner(null);
-    setMyFeaturedProfile(null);
-    setModalOpen('featured');
+    navigateToRootRoute(navigation, 'FeaturedVideoUpload');
   };
 
   const openAddVendorFeatured = () => {
@@ -775,28 +667,6 @@ const AdminScreen = () => {
     ]);
   };
 
-  const pickFeaturedVideo = () => {
-    launchImageLibrary({ mediaType: 'video', videoQuality: 'high' }, res => {
-      if (res.didCancel) return;
-      if (res.errorCode) {
-        Alert.alert('Error', res.errorMessage || 'Failed to pick video');
-        return;
-      }
-      if (res.assets?.[0]) setFeaturedVideoFile(res.assets[0]);
-    });
-  };
-
-  const pickFeaturedThumbnail = () => {
-    launchImageLibrary({ mediaType: 'photo' }, res => {
-      if (res.didCancel) return;
-      if (res.errorCode) {
-        Alert.alert('Error', res.errorMessage || 'Failed to pick image');
-        return;
-      }
-      if (res.assets?.[0]) setFeaturedThumbnailFile(res.assets[0]);
-    });
-  };
-
   const pickVendorFeaturedVideo = () => {
     launchImageLibrary({ mediaType: 'video', videoQuality: 'high' }, res => {
       if (res.didCancel) return;
@@ -839,103 +709,6 @@ const AdminScreen = () => {
       }
       if (res.assets?.[0]) setVendorSponsoredThumbnailFile(res.assets[0]);
     });
-  };
-
-  const handleCreateFeatured = async () => {
-    const {
-      ownerId,
-      title,
-      areaName: featAreaName,
-      radiusKm,
-      startDate,
-      endDate,
-      amountPaid,
-      currency,
-    } = featuredForm;
-    const isAdmin = isAdminUser;
-
-    if (!featuredVideoFile || !featuredThumbnailFile) {
-      Alert.alert('Error', 'Please select a video and a thumbnail');
-      return;
-    }
-    if (isAdmin && !ownerId) {
-      Alert.alert('Error', 'Please select the owner this featured is for');
-      return;
-    }
-    if (isAdmin) {
-      if (!selectedFeaturedOwner) {
-        Alert.alert('Error', 'Please select the owner this featured is for');
-        return;
-      }
-      if (
-        selectedFeaturedOwner.latitude == null ||
-        selectedFeaturedOwner.longitude == null
-      ) {
-        Alert.alert(
-          'Error',
-          'Selected owner has no saved location. Update owner profile first.',
-        );
-        return;
-      }
-    } else if (isOwnerUser) {
-      const lat = myFeaturedProfile?.latitude ?? user?.latitude;
-      const lng = myFeaturedProfile?.longitude ?? user?.longitude;
-      if (lat == null || lng == null) {
-        Alert.alert(
-          'Error',
-          'You have no saved location. Update your profile first.',
-        );
-        return;
-      }
-    }
-    if (!startDate || !endDate || amountPaid === '') {
-      Alert.alert('Error', 'Please fill Dates and Amount paid');
-      return;
-    }
-    setSubmitLoading(true);
-    try {
-      const videoTitle =
-        title || featAreaName
-          ? `Featured - ${title || featAreaName}`
-          : 'Featured video';
-      const uploadRes = await uploadVideo({
-        userId: user.id,
-        title: videoTitle,
-        videoUri: featuredVideoFile.uri,
-        videoType: featuredVideoFile.type || 'video/mp4',
-        videoName:
-          featuredVideoFile.fileName ||
-          featuredVideoFile.uri?.split('/').pop() ||
-          'video.mp4',
-        thumbnailUri: featuredThumbnailFile.uri,
-        thumbnailType: featuredThumbnailFile.type || 'image/jpeg',
-        thumbnailName:
-          featuredThumbnailFile.fileName ||
-          featuredThumbnailFile.uri?.split('/').pop() ||
-          'thumb.jpg',
-      });
-      const finalVideoId = uploadRes?.video?.id || uploadRes?.id;
-      if (!finalVideoId)
-        throw new Error('Upload succeeded but no video ID returned');
-
-      const body = {
-        videoId: finalVideoId,
-        radiusKm: parseFloat(radiusKm) || 2,
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate).toISOString(),
-        amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'GBP',
-      };
-      if (isAdmin) body.ownerId = ownerId;
-      await createFeatured(user.token, body);
-      setModalOpen(false);
-      loadFeatured();
-      Alert.alert('Success', 'Featured campaign created.');
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to create');
-    } finally {
-      setSubmitLoading(false);
-    }
   };
 
   const handleDeleteFeatured = f => {
@@ -2235,8 +2008,6 @@ const AdminScreen = () => {
                 ? 'Edit Order Review'
                 : modalOpen === 'sponsored'
                 ? 'New Sponsored Campaign'
-                : modalOpen === 'featured'
-                ? 'New Featured Campaign'
                 : modalOpen === 'vendorFeatured'
                 ? 'New Vendor Featured Campaign'
                 : modalOpen === 'vendorSponsored'
@@ -2810,280 +2581,6 @@ const AdminScreen = () => {
                   placeholderTextColor="#999"
                 />
               </ScrollView>
-            ) : modalOpen === 'featured' ? (
-              <ScrollView
-                style={{ maxHeight: 520 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {isAdminUser && (
-                  <>
-                    <Text style={styles.label}>
-                      1. Select owner (list shows only role: owner)
-                    </Text>
-                    {selectedFeaturedOwner ? (
-                      <View style={styles.selectedOwnerBox}>
-                        <Text
-                          style={styles.selectedOwnerName}
-                          numberOfLines={1}
-                        >
-                          {selectedFeaturedOwner.nickname ||
-                            selectedFeaturedOwner.name ||
-                            selectedFeaturedOwner.email}
-                        </Text>
-                        {selectedFeaturedOwner.address ? (
-                          <Text
-                            style={styles.selectedOwnerAddress}
-                            numberOfLines={2}
-                          >
-                            {selectedFeaturedOwner.address}
-                          </Text>
-                        ) : null}
-                        <TouchableOpacity
-                          onPress={() => {
-                            setSelectedFeaturedOwner(null);
-                            setFeaturedForm(p => ({
-                              ...p,
-                              ownerId: '',
-                              areaName: '',
-                              latitude: '',
-                              longitude: '',
-                            }));
-                          }}
-                          style={styles.changeOwnerBtn}
-                        >
-                          <Text style={styles.changeOwnerBtnText}>
-                            Change owner
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <>
-                        <TextInput
-                          style={styles.input}
-                          value={featuredOwnerSearchQuery}
-                          onChangeText={setFeaturedOwnerSearchQuery}
-                          placeholder="Search by name or email (email is unique)"
-                          placeholderTextColor="#999"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          keyboardType="email-address"
-                        />
-                        <Text style={[styles.hintText, { marginTop: 4 }]}>
-                          {
-                            'Only owners listed. Type name or full email → select one, address & location auto-fill.'
-                          }
-                        </Text>
-                        {featuredOwnerSearchLoading ? (
-                          <ActivityIndicator
-                            size="small"
-                            style={{ marginVertical: 8 }}
-                            color={COLORS?.primary || '#333'}
-                          />
-                        ) : featuredOwnerSearchResults.length > 0 ? (
-                          <ScrollView
-                            style={styles.ownerSearchList}
-                            nestedScrollEnabled
-                            keyboardShouldPersistTaps="handled"
-                          >
-                            {featuredOwnerSearchResults.map(o => (
-                              <TouchableOpacity
-                                key={o.id}
-                                style={styles.ownerSearchItem}
-                                onPress={() => {
-                                  setFeaturedOwnerSearchLoading(true);
-                                  getUser(o.id)
-                                    .then(res => {
-                                      const profile = res?.user || res || o;
-                                      setSelectedFeaturedOwner(profile);
-                                      setFeaturedForm(p => ({
-                                        ...p,
-                                        ownerId: profile?.id || o.id,
-                                        areaName: profile?.address
-                                          ? String(profile.address).trim()
-                                          : '',
-                                        latitude:
-                                          profile?.latitude != null
-                                            ? String(profile.latitude)
-                                            : '',
-                                        longitude:
-                                          profile?.longitude != null
-                                            ? String(profile.longitude)
-                                            : '',
-                                      }));
-                                      setFeaturedOwnerSearchQuery('');
-                                      setFeaturedOwnerSearchResults([]);
-                                    })
-                                    .catch(() => {
-                                      setSelectedFeaturedOwner(o);
-                                      setFeaturedForm(p => ({
-                                        ...p,
-                                        ownerId: o.id,
-                                        areaName: o.address
-                                          ? String(o.address).trim()
-                                          : '',
-                                        latitude:
-                                          o.latitude != null
-                                            ? String(o.latitude)
-                                            : '',
-                                        longitude:
-                                          o.longitude != null
-                                            ? String(o.longitude)
-                                            : '',
-                                      }));
-                                      setFeaturedOwnerSearchQuery('');
-                                      setFeaturedOwnerSearchResults([]);
-                                    })
-                                    .finally(() =>
-                                      setFeaturedOwnerSearchLoading(false),
-                                    );
-                                }}
-                              >
-                                <Text
-                                  style={styles.ownerSearchItemName}
-                                  numberOfLines={1}
-                                >
-                                  {o.nickname || o.name || o.email}
-                                </Text>
-                                {o.address ? (
-                                  <Text
-                                    style={styles.ownerSearchItemAddress}
-                                    numberOfLines={1}
-                                  >
-                                    {o.address}
-                                  </Text>
-                                ) : null}
-                              </TouchableOpacity>
-                            ))}
-                          </ScrollView>
-                        ) : featuredOwnerSearchQuery.trim() ? (
-                          <Text style={styles.hintText}>
-                            No owners found. Try another search.
-                          </Text>
-                        ) : (
-                          <Text style={styles.hintText}>
-                            Type to search owners (name or email).
-                          </Text>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-                <Text style={styles.label}>Title (optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.title}
-                  onChangeText={t => setFeaturedForm(p => ({ ...p, title: t }))}
-                  placeholder="e.g. My featured promo"
-                  placeholderTextColor="#999"
-                />
-                <Text style={styles.label}>Video (required)</Text>
-                <TouchableOpacity
-                  style={[styles.addBtn, { marginVertical: 4 }]}
-                  onPress={pickFeaturedVideo}
-                >
-                  <Text style={styles.addBtnText}>
-                    {featuredVideoFile
-                      ? featuredVideoFile.fileName || 'Video selected'
-                      : 'Pick video'}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.label}>Thumbnail (required)</Text>
-                <TouchableOpacity
-                  style={[styles.addBtn, { marginVertical: 4 }]}
-                  onPress={pickFeaturedThumbnail}
-                >
-                  <Text style={styles.addBtnText}>
-                    {featuredThumbnailFile
-                      ? featuredThumbnailFile.fileName || 'Image selected'
-                      : 'Pick thumbnail'}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.label}>Location</Text>
-                <View style={styles.selectedOwnerBox}>
-                  {isAdminUser ? (
-                    !selectedFeaturedOwner ? (
-                      <Text style={styles.hintText}>
-                        Select an owner first. Location will be taken from that
-                        owner's profile.
-                      </Text>
-                    ) : selectedFeaturedOwner?.address ? (
-                      <Text style={styles.selectedOwnerAddress}>
-                        {selectedFeaturedOwner.address}
-                      </Text>
-                    ) : (
-                      <Text style={styles.hintText}>
-                        Selected owner has no address/location saved. Please
-                        update the owner profile first.
-                      </Text>
-                    )
-                  ) : myFeaturedProfileLoading ? (
-                    <Text style={styles.hintText}>
-                      Loading your saved location…
-                    </Text>
-                  ) : myFeaturedProfile?.address || user?.address ? (
-                    <Text style={styles.selectedOwnerAddress}>
-                      {myFeaturedProfile?.address || user?.address}
-                    </Text>
-                  ) : (
-                    <Text style={styles.hintText}>
-                      You have no address/location saved. Please update your
-                      profile first.
-                    </Text>
-                  )}
-                </View>
-                <Text style={styles.label}>Radius (km)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.radiusKm}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, radiusKm: t }))
-                  }
-                  placeholder="2"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                />
-                <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.startDate}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, startDate: t }))
-                  }
-                  placeholder="2026-02-18"
-                  placeholderTextColor="#999"
-                />
-                <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.endDate}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, endDate: t }))
-                  }
-                  placeholder="2026-03-18"
-                  placeholderTextColor="#999"
-                />
-                <Text style={styles.label}>Amount paid</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.amountPaid}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, amountPaid: t }))
-                  }
-                  placeholder="0"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                />
-                <Text style={styles.label}>Currency</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.currency}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, currency: t }))
-                  }
-                  placeholder="GBP"
-                  placeholderTextColor="#999"
-                />
-              </ScrollView>
             ) : modalOpen === 'sponsored' ? (
               <ScrollView
                 style={{ maxHeight: 520 }}
@@ -3458,8 +2955,6 @@ const AdminScreen = () => {
                     ? handleSaveRole
                     : modalOpen === 'sponsored'
                     ? handleCreateSponsored
-                    : modalOpen === 'featured'
-                    ? handleCreateFeatured
                     : modalOpen === 'vendorFeatured'
                     ? handleCreateVendorFeatured
                     : modalOpen === 'vendorSponsored'

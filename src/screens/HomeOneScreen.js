@@ -79,6 +79,30 @@ const formatCount = n => {
 const viewerRole = user =>
   (user?.role && String(user.role).toLowerCase()) || 'user';
 
+/**
+ * Home banner: one featured row. Prefer the campaign tied to the logged-in user
+ * (owner userId on the featured row). If several match, use the first in API order.
+ * Owners with no matching campaign see none; other roles / guests see the first global.
+ */
+const pickHomeFeatured = (list, viewerUser) => {
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const withVideo = list.filter(item => item?.video);
+  if (withVideo.length === 0) return null;
+  const vid = viewerUser?.id != null ? String(viewerUser.id) : null;
+  const role = String(viewerUser?.role || '').toLowerCase();
+  const isOwner = role === 'owner';
+
+  if (vid) {
+    const mine = withVideo.find(f => {
+      const ownerId = f?.userId ?? f?.user?.id;
+      return ownerId != null && String(ownerId) === vid;
+    });
+    if (mine) return mine;
+    if (isOwner) return null;
+  }
+  return withVideo[0];
+};
+
 // Same shape as VideoDetailsScreen currentVideo so selectedItem has all fields
 const mapToDisplayItem = (v, type) => {
   const u = v.user || {};
@@ -558,11 +582,7 @@ const HomeOneScreen = () => {
     // Featured + sponsored: direct GET /featured and GET /sponsored (no location check)
     getFeatured()
       .then(({ featured: list }) => {
-        const first =
-          Array.isArray(list) && list.length > 0 && list[0].video
-            ? list[0]
-            : null;
-        setFeaturedVideo(first);
+        setFeaturedVideo(pickHomeFeatured(list, user));
       })
       .catch(() => setFeaturedVideo(null));
     getSponsored()

@@ -195,6 +195,7 @@ const VideoItem = ({
   onOrderNow,
   onLoginPress,
   onSubscribersPress,
+  onDoubleTapRecordView,
   isSubscribed,
   currentUser,
   navigation,
@@ -247,8 +248,9 @@ const VideoItem = ({
         clearTimeout(singleTapTimerRef.current);
         singleTapTimerRef.current = null;
       }
-      // Double tap: like only (no unlike)
+      // Double tap: like + record an extra view (scroll dedupe does not apply)
       onLike?.(item, { forceLike: true });
+      onDoubleTapRecordView?.(item);
       return;
     }
     lastTapMsRef.current = now;
@@ -881,6 +883,8 @@ const ShortsVideoScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
+  /** Bumps each time we focus with a deep-linked short so record effect re-runs (same id reopen from Promotion). */
+  const [deepLinkVisitSeq, setDeepLinkVisitSeq] = useState(0);
   const hasAppliedInitialShort = useRef(false);
   /** Dedupes recordView between the initial-short effect and onViewableItemsChanged */
   const viewRecordedIdsRef = useRef(new Set());
@@ -936,6 +940,21 @@ const ShortsVideoScreen = ({ navigation }) => {
     [user?.id, applyViewIncrement, applyViewDecrement],
   );
 
+  /** Each double-tap: bump views (not deduped with scroll/open — user expects visible feedback) */
+  const recordShortViewFromDoubleTap = useCallback(
+    item => {
+      if (!item?.id) return;
+      const sid = String(item.id);
+      applyViewIncrement(sid);
+      shortsService
+        .recordView(sid, user?.id || null, 0, false)
+        .catch(() => {
+          applyViewDecrement(sid);
+        });
+    },
+    [user?.id, applyViewIncrement, applyViewDecrement],
+  );
+
   // HomeThreeScreen/HomeSevenScreen live in Home1 stack (tab). Use root ref so navigation works from any nested stack.
   const navigateToHomeScreen = (screenName, params) => {
     const payload =
@@ -956,15 +975,26 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
-  // When user navigates away, pause playback and reset view dedupe so the next open records again
+  // When leaving this screen (pop), clear dedupe + allow merge again on next entry with same navigator instance
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', () => {
+      viewRecordedIdsRef.current.clear();
+      hasAppliedInitialShort.current = false;
+    });
+    return sub;
+  }, [navigation]);
+
+  // Each focus with a deep-linked short re-triggers view record (deps); tab switch does not clear dedupe so we do not double-count
   useFocusEffect(
     React.useCallback(() => {
       setIsScreenFocused(true);
+      if (initialShortId) {
+        setDeepLinkVisitSeq(s => s + 1);
+      }
       return () => {
         setIsScreenFocused(false);
-        viewRecordedIdsRef.current.clear();
       };
-    }, []),
+    }, [initialShortId]),
   );
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [createVisible, setCreateVisible] = useState(false);
@@ -1100,13 +1130,19 @@ const ShortsVideoScreen = ({ navigation }) => {
     hasAppliedInitialShort.current = false;
   }, [initialShortId]);
 
-  /** Record view once the target short is the first row (after merge); bump UI when API succeeds */
+  /** Record once per visit: deepLinkVisitSeq changes on each focus with initialShortId */
   useEffect(() => {
     if (!initialShortId || loading) return;
     const sid = String(initialShortId);
     if (!firstRowShortId || String(firstRowShortId) !== sid) return;
     recordShortViewAndBumpUI(sid);
-  }, [initialShortId, loading, firstRowShortId, recordShortViewAndBumpUI]);
+  }, [
+    initialShortId,
+    loading,
+    firstRowShortId,
+    recordShortViewAndBumpUI,
+    deepLinkVisitSeq,
+  ]);
 
   useEffect(() => {
     if (
@@ -1208,7 +1244,7 @@ const ShortsVideoScreen = ({ navigation }) => {
       await shortsService.toggleLike(item.id, user.id);
       setVideos(prev =>
         prev.map(v => {
-          if (v.id !== item.id) return v;
+          if (String(v.id) !== String(item.id)) return v;
           const newLiked = !v.isLiked;
           const delta = newLiked ? 1 : -1;
           const newCount = Math.max(0, (v._likeCount ?? 0) + delta);
@@ -1232,7 +1268,7 @@ const ShortsVideoScreen = ({ navigation }) => {
       await shortsService.toggleDislike(item.id, user.id);
       setVideos(prev =>
         prev.map(v => {
-          if (v.id !== item.id) return v;
+          if (String(v.id) !== String(item.id)) return v;
           const newDisliked = !v.isDisliked;
           const delta = newDisliked ? 1 : -1;
           const newCount = Math.max(0, (v._dislikeCount ?? 0) + delta);
@@ -1677,6 +1713,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               }}
               onOpenCreate={() => setCreateVisible(true)}
               onLike={handleLike}
+              onDoubleTapRecordView={recordShortViewFromDoubleTap}
               onDislike={handleDislike}
               onSubscribe={handleSubscribe}
               onShare={handleShare}
@@ -1709,7 +1746,13 @@ const ShortsVideoScreen = ({ navigation }) => {
           maxToRenderPerBatch={3} // Increased
           windowSize={10} // Increased to keep more videos ready
           removeClippedSubviews={false} // Disabled for Android reliability
-          extraData={{ activeVideoIndex, editShortVisible }}
+          extraData={{
+            activeVideoIndex,
+            editShortVisible,
+            deepLinkVisitSeq,
+            headViews: videos[0]?._viewCount,
+            headId: videos[0]?.id,
+          }}
           getItemLayout={(data, index) => ({
             length: screenHeight,
             offset: screenHeight * index,

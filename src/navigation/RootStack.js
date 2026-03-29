@@ -20,6 +20,7 @@ import ChannelReviewsScreen from '../screens/NewScreen/ChannelReviewsScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import CustomPlaylistScreen from '../screens/CustomPlaylistScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
+import FeaturedVideoUploadScreen from '../screens/FeaturedVideoUploadScreen';
 
 const Root = createStackNavigator();
 
@@ -60,6 +61,10 @@ const RootStack = () => {
             ? String(params.playlistId)
             : 'custom-pl-root-none'
         }
+      />
+      <Root.Screen
+        name="FeaturedVideoUpload"
+        component={FeaturedVideoUploadScreen}
       />
     </Root.Navigator>
   );

@@ -27,6 +27,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import VideoUploadSettings from '../components/VideoUploadSettings';
 import { getUserVideos } from '../services/videoService';
 import { getUserSubscription } from '../services/subscriptionService';
+import { navigateToHomeOne } from '../utils/navigateToHomeOne';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - SPACING.lg * 3) / 2;
@@ -356,7 +357,7 @@ const UploadVideoScreen = () => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={() => navigateToHomeOne(navigation)}
           style={styles.headerButton}
         >
           <Ionicons name="close" size={28} color="#000" />

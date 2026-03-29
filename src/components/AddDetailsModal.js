@@ -31,6 +31,8 @@ const AddDetailsModal = ({
   shortsMetadata = {},
   isLive = false,
   onVideoPicked,
+  /** Called after OK on successful upload — e.g. navigate to HomeOneScreen */
+  onUploadSuccess,
 }) => {
   const [visibilityModalVisible, setVisibilityModalVisible] = useState(false);
   const [visibility, setVisibility] = useState('Public');
@@ -199,7 +201,13 @@ const AddDetailsModal = ({
       }
       await shortsService.uploadShort(formData, shortsMetadata.userId);
       Alert.alert('Success', 'Short uploaded successfully', [
-        { text: 'OK', onPress: onClose },
+        {
+          text: 'OK',
+          onPress: () => {
+            onClose?.();
+            onUploadSuccess?.();
+          },
+        },
       ]);
     } catch (e) {
       const msg =

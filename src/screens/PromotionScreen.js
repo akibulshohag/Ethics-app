@@ -1530,6 +1530,7 @@ const PromotionScreen = ({ onBack }) => {
         const tabName = state?.routes?.[idx]?.name || 'Home1';
         nav.navigate('Create', {
           returnTo: { tab: tabName, screen: 'PromotionScreen' },
+          _openPicker: Date.now(),
         });
         return;
       }

@@ -833,33 +833,55 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       if (!item?.id) return;
       const itemType = String(item.type || item._type || '').toLowerCase();
       if (itemType === 'short') {
-        shortsService
-          .recordView(String(item.id), currentUser?.id, 0, false)
-          .catch(() => {});
+        const sid = String(item.id);
+        const fallbackName =
+          profile?.nickname ||
+          profile?.channelName ||
+          profile?.name ||
+          'User';
         const initialShortItem = {
           ...item,
-          id: String(item.id),
+          id: sid,
           type: 'short',
           userId: item?.userId || profileUserId,
+          videoUrl: item?.videoUrl || item?.video_url,
           user: item?.user || {
             id: profileUserId,
-            nickname:
-              profile?.nickname || profile?.channelName || profile?.name || 'User',
-            name: profile?.name || profile?.nickname,
+            nickname: fallbackName,
+            name: profile?.name || fallbackName,
           },
         };
-        // Open shorts player inside Shorts tab stack
-        try {
-          navigation?.navigate('Shorts', {
-            screen: 'ShortsVideoScreen',
-            params: { shortId: item.id, initialShortItem },
-          });
-        } catch (_) {
-          navigation?.getParent()?.navigate('Shorts', {
-            screen: 'ShortsVideoScreen',
-            params: { shortId: item.id, initialShortItem },
-          });
+        let nav = navigation;
+        for (let i = 0; i < 16 && nav; i++) {
+          const names = nav.getState?.()?.routeNames;
+          if (Array.isArray(names) && names.includes('Shorts')) {
+            nav.navigate('Shorts', {
+              screen: 'ShortsVideoScreen',
+              params: { shortId: sid, initialShortItem },
+            });
+            return;
+          }
+          nav = nav.getParent?.();
         }
+        nav = navigation;
+        for (let i = 0; i < 16 && nav; i++) {
+          const names = nav.getState?.()?.routeNames;
+          if (Array.isArray(names) && names.includes('Library')) {
+            nav.navigate('Library', {
+              screen: 'ShortsVideoScreen',
+              params: { shortId: sid, initialShortItem },
+            });
+            return;
+          }
+          nav = nav.getParent?.();
+        }
+        navigation.navigate('Root', {
+          screen: 'Shorts',
+          params: {
+            screen: 'ShortsVideoScreen',
+            params: { shortId: sid, initialShortItem },
+          },
+        });
         return;
       }
       // Open video details via Root stack (BusinessProfileViewScreen is a Tab screen)
@@ -871,7 +893,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
       }
     },
-    [navigation, currentUser?.id, profileUserId, profile],
+    [navigation, profileUserId, profile],
   );
 
   const openEditProfile = () => {
@@ -2026,6 +2048,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               // Open Create tab and tell it to return to this screen when closed
               navigation.navigate('Create', {
                 returnTo: { tab: 'Home1', screen: 'BusinessProfileViewScreen' },
+                _openPicker: Date.now(),
               });
             }}
           >
@@ -2398,9 +2421,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             }}
             onPress={() => {
               if (!item?.id || !profileUserId) return;
+              const isShort =
+                item._type === 'short' ||
+                String(item.type || '').toLowerCase() === 'short';
+              if (isShort) {
+                openVideoDetails(item);
+                return;
+              }
               setGalleryVideoModal({
                 contentId: String(item.id),
-                kind: item._type === 'short' ? 'short' : 'video',
+                kind: 'video',
               });
             }}
           />

@@ -76,8 +76,11 @@ const BottomNaivgation = () => {
   const isOwner = role === 'owner';
   const isVendor = role === 'vendor';
   const isUser = role === 'user';
-  const isAdmin = role === 'admin';
-  const showCreateTab = user?.role === 'owner' || user?.role === 'admin';
+  const isAdmin =
+    role === 'admin' ||
+    role === 'superadmin' ||
+    role === 'super_admin' ||
+    role === 'super-admin';
   const showVProfileTab = role === 'vendor';
 
   const requireLogin = (e, tabName) => {
@@ -128,7 +131,10 @@ const BottomNaivgation = () => {
     }
     e.preventDefault();
     const returnTo = getReturnToFromState();
-    tabNavigation.navigate('Create', { returnTo });
+    tabNavigation.navigate('Create', {
+      returnTo,
+      _openPicker: Date.now(),
+    });
   };
 
   return (
@@ -415,9 +421,17 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Library"
             component={LibraryNavigation}
-            listeners={{
-              tabPress: redirectToHomeThreeIfGuest,
-            }}
+            listeners={({ navigation: tabNav }) => ({
+              tabPress: e => {
+                if (!user?.id) {
+                  redirectToHomeThreeIfGuest(e);
+                  return;
+                }
+                // Always land on Library root — avoids reopening CreateShortsScreen / stack after leaving camera
+                e.preventDefault();
+                tabNav.navigate('Library', { screen: 'LibraryScreen' });
+              },
+            })}
             options={({ route }) => ({
               tabBarStyle: {
                 backgroundColor: COLORS.white,

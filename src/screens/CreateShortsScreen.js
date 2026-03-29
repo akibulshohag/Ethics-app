@@ -25,10 +25,13 @@ import BeautyModal from '../components/BeautyModal';
 import SpeedModal from '../components/SpeedModal';
 import CameraShortsView from '../components/CameraShortsView';
 import {getFilterOverlayStyle} from '../constants/filterEffects';
+import {navigateToHomeOne} from '../utils/navigateToHomeOne';
 
 const {width, height} = Dimensions.get('window');
 
 const CreateShortsScreen = ({navigation, route}) => {
+  const exitToHomeOne = () => navigateToHomeOne(navigation);
+
   const initialLive = route?.params?.isLive === true;
   const [activeDuration, setActiveDuration] = useState(initialLive ? '10s' : '60s');
   const [soundsVisible, setSoundsVisible] = useState(false);
@@ -341,7 +344,7 @@ const CreateShortsScreen = ({navigation, route}) => {
           ) : (
             <View style={styles.recordingModeOverlay}>
               <View style={[styles.topControls, { marginTop: insets.top + 10 }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                <TouchableOpacity onPress={exitToHomeOne} style={styles.closeButton}>
                   <Ionicons name="close" size={30} color="white" />
                 </TouchableOpacity>
                 <View style={styles.topRightRow}>
@@ -506,7 +509,7 @@ const CreateShortsScreen = ({navigation, route}) => {
             ) : (
               <View style={styles.recordingModeOverlay}>
                 <View style={[styles.topControls, {marginTop: insets.top + 10}]}>
-                  <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                  <TouchableOpacity onPress={exitToHomeOne} style={styles.closeButton}>
                     <Ionicons name="close" size={30} color="white" />
                   </TouchableOpacity>
                   <View style={styles.topRightRow}>
@@ -587,6 +590,7 @@ const CreateShortsScreen = ({navigation, route}) => {
       <AddDetailsModal
         visible={addDetailsVisible}
         onClose={() => setAddDetailsVisible(false)}
+        onUploadSuccess={exitToHomeOne}
         shortsMetadata={shortsMetadata}
         isLive={isLiveMode}
       />
