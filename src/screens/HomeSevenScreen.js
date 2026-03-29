@@ -253,7 +253,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Icon
-                      name={passwordVisible ? 'eye' : 'eye-off'}
+                      name={passwordVisible ? 'eye-off' : 'eye'}
                       size={22}
                       color="#333"
                     />
@@ -336,6 +336,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     </TouchableOpacity>
                   </View>
                 </View>
+                
               </View>
             </View>
           </View>
@@ -437,15 +438,15 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
   signUpText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
   socialContainer: { alignItems: 'center', marginTop: 25 },
-  socialTitle: { color: '#333', fontSize: 14, marginBottom: 15 },
+  socialTitle: { color: '#333', fontSize: 15, marginBottom: 15 },
   socialPill: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
+    backgroundColor: '#FFF',
+    paddingHorizontal: 20,
+    paddingVertical: 4,
     borderRadius: 25,
   },
-  socialIcon: { marginHorizontal: 15 },
+  socialIcon: { marginHorizontal: 12 },
 });
 
 export default HomeSevenScreen;

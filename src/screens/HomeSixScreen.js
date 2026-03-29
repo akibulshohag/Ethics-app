@@ -410,13 +410,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#32373D',
   },
   btnText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
-  socialContainer: { alignItems: 'center', marginTop: 30 },
-  socialTitle: {
-    color: '#1A1A1A',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
+  socialContainer: { alignItems: 'center', marginTop: 25 },
+  socialTitle: { color: '#333', fontSize: 15, marginBottom: 15 },
   socialPill: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
