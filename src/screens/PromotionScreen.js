@@ -247,7 +247,6 @@ const PromotionScreen = ({ onBack }) => {
 
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editNickname, setEditNickname] = useState('');
   const [editChannelAbout, setEditChannelAbout] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
@@ -1453,9 +1452,13 @@ const PromotionScreen = ({ onBack }) => {
     const linkMap = Array.isArray(links)
       ? links.reduce((acc, l) => ({ ...acc, [l.type]: l.url || '' }), {})
       : {};
-    setEditName(profile?.name ?? currentUser?.name ?? '');
-    setEditNickname(
-      profile?.nickname ?? profile?.channelName ?? currentUser?.nickname ?? '',
+    setEditName(
+      profile?.name ??
+        profile?.nickname ??
+        profile?.channelName ??
+        currentUser?.name ??
+        currentUser?.nickname ??
+        '',
     );
     setEditChannelAbout(
       profile?.channelAbout ?? currentUser?.channelAbout ?? '',
@@ -1479,9 +1482,10 @@ const PromotionScreen = ({ onBack }) => {
           url: (l.url || '').trim(),
         }))
         .filter(l => l.url);
+      const nameValue = editName.trim() || undefined;
       await updateChannelProfile(userId, {
-        name: editName.trim() || undefined,
-        nickname: editNickname.trim() || undefined,
+        name: nameValue,
+        nickname: nameValue,
         channelAbout: editChannelAbout.trim() || undefined,
         phone: editPhone.trim() || undefined,
         address: editAddress.trim() || undefined,
@@ -1491,8 +1495,8 @@ const PromotionScreen = ({ onBack }) => {
       dispatch(
         appSetUser({
           ...currentUser,
-          name: editName.trim() || currentUser.name,
-          nickname: editNickname.trim() || currentUser.nickname,
+          name: nameValue || currentUser.name,
+          nickname: nameValue || currentUser.nickname,
           channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
           phone: editPhone.trim() || currentUser.phone,
           address: editAddress.trim() || currentUser.address,
@@ -3055,15 +3059,7 @@ const PromotionScreen = ({ onBack }) => {
                 placeholder="Name"
                 placeholderTextColor="#999"
               />
-              <Text style={styles.editLabel}>Nickname</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editNickname}
-                onChangeText={setEditNickname}
-                placeholder="Display name"
-                placeholderTextColor="#999"
-              />
-              <Text style={styles.editLabel}>Description</Text>
+              <Text style={styles.editLabel}>About You</Text>
               <TextInput
                 style={[styles.editInput, styles.editInputMultiline]}
                 value={editChannelAbout}

@@ -345,7 +345,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [profileLoading, setProfileLoading] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editNickname, setEditNickname] = useState('');
   const [editChannelAbout, setEditChannelAbout] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
@@ -897,9 +896,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   );
 
   const openEditProfile = () => {
-    setEditName(profile?.name ?? currentUser?.name ?? '');
-    setEditNickname(
-      profile?.nickname ?? profile?.channelName ?? currentUser?.nickname ?? '',
+    setEditName(
+      profile?.name ??
+        profile?.nickname ??
+        profile?.channelName ??
+        currentUser?.name ??
+        currentUser?.nickname ??
+        '',
     );
     setEditChannelAbout(
       profile?.channelAbout ?? currentUser?.channelAbout ?? '',
@@ -997,6 +1000,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           url: (l.url || '').trim(),
         }))
         .filter(l => l.url);
+      const nameValue = editName.trim() || undefined;
       const addressStr = editAddress.trim() || undefined;
       let latitude = undefined;
       let longitude = undefined;
@@ -1031,8 +1035,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         }
       }
       await updateChannelProfile(profileUserId, {
-        name: editName.trim() || undefined,
-        nickname: editNickname.trim() || undefined,
+        name: nameValue,
+        nickname: nameValue,
         channelAbout: editChannelAbout.trim() || undefined,
         phone: editPhone.trim() || undefined,
         address: addressStr,
@@ -1054,8 +1058,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         dispatch(
           appSetUser({
             ...currentUser,
-            name: editName.trim() || currentUser.name,
-            nickname: editNickname.trim() || currentUser.nickname,
+            name: nameValue || currentUser.name,
+            nickname: nameValue || currentUser.nickname,
             channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
             phone: editPhone.trim() || currentUser.phone,
             address: addressStr || currentUser.address,
@@ -3149,14 +3153,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 value={editName}
                 onChangeText={setEditName}
                 placeholder="Name"
-                placeholderTextColor="#999"
-              />
-              <Text style={styles.editLabel}>Nickname (display name)</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editNickname}
-                onChangeText={setEditNickname}
-                placeholder="Nickname"
                 placeholderTextColor="#999"
               />
               <Text style={styles.editLabel}>Description</Text>

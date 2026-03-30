@@ -3,7 +3,6 @@ import React, {
   useEffect,
   useRef,
   useCallback,
-  useMemo,
 } from 'react';
 import {
   StyleSheet,
@@ -30,8 +29,7 @@ import {
   useRoute,
   useFocusEffect,
 } from '@react-navigation/native';
-import { useDispatch, useSelector } from 'react-redux';
-import Video from 'react-native-video';
+import { useSelector } from 'react-redux';
 import { shortsService } from '../../services/shortsService';
 import CommentsModal from '../../components/CommentsModal';
 import ShortsMoreOptionsModal from '../../components/ShortsMoreOptionsModal';
@@ -41,19 +39,15 @@ import SetVisibilityModal from '../../components/SetVisibilityModal';
 import SelectAudienceModal from '../../components/SelectAudienceModal';
 import CommentsSettingsModal from '../../components/CommentsSettingsModal';
 import VideoScheduleModal from '../../components/VideoScheduleModal';
-import { setShortsMuted } from '../../redux/actions/appSlice';
-import Slider from '@react-native-community/slider';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { safeImageUri } from '../../utils/helper';
+import { safeImageUri, navigationRef } from '../../utils/helper';
+import ProductShortsVideoRow from './ProductShortsVideoRow';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
 import { setPlaylist } from '../../services/playlistService';
 import { downloadVideo } from '../../services/downloadService';
 import { submitReport } from '../../services/reportService';
-import {
-  getChannelProfile,
-  subscribeToChannel,
-} from '../../services/channelService';
+import { getChannelProfile } from '../../services/channelService';
 import Toast from 'react-native-toast-message';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -148,15 +142,31 @@ const normalizeShort = s => {
     s?.username ||
     (typeof s?.user === 'string' ? s.user : '') ||
     'user';
+  const ownerAddress =
+    userObj?.address ||
+    s?.address ||
+    s?.location ||
+    s?.creatorAddress ||
+    '';
+  const roleRaw =
+    userObj?.role != null
+      ? userObj.role
+      : s?.creatorRole != null
+      ? s.creatorRole
+      : s?.user?.role;
   return {
     id: s.id || String(Math.random()),
     videoUrl: s.videoUrl || s.mediaUrl || '',
     title: s.title || 'Short',
     user: displayUser,
+    /** Same intent as ShortsVideoScreen mapShortToItem — used for HomeThreeScreen header + Order flow */
+    ownerName: displayUser,
     userId: s.user?.id ?? s.userId,
     userObj: {
       ...userObj,
       avatar,
+      address: userObj?.address || s?.address || undefined,
+      role: roleRaw,
       isSubscribed:
         typeof userObj?.isSubscribed === 'boolean'
           ? userObj.isSubscribed
@@ -164,6 +174,10 @@ const normalizeShort = s => {
     },
     avatar,
     desc: s.description || s.title || s.desc || 'Description',
+    location: ownerAddress || 'Near you',
+    creatorAddress: ownerAddress,
+    creatorRole:
+      roleRaw != null ? String(roleRaw).toLowerCase() : undefined,
     viewCount,
     views: formatCount(viewCount) || '0',
     likeCount,
@@ -231,8 +245,6 @@ const ProductShortsVideo = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const user = useSelector(state => state?.app?.user);
-  const shortsMuted = useSelector(state => state?.app?.shortsMuted);
-  const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const initialItem = route.params?.item;
 
@@ -276,6 +288,69 @@ const ProductShortsVideo = () => {
   const [editScheduleModalVisible, setEditScheduleModalVisible] =
     useState(false);
   const [editShortSubmitting, setEditShortSubmitting] = useState(false);
+
+  /** HomeThreeScreen / HomeSevenScreen live under Home1 tab — same as ShortsVideoScreen */
+  const navigateToHomeScreen = useCallback(
+    (screenName, params) => {
+      const payload =
+        params != null
+          ? { screen: screenName, params }
+          : { screen: screenName };
+      if (navigationRef.current?.isReady?.()) {
+        navigationRef.current.navigate('Root', {
+          screen: 'Home1',
+          params: payload,
+        });
+      } else {
+        const tab = navigation.getParent?.();
+        if (tab?.navigate) tab.navigate('Home1', payload);
+        else
+          navigation
+            .getParent?.()
+            ?.getParent?.()
+            ?.navigate?.('Root', { screen: 'Home1', params: payload });
+      }
+    },
+    [navigation],
+  );
+
+  /** Match ShortsVideoScreen / UserViewsScreen params so restaurant name + address match on HomeThreeScreen */
+  const handleOrderNowPress = useCallback(
+    item => {
+      if (!item) return;
+      if (!user?.id) {
+        navigateToHomeScreen('HomeSevenScreen', {
+          returnToOrder: true,
+          ownerUserId: item?.userId ?? item?.userObj?.id ?? null,
+        });
+        return;
+      }
+      const oid = item?.userId ?? item?.userObj?.id ?? null;
+      if (!oid) {
+        navigateToHomeScreen('HomeThreeScreen');
+        return;
+      }
+      const ownerName =
+        item.ownerName ||
+        item.userObj?.nickname ||
+        item.userObj?.name ||
+        (typeof item.user === 'string' ? item.user : '') ||
+        '';
+      const title = item.desc || item.title || ownerName || '';
+      const location =
+        item.creatorAddress ||
+        item.userObj?.address ||
+        (item.location && item.location !== 'Near you' ? item.location : '') ||
+        '';
+      navigateToHomeScreen('HomeThreeScreen', {
+        ownerId: oid,
+        ownerName,
+        title,
+        location,
+      });
+    },
+    [user?.id, navigateToHomeScreen],
+  );
 
   const hasAvatarInShort = useCallback(shortItem => {
     const s = shortItem || {};
@@ -344,6 +419,8 @@ const ProductShortsVideo = () => {
             id: u?.id || s?.userId || p?.id,
             nickname: u?.nickname || p?.nickname || p?.name || s?.nickname,
             name: u?.name || p?.name || p?.nickname || s?.name,
+            role: u?.role ?? p?.role,
+            address: u?.address || p?.address,
             avatar: u?.avatar || pPhoto,
             channelAvatar: u?.channelAvatar || p?.channelAvatar || pPhoto,
             profileImage: u?.profileImage || p?.profileImage || pPhoto,
@@ -426,14 +503,16 @@ const ProductShortsVideo = () => {
           const sameUserRaw = (userRes?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
-          const sameUserEnriched = await enrichShortsWithProfile(sameUserRaw);
-          const sameUserOther = sameUserEnriched
-            .filter(s => String(s.id) !== String(currentShortId))
-            .map(normalizeShort);
           const feedRaw = (feedRes?.shorts || []).filter(
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
-          const feedEnriched = await enrichShortsWithProfile(feedRaw);
+          const [sameUserEnriched, feedEnriched] = await Promise.all([
+            enrichShortsWithProfile(sameUserRaw),
+            enrichShortsWithProfile(feedRaw),
+          ]);
+          const sameUserOther = sameUserEnriched
+            .filter(s => String(s.id) !== String(currentShortId))
+            .map(normalizeShort);
           const seen = new Set([
             currentShortId,
             ...sameUserOther.map(v => v.id),
@@ -503,80 +582,105 @@ const ProductShortsVideo = () => {
     ownerId,
     !!initialItem,
     user?.role,
+    user?.id,
     enrichShortsWithProfile,
   ]);
 
-  const userRef = useRef(user);
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
+  const viewRecordedIdsRef = useRef(new Set());
 
-  const initialShortViewRecordedRef = useRef(false);
+  const applyViewIncrement = useCallback(shortId => {
+    if (!shortId) return;
+    setVideos(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(v => {
+        if (String(v.id) !== String(shortId)) return v;
+        const newCount = (v.viewCount ?? 0) + 1;
+        return { ...v, viewCount: newCount, views: formatCount(newCount) };
+      });
+    });
+  }, []);
+
+  const applyViewDecrement = useCallback(shortId => {
+    if (!shortId) return;
+    setVideos(prev => {
+      if (prev.length === 0) return prev;
+      return prev.map(v => {
+        if (String(v.id) !== String(shortId)) return v;
+        const newCount = Math.max(0, (v.viewCount ?? 0) - 1);
+        return { ...v, viewCount: newCount, views: formatCount(newCount) };
+      });
+    });
+  }, []);
+
+  /** Optimistic +1; server in background; revert on failure — same pattern as ShortsVideoScreen */
+  const recordShortViewAndBumpUI = useCallback(
+    shortId => {
+      if (!shortId) return;
+      const sid = String(shortId);
+      if (viewRecordedIdsRef.current.has(sid)) return;
+      viewRecordedIdsRef.current.add(sid);
+      applyViewIncrement(sid);
+      shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
+        viewRecordedIdsRef.current.delete(sid);
+        applyViewDecrement(sid);
+      });
+    },
+    [user?.id, applyViewIncrement, applyViewDecrement],
+  );
+
   useEffect(() => {
-    initialShortViewRecordedRef.current = false;
-  }, [currentShortId]);
+    const sub = navigation.addListener('beforeRemove', () => {
+      viewRecordedIdsRef.current.clear();
+    });
+    return sub;
+  }, [navigation]);
+
   useEffect(() => {
     if (!currentShortId || loading) return;
-    if (initialShortViewRecordedRef.current) return;
-    initialShortViewRecordedRef.current = true;
-    shortsService
-      .recordView(String(currentShortId), user?.id || null, 0, false)
-      .catch(() => {});
-  }, [currentShortId, loading, user?.id]);
+    recordShortViewAndBumpUI(currentShortId);
+  }, [currentShortId, loading, recordShortViewAndBumpUI]);
 
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems && viewableItems.length > 0) {
-      const { index, item } = viewableItems[0];
-      setCurrentIndex(index);
-      if (item?.id) {
-        shortsService
-          .recordView(item.id, userRef.current?.id || null)
-          .then(() => {
-            setVideos(prev => {
-              if (prev.length === 0) return prev;
-              return prev.map(v => {
-                if (v.id !== item.id) return v;
-                const newCount = (v.viewCount ?? 0) + 1;
-                return {
-                  ...v,
-                  viewCount: newCount,
-                  views: formatCount(newCount),
-                };
-              });
-            });
-          })
-          .catch(() => {});
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }) => {
+      if (viewableItems && viewableItems.length > 0) {
+        const { index, item } = viewableItems[0];
+        setCurrentIndex(index);
+        if (item?.id) recordShortViewAndBumpUI(item.id);
       }
-    }
-  }).current;
+    },
+    [recordShortViewAndBumpUI],
+  );
 
-  const handleLike = async (item, opts = {}) => {
-    if (!user?.id || !item?.id) {
-      navigation.navigate('HomeSevenScreen');
-      return;
-    }
-    const forceLike = opts?.forceLike === true;
-    if (forceLike && item?.isLiked) return;
-    try {
-      await shortsService.toggleLike(item.id, user.id);
-      setVideos(prev =>
-        prev.map(v => {
-          if (v.id !== item.id) return v;
-          const newLiked = !v.isLiked;
-          const delta = newLiked ? 1 : -1;
-          const newCount = Math.max(0, (v.likeCount ?? 0) + delta);
-          return {
-            ...v,
-            isLiked: newLiked,
-            likeCount: newCount,
-            likes: formatCount(newCount),
-          };
-        }),
-      );
-    } catch (_) {}
-  };
+  const handleLike = useCallback(
+    async (item, opts = {}) => {
+      if (!user?.id || !item?.id) {
+        navigation.navigate('HomeSevenScreen');
+        return;
+      }
+      const forceLike = opts?.forceLike === true;
+      if (forceLike && item?.isLiked) return;
+      try {
+        await shortsService.toggleLike(item.id, user.id);
+        setVideos(prev =>
+          prev.map(v => {
+            if (v.id !== item.id) return v;
+            const newLiked = !v.isLiked;
+            const delta = newLiked ? 1 : -1;
+            const newCount = Math.max(0, (v.likeCount ?? 0) + delta);
+            return {
+              ...v,
+              isLiked: newLiked,
+              likeCount: newCount,
+              likes: formatCount(newCount),
+            };
+          }),
+        );
+      } catch (_) {}
+    },
+    [user?.id, navigation],
+  );
 
-  const handleShare = async item => {
+  const handleShare = useCallback(async item => {
     if (!item?.id) return;
     const message = `${item.title || item.desc || 'Short'}\neatix://shorts/${
       item.id
@@ -595,644 +699,55 @@ const ProductShortsVideo = () => {
         // ignore
       }
     }
-  };
+  }, []);
 
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50,
-  });
+    itemVisiblePercentThreshold: 80,
+  }).current;
 
-  const VideoItem = ({
-    item,
-    index,
-    currentIndex,
-    onLike,
-    onShare,
-    onOpenComments,
-    onOpenMoreMenu,
-    isScreenFocused: focused,
-    subscribersOrderLine,
-  }) => {
-    const isCurrentlyViewable = currentIndex === index;
-    const [isPausedLocally, setIsPausedLocally] = useState(false);
-    const videoRef = useRef(null);
-    const [duration, setDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-    const currentTimeRef = useRef(0);
-    const [isSeeking, setIsSeeking] = useState(false);
-    const lastProgressUpdate = useRef(0);
-    const lastTapMsRef = useRef(0);
-    const singleTapTimerRef = useRef(null);
+  const getItemLayout = useCallback(
+    (_, index) => ({
+      length: height,
+      offset: height * index,
+      index,
+    }),
+    [height],
+  );
 
-    const descText =
-      (item.desc && String(item.desc).trim()) || 'Description goes here';
-    const [descExpanded, setDescExpanded] = useState(false);
-    const [descNeedsMore, setDescNeedsMore] = useState(false);
-    const [descMeasureWidth, setDescMeasureWidth] = useState(0);
-    /** First line text from layout (when platform provides it) */
-    const [descFirstLine, setDescFirstLine] = useState('');
-    const [descLayoutDone, setDescLayoutDone] = useState(false);
-    const [subscribedLocal, setSubscribedLocal] = useState(
-      !!item?.userObj?.isSubscribed,
-    );
-    const [ownerAvatarBroken, setOwnerAvatarBroken] = useState(false);
+  const handleOpenComments = useCallback(() => setCommentsVisible(true), []);
 
-    useEffect(() => {
-      setDescExpanded(false);
-      setDescNeedsMore(false);
-      setDescMeasureWidth(0);
-      setDescFirstLine('');
-      setDescLayoutDone(false);
-      setSubscribedLocal(!!item?.userObj?.isSubscribed);
-      setOwnerAvatarBroken(false);
-    }, [item.id]);
-
-    useEffect(() => {
-      if (!isCurrentlyViewable) {
-        setIsPausedLocally(false);
-      } else {
-        setIsPausedLocally(false); // Force autoplay when coming back into view
-      }
-    }, [isCurrentlyViewable]);
-
-    const togglePause = () => {
-      if (isCurrentlyViewable) {
-        setIsPausedLocally(!isPausedLocally);
-      }
-    };
-
-    const onOverlayTap = () => {
-      const now = Date.now();
-      const DOUBLE_TAP_MS = 260;
-      if (now - lastTapMsRef.current < DOUBLE_TAP_MS) {
-        lastTapMsRef.current = 0;
-        if (singleTapTimerRef.current) {
-          clearTimeout(singleTapTimerRef.current);
-          singleTapTimerRef.current = null;
-        }
-        // Double tap: like only (no unlike)
-        onLike?.(item, { forceLike: true });
+  const openSubscribersModal = useCallback(
+    async ownerIdToLoad => {
+      if (!user?.token) {
+        navigation.navigate('HomeSevenScreen');
         return;
       }
-      lastTapMsRef.current = now;
-      if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
-      singleTapTimerRef.current = setTimeout(() => {
-        singleTapTimerRef.current = null;
-        togglePause();
-      }, DOUBLE_TAP_MS);
-    };
-
-    const isPaused = !focused || !isCurrentlyViewable || isPausedLocally;
-    const ownerId = item?.userId ?? item?.userObj?.id ?? null;
-    const isOwnShort = !!(
-      user?.id &&
-      ownerId &&
-      String(user.id) === String(ownerId)
-    );
-
-    const videoSource = useMemo(
-      () => ({ uri: item?.videoUrl }),
-      [item?.videoUrl],
-    );
-
-    // When muting/unmuting, `react-native-video` may reload and jump to 0s.
-    // Re-seek to the last known `currentTime` to keep playback position.
-    useEffect(() => {
-      if (!isCurrentlyViewable) return;
-      if (isSeeking) return;
-      const t = currentTimeRef.current;
-      if (!(t > 0.5)) return;
-      const seekNow = () => {
-        try {
-          videoRef.current?.seek?.(t);
-          setCurrentTime(t);
-        } catch (_) {}
-      };
-      seekNow();
-      const tid = setTimeout(seekNow, 120);
-      return () => clearTimeout(tid);
-    }, [shortsMuted, isCurrentlyViewable, isSeeking]);
-
-    useEffect(() => {
-      let cancelled = false;
-      const apiSubscribed = item?.userObj?.isSubscribed;
-      if (typeof apiSubscribed === 'boolean') {
-        setSubscribedLocal(apiSubscribed);
+      if (!ownerIdToLoad) return;
+      setSubsModalOpen(true);
+      setSubsLoading(true);
+      setSubsError('');
+      try {
+        const res = await listMySubscribersWhoOrderedFromOwner(
+          user.token,
+          ownerIdToLoad,
+        );
+        const items = Array.isArray(res?.items) ? res.items : [];
+        setSubsUsers(items);
+        const { firstDisplay, total } = subsOrderPreviewFromItems(items);
+        setSubsOrderByOwner(prev => ({
+          ...prev,
+          [String(ownerIdToLoad)]: { firstDisplay, total },
+        }));
+        subsPreviewFetchedRef.current.add(String(ownerIdToLoad));
+      } catch (e) {
+        setSubsUsers([]);
+        setSubsError(e?.message || 'Failed to load subscribers');
+      } finally {
+        setSubsLoading(false);
       }
-      if (!user?.id || !ownerId || isOwnShort) return;
-      getChannelProfile(ownerId, user.id)
-        .then(profile => {
-          if (cancelled) return;
-          if (typeof profile?.isSubscribed === 'boolean') {
-            setSubscribedLocal(profile.isSubscribed);
-          }
-        })
-        .catch(() => {});
-      return () => {
-        cancelled = true;
-      };
-    }, [item?.id, item?.userObj?.isSubscribed, isOwnShort, ownerId, user?.id]);
-
-    const showFollowPlus = !!ownerId && !isOwnShort && !subscribedLocal;
-    const ownerAvatarFallbackUri = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      item?.user || 'User',
-    )}&background=111&color=fff`;
-    const ownerAvatarUri = safeImageUri(
-      item?.avatar ||
-        item?.userObj?.avatar ||
-        item?.userObj?.channelAvatar ||
-        item?.userObj?.profileImage ||
-        item?.userObj?.photoUrl ||
-        (Array.isArray(item?.userObj?.photos) && item.userObj.photos[0]
-          ? typeof item.userObj.photos[0] === 'string'
-            ? item.userObj.photos[0]
-            : item.userObj.photos[0]?.src
-          : null) ||
-        null,
-      ownerAvatarFallbackUri,
-    );
-
-    /** One-line preview + room for "...more" on the same line */
-    let descPreviewOneLine = '';
-    if (!descExpanded && descNeedsMore && descMeasureWidth > 0) {
-      const flat = descText.replace(/\n/g, ' ').trim();
-      const approxCharPx = 6.8;
-      const moreReservePx = 52;
-      const maxChars = Math.max(
-        12,
-        Math.floor((descMeasureWidth - moreReservePx) / approxCharPx),
-      );
-      if (descFirstLine.length > 0) {
-        let line = descFirstLine.trimEnd();
-        const cut = Math.max(6, Math.ceil(moreReservePx / approxCharPx));
-        if (line.length > cut + 8) {
-          line = line
-            .slice(0, line.length - cut)
-            .replace(/\s+\S*$/, '')
-            .trim();
-        }
-        descPreviewOneLine = line || flat.slice(0, maxChars).trim();
-      } else {
-        descPreviewOneLine =
-          flat.length > maxChars
-            ? flat
-                .slice(0, maxChars)
-                .replace(/\s+\S*$/, '')
-                .trim()
-            : flat.slice(0, Math.min(flat.length, maxChars));
-      }
-      if (!descPreviewOneLine) {
-        descPreviewOneLine = flat.slice(0, maxChars);
-      }
-    }
-
-    return (
-      <View style={[styles.videoContainer, { height: height }]}>
-        <Video
-          ref={videoRef}
-          source={videoSource}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          repeat={true}
-          paused={isPaused}
-          muted={!!shortsMuted}
-          playInBackground={false}
-          playWhenInactive={false}
-          ignoreSilentSwitch="ignore"
-          controls={false}
-          onLoad={data => {
-            const d = Number(data?.duration || 0);
-            const api = Number(item?.duration);
-            const use =
-              Number.isFinite(d) && d > 0
-                ? d
-                : Number.isFinite(api) && api > 0
-                ? api
-                : 0;
-            setDuration(use);
-
-            // If video reloaded (e.g. mute/unmute), restore last playback position.
-            const t = currentTimeRef.current;
-            if (typeof t === 'number' && t > 0.5) {
-              const seekNow = () => {
-                try {
-                  videoRef.current?.seek?.(t);
-                  setCurrentTime(t);
-                } catch (_) {}
-              };
-              seekNow();
-              setTimeout(seekNow, 120);
-            }
-          }}
-          onProgress={data => {
-            const now = Date.now();
-            if (now - lastProgressUpdate.current < 250) return;
-            lastProgressUpdate.current = now;
-            const t = Number(data?.currentTime || 0);
-            const nextT = Number.isFinite(t) ? t : 0;
-
-            // Always remember the last time so we can restore after reload.
-            if (nextT > 0.5) {
-              currentTimeRef.current = nextT;
-            }
-
-            // Only update UI state while this item is active.
-            if (!isCurrentlyViewable || isPaused) return;
-            if (isSeeking) return;
-            setCurrentTime(nextT);
-          }}
-        />
-
-        <View
-          style={[
-            styles.progressBarWrap,
-            { bottom: Math.max(6, (insets?.bottom || 0) + 4) },
-          ]}
-          pointerEvents="box-none"
-        >
-          <View style={styles.progressRow}>
-            <Text style={styles.progressTimeText}>
-              {formatShortsTime(currentTime)}
-            </Text>
-            <Slider
-              style={styles.progressSlider}
-              value={Math.min(currentTime, Math.max(0.01, duration || 0.1))}
-              minimumValue={0}
-              maximumValue={Math.max(0.1, duration || 0.1)}
-              minimumTrackTintColor="rgba(255,255,255,0.9)"
-              maximumTrackTintColor="rgba(255,255,255,0.35)"
-              thumbTintColor="rgba(255,255,255,0.95)"
-              onSlidingStart={() => setIsSeeking(true)}
-              onValueChange={val => setCurrentTime(val)}
-              onSlidingComplete={val => {
-                const max = Math.max(0.1, duration || 0.1);
-                const v = Math.max(0, Math.min(Number(val) || 0, max));
-                try {
-                  videoRef.current?.seek?.(v);
-                } catch (_) {}
-                if (v > 0.5) currentTimeRef.current = v;
-                setCurrentTime(v);
-                setIsSeeking(false);
-              }}
-            />
-            <Text style={styles.progressTimeText}>
-              {duration > 0 ? formatShortsTime(duration) : '--:--'}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={onOverlayTap}
-          style={styles.touchOverlay}
-        >
-          {isPausedLocally && isCurrentlyViewable && (
-            <View style={styles.pauseIconContainer}>
-              <Icon name="play" size={50} color="rgba(255,255,255,0.6)" />
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.videoOverlay} pointerEvents="box-none">
-          <View style={styles.videoHeader}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-            >
-              <Icon name="chevron-left" size={20} color="#FFF" />
-              <Text style={styles.backText}>Back</Text>
-            </TouchableOpacity>
-            <View style={styles.videoHeaderIcons}>
-              <Icon
-                name="magnify"
-                size={20}
-                color="#FFF"
-                style={{ marginRight: 15 }}
-              />
-              <TouchableOpacity
-                onPress={() => onOpenMoreMenu?.(item)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Icon name="dots-vertical" size={20} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Reels-style: vertical column on the right, sat low above scrubber */}
-          <View
-            style={[
-              styles.rightActionsColumn,
-              { bottom: Math.max(10, (insets?.bottom || 0) + 36) },
-            ]}
-            pointerEvents="box-none"
-          >
-            <TouchableOpacity
-              style={styles.ownerProfileAction}
-              activeOpacity={0.85}
-              onPress={async () => {
-                if (!ownerId) return;
-                if (showFollowPlus) {
-                  if (!user?.id) {
-                    navigation.navigate('HomeSevenScreen');
-                    return;
-                  }
-                  try {
-                    await subscribeToChannel(user.id, ownerId);
-                    setSubscribedLocal(true);
-                  } catch (_) {}
-                  return;
-                }
-                const targetRole = String(
-                  item?.creatorRole ||
-                    item?.userObj?.role ||
-                    item?.user?.role ||
-                    '',
-                ).toLowerCase();
-                if (targetRole === 'user') {
-                  navigation.navigate('Root', {
-                    screen: 'Home1',
-                    params: {
-                      screen: 'PromotionScreen',
-                      params: { userId: ownerId },
-                    },
-                  });
-                } else {
-                  navigation.navigate('UserViewsScreen', { userId: ownerId });
-                }
-              }}
-            >
-              <View style={styles.ownerAvatarWrap}>
-                <Image
-                  source={{
-                    uri: ownerAvatarBroken
-                      ? ownerAvatarFallbackUri
-                      : ownerAvatarUri,
-                  }}
-                  style={styles.ownerAvatar}
-                  onError={() => setOwnerAvatarBroken(true)}
-                />
-                {showFollowPlus ? (
-                  <View style={styles.ownerPlusBadge}>
-                    <Icon name="plus" size={12} color="#FFF" />
-                  </View>
-                ) : null}
-              </View>
-            </TouchableOpacity>
-            <View style={styles.actionItemCol}>
-              <Icon name="eye-outline" size={26} color="#FFF" />
-              <Text style={styles.actionTextCol}>{item.views ?? '0'}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.actionItemCol}
-              onPress={() => onLike?.(item)}
-            >
-              <Icon
-                name={item.isLiked ? 'heart' : 'heart-outline'}
-                size={28}
-                color={item.isLiked ? '#FF4D4D' : '#FFF'}
-              />
-              <Text style={styles.actionTextCol}>{item.likes ?? '0'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionItemCol}
-              onPress={() => {
-                if (!user?.id) {
-                  navigation.navigate('HomeSevenScreen');
-                  return;
-                }
-                onOpenComments?.();
-              }}
-            >
-              <Icon name="comment-text-outline" size={26} color="#FFF" />
-              <Text style={styles.actionTextCol}>{item.comments ?? '0'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.actionItemCol}
-              onPress={() => onShare?.(item)}
-            >
-              <Icon name="share-outline" size={26} color="#FFF" />
-              <Text style={styles.actionTextCol}>{item.shares ?? '0'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.videoFooter}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => {
-                const ownerId = item?.userObj?.id ?? item?.userId ?? null;
-                if (ownerId) {
-                  const targetRole = String(
-                    item?.creatorRole ||
-                      item?.userObj?.role ||
-                      item?.user?.role ||
-                      '',
-                  ).toLowerCase();
-                  if (targetRole === 'user') {
-                    navigation.navigate('Root', {
-                      screen: 'Home1',
-                      params: {
-                        screen: 'PromotionScreen',
-                        params: { userId: ownerId },
-                      },
-                    });
-                  } else {
-                    navigation.navigate('UserViewsScreen', { userId: ownerId });
-                  }
-                }
-              }}
-              disabled={!(item?.userObj?.id || item?.userId)}
-            >
-              <Text style={styles.videoUser}>
-                @{item.user || item.title?.toLowerCase().replace(' ', '')}
-              </Text>
-            </TouchableOpacity>
-            <View
-              style={styles.descBlock}
-              onLayout={e => {
-                const w = Math.round(e.nativeEvent.layout.width);
-                if (w > 0 && w !== descMeasureWidth) {
-                  setDescMeasureWidth(w);
-                }
-              }}
-            >
-              {descMeasureWidth > 0 ? (
-                <Text
-                  pointerEvents="none"
-                  style={[
-                    styles.videoDesc,
-                    styles.descMeasureHidden,
-                    { width: descMeasureWidth },
-                  ]}
-                  onTextLayout={ev => {
-                    const lines = ev.nativeEvent.lines || [];
-                    setDescNeedsMore(lines.length > 1);
-                    const t0 = lines[0]?.text;
-                    if (typeof t0 === 'string' && t0.length > 0) {
-                      setDescFirstLine(t0.trimEnd());
-                    }
-                    setDescLayoutDone(true);
-                  }}
-                >
-                  {descText}
-                </Text>
-              ) : null}
-              {!descLayoutDone ? (
-                <Text
-                  style={styles.videoDesc}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {descText}
-                </Text>
-              ) : descExpanded ? (
-                <>
-                  <Text style={[styles.videoDesc, styles.videoDescExpanded]}>
-                    {descText}
-                  </Text>
-                  {descNeedsMore ? (
-                    <Text
-                      style={styles.viewLessLink}
-                      onPress={() => setDescExpanded(false)}
-                    >
-                      View less
-                    </Text>
-                  ) : null}
-                </>
-              ) : descNeedsMore ? (
-                <Text style={styles.videoDesc} numberOfLines={1}>
-                  {descPreviewOneLine}
-                  <Text style={styles.descEllipsisSameLine}>...</Text>
-                  <Text
-                    style={styles.moreInlineTap}
-                    onPress={() => setDescExpanded(true)}
-                  >
-                    more
-                  </Text>
-                </Text>
-              ) : (
-                <Text style={styles.videoDesc} numberOfLines={1}>
-                  {descText}
-                </Text>
-              )}
-            </View>
-            <Text style={styles.videoHashtags}>
-              {item.hashtags || '#hashtags #music #dance'}
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                const itemOwnerId = item?.userId ?? item?.userObj?.id ?? null;
-                if (itemOwnerId) openSubscribersModal(itemOwnerId);
-              }}
-              disabled={!(item?.userId || item?.userObj?.id)}
-            >
-              <Text style={styles.translationText} numberOfLines={2}>
-                {subscribersOrderLine || 'Subscribers Order'}
-              </Text>
-            </TouchableOpacity>
-            {/* Previous design: one row — audio / mute left, Order Now right (clears Reels column) */}
-            <View style={styles.footerRow}>
-              <View style={styles.audioRow}>
-                <Icon name="music" size={18} color="#FFF" />
-                <Text
-                  style={[
-                    styles.audioText,
-                    !user?.id ||
-                    String(item?.userObj?.role || '').toLowerCase() === 'owner'
-                      ? styles.audioTitleFlex
-                      : styles.audioTitleInline,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {item.audio || 'Original Sound'}
-                </Text>
-                <TouchableOpacity
-                  style={styles.muteBtn}
-                  onPress={() => dispatch(setShortsMuted(!shortsMuted))}
-                  activeOpacity={0.8}
-                >
-                  <Icon
-                    name={shortsMuted ? 'volume-off' : 'volume-high'}
-                    size={18}
-                    color="#FFF"
-                    style={{ marginLeft: 10 }}
-                  />
-                  <Text style={styles.audioText}>
-                    {shortsMuted ? 'Unmute' : 'Mute'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {!user?.id ? (
-                <TouchableOpacity
-                  style={styles.orderNowBtnFooter}
-                  onPress={() => navigation.navigate('HomeSevenScreen')}
-                >
-                  <Text style={styles.orderNowText}>Order Now</Text>
-                </TouchableOpacity>
-              ) : String(item?.userObj?.role || '').toLowerCase() ===
-                'owner' ? (
-                <TouchableOpacity
-                  style={styles.orderNowBtnFooter}
-                  onPress={() => {
-                    const itemOwnerId =
-                      item?.userId ?? item?.userObj?.id ?? null;
-                    if (itemOwnerId) {
-                      navigation.navigate('HomeThreeScreen', {
-                        ownerId: itemOwnerId,
-                        title: item?.title,
-                        location: item?.location || item?.creatorAddress || '',
-                      });
-                    } else {
-                      navigation.navigate('HomeThreeScreen');
-                    }
-                  }}
-                >
-                  <Text style={styles.orderNowText}>Order Now</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  };
-
-  const getItemLayout = (_, index) => ({
-    length: height,
-    offset: height * index,
-    index,
-  });
-
-  const handleOpenComments = () => setCommentsVisible(true);
-
-  const openSubscribersModal = async ownerIdToLoad => {
-    if (!user?.token) {
-      navigation.navigate('HomeSevenScreen');
-      return;
-    }
-    if (!ownerIdToLoad) return;
-    setSubsModalOpen(true);
-    setSubsLoading(true);
-    setSubsError('');
-    try {
-      const res = await listMySubscribersWhoOrderedFromOwner(
-        user.token,
-        ownerIdToLoad,
-      );
-      const items = Array.isArray(res?.items) ? res.items : [];
-      setSubsUsers(items);
-      const { firstDisplay, total } = subsOrderPreviewFromItems(items);
-      setSubsOrderByOwner(prev => ({
-        ...prev,
-        [String(ownerIdToLoad)]: { firstDisplay, total },
-      }));
-      subsPreviewFetchedRef.current.add(String(ownerIdToLoad));
-    } catch (e) {
-      setSubsUsers([]);
-      setSubsError(e?.message || 'Failed to load subscribers');
-    } finally {
-      setSubsLoading(false);
-    }
-  };
+    },
+    [user?.token, navigation],
+  );
 
   const listData = videos.length > 0 ? videos : DUMMY_VIDEOS;
 
@@ -1541,30 +1056,52 @@ const ProductShortsVideo = () => {
     );
   };
 
-  const renderItem = ({ item, index }) => {
-    const oid = String(item?.userId ?? item?.userObj?.id ?? '');
-    const preview = oid ? subsOrderByOwner[oid] : null;
-    const line =
-      preview && preview.total >= 1
-        ? buildSubscribersOrderLine(preview.firstDisplay, preview.total)
-        : 'Subscribers Order';
-    return (
-      <VideoItem
-        item={item}
-        index={index}
-        currentIndex={currentIndex}
-        onLike={handleLike}
-        onShare={handleShare}
-        onOpenComments={handleOpenComments}
-        onOpenMoreMenu={itemIn => {
-          setMoreMenuItem(itemIn);
-          setMoreMenuVisible(true);
-        }}
-        isScreenFocused={isScreenFocused && !editShortVisible}
-        subscribersOrderLine={line}
-      />
-    );
-  };
+  const renderItem = useCallback(
+    ({ item, index }) => {
+      const oid = String(item?.userId ?? item?.userObj?.id ?? '');
+      const preview = oid ? subsOrderByOwner[oid] : null;
+      const line =
+        preview && preview.total >= 1
+          ? buildSubscribersOrderLine(preview.firstDisplay, preview.total)
+          : 'Subscribers Order';
+      return (
+        <ProductShortsVideoRow
+          item={item}
+          index={index}
+          currentIndex={currentIndex}
+          onLike={handleLike}
+          onShare={handleShare}
+          onOpenComments={handleOpenComments}
+          onOpenMoreMenu={itemIn => {
+            setMoreMenuItem(itemIn);
+            setMoreMenuVisible(true);
+          }}
+          isScreenFocused={isScreenFocused && !editShortVisible}
+          subscribersOrderLine={line}
+          navigation={navigation}
+          user={user}
+          height={height}
+          onSubscribersPress={openSubscribersModal}
+          onOrderNowPress={handleOrderNowPress}
+          styles={styles}
+        />
+      );
+    },
+    [
+      currentIndex,
+      isScreenFocused,
+      editShortVisible,
+      subsOrderByOwner,
+      handleLike,
+      handleShare,
+      handleOpenComments,
+      handleOrderNowPress,
+      navigation,
+      user,
+      height,
+      openSubscribersModal,
+    ],
+  );
 
   if (loading && videos.length === 0) {
     return (
@@ -1911,17 +1448,23 @@ const ProductShortsVideo = () => {
         renderItem={renderItem}
         pagingEnabled
         showsVerticalScrollIndicator={false}
-        snapToAlignment="start"
+        snapToAlignment="center"
         snapToInterval={height}
         decelerationRate="fast"
         onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig.current}
+        viewabilityConfig={viewabilityConfig}
         getItemLayout={getItemLayout}
         initialNumToRender={2}
         maxToRenderPerBatch={3}
         windowSize={10}
         removeClippedSubviews={false}
-        extraData={{ currentIndex, editShortVisible }}
+        extraData={{
+          currentIndex,
+          editShortVisible,
+          subsOrderByOwner,
+          headViews: videos[0]?.viewCount,
+          headId: videos[0]?.id,
+        }}
       />
     </View>
   );
@@ -2053,6 +1596,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 5,
+  },
+  videoLocation: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 6,
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   descBlock: {
     width: '100%',
