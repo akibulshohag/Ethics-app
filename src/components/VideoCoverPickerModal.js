@@ -13,14 +13,14 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { createThumbnail } from 'react-native-create-thumbnail';
 
-const FRAME_COUNT = 8;
+const FRAME_COUNT = 6;
 
 const normalizeUri = uri => String(uri || '').trim();
 
 const buildTimestamps = durationSec => {
   const duration = Number(durationSec || 0);
   if (!Number.isFinite(duration) || duration <= 0) {
-    return [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000];
+    return [600, 1200, 1800, 2400, 3000, 3600];
   }
   const safeDurationMs = Math.max(2000, Math.floor(duration * 1000));
   const step = Math.floor(safeDurationMs / (FRAME_COUNT + 1));
@@ -56,29 +56,29 @@ const VideoCoverPickerModal = ({
       setLoading(true);
       setFrames([]);
       try {
-        const generated = [];
-        for (let i = 0; i < timestamps.length; i += 1) {
-          const ts = timestamps[i];
-          try {
-            const shot = await createThumbnail({
-              url: uri,
-              timeStamp: ts,
-              format: 'jpeg',
-              cacheName: `cover_${Date.now()}_${i}`,
-            });
-            if (shot?.path) {
-              generated.push({
-                id: `${ts}-${i}`,
-                uri: shot.path,
-                timeStamp: ts,
-                type: 'image/jpeg',
-                fileName: `cover_${i + 1}.jpg`,
-              });
-            }
-          } catch (_) {
-            // Skip failed timestamps and continue.
-          }
-        }
+        const reqs = timestamps.map((ts, i) =>
+          createThumbnail({
+            url: uri,
+            timeStamp: ts,
+            format: 'jpeg',
+            cacheName: `cover_${Date.now()}_${i}`,
+            maxWidth: 540,
+            maxHeight: 960,
+          })
+            .then(shot =>
+              shot?.path
+                ? {
+                    id: `${ts}-${i}`,
+                    uri: shot.path,
+                    timeStamp: ts,
+                    type: 'image/jpeg',
+                    fileName: `cover_${i + 1}.jpg`,
+                  }
+                : null,
+            )
+            .catch(() => null),
+        );
+        const generated = (await Promise.all(reqs)).filter(Boolean);
         if (!cancelled) {
           setFrames(generated);
           if (generated.length === 0) {

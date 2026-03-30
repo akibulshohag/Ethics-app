@@ -10,7 +10,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Offline } from './components/Offline';
 import Toast, { BaseToast } from 'react-native-toast-message';
 import colors from './constants/colors';
-import { Alert, BackHandler, View, StyleSheet } from 'react-native';
+import { Alert, BackHandler, View, StyleSheet, Linking } from 'react-native';
 // import Loading from './components/Loading';
 import RootStack from './navigation/RootStack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import {
   connectNotificationSocket,
   disconnectNotificationSocket,
 } from './services/notificationSocket';
+import { parseSharedContentUrl } from './utils/contentLinks';
 
 const AppContent = () => {
   const { user, onboardingDone } = useSelector(state => state.app);
@@ -73,13 +74,49 @@ const AppContent = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const navigateFromUrl = url => {
+      const parsed = parseSharedContentUrl(url);
+      if (!parsed || !navigationRef.current?.isReady?.()) return;
+      const { type, id } = parsed;
+      if (type === 'video') {
+        navigationRef.current.navigate('VideoDetailsScreen', { videoId: id });
+        return;
+      }
+      if (type === 'post') {
+        navigationRef.current.navigate('UserViewsScreen', {
+          sharedPostId: id,
+          focusPostsTab: true,
+          deepLinkVisitSeq: Date.now(),
+        });
+        return;
+      }
+      navigationRef.current.navigate('Root', {
+        screen: 'Shorts',
+        params: {
+          screen: 'ShortsVideoScreen',
+          params: { initialShortId: id, shortId: id, deepLinkVisitSeq: Date.now() },
+        },
+      });
+    };
+
+    const openInitial = async () => {
+      try {
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          setTimeout(() => navigateFromUrl(initialUrl), 400);
+        }
+      } catch {}
+    };
+    openInitial();
+
+    const sub = Linking.addEventListener('url', ({ url }) => navigateFromUrl(url));
+    return () => sub?.remove?.();
+  }, []);
+
   return (
     <NavigationContainer ref={navigationRef}>
-      {_.isEmpty(user) && !onboardingDone ? (
-        <AuthStack />
-      ) : (
-        <RootStack />
-      )}
+      {_.isEmpty(user) && !onboardingDone ? <AuthStack /> : <RootStack />}
     </NavigationContainer>
   );
 };

@@ -42,6 +42,7 @@ import { downloadVideo } from '../services/downloadService';
 import { submitReport } from '../services/reportService';
 import SaveModal from '../components/SaveModal';
 import Toast from 'react-native-toast-message';
+import { buildContentShareMessage } from '../utils/contentLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -851,11 +852,11 @@ const HomeVersion = () => {
       navigationRef.current?.navigate('Login');
       return;
     }
-    const shareUrl =
-      selectedItem.type === 'short'
-        ? `eatix://shorts/${selectedItem.id}`
-        : `eatix://video/${selectedItem.id}`;
-    const message = `${selectedItem.title || 'Video'}\n${shareUrl}`;
+    const message = buildContentShareMessage({
+      type: selectedItem.type === 'short' ? 'short' : 'video',
+      id: selectedItem.id,
+      title: selectedItem.title || 'Video',
+    });
     try {
       await Share.share({ message, title: selectedItem.title || 'Share' });
       if (selectedItem.type === 'video') {

@@ -112,6 +112,22 @@ export const uploadMenuFile = async (token, formData) => {
 };
 
 /**
+ * Upload CSV file and bulk-create menu items/categories. Requires auth.
+ */
+export const uploadMenuCsv = async (token, formData) => {
+  const res = await fetch(`${API_URL}/upload-csv`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Failed to import CSV');
+  }
+  return res.json();
+};
+
+/**
  * List menu files (owner's PDF/image uploads). Requires auth.
  */
 export const getMenuFiles = async (token, userId = null) => {

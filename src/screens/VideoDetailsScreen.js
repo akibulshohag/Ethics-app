@@ -41,6 +41,7 @@ import {
   subscribeToChannel,
   unsubscribeFromChannel,
 } from '../services/channelService';
+import { buildContentShareMessage, buildContentUniversalLink } from '../utils/contentLinks';
 import {
   downloadVideo,
   isVideoDownloaded,
@@ -467,8 +468,12 @@ const VideoDetailsScreen = () => {
         prev ? { ...prev, shareCount: prev.shareCount + 1 } : null,
       );
       await Share.share({
-        message: `Check out this video: ${currentVideo.title}`,
-        url: currentVideo.videoUrl || '',
+        message: buildContentShareMessage({
+          type: 'video',
+          id: currentVideo.id,
+          title: currentVideo.title || 'Video',
+        }),
+        url: buildContentUniversalLink('video', currentVideo.id),
         title: currentVideo.title,
       });
     } catch (error) {

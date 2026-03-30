@@ -39,9 +39,11 @@ import SetVisibilityModal from '../../components/SetVisibilityModal';
 import SelectAudienceModal from '../../components/SelectAudienceModal';
 import CommentsSettingsModal from '../../components/CommentsSettingsModal';
 import VideoScheduleModal from '../../components/VideoScheduleModal';
+import VideoCoverPickerModal from '../../components/VideoCoverPickerModal';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { safeImageUri, navigationRef } from '../../utils/helper';
+import { safeImageUri, navigationRef, isLocalMediaUri } from '../../utils/helper';
+import { buildContentShareMessage } from '../../utils/contentLinks';
 import ProductShortsVideoRow from './ProductShortsVideoRow';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
 import { setPlaylist } from '../../services/playlistService';
@@ -279,6 +281,12 @@ const ProductShortsVideo = () => {
   const [editShortComments, setEditShortComments] =
     useState('Allow all comments');
   const [editShortScheduleDate, setEditShortScheduleDate] = useState(null);
+  const [editInitialHadFutureSchedule, setEditInitialHadFutureSchedule] =
+    useState(false);
+  const [editCoverPickerVisible, setEditCoverPickerVisible] = useState(false);
+  const [editShortDurationSec, setEditShortDurationSec] = useState(15);
+  const [editLocalThumbMeta, setEditLocalThumbMeta] = useState(null);
+  const [editVideoPickMeta, setEditVideoPickMeta] = useState(null);
   const [editVisibilityModalVisible, setEditVisibilityModalVisible] =
     useState(false);
   const [editAudienceModalVisible, setEditAudienceModalVisible] =
@@ -682,9 +690,11 @@ const ProductShortsVideo = () => {
 
   const handleShare = useCallback(async item => {
     if (!item?.id) return;
-    const message = `${item.title || item.desc || 'Short'}\neatix://shorts/${
-      item.id
-    }`;
+    const message = buildContentShareMessage({
+      type: 'short',
+      id: item.id,
+      title: item.title || item.desc || 'Short',
+    });
     try {
       await Share.share({ message, title: item.title || 'Share Short' });
       setVideos(prev =>
@@ -829,6 +839,28 @@ const ProductShortsVideo = () => {
       String(t?.thumbnailUrl || t?.thumbnail || t?.coverUrl || '').trim(),
     );
     setEditShortVideoUri(String(t?.videoUrl || t?.mediaUrl || '').trim());
+    const dur = Number(t?.duration);
+    setEditShortDurationSec(
+      Number.isFinite(dur) && dur > 0 ? dur : 15,
+    );
+    setEditLocalThumbMeta(null);
+    setEditVideoPickMeta(null);
+    const pubAt = t?.publishedAt ? new Date(t.publishedAt) : null;
+    const schedAt = t?.scheduledPublishAt
+      ? new Date(t.scheduledPublishAt)
+      : null;
+    const cand =
+      schedAt && Number.isFinite(schedAt.getTime())
+        ? schedAt
+        : pubAt && Number.isFinite(pubAt.getTime())
+          ? pubAt
+          : null;
+    const isFuture =
+      cand &&
+      Number.isFinite(cand.getTime()) &&
+      cand.getTime() > Date.now() + 60_000;
+    setEditShortScheduleDate(isFuture ? cand : null);
+    setEditInitialHadFutureSchedule(!!isFuture);
     setEditShortVisibility(
       String(t?.visibility || '').toLowerCase() === 'private'
         ? 'Private'
@@ -847,10 +879,19 @@ const ProductShortsVideo = () => {
       ageRestricted:
         typeof t?.ageRestricted === 'boolean' ? Boolean(t.ageRestricted) : null,
     });
-    setEditShortScheduleDate(
-      t?.scheduledPublishAt ? new Date(t.scheduledPublishAt) : null,
-    );
     setEditShortVisible(true);
+  };
+
+  const openEditCoverFromVideoProduct = () => {
+    const vid = String(editShortVideoUri || '').trim();
+    const fromItem = String(
+      menuTargetProduct()?.videoUrl || menuTargetProduct()?.mediaUrl || '',
+    ).trim();
+    if (!vid && !fromItem) {
+      Alert.alert('No video', 'Add or keep a video first.');
+      return;
+    }
+    setEditCoverPickerVisible(true);
   };
 
   const pickEditShortThumbnailProduct = async () => {
@@ -860,7 +901,13 @@ const ProductShortsVideo = () => {
       selectionLimit: 1,
     });
     const asset = res?.assets?.[0];
-    if (asset?.uri) setEditShortThumbnailUri(asset.uri);
+    if (asset?.uri) {
+      setEditShortThumbnailUri(asset.uri);
+      setEditLocalThumbMeta({
+        type: asset.type || 'image/jpeg',
+        name: asset.fileName || 'thumb.jpg',
+      });
+    }
   };
 
   const pickEditShortVideoProduct = async () => {
@@ -870,21 +917,80 @@ const ProductShortsVideo = () => {
       selectionLimit: 1,
     });
     const asset = res?.assets?.[0];
-    if (asset?.uri) setEditShortVideoUri(asset.uri);
+    if (asset?.uri) {
+      setEditShortVideoUri(asset.uri);
+      setEditVideoPickMeta({
+        type: asset.type || 'video/mp4',
+        name: asset.fileName || 'short.mp4',
+      });
+      const d = Number(asset?.duration);
+      if (Number.isFinite(d) && d > 0) {
+        setEditShortDurationSec(d);
+      }
+    }
   };
 
   const submitEditShortFromMenuProduct = async () => {
     if (!editShortTargetId || !user?.id) return;
     const nextTitle = String(editShortTitle || '').trim();
     const nextText = String(editShortText || '').trim();
+    let thumbOut = String(editShortThumbnailUri || '').trim();
+    let vidOut = String(editShortVideoUri || '').trim();
+    const needUpload =
+      isLocalMediaUri(thumbOut) || isLocalMediaUri(vidOut);
+    const scheduleMs =
+      editShortScheduleDate instanceof Date
+        ? editShortScheduleDate.getTime()
+        : NaN;
+    const isFutureSchedule =
+      Number.isFinite(scheduleMs) && scheduleMs > Date.now() + 60_000;
+
     try {
       setEditShortSubmitting(true);
-      await shortsService.updateShort(editShortTargetId, user.id, {
+      if (needUpload) {
+        try {
+          const mediaResult = await shortsService.replaceShortMedia(
+            editShortTargetId,
+            user.id,
+            {
+              videoUri: isLocalMediaUri(vidOut) ? vidOut : null,
+              videoType: editVideoPickMeta?.type,
+              videoName: editVideoPickMeta?.name,
+              thumbnailUri: isLocalMediaUri(thumbOut) ? thumbOut : null,
+              thumbnailType: editLocalThumbMeta?.type,
+              thumbnailName: editLocalThumbMeta?.name,
+            },
+          );
+          if (mediaResult?.thumbnailUrl) {
+            thumbOut = mediaResult.thumbnailUrl;
+          }
+          if (mediaResult?.videoUrl) {
+            vidOut = mediaResult.videoUrl;
+          }
+        } catch (mediaErr) {
+          const msg = String(
+            mediaErr?.response?.data?.message || mediaErr?.message || '',
+          );
+          const unsupported =
+            mediaErr?.response?.status === 404 ||
+            msg.includes('Cannot POST') ||
+            msg.includes('/media');
+          if (!unsupported) throw mediaErr;
+          Toast.show({
+            type: 'info',
+            text1: 'Media route not found on backend',
+            text2: 'Saved details only. Restart/update backend for media replace.',
+          });
+        }
+      }
+
+      const patch = {
         title: nextTitle || undefined,
         description: nextText || undefined,
-        thumbnailUrl: String(editShortThumbnailUri || '').trim() || undefined,
-        videoUrl: String(editShortVideoUri || '').trim() || undefined,
-        mediaUrl: String(editShortVideoUri || '').trim() || undefined,
+        thumbnailUrl: thumbOut || undefined,
+        coverUrl: thumbOut || undefined,
+        videoUrl: vidOut || undefined,
+        mediaUrl: vidOut || undefined,
         visibility: mapVisibilityForApi(editShortVisibility),
         commentSetting: mapCommentsForApi(editShortComments),
         ...(editShortAudience?.madeForKids != null && {
@@ -893,10 +999,19 @@ const ProductShortsVideo = () => {
         ...(editShortAudience?.ageRestricted != null && {
           ageRestricted: Boolean(editShortAudience.ageRestricted),
         }),
-        ...(editShortScheduleDate instanceof Date && {
-          scheduledPublishAt: editShortScheduleDate.toISOString(),
-        }),
-      });
+      };
+      if (isFutureSchedule) {
+        patch.scheduledPublishAt = editShortScheduleDate.toISOString();
+      } else if (editInitialHadFutureSchedule) {
+        patch.publishImmediately = true;
+      }
+
+      const saved = await shortsService.updateShort(
+        editShortTargetId,
+        user.id,
+        patch,
+      );
+
       setVideos(prev =>
         prev.map(v =>
           String(v.id) === String(editShortTargetId)
@@ -905,11 +1020,15 @@ const ProductShortsVideo = () => {
                 desc: nextText || v.desc,
                 description: nextText || v.description,
                 title: nextTitle || v.title,
-                thumbnailUrl: editShortThumbnailUri || v.thumbnailUrl,
-                thumbnail: editShortThumbnailUri || v.thumbnail,
-                coverUrl: editShortThumbnailUri || v.coverUrl,
-                videoUrl: editShortVideoUri || v.videoUrl,
-                mediaUrl: editShortVideoUri || v.mediaUrl,
+                thumbnailUrl: saved.thumbnailUrl ?? thumbOut ?? v.thumbnailUrl,
+                thumbnail: saved.thumbnailUrl ?? thumbOut ?? v.thumbnail,
+                coverUrl:
+                  saved.coverUrl ??
+                  saved.thumbnailUrl ??
+                  thumbOut ??
+                  v.coverUrl,
+                videoUrl: saved.videoUrl ?? vidOut ?? v.videoUrl,
+                mediaUrl: saved.videoUrl ?? vidOut ?? v.mediaUrl,
                 visibility: mapVisibilityForApi(editShortVisibility),
                 commentSetting: mapCommentsForApi(editShortComments),
                 madeForKids:
@@ -920,9 +1039,11 @@ const ProductShortsVideo = () => {
                   editShortAudience?.ageRestricted != null
                     ? Boolean(editShortAudience.ageRestricted)
                     : v.ageRestricted,
-                scheduledPublishAt:
-                  editShortScheduleDate instanceof Date
-                    ? editShortScheduleDate.toISOString()
+                publishedAt: saved.publishedAt ?? v.publishedAt,
+                scheduledPublishAt: isFutureSchedule
+                  ? editShortScheduleDate.toISOString()
+                  : editInitialHadFutureSchedule
+                    ? null
                     : v.scheduledPublishAt,
               }
             : v,
@@ -1169,7 +1290,7 @@ const ProductShortsVideo = () => {
             <View style={styles.editTopSection}>
               <TouchableOpacity
                 style={styles.editCoverContainer}
-                onPress={pickEditShortThumbnailProduct}
+                onPress={openEditCoverFromVideoProduct}
               >
                 <Image
                   source={{
@@ -1181,7 +1302,9 @@ const ProductShortsVideo = () => {
                   style={styles.editCoverImage}
                 />
                 <View style={styles.editSelectCoverOverlay}>
-                  <Text style={styles.editSelectCoverText}>Select Cover</Text>
+                  <Text style={styles.editSelectCoverText}>
+                    Select Cover From Video
+                  </Text>
                 </View>
               </TouchableOpacity>
               <View style={styles.editCaptionContainer}>
@@ -1196,6 +1319,15 @@ const ProductShortsVideo = () => {
                 />
               </View>
             </View>
+            <TouchableOpacity
+              style={styles.editCoverGalleryBtn}
+              onPress={pickEditShortThumbnailProduct}
+              disabled={editShortSubmitting}
+            >
+              <Text style={styles.editCoverGalleryText}>
+                Or pick cover photo from gallery
+              </Text>
+            </TouchableOpacity>
             <TextInput
               value={editShortTitle}
               onChangeText={setEditShortTitle}
@@ -1246,9 +1378,22 @@ const ProductShortsVideo = () => {
                 </View>
                 <View style={styles.editOptionRight}>
                   <Text style={styles.editOptionValue}>
-                    {editShortScheduleDate instanceof Date
-                      ? editShortScheduleDate.toLocaleDateString()
-                      : 'Now'}
+                    {(() => {
+                      const d = editShortScheduleDate;
+                      if (!(d instanceof Date)) return 'Now';
+                      const ms = d.getTime();
+                      if (
+                        !Number.isFinite(ms) ||
+                        ms <= Date.now() + 60_000
+                      ) {
+                        return 'Now';
+                      }
+                      return d.toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      });
+                    })()}
                   </Text>
                   <Ionicons name="chevron-forward" size={18} color="#333" />
                 </View>
@@ -1325,6 +1470,27 @@ const ProductShortsVideo = () => {
             initialDate={editShortScheduleDate}
             onSelectNow={() => setEditShortScheduleDate(null)}
             onConfirmDate={d => setEditShortScheduleDate(d)}
+          />
+          <VideoCoverPickerModal
+            visible={editCoverPickerVisible}
+            onClose={() => setEditCoverPickerVisible(false)}
+            videoUri={
+              editShortVideoUri ||
+              menuTargetProduct()?.videoUrl ||
+              menuTargetProduct()?.mediaUrl
+            }
+            durationSec={editShortDurationSec}
+            onSelect={frame => {
+              if (frame?.uri) {
+                setEditShortThumbnailUri(frame.uri);
+                setEditLocalThumbMeta({
+                  type: frame.type || 'image/jpeg',
+                  name: frame.fileName || 'thumb.jpg',
+                });
+              }
+              setEditCoverPickerVisible(false);
+            }}
+            title="Select short cover"
           />
         </View>
       </Modal>
@@ -1812,8 +1978,19 @@ const styles = StyleSheet.create({
   },
   editSelectCoverText: {
     color: '#fff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  editCoverGalleryBtn: {
+    marginTop: 8,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
+  },
+  editCoverGalleryText: {
+    fontSize: 13,
+    color: '#666',
+    textDecorationLine: 'underline',
   },
   editCaptionContainer: {
     flex: 1,

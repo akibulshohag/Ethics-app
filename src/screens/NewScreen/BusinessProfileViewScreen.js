@@ -58,6 +58,10 @@ import {
   recordGalleryPhotoShare,
 } from '../../services/channelService';
 import {
+  pickProfileAvatarCrop,
+  pickProfileCoverCrop,
+} from '../../utils/profileImagePicker';
+import {
   getUserVideos,
   updateVideo,
   deleteVideo,
@@ -73,12 +77,14 @@ import {
 import {
   getMenuByUserId,
   getMenuFiles,
+  uploadMenuItemImage,
   updateMenuItem,
   deleteMenuItem,
   deleteMenuFile,
 } from '../../services/menuService';
 import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
+import { buildPostShareMessage } from '../../utils/contentLinks';
 import {
   geocodeAddress,
   getCurrentPositionSafe,
@@ -89,6 +95,7 @@ import CreatePromotionModal from '../../components/CreatePromotionModal';
 import Video from 'react-native-video';
 import { getSocialIcon } from '../../constants/socialLinks';
 import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
+import { ALLERGENS, normalizeAllergens } from '../../constants/allergens';
 
 const { width } = Dimensions.get('window');
 
@@ -236,7 +243,7 @@ const MOCK_PROMOTIONS = [
   {
     id: '1',
     title: '10 Rice Bag',
-    price: '$100',
+    price: '€100',
     image:
       'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
@@ -244,7 +251,7 @@ const MOCK_PROMOTIONS = [
   {
     id: '2',
     title: '10 Rice Bag',
-    price: '$100',
+    price: '€100',
     image:
       'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
@@ -252,7 +259,7 @@ const MOCK_PROMOTIONS = [
   {
     id: '3',
     title: '10 Rice Bag',
-    price: '$100',
+    price: '€100',
     image:
       'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
@@ -412,6 +419,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [itemEditPromoAmount, setItemEditPromoAmount] = useState('');
   const [itemEditThumbnailUri, setItemEditThumbnailUri] = useState('');
   const [itemEditVideoUri, setItemEditVideoUri] = useState('');
+  const [itemEditCategoryId, setItemEditCategoryId] = useState('');
+  const [itemEditAllergens, setItemEditAllergens] = useState([]);
+  const [itemEditAllergenIconUrls, setItemEditAllergenIconUrls] = useState([]);
+  const [itemEditAllergenIconUploading, setItemEditAllergenIconUploading] =
+    useState(false);
   const [itemEditSaving, setItemEditSaving] = useState(false);
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
   const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
@@ -513,6 +525,36 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       setOwnerVideosLoading(false);
     }
   }, [profileUserId]);
+
+  useEffect(() => {
+    const sub = shortsService.onShortUpdated?.(updated => {
+      const sid = String(updated?.id || '').trim();
+      if (!sid) return;
+      setOwnerVideos(prev =>
+        prev.map(v => {
+          if (String(v?.id) !== sid) return v;
+          const vType = String(v?._type || v?.type || '').toLowerCase();
+          if (vType && vType !== 'short') return v;
+          return {
+            ...v,
+            title: updated?.title ?? v.title,
+            description: updated?.description ?? v.description,
+            thumbnail:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnail,
+            thumbnailUrl:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnailUrl,
+            coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? v.coverUrl,
+            videoUrl: updated?.videoUrl ?? v.videoUrl,
+            mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? v.mediaUrl,
+            visibility: updated?.visibility ?? v.visibility,
+            commentSetting: updated?.commentSetting ?? v.commentSetting,
+            publishedAt: updated?.publishedAt ?? v.publishedAt,
+          };
+        }),
+      );
+    });
+    return () => sub?.remove?.();
+  }, []);
 
   const combinedGalleryFeed = useMemo(() => {
     const postItems = (posts || []).map(p => {
@@ -940,38 +982,42 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const handleCoverPress = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || uploadingCover)
       return;
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
-      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-      const asset = res.assets[0];
+    (async () => {
+      let file;
+      try {
+        file = await pickProfileCoverCrop();
+      } catch (e) {
+        Alert.alert('Error', e?.message || 'Could not process image');
+        return;
+      }
+      if (!file) return;
       setUploadingCover(true);
       try {
-        await uploadCoverImage(profileUserId, {
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || 'cover.jpg',
-        });
+        await uploadCoverImage(profileUserId, file);
         await loadProfile();
       } catch (e) {
         Alert.alert('Error', e?.message || 'Failed to upload cover image');
       } finally {
         setUploadingCover(false);
       }
-    });
+    })();
   }, [profileUserId, currentUser?.id, uploadingCover, loadProfile]);
 
   const handleAvatarPress = useCallback(() => {
     if (!profileUserId || profileUserId !== currentUser?.id || uploadingAvatar)
       return;
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
-      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-      const asset = res.assets[0];
+    (async () => {
+      let file;
+      try {
+        file = await pickProfileAvatarCrop();
+      } catch (e) {
+        Alert.alert('Error', e?.message || 'Could not process image');
+        return;
+      }
+      if (!file) return;
       setUploadingAvatar(true);
       try {
-        const data = await uploadProfilePhoto(profileUserId, {
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || 'avatar.jpg',
-        });
+        const data = await uploadProfilePhoto(profileUserId, file);
         await loadProfile();
         const photoUrl = data?.photoUrl || data?.userUpdate?.photos?.[0]?.src;
         if (currentUser?.id === profileUserId && photoUrl) {
@@ -987,7 +1033,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       } finally {
         setUploadingAvatar(false);
       }
-    });
+    })();
   }, [profileUserId, currentUser, uploadingAvatar, loadProfile, dispatch]);
 
   const saveProfile = async () => {
@@ -1162,7 +1208,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       if (!post) return;
       try {
         await Share.share({
-          message: `${post.title}\neatix://post/${postId}`,
+          message: buildPostShareMessage({ id: postId }),
           title: post.title,
         });
         await recordPostShare(postId);
@@ -1703,6 +1749,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       setItemEditDescription(String(item.description || '').trim());
       setItemEditThumbnailUri(String(item.imageUrl || '').trim());
       setItemEditVideoUri('');
+      setItemEditCategoryId(String(item.categoryId || item.category?.id || '').trim());
+      setItemEditAllergens(normalizeAllergens(item.allergens));
+      setItemEditAllergenIconUrls(normalizeAllergens(item.allergenIconUrls));
     } else if (kind === 'promotion') {
       setItemEditTitle(String(item.title || '').trim());
       setItemEditDescription(String(item.description || '').trim());
@@ -1744,6 +1793,38 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     const asset = res?.assets?.[0];
     if (asset?.uri) setItemEditVideoUri(asset.uri);
   }, []);
+
+  const pickItemAllergenIcon = useCallback(async () => {
+    if (!currentUser?.token) return;
+    const res = await launchImageLibrary({
+      mediaType: 'photo',
+      quality: 0.9,
+      selectionLimit: 1,
+    });
+    const asset = res?.assets?.[0];
+    if (!asset?.uri) return;
+    setItemEditAllergenIconUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', {
+        uri: asset.uri,
+        type: asset.type || 'image/jpeg',
+        name:
+          asset.fileName || asset.uri?.split('/').pop() || 'allergen-icon.jpg',
+      });
+      const data = await uploadMenuItemImage(currentUser.token, formData);
+      const url = String(data?.imageUrl || '').trim();
+      if (url) {
+        setItemEditAllergenIconUrls(prev =>
+          prev.includes(url) ? prev : [...prev, url],
+        );
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Allergen icon upload failed');
+    } finally {
+      setItemEditAllergenIconUploading(false);
+    }
+  }, [currentUser?.token]);
 
   const submitItemEdit = useCallback(async () => {
     const target = itemActionTarget;
@@ -1803,6 +1884,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               ? undefined
               : Number(itemEditPrice.trim()),
           imageUrl: itemEditThumbnailUri.trim() || undefined,
+          categoryId: itemEditCategoryId ? itemEditCategoryId : null,
+          allergens: Array.isArray(itemEditAllergens) ? itemEditAllergens : [],
+          allergenIconUrls: Array.isArray(itemEditAllergenIconUrls)
+            ? itemEditAllergenIconUrls
+            : [],
         };
         await updateMenuItem(currentUser?.token, item.id, payload);
         setMenuItems(prev =>
@@ -1826,6 +1912,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     itemEditPromoAmount,
     itemEditThumbnailUri,
     itemEditVideoUri,
+    itemEditCategoryId,
+    itemEditAllergens,
+    itemEditAllergenIconUrls,
   ]);
 
   const deleteItemFromActions = useCallback(() => {
@@ -2350,7 +2439,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               {item.itemName}
             </Text>
             <Text style={styles.menuRowPrice}>
-              {item.price != null ? `$${Number(item.price).toFixed(2)}` : '—'}
+              {item.price != null ? `€${Number(item.price).toFixed(2)}` : '—'}
             </Text>
           </View>
           {isOwnProfile && item.id ? (
@@ -2884,6 +2973,125 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholderTextColor="#9CA3AF"
                 keyboardType="decimal-pad"
               />
+            ) : null}
+            {itemActionTarget?.kind === 'menu' ? (
+              <>
+                <Text style={styles.postEditSmallLabel}>Category</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.postEditChipRow}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.postEditChip,
+                      !itemEditCategoryId && styles.postEditChipActive,
+                    ]}
+                    onPress={() => setItemEditCategoryId('')}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.postEditChipText,
+                        !itemEditCategoryId && styles.postEditChipTextActive,
+                      ]}
+                    >
+                      None
+                    </Text>
+                  </TouchableOpacity>
+                  {(menuCategories || []).map(cat => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.postEditChip,
+                        itemEditCategoryId === cat.id &&
+                          styles.postEditChipActive,
+                      ]}
+                      onPress={() => setItemEditCategoryId(cat.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.postEditChipText,
+                          itemEditCategoryId === cat.id &&
+                            styles.postEditChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {cat.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <Text style={styles.postEditSmallLabel}>Allergens</Text>
+                <View style={styles.postEditAllergenWrap}>
+                  {ALLERGENS.map(a => {
+                    const active = itemEditAllergens.includes(a.key);
+                    return (
+                      <TouchableOpacity
+                        key={a.key}
+                        style={[
+                          styles.postEditAllergenChip,
+                          active && styles.postEditAllergenChipActive,
+                        ]}
+                        onPress={() =>
+                          setItemEditAllergens(prev =>
+                            prev.includes(a.key)
+                              ? prev.filter(x => x !== a.key)
+                              : [...prev, a.key],
+                          )
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <MaterialCommunityIcons
+                          name={a.icon}
+                          size={16}
+                          color={active ? '#fff' : '#666'}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.postEditSmallLabel}>
+                  Custom allergen icons
+                </Text>
+                <TouchableOpacity
+                  style={styles.postEditMediaBtn}
+                  onPress={pickItemAllergenIcon}
+                  disabled={itemEditAllergenIconUploading}
+                >
+                  {itemEditAllergenIconUploading ? (
+                    <ActivityIndicator size="small" color="#E26A00" />
+                  ) : (
+                    <Text style={styles.postEditMediaBtnText}>
+                      Upload allergen icon
+                    </Text>
+                  )}
+                </TouchableOpacity>
+                {itemEditAllergenIconUrls.length > 0 ? (
+                  <View style={styles.postEditCustomIconWrap}>
+                    {itemEditAllergenIconUrls.map((uri, idx) => (
+                      <View key={`${uri}-${idx}`} style={styles.postEditCustomIconItem}>
+                        <Image source={{ uri }} style={styles.postEditCustomIconImage} />
+                        <TouchableOpacity
+                          style={styles.postEditCustomIconRemove}
+                          onPress={() =>
+                            setItemEditAllergenIconUrls(prev =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
+                        >
+                          <MaterialCommunityIcons
+                            name="close"
+                            size={12}
+                            color="#fff"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </>
             ) : null}
             {itemActionTarget?.kind === 'promotion' ? (
               <>
@@ -4612,6 +4820,86 @@ const styles = StyleSheet.create({
   postEditTextarea: {
     minHeight: 90,
     textAlignVertical: 'top',
+  },
+  postEditSmallLabel: {
+    marginTop: 4,
+    marginBottom: 6,
+    color: '#6B7280',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  postEditChipRow: {
+    marginBottom: 10,
+  },
+  postEditChip: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginRight: 8,
+    backgroundColor: '#fff',
+    maxWidth: 160,
+  },
+  postEditChipActive: {
+    borderColor: '#FF8C00',
+    backgroundColor: '#FF8C00',
+  },
+  postEditChipText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  postEditChipTextActive: {
+    color: '#fff',
+  },
+  postEditAllergenWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 10,
+  },
+  postEditAllergenChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  postEditAllergenChipActive: {
+    backgroundColor: '#FF8C00',
+    borderColor: '#FF8C00',
+  },
+  postEditCustomIconWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 10,
+  },
+  postEditCustomIconItem: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  postEditCustomIconImage: {
+    width: '100%',
+    height: '100%',
+  },
+  postEditCustomIconRemove: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: 16,
+    height: 16,
+    borderBottomLeftRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   postEditRow: {
     flexDirection: 'row',

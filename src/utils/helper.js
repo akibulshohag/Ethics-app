@@ -44,3 +44,22 @@ export function safeImageUri(val, placeholder = 'https://via.placeholder.com/200
   }
   return placeholder;
 }
+
+/** True when URI must be uploaded (not a remote https URL stored on the server). */
+export function isLocalMediaUri(uri) {
+  const s = String(uri || '').trim();
+  if (!s) return false;
+  const lower = s.toLowerCase();
+  if (lower.startsWith('https://') || lower.startsWith('http://')) {
+    return false;
+  }
+  return (
+    lower.startsWith('file://') ||
+    lower.startsWith('content://') ||
+    lower.startsWith('ph://') ||
+    lower.startsWith('assets-library://') ||
+    lower.startsWith('/private/') ||
+    lower.startsWith('/var/') ||
+    lower.startsWith('/tmp/')
+  );
+}

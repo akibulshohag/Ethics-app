@@ -93,7 +93,7 @@ const PromoDetailsScreen = () => {
       ? safeImageUri(item.imageUrl)
       : 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
     const priceStr =
-      item?.price != null ? `$${Number(item.price).toFixed(2)}` : 'UPTO $3';
+      item?.price != null ? `€${Number(item.price).toFixed(2)}` : 'UPTO €3';
 
     return (
       <TouchableOpacity

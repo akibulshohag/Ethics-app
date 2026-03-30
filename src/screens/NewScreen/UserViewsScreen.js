@@ -37,6 +37,7 @@ import {
 } from '../../services/videoService';
 import {
   getPostsByUser,
+  getPostById,
   togglePostLike,
   togglePostDislike,
   recordPostShare,
@@ -56,6 +57,11 @@ import SaveModal from '../../components/SaveModal';
 import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 import { getSocialIcon } from '../../constants/socialLinks';
 import { listCustomPlaylists } from '../../services/playlistService';
+import {
+  buildContentShareMessage,
+  buildPostShareMessage,
+  buildContentUniversalLink,
+} from '../../utils/contentLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -285,6 +291,36 @@ const UserViewsScreen = ({ navigation }) => {
     return (rawVideos || []).map(v => mapVideoToCard(v, profile));
   }, [rawVideos, profile]);
 
+  useEffect(() => {
+    const sub = shortsService.onShortUpdated?.(updated => {
+      const sid = String(updated?.id || '').trim();
+      if (!sid) return;
+      setRawVideos(prev =>
+        prev.map(v => {
+          if (String(v?.id) !== sid) return v;
+          const vType = String(v?._type || v?.type || '').toLowerCase();
+          if (vType && vType !== 'short') return v;
+          return {
+            ...v,
+            title: updated?.title ?? v.title,
+            description: updated?.description ?? v.description,
+            thumbnail:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnail,
+            thumbnailUrl:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnailUrl,
+            coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? v.coverUrl,
+            videoUrl: updated?.videoUrl ?? v.videoUrl,
+            mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? v.mediaUrl,
+            visibility: updated?.visibility ?? v.visibility,
+            commentSetting: updated?.commentSetting ?? v.commentSetting,
+            publishedAt: updated?.publishedAt ?? v.publishedAt,
+          };
+        }),
+      );
+    });
+    return () => sub?.remove?.();
+  }, []);
+
   const posts = useMemo(() => {
     return (rawPosts || []).map(p => mapPostToCard(p, profile));
   }, [rawPosts, profile]);
@@ -510,8 +546,12 @@ const UserViewsScreen = ({ navigation }) => {
       );
       recordVideoShare(modalVideo.id);
       await Share.share({
-        message: modalVideo?.title ? `${modalVideo.title}` : 'Check this video',
-        url: modalVideo?.videoUrl || '',
+        message: buildContentShareMessage({
+          type: 'video',
+          id: modalVideo.id,
+          title: modalVideo?.title || 'Video',
+        }),
+        url: buildContentUniversalLink('video', modalVideo.id),
         title: modalVideo?.title || 'Video',
       });
     } catch (_) {}
@@ -637,8 +677,7 @@ const UserViewsScreen = ({ navigation }) => {
       }));
       recordPostShare(postId);
       await Share.share({
-        message: post?.title ? `${post.title}` : 'Check this post',
-        url: post?.mediaUrl || '',
+        message: buildPostShareMessage({ id: postId }),
         title: post?.title || 'Post',
       });
     } catch (e) {
@@ -1325,8 +1364,58 @@ const UserViewsScreen = ({ navigation }) => {
         setActiveTab('Videos');
         navigation.setParams({ focusVideosTab: undefined });
       }
+      if (route.params?.focusPostsTab) {
+        setActiveTab('Posts');
+        navigation.setParams({ focusPostsTab: undefined });
+      }
     }, [route.params?.focusVideosTab, navigation]),
   );
+
+  useEffect(() => {
+    const sharedPostId = route.params?.sharedPostId;
+    if (!sharedPostId) return;
+    let mounted = true;
+    (async () => {
+      try {
+        setActiveTab('Posts');
+        const data = await getPostById(sharedPostId, currentUser?.id);
+        const post = data?.post || data?.data || data || null;
+        if (!post?.id || !mounted) return;
+        setRawPosts(prev => {
+          const list = Array.isArray(prev) ? prev : [];
+          const exists = list.some(p => String(p.id) === String(post.id));
+          if (exists) {
+            return list.map(p => (String(p.id) === String(post.id) ? post : p));
+          }
+          return [post, ...list];
+        });
+        const mapped = mapPostToCard(post, profile);
+        setGalleryPostDetailItem({
+          ...mapped,
+          originId: post.id,
+          sourceType: 'post',
+        });
+        setGalleryPostDetailVisible(true);
+      } catch (_) {
+      } finally {
+        if (mounted) {
+          navigation.setParams({
+            sharedPostId: undefined,
+            deepLinkVisitSeq: undefined,
+          });
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [
+    route.params?.sharedPostId,
+    route.params?.deepLinkVisitSeq,
+    currentUser?.id,
+    navigation,
+    profile,
+  ]);
 
   useEffect(() => {
     if (!profileUserId) return;

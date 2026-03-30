@@ -47,6 +47,10 @@ import {
   recordGalleryPhotoShare,
 } from '../services/channelService';
 import {
+  pickProfileAvatarCrop,
+  pickProfileCoverCrop,
+} from '../utils/profileImagePicker';
+import {
   getUserVideos,
   updateVideo,
   deleteVideo,
@@ -57,6 +61,7 @@ import { getNearbyPromotions } from '../services/promotionService';
 import { appSetUser } from '../redux/actions/appSlice';
 import { safeImageUri } from '../utils/helper';
 import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
+import { buildPostShareMessage } from '../utils/contentLinks';
 import {
   getPostsByUser,
   updatePost,
@@ -405,6 +410,35 @@ const PromotionScreen = ({ onBack }) => {
       setMyVideosLoading(false);
     }
   }, [userId]);
+
+  useEffect(() => {
+    const sub = shortsService.onShortUpdated?.(updated => {
+      const sid = String(updated?.id || '').trim();
+      if (!sid) return;
+      setMyVideos(prev =>
+        prev.map(v => {
+          if (String(v?.id) !== sid) return v;
+          const vType = String(v?.type || v?._type || '').toLowerCase();
+          if (vType && vType !== 'short') return v;
+          return {
+            ...v,
+            title: updated?.title ?? v.title,
+            description: updated?.description ?? v.description,
+            thumbnailUrl:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnailUrl,
+            thumbnail: updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnail,
+            coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? v.coverUrl,
+            videoUrl: updated?.videoUrl ?? v.videoUrl,
+            mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? v.mediaUrl,
+            visibility: updated?.visibility ?? v.visibility,
+            commentSetting: updated?.commentSetting ?? v.commentSetting,
+            publishedAt: updated?.publishedAt ?? v.publishedAt,
+          };
+        }),
+      );
+    });
+    return () => sub?.remove?.();
+  }, []);
 
   /** Your uploads sorted by likes (same pool as My Videos). */
   const mostLikedItems = useMemo(() => {
@@ -957,7 +991,7 @@ const PromotionScreen = ({ onBack }) => {
       if (!post) return;
       try {
         await Share.share({
-          message: `${post.title}\neatix://post/${postId}`,
+          message: buildPostShareMessage({ id: postId }),
           title: post.title,
         });
         await recordPostShare(postId);
@@ -1545,38 +1579,42 @@ const PromotionScreen = ({ onBack }) => {
   const handleCoverPress = () => {
     if (!isOwnProfile) return;
     if (!userId || uploadingCover) return;
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
-      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-      const asset = res.assets[0];
+    (async () => {
+      let file;
+      try {
+        file = await pickProfileCoverCrop();
+      } catch (e) {
+        Alert.alert('Error', e?.message || 'Could not process image');
+        return;
+      }
+      if (!file) return;
       setUploadingCover(true);
       try {
-        await uploadCoverImage(userId, {
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || 'cover.jpg',
-        });
+        await uploadCoverImage(userId, file);
         await loadProfile();
       } catch (e) {
         Alert.alert('Error', e?.message || 'Failed to upload cover image');
       } finally {
         setUploadingCover(false);
       }
-    });
+    })();
   };
 
   const handleAvatarPress = () => {
     if (!isOwnProfile) return;
     if (!userId || uploadingAvatar) return;
-    launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, async res => {
-      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-      const asset = res.assets[0];
+    (async () => {
+      let file;
+      try {
+        file = await pickProfileAvatarCrop();
+      } catch (e) {
+        Alert.alert('Error', e?.message || 'Could not process image');
+        return;
+      }
+      if (!file) return;
       setUploadingAvatar(true);
       try {
-        const data = await uploadProfilePhoto(userId, {
-          uri: asset.uri,
-          type: asset.type || 'image/jpeg',
-          name: asset.fileName || 'avatar.jpg',
-        });
+        const data = await uploadProfilePhoto(userId, file);
         await loadProfile();
         const photoUrl = data?.photoUrl || data?.userUpdate?.photos?.[0]?.src;
         if (photoUrl) {
@@ -1592,7 +1630,7 @@ const PromotionScreen = ({ onBack }) => {
       } finally {
         setUploadingAvatar(false);
       }
-    });
+    })();
   };
 
   const getThumbnailForItem = item => {

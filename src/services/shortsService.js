@@ -1,8 +1,19 @@
 import axios from 'axios';
+import { DeviceEventEmitter } from 'react-native';
 import { config } from '../../config';
+import { isLocalMediaUri } from '../utils/helper';
 
 // Shorts API: POST /v1/shorts/upload (not /videos - this is for shorts)
 const API_URL = `${config.apiBaseUrl}/shorts`;
+const SHORT_UPDATED_EVENT = 'shorts:updated';
+
+const toUpdatedShortPayload = payload => {
+  if (!payload) return null;
+  if (payload.short && typeof payload.short === 'object') return payload.short;
+  if (payload.data && typeof payload.data === 'object') return payload.data;
+  if (typeof payload === 'object') return payload;
+  return null;
+};
 
 const getAuthHeaders = () => {
   try {
@@ -103,7 +114,76 @@ export const shortsService = {
     }, {
       headers: getAuthHeaders(),
     });
+    const updated = toUpdatedShortPayload(response.data);
+    if (updated?.id || shortId) {
+      DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
+        ...(updated || {}),
+        id: String(updated?.id || shortId),
+      });
+    }
     return response.data;
+  },
+
+  /**
+   * Upload new video and/or thumbnail for an existing short (multipart → R2).
+   * Pass local file URIs only; omit a field if that asset was not changed.
+   */
+  async replaceShortMedia(shortId, userId, payload = {}) {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+    const {
+      videoUri,
+      videoType,
+      videoName,
+      thumbnailUri,
+      thumbnailType,
+      thumbnailName,
+    } = payload;
+    const formData = new FormData();
+    formData.append('userId', userId);
+    let n = 0;
+    if (videoUri && isLocalMediaUri(videoUri)) {
+      formData.append('files', {
+        uri: videoUri,
+        type: videoType || 'video/mp4',
+        name: videoName || 'short.mp4',
+      });
+      n += 1;
+    }
+    if (thumbnailUri && isLocalMediaUri(thumbnailUri)) {
+      formData.append('files', {
+        uri: thumbnailUri,
+        type: thumbnailType || 'image/jpeg',
+        name: thumbnailName || 'thumb.jpg',
+      });
+      n += 1;
+    }
+    if (n === 0) {
+      throw new Error('No local video or thumbnail to upload');
+    }
+    const response = await axios.post(`${API_URL}/${shortId}/media`, formData, {
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 120000,
+    });
+    const updated = toUpdatedShortPayload(response.data);
+    if (updated?.id || shortId) {
+      DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
+        ...(updated || {}),
+        id: String(updated?.id || shortId),
+      });
+    }
+    return response.data;
+  },
+
+  onShortUpdated(callback) {
+    if (typeof callback !== 'function') {
+      return { remove: () => {} };
+    }
+    return DeviceEventEmitter.addListener(SHORT_UPDATED_EVENT, callback);
   },
 
   /**

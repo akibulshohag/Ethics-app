@@ -118,7 +118,7 @@ const PromotionDetailScreen = () => {
             <Text style={styles.getFlatText}>
               Get Flat <Text style={styles.highlightText}>30% OFF</Text>
             </Text>
-            <Text style={styles.uptoText}>UPTO $3</Text>
+            <Text style={styles.uptoText}>UPTO €3</Text>
           </View>
         </View>
       );
@@ -128,7 +128,7 @@ const PromotionDetailScreen = () => {
       item?.imageUrl ||
       'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
     const priceStr =
-      item?.price != null ? `$${Number(item.price).toFixed(2)}` : '—';
+      item?.price != null ? `€${Number(item.price).toFixed(2)}` : '—';
 
     return (
       <TouchableOpacity

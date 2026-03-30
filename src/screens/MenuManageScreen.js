@@ -12,12 +12,21 @@ import {
   Image,
   Modal,
   Pressable,
+  Share,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
+import ReactNativeBlobUtil from 'react-native-blob-util';
+import {
+  pick as pickDocumentNative,
+  types as docTypes,
+  isErrorWithCode,
+  errorCodes as docErrorCodes,
+} from '@react-native-documents/picker';
 import {
   getMenuItems,
   getMenuFiles,
@@ -30,8 +39,10 @@ import {
   deleteMenuCategory,
   uploadMenuItemImage,
   uploadMenuFile,
+  uploadMenuCsv,
 } from '../services/menuService';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import { ALLERGENS, normalizeAllergens } from '../constants/allergens';
 
 const MenuManageScreen = () => {
   const navigation = useNavigation();
@@ -45,13 +56,19 @@ const MenuManageScreen = () => {
   const [editingId, setEditingId] = useState(null);
   const [itemName, setItemName] = useState('');
   const [price, setPrice] = useState('');
+  const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [itemImageAsset, setItemImageAsset] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   /** veg | egg | non_veg | '' */
   const [dietaryType, setDietaryType] = useState('');
+  const [selectedAllergens, setSelectedAllergens] = useState([]);
+  const [customAllergenIcons, setCustomAllergenIcons] = useState([]);
+  const [allergenIconUploading, setAllergenIconUploading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [fileUploadLoading, setFileUploadLoading] = useState(false);
+  const [csvUploadLoading, setCsvUploadLoading] = useState(false);
+  const [csvExportLoading, setCsvExportLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [addSuccessInModal, setAddSuccessInModal] = useState(false);
   // Category form (add/edit)
@@ -118,6 +135,110 @@ const MenuManageScreen = () => {
     );
   };
 
+  const pickAndUploadMenuCsv = async () => {
+    try {
+      const picked = await pickDocumentNative({
+        type: ['text/csv', 'text/comma-separated-values', docTypes.plainText],
+        allowMultiSelection: false,
+      });
+      const file = Array.isArray(picked) ? picked[0] : picked;
+      if (!file?.uri) return;
+      setCsvUploadLoading(true);
+      const formData = new FormData();
+      formData.append('file', {
+        uri: file.uri,
+        type: file.type || 'text/csv',
+        name: file.name || 'menu.csv',
+      });
+      const data = await uploadMenuCsv(user.token, formData);
+      Alert.alert(
+        'CSV import done',
+        `Imported: ${data?.importedCount || 0}\nFailed: ${
+          data?.failedCount || 0
+        }\nPrevious menu replaced.`,
+      );
+      loadMenu();
+    } catch (e) {
+      if (isErrorWithCode(e) && e.code === docErrorCodes.OPERATION_CANCELED) {
+        return;
+      }
+      Alert.alert('Error', e?.message || 'CSV import failed');
+    } finally {
+      setCsvUploadLoading(false);
+    }
+  };
+
+  const escapeCsv = (value) => {
+    const str = String(value ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const exportMenuCsv = async () => {
+    try {
+      setCsvExportLoading(true);
+      const categoryMap = new Map(
+        (categories || []).map((c) => [c.id, c.name || '']),
+      );
+      const header = [
+        'item_name',
+        'description',
+        'category',
+        'price',
+        'discount_price',
+        'image_url',
+        'availability',
+        'veg_nonveg',
+        'allergens',
+      ];
+      const rows = (list || []).map((item) => {
+        const dietary =
+          item?.dietaryType === 'non_veg'
+            ? 'non-veg'
+            : item?.dietaryType === 'egg'
+              ? 'egg'
+              : item?.dietaryType === 'veg'
+                ? 'veg'
+                : '';
+        const categoryName =
+          categoryMap.get(item?.categoryId) || item?.category?.name || '';
+        const allergens = Array.isArray(item?.allergens)
+          ? item.allergens.join(',')
+          : '';
+        return [
+          item?.itemName || '',
+          item?.description || '',
+          categoryName,
+          item?.price ?? '',
+          '',
+          item?.imageUrl || '',
+          'available',
+          dietary,
+          allergens,
+        ];
+      });
+      const csv = [header, ...rows]
+        .map((cols) => cols.map(escapeCsv).join(','))
+        .join('\n');
+
+      const fileName = `menu_export_${Date.now()}.csv`;
+      const filePath = `${ReactNativeBlobUtil.fs.dirs.DocumentDir}/${fileName}`;
+      await ReactNativeBlobUtil.fs.writeFile(filePath, csv, 'utf8');
+      const shareUrl = Platform.OS === 'android' ? `file://${filePath}` : filePath;
+      await Share.share({
+        title: 'Export Menu CSV',
+        message: 'Current menu CSV export',
+        url: shareUrl,
+      });
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'CSV export failed');
+    } finally {
+      setCsvExportLoading(false);
+    }
+  };
+
   const pickAndUploadItemImage = () => {
     launchImageLibrary(
       { mediaType: 'photo', selectionLimit: 1 },
@@ -148,10 +269,13 @@ const MenuManageScreen = () => {
     setEditingId(null);
     setItemName('');
     setPrice('');
+    setDescription('');
     setImageUrl('');
     setItemImageAsset(null);
     setSelectedCategoryId(categories.length > 0 ? categories[0].id : '');
     setDietaryType('');
+    setSelectedAllergens([]);
+    setCustomAllergenIcons([]);
     setAddSuccessInModal(false);
     setFormVisible(true);
   };
@@ -160,10 +284,13 @@ const MenuManageScreen = () => {
     setEditingId(item.id);
     setItemName(item.itemName || '');
     setPrice(String(item.price ?? ''));
+    setDescription(String(item.description || '').trim());
     setImageUrl(item.imageUrl || '');
     setItemImageAsset(null);
     setDietaryType(item.dietaryType && ['veg', 'egg', 'non_veg'].includes(item.dietaryType) ? item.dietaryType : '');
     setSelectedCategoryId(item.categoryId || item.category?.id || (categories.length > 0 ? categories[0].id : ''));
+    setSelectedAllergens(normalizeAllergens(item.allergens));
+    setCustomAllergenIcons(normalizeAllergens(item.allergenIconUrls));
     setAddSuccessInModal(false);
     setFormVisible(true);
   };
@@ -173,17 +300,52 @@ const MenuManageScreen = () => {
     setEditingId(null);
     setItemName('');
     setPrice('');
+    setDescription('');
     setImageUrl('');
     setItemImageAsset(null);
     setAddSuccessInModal(false);
+    setCustomAllergenIcons([]);
   };
 
   const resetFormForAnother = () => {
     setItemName('');
     setPrice('');
+    setDescription('');
     setImageUrl('');
     setItemImageAsset(null);
     setAddSuccessInModal(false);
+    setCustomAllergenIcons([]);
+  };
+
+  const pickAndUploadAllergenIcon = () => {
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: 1 },
+      async (res) => {
+        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+        const asset = res.assets[0];
+        setAllergenIconUploading(true);
+        try {
+          const formData = new FormData();
+          formData.append('image', {
+            uri: asset.uri,
+            type: asset.type || 'image/jpeg',
+            name:
+              asset.fileName || asset.uri?.split('/').pop() || 'allergen-icon.jpg',
+          });
+          const data = await uploadMenuItemImage(user.token, formData);
+          const url = String(data?.imageUrl || '').trim();
+          if (url) {
+            setCustomAllergenIcons(prev =>
+              prev.includes(url) ? prev : [...prev, url],
+            );
+          }
+        } catch (e) {
+          Alert.alert('Error', e.message || 'Allergen icon upload failed');
+        } finally {
+          setAllergenIconUploading(false);
+        }
+      },
+    );
   };
 
   const handleSave = async () => {
@@ -202,8 +364,13 @@ const MenuManageScreen = () => {
       const payload = {
         itemName: name,
         price: numPrice,
+        description: description.trim() || undefined,
         imageUrl: imageUrl || undefined,
         ...(selectedCategoryId ? { categoryId: selectedCategoryId } : {}),
+        ...(selectedAllergens.length ? { allergens: selectedAllergens } : { allergens: [] }),
+        ...(customAllergenIcons.length
+          ? { allergenIconUrls: customAllergenIcons }
+          : { allergenIconUrls: [] }),
         ...(dietaryType
           ? { dietaryType }
           : editingId
@@ -416,6 +583,51 @@ const MenuManageScreen = () => {
             {fileUploadLoading ? 'Uploading…' : 'Upload menu file (image)'}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.uploadCsvButton,
+            csvUploadLoading && styles.buttonDisabled,
+          ]}
+          onPress={pickAndUploadMenuCsv}
+          disabled={csvUploadLoading}
+        >
+          {csvUploadLoading ? (
+            <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+          ) : (
+            <Icon
+              name="file-delimited-outline"
+              size={22}
+              color={COLORS.primaryOrange}
+            />
+          )}
+          <Text style={styles.uploadCsvButtonText}>
+            {csvUploadLoading ? 'Importing CSV…' : 'Import menu from CSV (bulk)'}
+          </Text>
+        </TouchableOpacity>
+        <Text style={styles.csvHint}>
+          CSV columns: item_name, description, category, price, image_url,
+          veg_nonveg, allergens
+        </Text>
+        <Text style={styles.csvHint}>
+          Import mode: replaces all existing menu items/categories with this CSV.
+        </Text>
+        <TouchableOpacity
+          style={[
+            styles.exportCsvButton,
+            csvExportLoading && styles.buttonDisabled,
+          ]}
+          onPress={exportMenuCsv}
+          disabled={csvExportLoading}
+        >
+          {csvExportLoading ? (
+            <ActivityIndicator size="small" color={COLORS.gray800} />
+          ) : (
+            <Icon name="file-export-outline" size={22} color={COLORS.gray800} />
+          )}
+          <Text style={styles.exportCsvButtonText}>
+            {csvExportLoading ? 'Exporting CSV…' : 'Export current menu CSV'}
+          </Text>
+        </TouchableOpacity>
         {menuFiles.length > 0 && (
           <Text style={styles.uploadedCount}>{menuFiles.length} file(s) uploaded</Text>
         )}
@@ -443,7 +655,7 @@ const MenuManageScreen = () => {
                     ) : null}
                     <View style={styles.cardTextWrap}>
                       <Text style={styles.cardTitle}>{item.itemName}</Text>
-                      <Text style={styles.cardPrice}>${Number(item.price).toFixed(2)}</Text>
+                      <Text style={styles.cardPrice}>€{Number(item.price).toFixed(2)}</Text>
                     </View>
                   </View>
                   <View style={styles.cardActions}>
@@ -520,6 +732,14 @@ const MenuManageScreen = () => {
                   placeholderTextColor="#999"
                   keyboardType="decimal-pad"
                 />
+                <TextInput
+                  style={[styles.input, styles.textarea]}
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Description (optional)"
+                  placeholderTextColor="#999"
+                  multiline
+                />
                 <Text style={styles.inputLabel}>Veg / Non-veg (for customer filters)</Text>
                 <View style={styles.dietaryRow}>
                   {[
@@ -554,6 +774,79 @@ const MenuManageScreen = () => {
                     </TouchableOpacity>
                   ))}
                 </View>
+                <Text style={styles.inputLabel}>Allergens (tap to select)</Text>
+                <View style={styles.allergenWrap}>
+                  {ALLERGENS.map(a => {
+                    const active = selectedAllergens.includes(a.key);
+                    return (
+                      <TouchableOpacity
+                        key={a.key}
+                        style={[
+                          styles.allergenChip,
+                          active && styles.allergenChipActive,
+                        ]}
+                        onPress={() =>
+                          setSelectedAllergens(prev =>
+                            prev.includes(a.key)
+                              ? prev.filter(x => x !== a.key)
+                              : [...prev, a.key],
+                          )
+                        }
+                      >
+                        <Icon
+                          name={a.icon}
+                          size={16}
+                          color={active ? COLORS.white : '#666'}
+                        />
+                        <Text
+                          style={[
+                            styles.allergenChipText,
+                            active && styles.allergenChipTextActive,
+                          ]}
+                        >
+                          {a.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={styles.inputLabel}>Custom allergen icons (upload)</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.uploadImageBtn,
+                    allergenIconUploading && styles.buttonDisabled,
+                  ]}
+                  onPress={pickAndUploadAllergenIcon}
+                  disabled={allergenIconUploading}
+                >
+                  {allergenIconUploading ? (
+                    <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+                  ) : (
+                    <Icon name="image-plus" size={22} color={COLORS.primaryOrange} />
+                  )}
+                  <Text style={styles.uploadImageBtnText}>
+                    {allergenIconUploading ? 'Uploading…' : 'Upload allergen icon'}
+                  </Text>
+                </TouchableOpacity>
+                {customAllergenIcons.length > 0 ? (
+                  <View style={styles.customIconWrap}>
+                    {customAllergenIcons.map((uri, idx) => (
+                      <View key={`${uri}-${idx}`} style={styles.customIconItem}>
+                        <Image source={{ uri }} style={styles.customIconImage} />
+                        <TouchableOpacity
+                          style={styles.customIconRemove}
+                          onPress={() =>
+                            setCustomAllergenIcons(prev =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
+                        >
+                          <Icon name="close" size={14} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
                 <Text style={styles.inputLabel}>Item image (upload file, no URL)</Text>
                 <TouchableOpacity
                   style={[styles.uploadImageBtn, imageUploading && styles.buttonDisabled]}
@@ -665,6 +958,41 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   uploadFileButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 15 },
+  uploadCsvButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primaryOrange,
+    backgroundColor: '#FFF7ED',
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.md,
+    gap: 8,
+    marginTop: 10,
+  },
+  uploadCsvButtonText: {
+    color: COLORS.primaryOrange,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  csvHint: { fontSize: 12, color: COLORS.gray600, marginTop: 8 },
+  exportCsvButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray300,
+    backgroundColor: COLORS.gray100,
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.md,
+    gap: 8,
+    marginTop: 10,
+  },
+  exportCsvButtonText: {
+    color: COLORS.gray800,
+    fontWeight: '600',
+    fontSize: 15,
+  },
   uploadedCount: { fontSize: 12, color: COLORS.gray600, marginTop: 8 },
   buttonDisabled: { opacity: 0.7 },
   addCategoryButton: {
@@ -757,6 +1085,67 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
     fontSize: 16,
+  },
+  textarea: {
+    minHeight: 70,
+    textAlignVertical: 'top',
+  },
+  allergenWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  allergenChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+  },
+  allergenChipActive: {
+    backgroundColor: COLORS.primaryOrange,
+    borderColor: COLORS.primaryOrange,
+  },
+  allergenChipText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  allergenChipTextActive: {
+    color: COLORS.white,
+  },
+  customIconWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 10,
+  },
+  customIconItem: {
+    width: 42,
+    height: 42,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  customIconImage: {
+    width: '100%',
+    height: '100%',
+  },
+  customIconRemove: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderBottomLeftRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   inputLabel: { fontSize: 14, color: COLORS.gray600, marginBottom: 6 },
   uploadImageBtn: {

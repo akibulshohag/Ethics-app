@@ -66,6 +66,7 @@ import ReportContentModal from '../components/ReportContentModal';
 import { downloadVideo } from '../services/downloadService';
 import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
+import { buildContentShareMessage } from '../utils/contentLinks';
 
 const { width, height } = Dimensions.get('window');
 
@@ -240,6 +241,37 @@ const HomeOneScreen = () => {
     average: 0,
     reviewCount: 0,
   });
+
+  useEffect(() => {
+    const sub = shortsService.onShortUpdated?.(updated => {
+      const sid = String(updated?.id || '').trim();
+      if (!sid) return;
+      const mergeShort = s => ({
+        ...s,
+        title: updated?.title ?? s.title,
+        description: updated?.description ?? s.description,
+        img: updated?.thumbnailUrl ?? updated?.coverUrl ?? s.img,
+        thumbnailUrl:
+          updated?.thumbnailUrl ?? updated?.coverUrl ?? s.thumbnailUrl,
+        coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? s.coverUrl,
+        videoUrl: updated?.videoUrl ?? s.videoUrl,
+        mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? s.mediaUrl,
+        visibility: updated?.visibility ?? s.visibility,
+        commentSetting: updated?.commentSetting ?? s.commentSetting,
+        publishedAt: updated?.publishedAt ?? s.publishedAt,
+      });
+      setFeedShorts(prev =>
+        prev.map(s => (String(s?.id) === sid ? mergeShort(s) : s)),
+      );
+      setSelectedItem(prev => {
+        if (String(prev?.id) !== sid) return prev;
+        const t = String(prev?.type || prev?._type || '').toLowerCase();
+        if (t && t !== 'short') return prev;
+        return mergeShort(prev);
+      });
+    });
+    return () => sub?.remove?.();
+  }, []);
   /** When opening video from Library / UserViews Videos, Back returns there */
   const libraryDetailReturnRef = useRef(null);
 
@@ -1159,9 +1191,11 @@ const HomeOneScreen = () => {
 
   const handleShortShare = useCallback(async item => {
     if (!item?.id) return;
-    const message = `${
-      item.title || item.description || 'Short'
-    }\neatix://shorts/${item.id}`;
+    const message = buildContentShareMessage({
+      type: 'short',
+      id: item.id,
+      title: item.title || item.description || 'Short',
+    });
     try {
       await Share.share({ message, title: item.title || 'Share Short' });
       setSelectedItem(prev => {
@@ -1261,9 +1295,11 @@ const HomeOneScreen = () => {
   const handleRestaurantShare = useCallback(async () => {
     if (!selectedItem?.id) return;
     const isShort = selectedItem?.type === 'short';
-    const message = `${selectedItem?.title || 'Video'}\neatix://${
-      isShort ? 'shorts' : 'video'
-    }/${selectedItem.id}`;
+    const message = buildContentShareMessage({
+      type: isShort ? 'short' : 'video',
+      id: selectedItem.id,
+      title: selectedItem?.title || (isShort ? 'Short' : 'Video'),
+    });
     try {
       await Share.share({ message, title: selectedItem?.title || 'Share' });
       if (!isShort) recordVideoShare(selectedItem.id);
@@ -1448,9 +1484,11 @@ const HomeOneScreen = () => {
   const onMoreShare = useCallback(async () => {
     const t = homeMoreTarget;
     if (!t?.contentId) return;
-    const msg = `${t.title || 'Check this out'}\neatix://${
-      t.contentType === 'short' ? 'shorts' : 'video'
-    }/${t.contentId}`;
+    const msg = buildContentShareMessage({
+      type: t.contentType === 'short' ? 'short' : 'video',
+      id: t.contentId,
+      title: t.title || 'Check this out',
+    });
     try {
       await Share.share({ message: msg, title: t.title });
       if (t.contentType === 'video') {

@@ -130,6 +130,14 @@ const mapShortApiToDisplay = s => {
   };
 };
 
+const mergeUpdatedShortToLibraryCard = (card, updated) => ({
+  ...card,
+  title:
+    ((updated?.title ?? card.title ?? 'Untitled').slice(0, 80)) +
+    ((updated?.title ?? card.title)?.length > 80 ? '...' : ''),
+  thumbnail: safeUri(updated?.thumbnailUrl || updated?.coverUrl || card.thumbnail),
+});
+
 const mapVideoApiToModal = (v = {}) => {
   const u = v.user || {};
   const channelName = u.nickname || u.name || 'Unknown';
@@ -221,6 +229,21 @@ const LibraryScreen = ({ navigation }) => {
   const [historyRefreshing, setHistoryRefreshing] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('All'); // All | Videos | Shorts
   const [downloadedVideos, setDownloadedVideos] = useState([]);
+
+  useEffect(() => {
+    const sub = shortsService.onShortUpdated?.(updated => {
+      const sid = String(updated?.id || '').trim();
+      if (!sid) return;
+      setUserVideos(prev =>
+        prev.map(v =>
+          String(v?.id) === sid && String(v?.type || '').toLowerCase() === 'short'
+            ? mergeUpdatedShortToLibraryCard(v, updated)
+            : v,
+        ),
+      );
+    });
+    return () => sub?.remove?.();
+  }, []);
   const [downloadsLoading, setDownloadsLoading] = useState(false);
 
   // Playlist counts (Watch Later, Liked, Favorites) - dynamic
