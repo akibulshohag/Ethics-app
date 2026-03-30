@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
+    "generate-icons": "bash scripts/generate-app-icons.sh",
     "apk:prod": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/build/intermediates/res/merged/release/ && cd android && ./gradlew assembleRelease && cd .."
   },
   "dependencies": {
@@ -31,6 +32,7 @@
     "react-native-element-dropdown": "^2.12.4",
     "react-native-gesture-handler": "^2.30.0",
     "react-native-html-to-pdf": "^1.3.0",
+    "react-native-image-crop-picker": "^0.51.1",
     "react-native-image-picker": "^8.2.1",
     "react-native-linear-gradient": "^2.8.3",
     "react-native-maps": "^1.27.1",
