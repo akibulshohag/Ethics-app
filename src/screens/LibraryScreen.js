@@ -1953,7 +1953,7 @@ const styles = StyleSheet.create({
   },
   menuIconContainer: {
     width: 45,
-    height: 45,
+    height: 25,
     borderRadius: 22.5,
     backgroundColor: '#FFF5EE',
     justifyContent: 'center',
