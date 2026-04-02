@@ -243,7 +243,7 @@ const MOCK_PROMOTIONS = [
   {
     id: '1',
     title: '10 Rice Bag',
-    price: '€100',
+    price: '£100',
     image:
       'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
@@ -251,7 +251,7 @@ const MOCK_PROMOTIONS = [
   {
     id: '2',
     title: '10 Rice Bag',
-    price: '€100',
+    price: '£100',
     image:
       'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
@@ -259,7 +259,7 @@ const MOCK_PROMOTIONS = [
   {
     id: '3',
     title: '10 Rice Bag',
-    price: '€100',
+    price: '£100',
     image:
       'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
     views: '120',
@@ -428,6 +428,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
   const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
   const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
+  const [postMediaPreviewPostId, setPostMediaPreviewPostId] = useState(null);
   const tabsScrollRef = useRef(null);
   const tabLayoutsRef = useRef({});
   const tabsViewportWidthRef = useRef(0);
@@ -1240,6 +1241,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const openPostMediaPreview = useCallback(post => {
     const media = String(post?.mediaUrl || post?.thumbnail || '').trim();
     if (!media) return;
+    const postId = post?.postId || post?.id;
+    if (postId) setPostMediaPreviewPostId(String(postId));
     const mt = String(post?.mediaType || '').toLowerCase();
     const byExt = /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
     const kind = mt === 'video' || byExt ? 'video' : 'image';
@@ -1247,6 +1250,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setPostMediaPreviewUri(safeImageUri(media));
     setPostMediaPreviewVisible(true);
   }, []);
+
+  const postMediaPreviewPost = useMemo(() => {
+    if (!postMediaPreviewPostId) return null;
+    return (
+      posts.find(
+        p => String(p?.postId || p?.id || '') === String(postMediaPreviewPostId),
+      ) || null
+    );
+  }, [posts, postMediaPreviewPostId]);
 
   const applyGLLike = useCallback(p => {
     const nextLiked = !p.isLiked;
@@ -2439,7 +2451,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               {item.itemName}
             </Text>
             <Text style={styles.menuRowPrice}>
-              {item.price != null ? `€${Number(item.price).toFixed(2)}` : '—'}
+              {item.price != null ? `£${Number(item.price).toFixed(2)}` : '—'}
             </Text>
           </View>
           {isOwnProfile && item.id ? (
@@ -3672,12 +3684,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         visible={postMediaPreviewVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setPostMediaPreviewVisible(false)}
+        onRequestClose={() => {
+          setPostMediaPreviewVisible(false);
+          setPostMediaPreviewPostId(null);
+        }}
       >
         <View style={styles.previewBackdrop}>
           <TouchableOpacity
             style={styles.previewCloseBtn}
-            onPress={() => setPostMediaPreviewVisible(false)}
+            onPress={() => {
+              setPostMediaPreviewVisible(false);
+              setPostMediaPreviewPostId(null);
+            }}
           >
             <MaterialCommunityIcons name="close" size={28} color="#fff" />
           </TouchableOpacity>
@@ -3699,6 +3717,72 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 resizeMode="contain"
               />
             )
+          ) : null}
+          {postMediaPreviewPost ? (
+            <View style={styles.bpGalleryEngageCard}>
+              <View style={styles.bpGalleryEngageRow}>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={() =>
+                    handlePostLike(postMediaPreviewPost?.postId || postMediaPreviewPost?.id)
+                  }
+                >
+                  <MaterialCommunityIcons name="thumb-up-outline" size={18} color="#333" />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {postMediaPreviewPost?.likes ??
+                      formatCount(postMediaPreviewPost?.likeCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={() =>
+                    handlePostDislike(
+                      postMediaPreviewPost?.postId || postMediaPreviewPost?.id,
+                    )
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="thumb-down-outline"
+                    size={18}
+                    color="#333"
+                  />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {postMediaPreviewPost?.dislikes ??
+                      formatCount(postMediaPreviewPost?.dislikeCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={() =>
+                    setCommentsModalPostId(
+                      postMediaPreviewPost?.postId || postMediaPreviewPost?.id,
+                    )
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="comment-text-outline"
+                    size={18}
+                    color="#333"
+                  />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {postMediaPreviewPost?.comments ??
+                      formatCount(postMediaPreviewPost?.commentCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bpGalleryEngageCell}
+                  onPress={() =>
+                    handlePostShare(postMediaPreviewPost?.postId || postMediaPreviewPost?.id)
+                  }
+                >
+                  <MaterialCommunityIcons name="share-outline" size={18} color="#333" />
+                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                    {postMediaPreviewPost?.shares ??
+                      formatCount(postMediaPreviewPost?.shareCount ?? 0)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ) : null}
         </View>
       </Modal>

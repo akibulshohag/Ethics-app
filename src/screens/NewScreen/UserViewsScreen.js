@@ -226,6 +226,7 @@ const UserViewsScreen = ({ navigation }) => {
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
   const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
   const [postMediaPreviewType, setPostMediaPreviewType] = useState('image');
+  const [postMediaPreviewPostId, setPostMediaPreviewPostId] = useState(null);
   const [instagramPreviewVisible, setInstagramPreviewVisible] = useState(false);
   const [instagramPreviewItem, setInstagramPreviewItem] = useState(null);
   const [galleryPostDetailVisible, setGalleryPostDetailVisible] =
@@ -696,6 +697,8 @@ const UserViewsScreen = ({ navigation }) => {
   const openPostMediaPreview = post => {
     const media = String(post?.mediaUrl || post?.thumbnail || '').trim();
     if (!media) return;
+    const postId = post?.postId || post?.id;
+    if (postId) setPostMediaPreviewPostId(String(postId));
     const mt = String(post?.mediaType || '').toLowerCase();
     const byExt = /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
     const kind = mt === 'video' || byExt ? 'video' : 'image';
@@ -703,6 +706,15 @@ const UserViewsScreen = ({ navigation }) => {
     setPostMediaPreviewUri(media);
     setPostMediaPreviewVisible(true);
   };
+
+  const postMediaPreviewPost = useMemo(() => {
+    if (!postMediaPreviewPostId) return null;
+    return (
+      posts.find(
+        p => String(p?.postId || p?.id || '') === String(postMediaPreviewPostId),
+      ) || null
+    );
+  }, [posts, postMediaPreviewPostId]);
 
   const openInstagramPreview = item => {
     if (!item?.mediaUrl) return;
@@ -1985,12 +1997,18 @@ const UserViewsScreen = ({ navigation }) => {
         visible={postMediaPreviewVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setPostMediaPreviewVisible(false)}
+        onRequestClose={() => {
+          setPostMediaPreviewVisible(false);
+          setPostMediaPreviewPostId(null);
+        }}
       >
         <View style={styles.previewBackdrop}>
           <TouchableOpacity
             style={styles.previewCloseBtn}
-            onPress={() => setPostMediaPreviewVisible(false)}
+            onPress={() => {
+              setPostMediaPreviewVisible(false);
+              setPostMediaPreviewPostId(null);
+            }}
           >
             <MaterialCommunityIcons name="close" size={28} color="#fff" />
           </TouchableOpacity>
@@ -2012,6 +2030,66 @@ const UserViewsScreen = ({ navigation }) => {
                 resizeMode="contain"
               />
             )
+          ) : null}
+          {postMediaPreviewPost ? (
+            <View style={styles.galleryPostActionsRow}>
+              <TouchableOpacity
+                style={styles.galleryPostActionBtn}
+                onPress={() => handlePostLike(postMediaPreviewPost)}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    postMediaPreviewPost?.isLiked
+                      ? 'thumb-up'
+                      : 'thumb-up-outline'
+                  }
+                  size={20}
+                  color={postMediaPreviewPost?.isLiked ? '#FF7F0B' : '#fff'}
+                />
+                <Text style={styles.galleryPostActionText}>
+                  {formatCount(postMediaPreviewPost?.likeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.galleryPostActionBtn}
+                onPress={() => handlePostDislike(postMediaPreviewPost)}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    postMediaPreviewPost?.isDisliked
+                      ? 'thumb-down'
+                      : 'thumb-down-outline'
+                  }
+                  size={20}
+                  color={postMediaPreviewPost?.isDisliked ? '#FF7F0B' : '#fff'}
+                />
+                <Text style={styles.galleryPostActionText}>
+                  {formatCount(postMediaPreviewPost?.dislikeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.galleryPostActionBtn}
+                onPress={() => openPostComments(postMediaPreviewPost)}
+              >
+                <MaterialCommunityIcons
+                  name="comment-text-outline"
+                  size={20}
+                  color="#fff"
+                />
+                <Text style={styles.galleryPostActionText}>
+                  {formatCount(postMediaPreviewPost?.commentCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.galleryPostActionBtn}
+                onPress={() => handlePostShare(postMediaPreviewPost)}
+              >
+                <MaterialCommunityIcons name="share-outline" size={20} color="#fff" />
+                <Text style={styles.galleryPostActionText}>
+                  {formatCount(postMediaPreviewPost?.shareCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
       </Modal>

@@ -130,7 +130,7 @@ const ProductDetailModal = ({
                           <Text style={styles.itemTitle}>{item.itemName}</Text>
                           <View style={styles.itemPriceRow}>
                             <Text style={styles.itemPrice}>
-                              €{Number(item.price).toFixed(2)}
+                              £{Number(item.price).toFixed(2)}
                             </Text>
                           </View>
                         </View>

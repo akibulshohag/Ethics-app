@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRoute } from '@react-navigation/native';
 import {
   getRestaurantOrders,
   updateRestaurantOrderStatus,
@@ -70,9 +70,13 @@ const statusColor = status => {
   }
 };
 
-const OrderListScreen = ({ navigation }) => {
+const OrderListScreen = ({ navigation, route: routeProp }) => {
+  const routeHook = useRoute();
+  const route = routeProp || routeHook;
   const { user } = useSelector(state => state.app) || {};
   const role = String(user?.role || '').toLowerCase();
+  const forceCustomerScope = !!route?.params?.forceCustomerScope;
+  const embedded = !!route?.params?.embedded;
   const [orders, setOrders] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -82,7 +86,7 @@ const OrderListScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('All');
   const ORDER_TABS = ['All', 'Pending', 'In Progress', 'Complete', 'Rejected'];
 
-  const isUser = role === 'user';
+  const isUser = role === 'user' || forceCustomerScope;
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
@@ -92,7 +96,9 @@ const OrderListScreen = ({ navigation }) => {
   const [reviewExistingId, setReviewExistingId] = useState(null);
 
   const title =
-    role === 'owner'
+    forceCustomerScope
+      ? 'My orders'
+      : role === 'owner'
       ? 'Restaurant orders'
       : role === 'admin' || role === 'superadmin' || role === 'super_admin'
       ? 'All orders'
@@ -112,6 +118,7 @@ const OrderListScreen = ({ navigation }) => {
         const res = await getRestaurantOrders(user.token, {
           page: p,
           limit,
+          ...(forceCustomerScope ? { scope: 'customer' } : {}),
         });
         const list = res?.orders || [];
         setTotal(res?.total ?? 0);
@@ -124,7 +131,7 @@ const OrderListScreen = ({ navigation }) => {
         setRefreshing(false);
       }
     },
-    [user?.token, page],
+    [user?.token, page, forceCustomerScope],
   );
 
   useEffect(() => {
@@ -164,10 +171,11 @@ const OrderListScreen = ({ navigation }) => {
   };
 
   const canUpdateStatus =
-    role === 'owner' ||
+    !forceCustomerScope &&
+    (role === 'owner' ||
     role === 'admin' ||
     role === 'superadmin' ||
-    role === 'super_admin';
+      role === 'super_admin');
 
   const openReview = async order => {
     if (!user?.token) return;
@@ -297,7 +305,7 @@ const OrderListScreen = ({ navigation }) => {
         )}
         <Text style={styles.cardDate}>{formatDate(item.createdAt)}</Text>
         <Text style={styles.cardItems}>
-          {itemCount} item(s) · {'€'} {Number(item.totalAmount).toFixed(2)}
+          {itemCount} item(s) · {'£'} {Number(item.totalAmount).toFixed(2)}
         </Text>
 
         {isUser && (
@@ -325,7 +333,7 @@ const OrderListScreen = ({ navigation }) => {
                   itemName: it.itemName,
                   price: it.unitPrice,
                   quantity: it.quantity,
-                  currency: '€',
+                  currency: '£',
                   imageUrl: null,
                 }));
                 navigation.navigate('CartDetailsScreen', {
@@ -399,6 +407,13 @@ const OrderListScreen = ({ navigation }) => {
   };
 
   if (!user?.token) {
+    if (embedded) {
+      return (
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Sign in to view orders.</Text>
+        </View>
+      );
+    }
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
@@ -415,15 +430,22 @@ const OrderListScreen = ({ navigation }) => {
     );
   }
 
+  const RootWrapper = embedded ? View : SafeAreaView;
+  const rootWrapperProps = embedded
+    ? { style: styles.embeddedContainer }
+    : { style: styles.container, edges: ['top', 'bottom'] };
+
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{title}</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <RootWrapper {...rootWrapperProps}>
+      {!embedded ? (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{title}</Text>
+          <View style={{ width: 24 }} />
+        </View>
+      ) : null}
       <View style={styles.tabsRow}>
         {ORDER_TABS.map(tab => (
           <TouchableOpacity
@@ -558,7 +580,7 @@ const OrderListScreen = ({ navigation }) => {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </RootWrapper>
   );
 };
 

@@ -27,6 +27,7 @@ export const createRestaurantOrder = async (token, body) => {
 export const getRestaurantOrders = async (token, params = {}) => {
   const q = new URLSearchParams();
   if (params.status) q.set('status', params.status);
+  if (params.scope) q.set('scope', params.scope);
   if (params.page != null) q.set('page', String(params.page));
   if (params.limit != null) q.set('limit', String(params.limit));
   const url = q.toString() ? `${API_URL}?${q}` : API_URL;
@@ -155,5 +156,20 @@ export const listMySubscribersWhoOrderedFromOwner = async (token, ownerId) => {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || 'Failed to load subscribers');
   }
+  return res.json();
+};
+
+/**
+ * Public list of most ordered restaurants for discovery feed.
+ */
+export const getTopRestaurantsByOrders = async (params = {}) => {
+  const q = new URLSearchParams();
+  if (params.page != null) q.set('page', String(params.page));
+  if (params.limit != null) q.set('limit', String(params.limit));
+  const url = q.toString()
+    ? `${API_URL}/top-restaurants?${q.toString()}`
+    : `${API_URL}/top-restaurants`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Failed to load top restaurants');
   return res.json();
 };

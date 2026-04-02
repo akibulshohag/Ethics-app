@@ -268,7 +268,7 @@ export default function OrderDetailsScreen() {
 
   const items = order.items || [];
   const totalAmount = Number(order.totalAmount || 0);
-  const currency = '€';
+  const currency = '£';
   const displayOrderId = order.id ? `#${String(order.id)}` : '—';
   const orderStatus = String(order?.status || '').toLowerCase();
   const isPendingOrder = orderStatus === 'pending';
@@ -299,8 +299,8 @@ export default function OrderDetailsScreen() {
           <tr>
             <td>${escapeHtml(item?.itemName || 'Item')}</td>
             <td style="text-align:center;">${q}</td>
-            <td style="text-align:right;">€ ${unit.toFixed(2)}</td>
-            <td style="text-align:right;">€ ${line.toFixed(2)}</td>
+            <td style="text-align:right;">£ ${unit.toFixed(2)}</td>
+            <td style="text-align:right;">£ ${line.toFixed(2)}</td>
           </tr>
         `;
       })
@@ -369,7 +369,7 @@ export default function OrderDetailsScreen() {
               </tbody>
             </table>
 
-            <div class="total">Grand Total: € ${totalAmount.toFixed(2)}</div>
+            <div class="total">Grand Total: £ ${totalAmount.toFixed(2)}</div>
           </body>
         </html>
       `;
@@ -431,10 +431,7 @@ export default function OrderDetailsScreen() {
     try {
       const path = await generateInvoicePdfPath();
       setInvoiceOptionsVisible(false);
-      Alert.alert(
-        'Invoice downloaded',
-        `Saved invoice PDF to:\n${path}`,
-      );
+      Alert.alert('Invoice downloaded', `Saved invoice PDF to:\n${path}`);
     } catch (e) {
       Alert.alert('Invoice error', e?.message || 'Failed to generate invoice.');
     }
@@ -553,9 +550,7 @@ export default function OrderDetailsScreen() {
               </View>
             </View>
             <Text style={styles.sectionLabel}>Delivery Address</Text>
-            <Text style={styles.addressText}>
-              {deliveryAddressText || '—'}
-            </Text>
+            <Text style={styles.addressText}>{deliveryAddressText || '—'}</Text>
             {restaurantNoteText ? (
               <>
                 <Text style={[styles.sectionLabel, { marginTop: 12 }]}>

@@ -76,6 +76,10 @@ import BusinessVideoTabCard from '../components/BusinessVideoTabCard';
 import CommentsModal from '../components/CommentsModal';
 import CreatePostModal from '../components/CreatePostModal';
 import GalleryVideoDetailModal from '../components/GalleryVideoDetailModal';
+import {
+  abbrevCountryLabel,
+  formatShortProfileLocationLine,
+} from '../utils/locationFormat';
 
 const { width } = Dimensions.get('window');
 
@@ -292,6 +296,7 @@ const PromotionScreen = ({ onBack }) => {
   const [postPreviewVisible, setPostPreviewVisible] = useState(false);
   const [postPreviewUri, setPostPreviewUri] = useState('');
   const [postPreviewType, setPostPreviewType] = useState('image');
+  const [postPreviewPostId, setPostPreviewPostId] = useState(null);
   const [itemActionsVisible, setItemActionsVisible] = useState(false);
   const [itemEditVisible, setItemEditVisible] = useState(false);
   const [actionTarget, setActionTarget] = useState(null);
@@ -315,6 +320,9 @@ const PromotionScreen = ({ onBack }) => {
   );
 
   const lastPromoProfileUserIdRef = useRef(null);
+  const promoTabsScrollRef = useRef(null);
+  const promoTabLayoutsRef = useRef({});
+  const promoTabsViewportWidthRef = useRef(0);
   useEffect(() => {
     if (String(lastPromoProfileUserIdRef.current) === String(userId)) return;
     lastPromoProfileUserIdRef.current = userId;
@@ -326,8 +334,25 @@ const PromotionScreen = ({ onBack }) => {
     (isOwnProfile ? currentUser?.nickname : null) ||
     (isOwnProfile ? currentUser?.name : null) ||
     'User';
-  const displayLocation =
+  const rawAddressLine =
     profile?.address || (isOwnProfile ? currentUser?.address : '') || '';
+  const cityField =
+    (profile?.city && String(profile.city).trim()) ||
+    (profile?.town && String(profile.town).trim()) ||
+    '';
+  const countryField =
+    (profile?.country && String(profile.country).trim()) ||
+    (isOwnProfile && currentUser?.country
+      ? String(currentUser.country).trim()
+      : '') ||
+    '';
+  let displayLocation = '';
+  if (cityField && countryField) {
+    displayLocation = `${cityField}, ${abbrevCountryLabel(countryField)}`;
+  } else {
+    displayLocation =
+      formatShortProfileLocationLine(rawAddressLine) || cityField || '';
+  }
   const bio =
     profile?.channelAbout ||
     (isOwnProfile ? currentUser?.channelAbout : '') ||
@@ -584,6 +609,18 @@ const PromotionScreen = ({ onBack }) => {
     if (!visiblePromoTabs.includes(activePromoTab)) {
       setActivePromoTab(visiblePromoTabs[0] || 'Posts');
     }
+  }, [activePromoTab, visiblePromoTabs]);
+
+  useEffect(() => {
+    const scrollNode = promoTabsScrollRef.current;
+    const tabLayout = promoTabLayoutsRef.current[activePromoTab];
+    const viewportWidth = promoTabsViewportWidthRef.current;
+    if (!scrollNode || !tabLayout || !viewportWidth) return;
+
+    const targetX = Math.max(0, tabLayout.x - (viewportWidth - tabLayout.width) / 2);
+    requestAnimationFrame(() => {
+      scrollNode.scrollTo({ x: targetX, y: 0, animated: true });
+    });
   }, [activePromoTab, visiblePromoTabs]);
 
   useEffect(() => {
@@ -1194,6 +1231,8 @@ const PromotionScreen = ({ onBack }) => {
   const openPostMediaPreview = useCallback(item => {
     const media = String(item?.mediaUrl || item?.thumbnail || '').trim();
     if (!media) return;
+    const postId = item?.postId || item?.id;
+    if (postId) setPostPreviewPostId(String(postId));
     const mt = String(item?.mediaType || '').toLowerCase();
     const byExt = /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
     const type = mt === 'video' || byExt ? 'video' : 'image';
@@ -1201,6 +1240,15 @@ const PromotionScreen = ({ onBack }) => {
     setPostPreviewUri(safeImageUri(media));
     setPostPreviewVisible(true);
   }, []);
+
+  const postPreviewPost = useMemo(() => {
+    if (!postPreviewPostId) return null;
+    return (
+      postsTab.find(
+        p => String(p?.postId || p?.id || '') === String(postPreviewPostId),
+      ) || null
+    );
+  }, [postsTab, postPreviewPostId]);
 
   const handleGalleryTabUpload = useCallback(() => {
     if (!userId || galleryTabUploading) return;
@@ -1915,9 +1963,13 @@ const PromotionScreen = ({ onBack }) => {
         {/* Same tab pattern as Business profile: Posts, Gallery, Video, Notification (no Promotions/Menus) */}
         <View style={styles.promoProfileTabsSection}>
           <ScrollView
+            ref={promoTabsScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.promoTabBarScroll}
+            onLayout={e => {
+              promoTabsViewportWidthRef.current = e.nativeEvent.layout.width;
+            }}
           >
             {visiblePromoTabs.map(tab => {
               const isGrid = tab === 'Gallery';
@@ -1925,6 +1977,12 @@ const PromotionScreen = ({ onBack }) => {
               return (
                 <TouchableOpacity
                   key={tab}
+                  onLayout={e => {
+                    promoTabLayoutsRef.current[tab] = {
+                      x: e.nativeEvent.layout.x,
+                      width: e.nativeEvent.layout.width,
+                    };
+                  }}
                   style={[
                     styles.promoTabPill,
                     active && styles.promoTabPillActive,
@@ -2237,10 +2295,7 @@ const PromotionScreen = ({ onBack }) => {
                           views:
                             item.views || formatCountTab(item.viewCount ?? 0),
                           location:
-                            item.location ||
-                            profile?.address ||
-                            currentUser?.address ||
-                            '',
+                            item.location || displayLocation || '',
                           distance: item.distance || '',
                         }}
                         onPress={() => openLibraryMedia(item)}
@@ -2871,12 +2926,18 @@ const PromotionScreen = ({ onBack }) => {
         visible={postPreviewVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setPostPreviewVisible(false)}
+        onRequestClose={() => {
+          setPostPreviewVisible(false);
+          setPostPreviewPostId(null);
+        }}
       >
         <View style={styles.promoGalleryPreviewBackdrop}>
           <TouchableOpacity
             style={styles.promoGalleryPreviewClose}
-            onPress={() => setPostPreviewVisible(false)}
+            onPress={() => {
+              setPostPreviewVisible(false);
+              setPostPreviewPostId(null);
+            }}
           >
             <Icon name="close" size={28} color="#fff" />
           </TouchableOpacity>
@@ -2898,6 +2959,73 @@ const PromotionScreen = ({ onBack }) => {
                 resizeMode="contain"
               />
             )
+          ) : null}
+          {postPreviewPost ? (
+            <View style={styles.promoGalleryPostActionsRow}>
+              <TouchableOpacity
+                style={styles.promoGalleryPostActionBtn}
+                onPress={() => {
+                  const pid = postPreviewPost?.postId || postPreviewPost?.id;
+                  if (pid && currentUser?.id) handlePostTabLike(pid);
+                }}
+              >
+                <Icon
+                  name={postPreviewPost?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+                  size={20}
+                  color={postPreviewPost?.isLiked ? '#FF7F0B' : '#333'}
+                />
+                <Text style={styles.promoGalleryPostActionText}>
+                  {postPreviewPost?.likes ??
+                    formatCountTab(postPreviewPost?.likeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.promoGalleryPostActionBtn}
+                onPress={() => {
+                  const pid = postPreviewPost?.postId || postPreviewPost?.id;
+                  if (pid && currentUser?.id) handlePostTabDislike(pid);
+                }}
+              >
+                <Icon
+                  name={
+                    postPreviewPost?.isDisliked
+                      ? 'thumb-down'
+                      : 'thumb-down-outline'
+                  }
+                  size={20}
+                  color={postPreviewPost?.isDisliked ? '#FF7F0B' : '#333'}
+                />
+                <Text style={styles.promoGalleryPostActionText}>
+                  {postPreviewPost?.dislikes ??
+                    formatCountTab(postPreviewPost?.dislikeCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.promoGalleryPostActionBtn}
+                onPress={() =>
+                  setCommentsModalPostId(postPreviewPost?.postId || postPreviewPost?.id)
+                }
+              >
+                <Icon name="comment-text-outline" size={20} color="#333" />
+                <Text style={styles.promoGalleryPostActionText}>
+                  {postPreviewPost?.comments ??
+                    formatCountTab(postPreviewPost?.commentCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.promoGalleryPostActionBtn}
+                onPress={() => {
+                  const pid = postPreviewPost?.postId || postPreviewPost?.id;
+                  if (pid) handlePostTabShare(pid);
+                }}
+              >
+                <Icon name="share-outline" size={20} color="#333" />
+                <Text style={styles.promoGalleryPostActionText}>
+                  {postPreviewPost?.shares ??
+                    formatCountTab(postPreviewPost?.shareCount ?? 0)}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
       </Modal>
@@ -3224,17 +3352,23 @@ const styles = StyleSheet.create({
   brandingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', // Pushes logos to ends and keeps avatar in middle
+    justifyContent: 'center',
+    alignSelf: 'center',
     width: '100%',
-    paddingHorizontal: 30, // Adjust this to move logos closer/further from edges
+    paddingHorizontal: 12,
     marginBottom: 8,
+    gap: 10,
   },
   eatText: { color: '#FFF', fontSize: 44, fontWeight: 'bold', marginRight: 20 },
   ixText: { color: '#FFF', fontSize: 44, fontWeight: 'bold', marginLeft: 20 },
   // avatarContainer: { position: 'relative' },
   avatarContainer: {
-    width: 80, // Matches width of headerLogoContainer for perfect centering
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLogoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarImage: {
     width: 92,
@@ -3257,8 +3391,19 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     marginTop: 12,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    width: '100%',
   },
-  profileLocation: { color: '#BDC3C7', fontSize: 13, marginBottom: 18 },
+  profileLocation: {
+    color: '#BDC3C7',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 18,
+    textAlign: 'center',
+    alignSelf: 'stretch',
+    paddingHorizontal: 22,
+  },
   statsContainer: {
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -3419,20 +3564,15 @@ const styles = StyleSheet.create({
   },
   scrollPadding: { paddingBottom: 20 },
   logoImage: {
-    width: 85,
-    height: 30,
-    // marginRight: 15,
-    marginLeft: -8,
-    marginTop: -30,
+    width: 72,
+    height: 26,
   },
   logoImageIx: {
-    width: 60,
-    height: 30,
-    marginLeft: 5,
-    marginTop: -30,
+    width: 52,
+    height: 26,
   },
 
-  brandRow: { flexDirection: 'row', alignItems: 'center', marginBottom: -10 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   avatarImage: {
     width: 95,
     height: 95,
@@ -3541,6 +3681,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
+    paddingRight: 18,
     paddingVertical: 10,
     gap: 8,
     borderBottomWidth: 1,

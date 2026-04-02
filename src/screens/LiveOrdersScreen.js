@@ -19,6 +19,7 @@ import {
   getRestaurantOrders,
   updateRestaurantOrderStatus,
 } from '../services/orderService';
+import OrderListScreen from './OrderListScreen';
 
 /** Shown in tab bar only; pending orders use top-left "Live Order" control. */
 const TAB_ITEMS = ['In Progress', 'Complete', 'Rejected'];
@@ -67,12 +68,16 @@ export default function LiveOrdersScreen() {
   const navigation = useNavigation();
   const user = useSelector(s => s?.app?.user);
   const role = String(user?.role || '').toLowerCase();
-  const canAcceptReject = [
+  const isOwnerOrAdmin = [
     'owner',
+    'vendor',
     'admin',
     'superadmin',
     'super_admin',
+    'super-admin',
   ].includes(role);
+  const canAcceptReject = isOwnerOrAdmin;
+  const [orderScope, setOrderScope] = useState('user');
   const [activeTab, setActiveTab] = useState('Pending');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +86,12 @@ export default function LiveOrdersScreen() {
 
   const loadOrders = useCallback(
     async (isRefresh = false) => {
+      if (orderScope === 'own') {
+        setOrders([]);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
       if (!user?.token) {
         setOrders([]);
         setLoading(false);
@@ -89,7 +100,11 @@ export default function LiveOrdersScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       try {
-        const res = await getRestaurantOrders(user.token, { limit: 100 });
+        const scopeParam = orderScope === 'own' ? 'customer' : 'owner';
+        const res = await getRestaurantOrders(user.token, {
+          limit: 100,
+          scope: scopeParam,
+        });
         const all = res?.orders || [];
         const filtered = all.filter(o => {
           const s = String(o?.status || '').toLowerCase();
@@ -115,7 +130,7 @@ export default function LiveOrdersScreen() {
         setRefreshing(false);
       }
     },
-    [user?.token, activeTab],
+    [user?.token, activeTab, orderScope],
   );
 
   useFocusEffect(
@@ -126,7 +141,7 @@ export default function LiveOrdersScreen() {
 
   useEffect(() => {
     loadOrders();
-  }, [activeTab]);
+  }, [activeTab, orderScope]);
 
   const handleReject = order => {
     Alert.alert('Reject order', 'Cancel this order?', [
@@ -203,65 +218,114 @@ export default function LiveOrdersScreen() {
             <Icon name="chevron-left" size={20} color="white" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.liveOrderBtn,
-              activeTab === 'Pending' && styles.liveOrderBtnActive,
-            ]}
-            onPress={() => setActiveTab('Pending')}
-            activeOpacity={0.75}
-          >
-            <View
+          {orderScope === 'user' ? (
+            <TouchableOpacity
               style={[
-                styles.orangeCircle,
-                activeTab === 'Pending' && styles.orangeCircleOnLiveActive,
+                styles.liveOrderBtn,
+                activeTab === 'Pending' && styles.liveOrderBtnActive,
               ]}
+              onPress={() => setActiveTab('Pending')}
+              activeOpacity={0.75}
             >
               <View
                 style={[
-                  styles.innerPlay,
-                  activeTab === 'Pending' && styles.innerPlayOnLiveActive,
+                  styles.orangeCircle,
+                  activeTab === 'Pending' && styles.orangeCircleOnLiveActive,
                 ]}
-              />
-            </View>
-            <Text
-              style={[
-                styles.liveOrderBtnText,
-                activeTab === 'Pending' && styles.liveOrderBtnTextActive,
-              ]}
-              numberOfLines={1}
-            >
-              Live Order
-            </Text>
-          </TouchableOpacity>
+              >
+                <View
+                  style={[
+                    styles.innerPlay,
+                    activeTab === 'Pending' && styles.innerPlayOnLiveActive,
+                  ]}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.liveOrderBtnText,
+                  activeTab === 'Pending' && styles.liveOrderBtnTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                Live Order
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View />
+          )}
         </View>
-
-        <View style={styles.tabBarRow}>
-          {TAB_ITEMS.map(tab => (
+        {isOwnerOrAdmin ? (
+          <View style={styles.orderModeRow}>
             <TouchableOpacity
-              key={tab}
-              onPress={() => setActiveTab(tab)}
               style={[
-                styles.tabItem,
-                activeTab === tab && styles.activeTabItem,
+                styles.orderModePill,
+                orderScope === 'user' && styles.orderModePillActive,
               ]}
+              onPress={() => setOrderScope('user')}
               activeOpacity={0.85}
             >
               <Text
                 style={[
-                  styles.tabText,
-                  activeTab === tab && styles.activeTabText,
+                  styles.orderModeText,
+                  orderScope === 'user' && styles.orderModeTextActive,
                 ]}
-                numberOfLines={2}
               >
-                {tab}
+                User Orders
               </Text>
             </TouchableOpacity>
-          ))}
-        </View>
+            <TouchableOpacity
+              style={[
+                styles.orderModePill,
+                orderScope === 'own' && styles.orderModePillActive,
+              ]}
+              onPress={() => setOrderScope('own')}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.orderModeText,
+                  orderScope === 'own' && styles.orderModeTextActive,
+                ]}
+              >
+                Own Orders
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {orderScope === 'user' ? (
+          <View style={styles.tabBarRow}>
+            {TAB_ITEMS.map(tab => (
+              <TouchableOpacity
+                key={tab}
+                onPress={() => setActiveTab(tab)}
+                style={[
+                  styles.tabItem,
+                  activeTab === tab && styles.activeTabItem,
+                ]}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab && styles.activeTabText,
+                  ]}
+                  numberOfLines={2}
+                >
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
       </SafeAreaView>
 
-      {loading ? (
+      {orderScope === 'own' ? (
+        <OrderListScreen
+          navigation={navigation}
+          route={{ params: { forceCustomerScope: true, embedded: true } }}
+        />
+      ) : loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#FDB022" />
         </View>
@@ -294,7 +358,12 @@ export default function LiveOrdersScreen() {
           ) : (
             orders.map(order => {
               const customerName =
-                order.user?.name || order.user?.email || 'Customer';
+                orderScope === 'own'
+                  ? order.owner?.nickname ||
+                    order.owner?.name ||
+                    order.owner?.email ||
+                    'Restaurant'
+                  : order.user?.name || order.user?.email || 'Customer';
               const isUpdating = updatingId === order.id;
               const orderStatus = String(order.status || '').toLowerCase();
               const isPending = orderStatus === 'pending';
@@ -306,7 +375,10 @@ export default function LiveOrdersScreen() {
                     <View style={styles.userInfo}>
                       <View style={styles.userIconBg}>
                         {(() => {
-                          const photo = order.user?.photos?.[0];
+                          const photo =
+                            orderScope === 'own'
+                              ? order.owner?.photos?.[0]
+                              : order.user?.photos?.[0];
                           const uri =
                             typeof photo === 'string'
                               ? photo
@@ -374,7 +446,10 @@ export default function LiveOrdersScreen() {
                     >
                       <Text style={styles.viewBtnText}>View Order</Text>
                     </TouchableOpacity>
-                    {canAcceptReject && activeTab === 'Pending' && isPending ? (
+                    {canAcceptReject &&
+                    orderScope === 'user' &&
+                    activeTab === 'Pending' &&
+                    isPending ? (
                       <>
                         <TouchableOpacity
                           style={[styles.actionButton, styles.rejectBtn]}
@@ -396,6 +471,7 @@ export default function LiveOrdersScreen() {
                         </TouchableOpacity>
                       </>
                     ) : canAcceptReject &&
+                      orderScope === 'user' &&
                       activeTab === 'In Progress' &&
                       isInProgress ? (
                       <TouchableOpacity
@@ -438,6 +514,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     paddingVertical: 10,
+  },
+  orderModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  orderModePill: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  orderModePillActive: {
+    backgroundColor: '#FFF4EB',
+    borderColor: '#FDB022',
+  },
+  orderModeText: {
+    color: '#667085',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  orderModeTextActive: {
+    color: '#B54708',
   },
   liveOrderBtn: {
     flexDirection: 'row',

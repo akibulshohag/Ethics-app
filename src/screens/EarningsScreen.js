@@ -177,7 +177,7 @@ export default function EarningsScreen() {
                 Total Earning
               </Text>
               <Text style={styles.summaryValue}>
-                €{Number(data?.totalEarning ?? 0).toFixed(2)}
+                £{Number(data?.totalEarning ?? 0).toFixed(2)}
               </Text>
             </View>
           </View>

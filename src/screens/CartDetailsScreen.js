@@ -110,7 +110,7 @@ const CartDetailsScreen = () => {
         itemName: menuItem.itemName || menuItem.name || 'Item',
         price: Number(menuItem.price) || 0,
         quantity: 1,
-        currency: menuItem.currency || '€',
+        currency: menuItem.currency || '£',
         imageUrl: menuItem.imageUrl || menuItem.thumbnailUrl || null,
       });
       return next;
@@ -243,7 +243,7 @@ const CartDetailsScreen = () => {
                       </Text>
                       <View style={styles.addMorePriceRow}>
                         <Text style={styles.addMorePrice}>
-                          {(it.currency || '€') + ' ' + (Number(it.price) || 0).toFixed(2)}
+                          {(it.currency || '£') + ' ' + (Number(it.price) || 0).toFixed(2)}
                         </Text>
                         <TouchableOpacity
                           style={styles.addMorePlusBtn}

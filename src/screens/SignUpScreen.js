@@ -38,6 +38,9 @@ const SignUpScreen = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [verificationMode, setVerificationMode] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [verificationOtp, setVerificationOtp] = useState('');
 
   useEffect(() => {
     getRolesList()
@@ -88,6 +91,17 @@ const SignUpScreen = () => {
         throw new Error(data.message || 'Registration failed');
       }
 
+      if (data?.requiresEmailVerification) {
+        setPendingEmail(email.trim());
+        setVerificationMode(true);
+        setVerificationOtp('');
+        Alert.alert(
+          'Verify Email',
+          'We sent a verification OTP to your email. Enter OTP to activate your account.',
+        );
+        return;
+      }
+
       // Save user data to Redux (which persists to AsyncStorage)
       const userData = {
         id: data.user.id,
@@ -118,6 +132,74 @@ const SignUpScreen = () => {
           error.message || 'Registration failed. Please try again.',
         );
       }, 100);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async () => {
+    if (!pendingEmail || !verificationOtp.trim()) {
+      Alert.alert('Error', 'Please enter OTP');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${config.apiBaseUrl}/users/verify-email-verification-otp`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingEmail, otp: verificationOtp.trim() }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'OTP verification failed');
+      }
+
+      const userData = {
+        id: data.user.id,
+        name: data.user.name || 'New User',
+        email: data.user.email,
+        phone: data.user.phone || '',
+        nickname: data.user.nickname || '',
+        gender: data.user.gender || 'others',
+        role: data.user.role,
+        roleId: data.user.roleId,
+        address: data.user.address,
+        latitude: data.user.latitude,
+        longitude: data.user.longitude,
+        token: data.token,
+      };
+      dispatch(appSetUser(userData));
+      navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+    } catch (error) {
+      Alert.alert('Error', error.message || 'OTP verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendVerificationOtp = async () => {
+    if (!pendingEmail) return;
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${config.apiBaseUrl}/users/request-email-verification-otp`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingEmail }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to resend OTP');
+      }
+      Alert.alert('Success', 'OTP sent again to your email');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to resend OTP');
     } finally {
       setLoading(false);
     }
@@ -166,68 +248,93 @@ const SignUpScreen = () => {
             />
           </View>
 
-          {/* Password Input (Focused/Active State) */}
-          <Text style={styles.inputLabel}>Create Password</Text>
-          <View style={[styles.inputWrapper, styles.inputActive]}>
-            <Icon name="lock" size={20} color="black" />
-            <TextInput
-              style={styles.input}
-              secureTextEntry={!passwordVisible}
-              placeholder="Enter password"
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TouchableOpacity
-              onPress={() => setPasswordVisible(!passwordVisible)}
-            >
-              <Icon
-                name={passwordVisible ? 'eye' : 'eye-off'}
-                size={20}
-                color="black"
-              />
-            </TouchableOpacity>
-          </View>
+          {!verificationMode ? (
+            <>
+              <Text style={styles.inputLabel}>Create Password</Text>
+              <View style={[styles.inputWrapper, styles.inputActive]}>
+                <Icon name="lock" size={20} color="black" />
+                <TextInput
+                  style={styles.input}
+                  secureTextEntry={!passwordVisible}
+                  placeholder="Enter password"
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setPasswordVisible(!passwordVisible)}
+                >
+                  <Icon
+                    name={passwordVisible ? 'eye' : 'eye-off'}
+                    size={20}
+                    color="black"
+                  />
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.inputLabel}>Email Verification OTP</Text>
+              <View style={styles.inputWrapper}>
+                <Icon name="shield-check" size={20} color="black" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter OTP"
+                  placeholderTextColor="#999"
+                  value={verificationOtp}
+                  onChangeText={setVerificationOtp}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </>
+          )}
 
-          {/* Role Input */}
-          <Text style={styles.inputLabel}>Role</Text>
-          <View style={styles.inputWrapper}>
-            <Icon name="account-badge" size={20} color="black" />
-            <Dropdown
-              data={roles.map(r => ({ label: r.name, value: r.id }))}
-              value={roleId}
-              labelField="label"
-              valueField="value"
-              placeholder={rolesLoading ? 'Loading roles...' : 'Select role'}
-              onChange={item => setRoleId(item.value)}
-              style={styles.dropdown}
-              placeholderStyle={styles.dropdownPlaceholder}
-              selectedTextStyle={styles.dropdownSelectedText}
-              containerStyle={styles.dropdownContainer}
-            />
-          </View>
+          {!verificationMode ? (
+            <>
+              {/* Role Input */}
+              <Text style={styles.inputLabel}>Role</Text>
+              <View style={styles.inputWrapper}>
+                <Icon name="account-badge" size={20} color="black" />
+                <Dropdown
+                  data={roles.map(r => ({ label: r.name, value: r.id }))}
+                  value={roleId}
+                  labelField="label"
+                  valueField="value"
+                  placeholder={rolesLoading ? 'Loading roles...' : 'Select role'}
+                  onChange={item => setRoleId(item.value)}
+                  style={styles.dropdown}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelectedText}
+                  containerStyle={styles.dropdownContainer}
+                />
+              </View>
+            </>
+          ) : null}
 
-          {/* Confirm Password Input */}
-          <Text style={styles.inputLabel}>Confirm Password</Text>
-          <View style={styles.inputWrapper}>
-            <Icon name="lock" size={20} color="black" />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#BBB"
-              secureTextEntry={!confirmPasswordVisible}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            <TouchableOpacity
-              onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
-            >
-              <Icon
-                name={confirmPasswordVisible ? 'eye' : 'eye-off'}
-                size={20}
-                color="black"
-              />
-            </TouchableOpacity>
-          </View>
+          {!verificationMode ? (
+            <>
+              <Text style={styles.inputLabel}>Confirm Password</Text>
+              <View style={styles.inputWrapper}>
+                <Icon name="lock" size={20} color="black" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="#BBB"
+                  secureTextEntry={!confirmPasswordVisible}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                >
+                  <Icon
+                    name={confirmPasswordVisible ? 'eye' : 'eye-off'}
+                    size={20}
+                    color="black"
+                  />
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
 
           {/* Sign Up Button */}
           <Pressable
@@ -237,15 +344,33 @@ const SignUpScreen = () => {
                 backgroundColor: hovered || pressed ? '#F97507' : '#32373D',
               },
             ]}
-            onPress={handleSignUp}
+            onPress={verificationMode ? handleVerifyEmailOtp : handleSignUp}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.signUpButtonText}>Sign up</Text>
+              <Text style={styles.signUpButtonText}>
+                {verificationMode ? 'Verify Email' : 'Sign up'}
+              </Text>
             )}
           </Pressable>
+
+          {verificationMode ? (
+            <Pressable
+              style={({ hovered, pressed }) => [
+                styles.signUpButton,
+                {
+                  marginTop: 12,
+                  backgroundColor: hovered || pressed ? '#1f242a' : '#32373D',
+                },
+              ]}
+              onPress={handleResendVerificationOtp}
+              disabled={loading}
+            >
+              <Text style={styles.signUpButtonText}>Resend OTP</Text>
+            </Pressable>
+          ) : null}
 
           {/* Divider */}
           <View style={styles.dividerContainer}>

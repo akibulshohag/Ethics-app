@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   StyleSheet,
   View,
@@ -17,6 +23,7 @@ import {
   FlatList,
   Share,
   BackHandler,
+  Platform,
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -58,7 +65,10 @@ import {
 import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
 import { safeImageUri } from '../utils/helper';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import SaveModal from '../components/SaveModal';
 import CommentsModal from '../components/CommentsModal';
 import HomeMoreOptionModal from '../components/HomeMoreOptionModal';
@@ -67,6 +77,18 @@ import { downloadVideo } from '../services/downloadService';
 import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import { buildContentShareMessage } from '../utils/contentLinks';
+import { getTopRestaurantsByOrders } from '../services/orderService';
+import {
+  buildShortLocationFromUser,
+  formatShortProfileLocationLine,
+  abbrevCountryLabel,
+} from '../utils/locationFormat';
+import {
+  distanceKmBetween,
+  formatDistanceKm,
+  resolveViewerLocationOpts,
+  getOwnerLatLngFromMediaPayload,
+} from '../utils/geoDistance';
 
 const { width, height } = Dimensions.get('window');
 
@@ -75,6 +97,15 @@ const formatCount = n => {
   if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
   if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(n);
+};
+
+/** Full-number grouping like YouTube: "23 views" / "2,344,000 views" */
+const formatVideoViewsLabel = n => {
+  const num = Number(n);
+  if (!Number.isFinite(num) || num < 0) return '0 views';
+  const rounded = Math.floor(num);
+  const formatted = new Intl.NumberFormat('en-US').format(rounded);
+  return `${formatted} ${rounded === 1 ? 'view' : 'views'}`;
 };
 
 const viewerRole = user =>
@@ -105,7 +136,7 @@ const pickHomeFeatured = (list, viewerUser) => {
 };
 
 // Same shape as VideoDetailsScreen currentVideo so selectedItem has all fields
-const mapToDisplayItem = (v, type) => {
+const mapToDisplayItem = (v, type, viewerOpts) => {
   const u = v.user || {};
   const channelName = u.nickname || u.name || 'Unknown';
   const firstPhoto =
@@ -124,6 +155,30 @@ const mapToDisplayItem = (v, type) => {
     viewCount >= 1000
       ? `${(viewCount / 1000).toFixed(1)}K views`
       : `${viewCount} views`;
+
+  const locationLine =
+    buildShortLocationFromUser(u) ||
+    formatShortProfileLocationLine(String(u.address || '').trim()) ||
+    '';
+  const locationDisplay = locationLine || 'Near you';
+
+  const { lat: olat, lng: olng } = getOwnerLatLngFromMediaPayload(v);
+  let distanceLabel = '';
+  if (
+    viewerOpts?.viewerLat != null &&
+    viewerOpts?.viewerLng != null &&
+    olat != null &&
+    olng != null
+  ) {
+    const km = distanceKmBetween(
+      viewerOpts.viewerLat,
+      viewerOpts.viewerLng,
+      olat,
+      olng,
+    );
+    if (km != null) distanceLabel = formatDistanceKm(km);
+  }
+
   return {
     id: v.id,
     type,
@@ -133,7 +188,9 @@ const mapToDisplayItem = (v, type) => {
         ? (v.description || 'Short').substring(0, 50)
         : 'Untitled'),
     description: v.description ?? '',
-    location: u.address || 'Near you',
+    location: locationDisplay,
+    locationLine,
+    distanceLabel,
     img:
       v.thumbnailUrl ||
       v.videoUrl ||
@@ -156,6 +213,7 @@ const mapToDisplayItem = (v, type) => {
     channelName,
     channelAvatar,
     views: viewsStr,
+    viewsCompact: formatCount(viewCount),
     viewCount,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? v._count?.dislikes ?? 0,
@@ -163,8 +221,8 @@ const mapToDisplayItem = (v, type) => {
     shareCount: v.shareCount ?? 0,
     isLiked: v.isLiked ?? false,
     creatorAddress: u.address ?? undefined,
-    creatorLatitude: u.latitude ?? undefined,
-    creatorLongitude: u.longitude ?? undefined,
+    creatorLatitude: olat ?? undefined,
+    creatorLongitude: olng ?? undefined,
     creatorSocialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
   };
 };
@@ -173,6 +231,7 @@ const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const HomeOneScreen = () => {
+  const insets = useSafeAreaInsets();
   const [isVideoDetail, setIsVideoDetail] = useState(false);
   const [isRestaurantDetail, setIsRestaurantDetail] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -197,6 +256,9 @@ const HomeOneScreen = () => {
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
   const [feedVideos, setFeedVideos] = useState([]);
   const [feedShorts, setFeedShorts] = useState([]);
+  const [popularShorts, setPopularShorts] = useState([]);
+  const [newShorts, setNewShorts] = useState([]);
+  const [mostOrderedRestaurants, setMostOrderedRestaurants] = useState([]);
   const [continueData, setContinueData] = useState([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [videoPaused, setVideoPaused] = useState(true);
@@ -241,6 +303,16 @@ const HomeOneScreen = () => {
     average: 0,
     reviewCount: 0,
   });
+
+  const viewerLocationOpts = useMemo(
+    () => resolveViewerLocationOpts(selectedLocation, user),
+    [
+      selectedLocation?.lat,
+      selectedLocation?.lng,
+      user?.latitude,
+      user?.longitude,
+    ],
+  );
 
   useEffect(() => {
     const sub = shortsService.onShortUpdated?.(updated => {
@@ -481,7 +553,7 @@ const HomeOneScreen = () => {
         if (ct === 'video') {
           getVideoById(id, user?.id, user?.role || 'user')
             .then(res => {
-              const full = mapToDisplayItem(res, 'video');
+              const full = mapToDisplayItem(res, 'video', viewerLocationOpts);
               setSelectedItem(full);
             })
             .catch(() => {
@@ -492,7 +564,7 @@ const HomeOneScreen = () => {
           shortsService
             .getShortById(id, user?.id, user?.role || 'user')
             .then(res => {
-              const full = mapToDisplayItem(res, 'short');
+              const full = mapToDisplayItem(res, 'short', viewerLocationOpts);
               setSelectedItem(full);
             })
             .catch(() => {
@@ -551,6 +623,23 @@ const HomeOneScreen = () => {
               setAddressText(saved.addressText || '');
               loadFeaturedAndFeed();
               loadContinueWatching();
+            } else if (
+              userRef.current?.latitude != null &&
+              userRef.current?.longitude != null
+            ) {
+              if (cancelled) return;
+              setSelectedLocation({
+                lat: Number(userRef.current.latitude),
+                lng: Number(userRef.current.longitude),
+              });
+              const u = userRef.current;
+              setAddressText(
+                (u?.address && String(u.address).trim()) ||
+                  [u?.city, u?.country].filter(Boolean).join(', ') ||
+                  '',
+              );
+              loadFeaturedAndFeed();
+              loadContinueWatching();
             } else if (!cancelled) {
               setLocationModalVisible(true);
             }
@@ -577,16 +666,18 @@ const HomeOneScreen = () => {
       user?.role,
       selectedLocation?.lat,
       selectedLocation?.lng,
+      viewerLocationOpts,
       loadFeaturedAndFeed,
       loadContinueWatching,
     ]),
   );
 
   const loadFeaturedAndFeed = useCallback(async () => {
-    if (selectedLocation?.lat == null || selectedLocation?.lng == null) return;
+    const voBrowse = resolveViewerLocationOpts(selectedLocation, user);
+    if (!voBrowse) return;
     setFeedLoading(true);
-    const lat = selectedLocation.lat;
-    const lng = selectedLocation.lng;
+    const lat = voBrowse.viewerLat;
+    const lng = voBrowse.viewerLng;
     const role = viewerRole(user);
     const baseParams = {
       page: 1,
@@ -628,12 +719,29 @@ const HomeOneScreen = () => {
       .catch(() => setSponsoredVideo(null));
 
     try {
-      const [videosRes, shortsRes] = await Promise.all([
-        getVideos(videoParams),
-        shortsService.getShorts(shortParams),
-      ]);
+      const [videosRes, shortsRes, popularShortsRes, newestShortsRes, topRes] =
+        await Promise.all([
+          getVideos(videoParams),
+          shortsService.getShorts(shortParams),
+          shortsService.getShorts({
+            ...shortParams,
+            sort: 'trending',
+            page: 1,
+            limit: 16,
+          }),
+          shortsService.getShorts({
+            ...shortParams,
+            sort: 'newest',
+            page: 1,
+            limit: 16,
+          }),
+          getTopRestaurantsByOrders({ page: 1, limit: 10 }).catch(() => ({
+            restaurants: [],
+          })),
+        ]);
+      const vo = { viewerLat: lat, viewerLng: lng };
       const mappedVideos = (videosRes?.videos || []).map(v =>
-        mapToDisplayItem(v, 'video'),
+        mapToDisplayItem(v, 'video', vo),
       );
       const rawShorts = (shortsRes?.shorts || []).filter(
         s => s.videoUrl && String(s.videoUrl).trim(),
@@ -674,10 +782,10 @@ const HomeOneScreen = () => {
           }
         }),
       );
-      const mappedShorts = rawShorts.map(s => {
+      const mapShortWithOwnerPatch = s => {
         const oid = String(s?.userId || s?.user?.id || '');
         const p = oid ? ownerProfileById[oid] : null;
-        if (!p) return mapToDisplayItem(s, 'short');
+        if (!p) return mapToDisplayItem(s, 'short', vo);
         const u = s?.user && typeof s.user === 'object' ? s.user : {};
         const p0 =
           Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null;
@@ -715,8 +823,16 @@ const HomeOneScreen = () => {
             user: mergedUser,
           },
           'short',
+          vo,
         );
-      });
+      };
+      const mappedShorts = rawShorts.map(mapShortWithOwnerPatch);
+      const mappedPopularShorts = (popularShortsRes?.shorts || [])
+        .filter(s => s?.videoUrl && String(s.videoUrl).trim())
+        .map(mapShortWithOwnerPatch);
+      const mappedNewestShorts = (newestShortsRes?.shorts || [])
+        .filter(s => s?.videoUrl && String(s.videoUrl).trim())
+        .map(mapShortWithOwnerPatch);
       const q = String(searchTerm || '')
         .toLowerCase()
         .trim();
@@ -739,10 +855,59 @@ const HomeOneScreen = () => {
       };
       setFeedVideos(mappedVideos.filter(matchesSearch));
       setFeedShorts(mappedShorts.filter(matchesSearch));
+      setPopularShorts(mappedPopularShorts.filter(matchesSearch));
+      setNewShorts(mappedNewestShorts.filter(matchesSearch));
+      const topRestaurants = (topRes?.restaurants || []).map(r => {
+        const firstPhoto =
+          Array.isArray(r?.photos) && r.photos.length > 0 ? r.photos[0] : null;
+        const photo =
+          typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src || null;
+        const city =
+          (r?.city && String(r.city).trim()) ||
+          (r?.town && String(r.town).trim()) ||
+          '';
+        const country = r?.country && String(r.country).trim();
+        const locShort =
+          (city && country && `${city}, ${abbrevCountryLabel(country)}`) ||
+          formatShortProfileLocationLine(String(r?.address || '').trim()) ||
+          '';
+        let distanceLabel = '';
+        if (
+          r?.latitude != null &&
+          r?.longitude != null &&
+          lat != null &&
+          lng != null
+        ) {
+          const km = distanceKmBetween(
+            lat,
+            lng,
+            Number(r.latitude),
+            Number(r.longitude),
+          );
+          if (km != null) distanceLabel = formatDistanceKm(km);
+        }
+        const oc = Number(r?.orderCount || 0);
+        return {
+          id: r?.id,
+          type: 'restaurant',
+          title: r?.nickname || r?.name || 'Restaurant',
+          location: locShort || 'Near you',
+          distanceLabel,
+          img:
+            photo ||
+            'https://images.unsplash.com/photo-1552566626-52f8b828add9',
+          orderCount: oc,
+          views: `${oc} order${oc === 1 ? '' : 's'}`,
+        };
+      });
+      setMostOrderedRestaurants(topRestaurants);
     } catch (e) {
       console.error('HomeOne load feed:', e);
       setFeedVideos([]);
       setFeedShorts([]);
+      setPopularShorts([]);
+      setNewShorts([]);
+      setMostOrderedRestaurants([]);
     } finally {
       setFeedLoading(false);
     }
@@ -756,11 +921,11 @@ const HomeOneScreen = () => {
         shortsService.getWatchHistory(user.id, 1, 20),
       ]);
       const vHistory = (vRes?.history || []).map(({ video, watchedAt }) => ({
-        ...mapToDisplayItem(video || {}, 'video'),
+        ...mapToDisplayItem(video || {}, 'video', viewerLocationOpts),
         watchedAt: new Date(watchedAt).getTime(),
       }));
       const sHistory = (sRes?.history || []).map(({ short: s, watchedAt }) => ({
-        ...mapToDisplayItem(s || {}, 'short'),
+        ...mapToDisplayItem(s || {}, 'short', viewerLocationOpts),
         watchedAt: new Date(watchedAt).getTime(),
       }));
       const merged = [...vHistory, ...sHistory]
@@ -771,7 +936,7 @@ const HomeOneScreen = () => {
     } catch (e) {
       setContinueData([]);
     }
-  }, [user?.id]);
+  }, [user?.id, viewerLocationOpts]);
 
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -785,12 +950,14 @@ const HomeOneScreen = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
+    if (resolveViewerLocationOpts(selectedLocation, user)) {
       loadFeaturedAndFeed();
     }
   }, [
     selectedLocation?.lat,
     selectedLocation?.lng,
+    user?.latitude,
+    user?.longitude,
     searchDebounced,
     loadFeaturedAndFeed,
   ]);
@@ -875,7 +1042,7 @@ const HomeOneScreen = () => {
       shortsService
         .getShortById(item.id, user?.id, user?.role || 'user')
         .then(res => {
-          const full = mapToDisplayItem(res, 'short');
+          const full = mapToDisplayItem(res, 'short', viewerLocationOpts);
           setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
         })
         .catch(() => {});
@@ -914,15 +1081,17 @@ const HomeOneScreen = () => {
       getVideoById(item.id, user?.id, user?.role || 'user')
         .then(res => {
           recordVideoView(item.id, user?.id || null).catch(() => {});
-          const rawDisplay = mapToDisplayItem(res, item?.type || 'video');
+          const rawDisplay = mapToDisplayItem(
+            res,
+            item?.type || 'video',
+            viewerLocationOpts,
+          );
           const vc = (rawDisplay.viewCount ?? 0) + 1;
           const full = {
             ...rawDisplay,
             viewCount: vc,
             views:
-              vc >= 1000
-                ? `${(vc / 1000).toFixed(1)}K views`
-                : `${vc} views`,
+              vc >= 1000 ? `${(vc / 1000).toFixed(1)}K views` : `${vc} views`,
           };
           const videoDescriptionRaw =
             (res?.description != null && String(res.description).trim()) ||
@@ -1565,7 +1734,24 @@ const HomeOneScreen = () => {
             ...co,
           }
         : video.user || co;
-    const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
+    const base = mapToDisplayItem(
+      {
+        ...video,
+        creatorLatitude:
+          video.creatorLatitude ??
+          featuredVideo.latitude ??
+          mergedUser?.latitude ??
+          mergedUser?.lat,
+        creatorLongitude:
+          video.creatorLongitude ??
+          featuredVideo.longitude ??
+          mergedUser?.longitude ??
+          mergedUser?.lng,
+        user: mergedUser,
+      },
+      'video',
+      viewerLocationOpts,
+    );
     const meta = campaignMetaFrom(featuredVideo);
     return co?.id
       ? {
@@ -1589,7 +1775,24 @@ const HomeOneScreen = () => {
                 ...co,
               }
             : video.user || co;
-        const base = mapToDisplayItem({ ...video, user: mergedUser }, 'video');
+        const base = mapToDisplayItem(
+          {
+            ...video,
+            creatorLatitude:
+              video.creatorLatitude ??
+              sponsoredVideo.latitude ??
+              mergedUser?.latitude ??
+              mergedUser?.lat,
+            creatorLongitude:
+              video.creatorLongitude ??
+              sponsoredVideo.longitude ??
+              mergedUser?.longitude ??
+              mergedUser?.lng,
+            user: mergedUser,
+          },
+          'video',
+          viewerLocationOpts,
+        );
         const meta = campaignMetaFrom(sponsoredVideo);
         return co?.id
           ? {
@@ -1601,10 +1804,15 @@ const HomeOneScreen = () => {
       })()
     : null;
 
-  // Sectioned feed: sponsored → 2 shorts → 2 videos → continue (3) → 4 shorts → 4 videos → 6 → 6 ...
+  // Curated feed order:
+  // sponsored -> most popular shorts -> 2 videos -> try new shorts -> 1 video
+  // -> most ordered restaurants -> 2 videos -> continue -> remaining mixed feed.
   const buildFeedSections = () => {
     const shorts = feedShorts || [];
     const videos = feedVideos || [];
+    const popShorts = popularShorts || [];
+    const freshShorts = newShorts || [];
+    const topRestaurants = mostOrderedRestaurants || [];
     const sections = [];
     let sIdx = 0;
     let vIdx = 0;
@@ -1613,10 +1821,9 @@ const HomeOneScreen = () => {
       sections.push({ type: 'SPONSORED', data: [sponsoredItem] });
     }
 
-    const firstShorts = shorts.slice(sIdx, sIdx + 2);
-    sIdx += firstShorts.length;
-    if (firstShorts.length > 0) {
-      sections.push({ type: 'SHORTS', data: firstShorts });
+    const firstPopular = popShorts.slice(0, 6);
+    if (firstPopular.length > 0) {
+      sections.push({ type: 'MOST_POPULAR_SHORTS', data: firstPopular });
     }
 
     const firstVideos = videos.slice(vIdx, vIdx + 2);
@@ -1625,11 +1832,42 @@ const HomeOneScreen = () => {
       sections.push({ type: 'VIDEOS', data: firstVideos });
     }
 
+    const firstTryNew = freshShorts.slice(0, 10);
+    if (firstTryNew.length > 0) {
+      sections.push({ type: 'TRY_NEW_SHORTS', data: firstTryNew });
+    }
+
+    const bridgeVideo = videos.slice(vIdx, vIdx + 1);
+    vIdx += bridgeVideo.length;
+    if (bridgeVideo.length > 0) {
+      sections.push({ type: 'VIDEOS', data: bridgeVideo });
+    }
+
+    if (topRestaurants.length > 0) {
+      sections.push({
+        type: 'MOST_ORDERS',
+        data: topRestaurants.slice(0, 6),
+      });
+    }
+
+    const secondVideos = videos.slice(vIdx, vIdx + 2);
+    vIdx += secondVideos.length;
+    if (secondVideos.length > 0) {
+      sections.push({ type: 'VIDEOS', data: secondVideos });
+    }
+
     if (continueData.length > 0) {
       sections.push({
         type: 'CONTINUE',
         data: continueData.slice(0, 3),
       });
+    }
+
+    // Use the regular feed shorts as the continuation mix.
+    const firstShorts = shorts.slice(sIdx, sIdx + 4);
+    sIdx += firstShorts.length;
+    if (firstShorts.length > 0) {
+      sections.push({ type: 'SHORTS', data: firstShorts });
     }
 
     let blockSize = 4;
@@ -1653,221 +1891,323 @@ const HomeOneScreen = () => {
 
   // --- RENDERING HELPERS ---
 
-  const renderResults = () => (
-    <View style={styles.mainContainer}>
-      <View style={styles.header}>
-        <View style={styles.navRow}>
-          {/* <TouchableOpacity
+  const renderResults = () => {
+    const addr = (addressText && String(addressText).trim()) || '';
+    const areaShort = addr ? addr.split(',')[0].trim() : '';
+    const areaForTitle = areaShort || 'your area';
+    const primaryLoc = areaShort || addr || 'Set your address';
+    const secondaryLoc = addr || primaryLoc;
+
+    return (
+      <View style={styles.mainContainer}>
+        <View style={styles.header}>
+          <View style={styles.navRow}>
+            {/* <TouchableOpacity
             onPress={() => navigation.navigate('LandingScreen')}
             style={styles.navBtn}
           >
             <Text style={styles.navBtnText}>{'<'} Home</Text>
           </TouchableOpacity> */}
-          <View style={styles.headerLogoContainer}>
-            <Image
-              source={logo}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-          {!(user?.token || user?.id) ? (
-            <TouchableOpacity
-              style={[styles.navBtn]}
-              onPress={() => navigation.navigate('HomeSevenScreen')}
-            >
-              <Text style={styles.navBtnText}>Login {'>'}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              // style={[styles.navBtn]}
-              onPress={() => {
-                const role = (user?.role || '').toLowerCase();
-                if (role === 'owner' || role === 'vendor') {
-                  navigation.navigate('BusinessProfileViewScreen');
-                } else if (role === 'user') {
-                  navigation.navigate('PromotionScreen');
-                } else if (role === 'admin') {
-                  navigation.getParent()?.navigate('Admin');
-                } else {
-                  navigation
-                    .getParent()
-                    ?.navigate('Library', { screen: 'ProfileScreen' });
-                }
-              }}
-            >
-              {(() => {
-                // Same as PromotionScreen: backend photos are [{ src, title }]; use first photo src
-                const firstPhoto =
-                  user?.photos?.[0] ??
-                  (Array.isArray(user?.photos) ? user.photos[0] : null);
-                const photo =
-                  user?.avatar ||
-                  (typeof firstPhoto === 'string'
-                    ? firstPhoto
-                    : firstPhoto?.src) ||
-                  null;
-                const profileImageUri =
-                  typeof photo === 'string' && photo.trim()
-                    ? photo.trim()
-                    : null;
-                const hasProfileImage =
-                  profileImageUri && String(profileImageUri).trim().length > 0;
-                if (hasProfileImage) {
-                  return (
-                    <Image
-                      source={{ uri: safeImageUri(profileImageUri) }}
-                      style={styles.profileAvatar}
-                    />
-                  );
-                }
-                return <Icon name="account-outline" size={28} color="#FFF" />;
-              })()}
-            </TouchableOpacity>
-          )}
-        </View>
-        <Text style={styles.resultsTitle}>
-          Your search results in {addressText || 'your area'}...
-        </Text>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {featuredVideo?.video ? (
-          <TouchableOpacity
-            style={styles.bannerWrapper}
-            activeOpacity={0.92}
-            onPress={() => featuredItem && openRestaurantDetail(featuredItem)}
-          >
-            <Image
-              source={{
-                uri:
-                  featuredVideo.video.thumbnailUrl ||
-                  featuredVideo.video.videoUrl ||
-                  featuredItem?.img ||
-                  'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-              }}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-            <View style={styles.featuredPlayOverlay} pointerEvents="none">
-              <Icon
-                name="play-circle"
-                size={56}
-                color="rgba(255,255,255,0.92)"
+            <View style={styles.headerLogoContainer}>
+              <Image
+                source={logo}
+                style={styles.logoImage}
+                resizeMode="contain"
               />
             </View>
-            <View style={styles.featuredBadge} pointerEvents="none">
-              <Text style={styles.featuredText}>Featured</Text>
-              <Icon name="chevron-right" size={16} color="#FFF" />
-            </View>
-          </TouchableOpacity>
-        ) : null}
-
-        <View style={styles.locationSection}>
-          <TouchableOpacity
-            style={styles.homeDropdown}
-            activeOpacity={0.8}
-            onPress={() => {
-              setLocationInput(addressText || '');
-              setLocationModalVisible(true);
-            }}
-          >
-            <Icon name="map-marker-radius" size={24} color="#FFF" />
-            <Text style={styles.homeText} numberOfLines={1}>
-              {addressText || 'Set your address'}
-            </Text>
-            <Icon name="chevron-down" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <Text style={styles.addressSubtext} numberOfLines={2}>
-            {addressText || 'Set your address on home'}
-          </Text>
-
-          <View style={styles.innerSearchBox}>
-            <Icon name="magnify" size={20} color="#999" />
-            <TextInput
-              placeholder="Search"
-              placeholderTextColor="#999"
-              style={styles.innerInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
+            {!(user?.token || user?.id) ? (
+              <TouchableOpacity
+                style={[styles.navBtn]}
+                onPress={() => navigation.navigate('HomeSevenScreen')}
+              >
+                <Text style={styles.navBtnText}>Login {'>'}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                // style={[styles.navBtn]}
+                onPress={() => {
+                  const role = (user?.role || '').toLowerCase();
+                  if (role === 'owner' || role === 'vendor') {
+                    navigation.navigate('BusinessProfileViewScreen');
+                  } else if (role === 'user') {
+                    navigation.navigate('PromotionScreen');
+                  } else if (role === 'admin') {
+                    navigation.getParent()?.navigate('Admin');
+                  } else {
+                    navigation
+                      .getParent()
+                      ?.navigate('Library', { screen: 'ProfileScreen' });
+                  }
+                }}
+              >
+                {(() => {
+                  // Same as PromotionScreen: backend photos are [{ src, title }]; use first photo src
+                  const firstPhoto =
+                    user?.photos?.[0] ??
+                    (Array.isArray(user?.photos) ? user.photos[0] : null);
+                  const photo =
+                    user?.avatar ||
+                    (typeof firstPhoto === 'string'
+                      ? firstPhoto
+                      : firstPhoto?.src) ||
+                    null;
+                  const profileImageUri =
+                    typeof photo === 'string' && photo.trim()
+                      ? photo.trim()
+                      : null;
+                  const hasProfileImage =
+                    profileImageUri &&
+                    String(profileImageUri).trim().length > 0;
+                  if (hasProfileImage) {
+                    return (
+                      <Image
+                        source={{ uri: safeImageUri(profileImageUri) }}
+                        style={styles.profileAvatar}
+                      />
+                    );
+                  }
+                  return <Icon name="account-outline" size={28} color="#FFF" />;
+                })()}
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
-
-        <View style={styles.feedPadding}>
-          <Text style={styles.feedHint}>
-            your search, served fresh... watch and choose
+          <Text style={styles.resultsTitle}>
+            Your search results in {areaForTitle}...
           </Text>
-
-          {feedLoading ? (
-            <View style={styles.feedLoading}>
-              <ActivityIndicator size="large" color="#F5A623" />
-              <Text style={styles.feedLoadingText}>Loading...</Text>
-            </View>
-          ) : (
-            <>
-              {feedSections.map((section, sectionIdx) => (
-                <View key={`${section.type}-${sectionIdx}`}>
-                  {section.type === 'SHORTS' && section.data.length > 0 && (
-                    <View
-                      style={{ flexDirection: 'row', alignItems: 'center' }}
-                    >
-                      <Icon
-                        style={{ marginRight: 5, marginTop: -5 }}
-                        name="camera"
-                        size={24}
-                        color="#d17409ff"
-                      />
-                      <Text style={styles.sectionTitle}>Shorts</Text>
-                    </View>
-                  )}
-                  {section.type === 'VIDEOS' && section.data.length > 0 && (
-                    <Text style={styles.sectionTitle}>Videos</Text>
-                  )}
-                  {section.type === 'CONTINUE' && section.data.length > 0 && (
-                    <Text style={styles.sectionTitle}>Continue watching</Text>
-                  )}
-                  {section.type === 'SPONSORED' && section.data.length > 0 && (
-                    <Text style={styles.sectionTitle}>Sponsored near you</Text>
-                  )}
-                  {section.type === 'SHORTS' ? (
-                    <View style={styles.shortsGrid}>
-                      {section.data.map((item, index) => (
-                        <View
-                          key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
-                          style={styles.shortsGridItem}
-                        >
-                          <ShortCard
-                            title={item.title}
-                            img={item.img}
-                            views={item.views}
-                            onPress={() => handleFeedItemPress(item)}
-                            onMorePress={() => openHomeMoreForShort(item)}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    section.data.map((item, index) => (
-                      <FoodCard
-                        key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
-                        title={item.title}
-                        location={item.location}
-                        isSponsored={section.type === 'SPONSORED'}
-                        img={item.img}
-                        onPress={() => handleFeedItemPress(item)}
-                      />
-                    ))
-                  )}
-                </View>
-              ))}
-            </>
-          )}
         </View>
-      </ScrollView>
-    </View>
-  );
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {featuredVideo?.video ? (
+            <TouchableOpacity
+              style={styles.bannerWrapper}
+              activeOpacity={0.92}
+              onPress={() => featuredItem && openRestaurantDetail(featuredItem)}
+            >
+              <Image
+                source={{
+                  uri:
+                    featuredVideo.video.thumbnailUrl ||
+                    featuredVideo.video.videoUrl ||
+                    featuredItem?.img ||
+                    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+                }}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
+              <View style={styles.featuredPlayOverlay} pointerEvents="none">
+                <Icon
+                  name="play-circle"
+                  size={56}
+                  color="rgba(255,255,255,0.92)"
+                />
+              </View>
+              <View style={styles.featuredBadge} pointerEvents="none">
+                <Text style={styles.featuredText}>Featured</Text>
+                <Icon name="chevron-right" size={16} color="#FFF" />
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
+          <View style={styles.locationSection}>
+            <TouchableOpacity
+              style={styles.homeDropdown}
+              activeOpacity={0.8}
+              onPress={() => {
+                setLocationInput(addressText || '');
+                setLocationModalVisible(true);
+              }}
+            >
+              <Icon name="map-marker-radius" size={24} color="#FFF" />
+
+              <Text style={styles.homeText} numberOfLines={1}>
+                {primaryLoc}
+              </Text>
+              <Icon name="chevron-down" size={24} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.addressSubtext} numberOfLines={2}>
+              {secondaryLoc}
+            </Text>
+
+            <View style={styles.innerSearchBox}>
+              <Icon name="magnify" size={20} color="#999" />
+              <TextInput
+                placeholder="Search"
+                placeholderTextColor="#999"
+                style={styles.innerInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+            </View>
+          </View>
+
+          <View style={styles.feedPadding}>
+            <Text style={styles.feedHint}>
+              your search, served fresh... watch and choose
+            </Text>
+
+            {feedLoading ? (
+              <View style={styles.feedLoading}>
+                <ActivityIndicator size="large" color="#F5A623" />
+                <Text style={styles.feedLoadingText}>Loading...</Text>
+              </View>
+            ) : (
+              <>
+                {feedSections.map((section, sectionIdx) => (
+                  <View key={`${section.type}-${sectionIdx}`}>
+                    {(section.type === 'MOST_POPULAR_SHORTS' ||
+                      section.type === 'TRY_NEW_SHORTS' ||
+                      section.type === 'MOST_ORDERS') && (
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionTitle}>
+                          {section.type === 'MOST_POPULAR_SHORTS'
+                            ? 'Most Views'
+                            : section.type === 'TRY_NEW_SHORTS'
+                            ? 'New Videos'
+                            : 'Most Ordered'}
+                        </Text>
+                        {(section.type === 'MOST_POPULAR_SHORTS' ||
+                          section.type === 'TRY_NEW_SHORTS') && (
+                          <TouchableOpacity
+                            onPress={() =>
+                              navigation.navigate('HomeShortsExploreScreen', {
+                                title:
+                                  section.type === 'MOST_POPULAR_SHORTS'
+                                    ? 'Most Views'
+                                    : 'New Videos',
+                                sort:
+                                  section.type === 'MOST_POPULAR_SHORTS'
+                                    ? 'trending'
+                                    : 'newest',
+                              })
+                            }
+                          >
+                            <Text style={styles.viewMoreText}>View more</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                    {section.type === 'SHORTS' && section.data.length > 0 && (
+                      <View
+                        style={{ flexDirection: 'row', alignItems: 'center' }}
+                      >
+                        <Icon
+                          style={{ marginRight: 5, marginTop: -5 }}
+                          name="camera"
+                          size={24}
+                          color="#d17409ff"
+                        />
+                        <Text style={styles.sectionTitle}>Shorts</Text>
+                      </View>
+                    )}
+                    {section.type === 'VIDEOS' && section.data.length > 0 && (
+                      <Text style={styles.sectionTitle}>Videos</Text>
+                    )}
+                    {section.type === 'CONTINUE' && section.data.length > 0 && (
+                      <Text style={styles.sectionTitle}>Continue watching</Text>
+                    )}
+                    {section.type === 'SPONSORED' &&
+                      section.data.length > 0 && (
+                        <Text style={styles.sectionTitle}>
+                          Sponsored near you
+                        </Text>
+                      )}
+                    {section.type === 'SHORTS' ||
+                    section.type === 'MOST_POPULAR_SHORTS' ? (
+                      <View style={styles.shortsGrid}>
+                        {section.data.map((item, index) => (
+                          <View
+                            key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
+                            style={styles.shortsGridItem}
+                          >
+                            <ShortCard
+                              title={item.title}
+                              img={item.img}
+                              views={item.views}
+                              onPress={() => handleFeedItemPress(item)}
+                              onMorePress={() => openHomeMoreForShort(item)}
+                            />
+                          </View>
+                        ))}
+                      </View>
+                    ) : section.type === 'TRY_NEW_SHORTS' ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.tryNewRow}
+                      >
+                        {section.data.map((item, index) => (
+                          <View
+                            key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
+                            style={styles.tryNewCard}
+                          >
+                            <ShortCard
+                              title={item.title}
+                              img={item.img}
+                              views={item.views}
+                              onPress={() => handleFeedItemPress(item)}
+                              onMorePress={() => openHomeMoreForShort(item)}
+                            />
+                          </View>
+                        ))}
+                      </ScrollView>
+                    ) : section.type === 'MOST_ORDERS' ? (
+                      <View style={styles.shortsGrid}>
+                        {section.data.map((item, index) => (
+                          <TouchableOpacity
+                            key={`${item.id}-rest-${sectionIdx}-${index}`}
+                            style={styles.shortsGridItem}
+                            activeOpacity={0.9}
+                            onPress={() =>
+                              navigation.navigate('BusinessProfileViewScreen', {
+                                userId: item.id,
+                                focusVideoTab: true,
+                              })
+                            }
+                          >
+                            <FoodCard
+                              title={item.title}
+                              location={item.location}
+                              views={item.views}
+                              distanceLabel={item.distanceLabel}
+                              img={item.img}
+                              onPress={() =>
+                                navigation.navigate(
+                                  'BusinessProfileViewScreen',
+                                  {
+                                    userId: item.id,
+                                    focusVideoTab: true,
+                                  },
+                                )
+                              }
+                            />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : (
+                      section.data.map((item, index) => (
+                        <FoodCard
+                          key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
+                          title={item.title}
+                          location={item.location}
+                          views={item.views}
+                          distanceLabel={item.distanceLabel}
+                          isSponsored={section.type === 'SPONSORED'}
+                          img={item.img}
+                          onPress={() => handleFeedItemPress(item)}
+                        />
+                      ))
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
 
   const handleShortVideoLoad = () => {
     setVideoLoading(false);
@@ -2158,21 +2498,33 @@ const HomeOneScreen = () => {
             ? resDetailRating.reviewCount
             : reviews;
         const rounded = Math.round(avgDisplay);
+        const viewCountRaw =
+          selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0;
+        const viewsLabel = formatVideoViewsLabel(viewCountRaw);
         return (
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.resScrollContent,
+              { paddingBottom: Math.max(insets.bottom, 12) + 28 },
+            ]}
+          >
             <View style={styles.resHeader}>
               <TouchableOpacity
                 onPress={handleRestaurantDetailBack}
                 style={styles.resBackBtn}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               >
-                <Icon name="chevron-left" size={20} color="#FFF" />
+                <Icon name="chevron-left" size={24} color="#1A1A1A" />
                 <Text style={styles.resBackText}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={openHomeMoreFromSelected}
+                style={styles.resHeaderMenuBtn}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Icon name="dots-vertical" size={24} color="#666" />
+                <Icon name="dots-vertical" size={22} color="#444" />
               </TouchableOpacity>
             </View>
 
@@ -2185,7 +2537,9 @@ const HomeOneScreen = () => {
                       selectedItem?.user?.id ?? selectedItem?.userId ?? null;
                     if (ownerId) {
                       const targetRole = String(
-                        selectedItem?.creatorRole || selectedItem?.user?.role || '',
+                        selectedItem?.creatorRole ||
+                          selectedItem?.user?.role ||
+                          '',
                       ).toLowerCase();
                       if (targetRole === 'user') {
                         navigation.navigate('PromotionScreen', {
@@ -2207,74 +2561,85 @@ const HomeOneScreen = () => {
                         selectedItem?.title ||
                         '—'}
                     </Text>
-                {(String(selectedItem?.creatorRole || '').toLowerCase() ===
-                  'owner' ||
-                  String(selectedItem?.user?.role || '').toLowerCase() ===
-                    'owner') && (
-                  <View style={styles.resRatingRow}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <Icon
-                        key={`res-rating-${star}`}
-                        name={star <= rounded ? 'star' : 'star-outline'}
-                        size={13}
-                        color={star <= rounded ? '#FFE082' : '#C7C7C7'}
-                      />
-                    ))}
-                    <Text style={styles.resRatingText}>
-                      ({reviewsDisplay}{' '}
-                      {reviewsDisplay === 1 ? 'review' : 'reviews'})
-                    </Text>
-                  </View>
-                )}
+                    <View style={styles.resMetaRow}>
+                      <Icon name="eye-outline" size={15} color="#606060" />
+                      <Text style={styles.resViewsText}>{viewsLabel}</Text>
+                      {(String(
+                        selectedItem?.creatorRole || '',
+                      ).toLowerCase() === 'owner' ||
+                        String(selectedItem?.user?.role || '').toLowerCase() ===
+                          'owner') && (
+                        <View style={styles.resRatingRow}>
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <Icon
+                              key={`res-rating-${star}`}
+                              name={star <= rounded ? 'star' : 'star-outline'}
+                              size={13}
+                              color={star <= rounded ? '#FFE082' : '#C7C7C7'}
+                            />
+                          ))}
+                          <Text style={styles.resRatingText}>
+                            ({reviewsDisplay}{' '}
+                            {reviewsDisplay === 1 ? 'review' : 'reviews'})
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
                 </TouchableOpacity>
-                <Text style={styles.resSubLoc}>{selectedItem?.location}</Text>
               </View>
               {(selectedItem?.creatorRole === 'owner' ||
                 selectedItem?.user?.role === 'owner' ||
                 selectedItem?.userId ||
-                selectedItem?.user?.id) &&
-                (!user?.token ? (
-                  <TouchableOpacity
-                    style={styles.resOrderBtn}
-                    onPress={() => {
-                      const ownerId =
-                        selectedItem?.user?.id ?? selectedItem?.userId ?? null;
-                      navigation.navigate('HomeSevenScreen', {
-                        returnToOrder: true,
-                        ownerUserId: ownerId,
-                      });
-                    }}
-                  >
-                    <Text style={styles.resOrderText}>Order Now</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.resOrderBtn}
-                    onPress={() => {
-                      const ownerId =
-                        selectedItem?.user?.id ?? selectedItem?.userId ?? null;
-                      if (ownerId) {
-                        navigation.navigate('HomeThreeScreen', {
-                          ownerId,
-                          ownerName:
-                            selectedItem?.user?.nickname ||
-                            selectedItem?.user?.name ||
-                            '',
-                          title: selectedItem?.title,
-                          location:
-                            selectedItem?.location ||
-                            selectedItem?.creatorAddress ||
-                            '',
+                selectedItem?.user?.id) && (
+                <View style={styles.resOrderBtnWrap}>
+                  {!user?.token ? (
+                    <TouchableOpacity
+                      style={styles.resOrderBtn}
+                      onPress={() => {
+                        const ownerId =
+                          selectedItem?.user?.id ??
+                          selectedItem?.userId ??
+                          null;
+                        navigation.navigate('HomeSevenScreen', {
+                          returnToOrder: true,
+                          ownerUserId: ownerId,
                         });
-                      } else {
-                        navigation.navigate('HomeThreeScreen');
-                      }
-                    }}
-                  >
-                    <Text style={styles.resOrderText}>Order Now</Text>
-                  </TouchableOpacity>
-                ))}
+                      }}
+                    >
+                      <Text style={styles.resOrderText}>Order Now</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.resOrderBtn}
+                      onPress={() => {
+                        const ownerId =
+                          selectedItem?.user?.id ??
+                          selectedItem?.userId ??
+                          null;
+                        if (ownerId) {
+                          navigation.navigate('HomeThreeScreen', {
+                            ownerId,
+                            ownerName:
+                              selectedItem?.user?.nickname ||
+                              selectedItem?.user?.name ||
+                              '',
+                            title: selectedItem?.title,
+                            location:
+                              selectedItem?.location ||
+                              selectedItem?.creatorAddress ||
+                              '',
+                          });
+                        } else {
+                          navigation.navigate('HomeThreeScreen');
+                        }
+                      }}
+                    >
+                      <Text style={styles.resOrderText}>Order Now</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
 
             <View style={styles.resVideoCard}>
@@ -2434,7 +2799,7 @@ const HomeOneScreen = () => {
               )}
             </View>
 
-            <View style={styles.resActionsRow}>
+            <View style={styles.resActionsRowWrap}>
               <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={handleRestaurantLike}
@@ -2442,15 +2807,15 @@ const HomeOneScreen = () => {
               >
                 <Icon
                   name={selectedItem?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
-                  size={22}
-                  color="#111"
+                  size={21}
+                  color="#333"
                 />
                 <Text style={styles.resActionText}>
                   {formatCount(selectedItem?.likeCount ?? 0)}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={handleRestaurantDislike}
                 activeOpacity={0.7}
@@ -2461,13 +2826,13 @@ const HomeOneScreen = () => {
                       ? 'thumb-down'
                       : 'thumb-down-outline'
                   }
-                  size={22}
-                  color="#111"
+                  size={21}
+                  color="#333"
                 />
                 <Text style={styles.resActionText}>
                   {formatCount(selectedItem?.dislikeCount ?? 0)}
                 </Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               <TouchableOpacity
                 style={styles.resActionItem}
@@ -2482,43 +2847,35 @@ const HomeOneScreen = () => {
                 activeOpacity={0.7}
                 disabled={!selectedItem?.id}
               >
-                <Icon name="comment-text-outline" size={22} color="#111" />
+                <Icon name="comment-text-outline" size={21} color="#333" />
                 <Text style={styles.resActionText}>
                   {formatCount(selectedItem?.commentCount ?? 0)}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={handleRestaurantChat}
                 activeOpacity={0.7}
               >
-                <Icon name="chat-outline" size={22} color="#111" />
+                <Icon name="chat-outline" size={21} color="#333" />
                 <Text style={styles.resActionText}>Chat</Text>
+              </TouchableOpacity> */}
+              <TouchableOpacity
+                style={styles.resActionItem}
+                onPress={handleRestaurantDownload}
+                activeOpacity={0.7}
+              >
+                <Icon name="download-outline" size={21} color="#333" />
+                <Text style={styles.resActionText}>Download</Text>
               </TouchableOpacity>
-              {/* 
-          <TouchableOpacity
-            style={styles.resActionItem}
-            onPress={handleRestaurantDownload}
-            activeOpacity={0.7}
-            disabled={resDownloadPct != null}
-          >
-            <Icon
-              name={resDownloadPct != null ? 'download' : 'download-outline'}
-              size={22}
-              color="#111"
-            />
-            <Text style={styles.resActionText}>
-              {resDownloadPct != null ? `${resDownloadPct}%` : 'Download'}
-            </Text>
-          </TouchableOpacity> */}
 
               <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={handleRestaurantShare}
                 activeOpacity={0.7}
               >
-                <Icon name="share-outline" size={22} color="#111" />
+                <Icon name="share-outline" size={21} color="#333" />
                 <Text style={styles.resActionText}>Share</Text>
               </TouchableOpacity>
 
@@ -2527,17 +2884,9 @@ const HomeOneScreen = () => {
                 onPress={handleRestaurantSave}
                 activeOpacity={0.7}
               >
-                <Icon name="bookmark-outline" size={22} color="#111" />
+                <Icon name="bookmark-outline" size={21} color="#333" />
                 <Text style={styles.resActionText}>Save</Text>
               </TouchableOpacity>
-              <View style={styles.resActionItem} pointerEvents="none">
-                <Icon name="eye-outline" size={22} color="#111" />
-                <Text style={styles.resActionText}>
-                  {formatCount(
-                    selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0,
-                  )}
-                </Text>
-              </View>
             </View>
             <View style={styles.resSocialRow}>
               {/* <View style={styles.resIconGroup}>
@@ -2636,9 +2985,9 @@ const HomeOneScreen = () => {
             '—'}
         </Text> */}
 
-            <View style={styles.descContainer}>
-              <Text style={styles.sectionTitle}>Description</Text>
-              <View style={styles.descBox}>
+            <View style={styles.resGlassCard}>
+              <View style={styles.descContainer}>
+                <Text style={styles.sectionTitle}>Description</Text>
                 <Text style={styles.descText}>
                   {selectedItem?._campaignVideoDetail
                     ? selectedItem?.description &&
@@ -2652,44 +3001,55 @@ const HomeOneScreen = () => {
               </View>
             </View>
 
-            <View style={styles.contactContainer}>
-              <Text style={styles.sectionTitle}>
-                Phone :{' '}
-                <Text style={{ fontWeight: 'normal' }}>
-                  {selectedItem?.user?.phone || '—'}
-                </Text>
-              </Text>
-              <Text style={styles.contactEmail}>
-                Email : {selectedItem?.user?.email || '—'}
-              </Text>
-              <Text style={styles.contactAddr}>
-                Address :{' '}
-                {selectedItem?.location ||
-                  selectedItem?.creatorAddress ||
-                  selectedItem?.user?.address ||
-                  '—'}
-              </Text>
-              {selectedItem?.creatorLatitude != null &&
-              selectedItem?.creatorLongitude != null &&
-              Number.isFinite(Number(selectedItem.creatorLatitude)) &&
-              Number.isFinite(Number(selectedItem.creatorLongitude)) ? (
-                <TouchableOpacity
-                  onPress={() =>
-                    Linking.openURL(
-                      `https://www.google.com/maps?q=${Number(
-                        selectedItem.creatorLatitude,
-                      )},${Number(selectedItem.creatorLongitude)}`,
-                    )
-                  }
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.contactMapLink}>
-                    Open location on map ·{' '}
-                    {Number(selectedItem.creatorLatitude).toFixed(5)},{' '}
-                    {Number(selectedItem.creatorLongitude).toFixed(5)}
+            <View style={styles.resGlassCard}>
+              <View style={styles.contactContainer}>
+                <Text style={styles.contactSectionLabel}>Contact</Text>
+                <View style={styles.contactRow}>
+                  <Icon name="phone-outline" size={18} color="#888" />
+                  <Text style={styles.contactRowText}>
+                    {selectedItem?.user?.phone || '—'}
                   </Text>
-                </TouchableOpacity>
-              ) : null}
+                </View>
+                <View style={styles.contactRow}>
+                  <Icon name="email-outline" size={18} color="#888" />
+                  <Text style={styles.contactRowText} numberOfLines={2}>
+                    {selectedItem?.user?.email || '—'}
+                  </Text>
+                </View>
+                <View style={styles.contactDivider} />
+                <View style={[styles.contactRow, styles.contactRowLast]}>
+                  <Icon name="map-marker-outline" size={18} color="#888" />
+                  <Text style={styles.contactRowText}>
+                    {selectedItem?.location ||
+                      selectedItem?.creatorAddress ||
+                      selectedItem?.user?.address ||
+                      '—'}
+                  </Text>
+                </View>
+                {selectedItem?.creatorLatitude != null &&
+                selectedItem?.creatorLongitude != null &&
+                Number.isFinite(Number(selectedItem.creatorLatitude)) &&
+                Number.isFinite(Number(selectedItem.creatorLongitude)) ? (
+                  <TouchableOpacity
+                    onPress={() =>
+                      Linking.openURL(
+                        `https://www.google.com/maps?q=${Number(
+                          selectedItem.creatorLatitude,
+                        )},${Number(selectedItem.creatorLongitude)}`,
+                      )
+                    }
+                    activeOpacity={0.85}
+                    style={styles.contactMapRow}
+                  >
+                    <Icon name="map-search-outline" size={18} color="#1565C0" />
+                    <Text style={styles.contactMapLink}>
+                      Open in Maps ·{' '}
+                      {Number(selectedItem.creatorLatitude).toFixed(5)},{' '}
+                      {Number(selectedItem.creatorLongitude).toFixed(5)}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           </ScrollView>
         );
@@ -2704,7 +3064,7 @@ const HomeOneScreen = () => {
     : 'light-content';
 
   const statusBarBg = isRestaurantDetail
-    ? '#FFF'
+    ? '#FFFFFF'
     : isVideoDetail
     ? '#000'
     : '#F5A623';
@@ -3123,7 +3483,15 @@ const ShortCard = ({ title, img, views, onPress, onMorePress }) => (
   </View>
 );
 
-const FoodCard = ({ title, location, isSponsored, img, onPress }) => (
+const FoodCard = ({
+  title,
+  location,
+  isSponsored,
+  img,
+  onPress,
+  views,
+  distanceLabel,
+}) => (
   <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
     <View style={styles.cardImageContainer}>
       <Image source={{ uri: img }} style={styles.cardImage} />
@@ -3139,22 +3507,19 @@ const FoodCard = ({ title, location, isSponsored, img, onPress }) => (
     <View style={styles.cardInfo}>
       <View>
         <Text style={styles.cardTitle}>
-           {title.length > 35 
-    ? `${title.substring(0, 35)}...` 
-    : title}
+          {title.length > 35 ? `${title.substring(0, 35)}...` : title}
         </Text>
         <Text
           numberOfLines={1}
           ellipsizeMode="tail"
           style={{ width: 150, color: '#666', fontSize: 11 }}
         >
-         
           {location}
         </Text>
       </View>
       <View style={styles.cardStats}>
-        <Text style={styles.statSmall}>100k views</Text>
-        <Text style={styles.statSmall}>1.2 Km</Text>
+        <Text style={styles.statSmall}>{views || '—'}</Text>
+        <Text style={styles.statSmall}>{distanceLabel || '—'}</Text>
       </View>
     </View>
   </TouchableOpacity>
@@ -3289,19 +3654,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingBottom: 20,
     paddingTop: 10,
+    position: 'relative',
   },
-  homeDropdown: { flexDirection: 'row', alignItems: 'center' },
+  homeDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  homeLocationTextCol: {
+    flex: 1,
+    marginHorizontal: 10,
+    minWidth: 0,
+  },
   homeText: {
     color: '#FFF',
     fontSize: 20,
     fontWeight: 'bold',
-    marginHorizontal: 10,
   },
   addressSubtext: {
     color: '#FFF',
     fontSize: 12,
     opacity: 0.9,
+    marginTop: 2,
     marginBottom: 15,
+    fontWeight: '400',
   },
   innerSearchBox: {
     position: 'absolute',
@@ -3335,6 +3710,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  viewMoreText: {
+    color: '#D78500',
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 8,
+  },
   shortsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -3344,6 +3730,11 @@ const styles = StyleSheet.create({
   shortsGridItem: {
     width: '50%',
     padding: 6,
+  },
+  tryNewRow: { paddingBottom: 8, paddingRight: 6 },
+  tryNewCard: {
+    width: width * 0.46,
+    marginRight: 10,
   },
   shortCard: {
     height: 280,
@@ -3539,42 +3930,82 @@ const styles = StyleSheet.create({
   bottomArrow: { alignItems: 'center', marginTop: 20 },
 
   // Restaurant Detail
-  resContainer: { flex: 1, backgroundColor: '#FFF' },
+  resContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    position: 'relative',
+  },
+  resScrollContent: {
+    flexGrow: 1,
+  },
   resHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 15,
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
   resBackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#333',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+    minHeight: 44,
+    ...Platform.select({
+      android: { elevation: 2 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+      },
+    }),
   },
   resBackText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 4,
+    color: '#1A1A1A',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  resHeaderMenuBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   resTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 15,
     alignItems: 'center',
-    marginBottom: 15,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  resMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   resNameRatingRow: {
     flexDirection: 'column',
     alignItems: 'flex-start',
-    maxWidth: 220,
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 4,
   },
-  resMainTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  resMainTitle: { fontSize: 22, fontWeight: '700', color: '#111' },
   resRatingRow: {
-    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -3584,27 +4015,64 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '600',
   },
-  resSubLoc: { fontSize: 12, color: '#999', width: 200 },
+  resViewsText: {
+    fontSize: 13,
+    color: '#606060',
+    fontWeight: '500',
+  },
+  resOrderBtnWrap: {
+    flexShrink: 0,
+    justifyContent: 'center',
+  },
   resOrderBtn: {
     backgroundColor: '#F5A623',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    minWidth: 118,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      android: { elevation: 2 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+    }),
   },
-  resOrderText: { color: '#FFF', fontWeight: 'bold' },
+  resOrderText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
   resVideoCard: {
-    paddingHorizontal: 15,
+    marginHorizontal: 16,
     height: 220,
     position: 'relative',
     marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    ...Platform.select({
+      android: { elevation: 4 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+    }),
   },
-  resVideoImg: { width: '100%', height: '100%', borderRadius: 15 },
+  resVideoImg: { width: '100%', height: '100%', borderRadius: 16 },
   resVideoLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 15,
+    borderRadius: 16,
   },
   resVideoErrorOverlay: {
     position: 'absolute',
@@ -3636,12 +4104,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 15,
+    borderRadius: 16,
   },
   resProgressBarContainer: {
     position: 'absolute',
-    left: 18,
-    right: 18,
+    left: 12,
+    right: 12,
     bottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -3662,9 +4130,8 @@ const styles = StyleSheet.create({
   },
   resSocialRow: {
     flexDirection: 'column',
-    // justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    alignItems: 'stretch',
   },
   resIconGroup: { flexDirection: 'row', flexWrap: 'wrap', width: '60%' },
   socialIconWrap: { marginRight: 15, marginBottom: 10 },
@@ -3672,7 +4139,6 @@ const styles = StyleSheet.create({
   resBookGalleryRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    paddingHorizontal: 15,
     marginBottom: 12,
     gap: 8,
   },
@@ -3737,39 +4203,113 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginBottom: 20,
   },
-  resActionsRow: {
+  resActionsRowWrap: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingHorizontal: 15,
-    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginBottom: 14,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderColor: 'transparent',
+    borderRadius: 0,
+    marginHorizontal: 16,
+    ...Platform.select({
+      android: { elevation: 0 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0,
+        shadowRadius: 0,
+      },
+    }),
   },
   resActionItem: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 2,
     minWidth: 44,
   },
   resActionText: {
-    marginTop: 6,
-    fontSize: 12,
-    color: '#222',
+    marginTop: 4,
+    fontSize: 11,
+    color: '#4B5563',
     fontWeight: '600',
   },
-  descContainer: { paddingHorizontal: 15, marginBottom: 20 },
+  resGlassCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#ECEDEF',
+    borderRadius: 14,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    ...Platform.select({
+      android: { elevation: 0 },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0,
+        shadowRadius: 0,
+      },
+    }),
+  },
+  descContainer: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 10,
   },
-  descBox: { backgroundColor: '#F0F0F0', padding: 15, borderRadius: 12 },
-  descText: { fontSize: 14, color: '#555', lineHeight: 20 },
-  contactContainer: { paddingHorizontal: 15, paddingBottom: 30 },
+  descText: { fontSize: 14, color: '#4B5563', lineHeight: 20, marginTop: 1 },
+  contactContainer: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  contactSectionLabel: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 10,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 10,
+  },
+  contactDivider: {
+    height: 1,
+    backgroundColor: 'rgba(148,163,184,0.24)',
+    marginTop: 1,
+    marginBottom: 8,
+  },
+  contactRowLast: {
+    marginBottom: 0,
+  },
+  contactRowText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+  },
+  contactMapRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
   contactEmail: { color: '#555', marginTop: 5 },
   contactAddr: { color: '#555', marginTop: 5 },
   contactMapLink: {
+    flex: 1,
     color: '#1565C0',
-    marginTop: 10,
     fontSize: 14,
     fontWeight: '600',
     textDecorationLine: 'underline',

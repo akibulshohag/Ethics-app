@@ -43,6 +43,8 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [verificationMode, setVerificationMode] = useState(false);
+  const [verificationOtp, setVerificationOtp] = useState('');
 
   // PRESERVED: Original handleLogin functionality
   const handleLogin = async () => {
@@ -168,12 +170,97 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       } catch (_) {}
     } catch (error) {
       console.error('Login error:', error);
+      const msg = String(error?.message || '');
+      const pendingOrVerification =
+        msg.toLowerCase().includes('pending') ||
+        msg.toLowerCase().includes('verify');
+      if (pendingOrVerification) {
+        setVerificationMode(true);
+      }
       setTimeout(() => {
-        Alert.alert(
-          'Error',
-          error.message || 'Login failed. Please try again.',
-        );
+        Alert.alert('Error', error.message || 'Login failed. Please try again.');
       }, 100);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyPendingAccount = async () => {
+    if (!email.trim() || !verificationOtp.trim()) {
+      Alert.alert('Error', 'Please enter email and OTP');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${config.apiBaseUrl}/users/verify-email-verification-otp`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            otp: verificationOtp.trim(),
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'OTP verification failed');
+      }
+
+      const userData = {
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        phone: data.user.phone,
+        nickname: data.user.nickname,
+        gender: data.user.gender,
+        role: data.user.role,
+        roleId: data.user.roleId,
+        address: data.user.address,
+        latitude: data.user.latitude,
+        longitude: data.user.longitude,
+        pin: data.user.pin,
+        photos: data.user.photos ?? [],
+        channelAbout: data.user.channelAbout,
+        socialLinks: data.user.socialLinks,
+        savedLastLocation: data.user.savedLastLocation,
+        rememberMe: rememberMe,
+        token: data.token,
+      };
+      dispatch(appSetUser(userData));
+      navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
+    } catch (error) {
+      Alert.alert('Error', error.message || 'OTP verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtpForPendingAccount = async () => {
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter email first');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${config.apiBaseUrl}/users/request-email-verification-otp`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim() }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to send OTP');
+      }
+      setVerificationMode(true);
+      Alert.alert('Success', 'OTP sent to your email');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to send OTP');
     } finally {
       setLoading(false);
     }
@@ -186,42 +273,43 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         backgroundColor={LOGIN_SCREEN_YELLOW}
       />
       <SafeAreaView style={styles.overlay}>
+        <View style={styles.bgOrbOne} />
+        <View style={styles.bgOrbTwo} />
+        <View style={styles.bgOrbThree} />
         <KeyboardAvoidingView
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          {/* UPDATED: Nav Header Style */}
-          
           <View style={styles.navHeader}>
             <TouchableOpacity
               onPress={() => (onBack ? onBack() : navigation.goBack())}
               style={styles.backBtn}
             >
-              <Icon name="chevron-left" size={18} color="#1A1A1A" />
+              <Icon name="chevron-left" size={18} color="#2D1800" />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
-            {/* <Icon name="dots-vertical" size={26} color="#1A1A1A" /> */}
           </View>
 
           <View style={styles.centerContainer}>
-            {/* UPDATED: UI Glassmorphism Card */}
             <View style={styles.loginCard}>
+              <View style={styles.cardGlow} />
               <Text style={styles.headerTitle}>Welcome back</Text>
-              <Text style={styles.headerSubTitle}>Sign in to continue</Text>
+              <Text style={styles.headerSubTitle}>
+                Sign in to continue your journey
+              </Text>
 
               <View style={styles.cardBody}>
-                {/* Email Input */}
                 <View style={styles.inputWrapper}>
                   <Icon
                     name="email-outline"
                     size={22}
-                    color="#555"
+                    color="#7A4B00"
                     style={styles.inputIcon}
                   />
                   <TextInput
                     placeholder="Enter your email"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="#8E6230"
                     style={styles.input}
                     value={email}
                     onChangeText={setEmail}
@@ -231,17 +319,16 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                   />
                 </View>
 
-                {/* Password Input */}
                 <View style={styles.inputWrapper}>
                   <Icon
                     name="lock-outline"
                     size={22}
-                    color="#555"
+                    color="#7A4B00"
                     style={styles.inputIcon}
                   />
                   <TextInput
                     placeholder="Password"
-                    placeholderTextColor="#999"
+                    placeholderTextColor="#8E6230"
                     secureTextEntry={!passwordVisible}
                     style={styles.input}
                     value={password}
@@ -255,12 +342,31 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     <Icon
                       name={passwordVisible ? 'eye-off' : 'eye'}
                       size={22}
-                      color="#333"
+                      color="#7A4B00"
                     />
                   </TouchableOpacity>
                 </View>
 
-                {/* Remember & Forgot Row */}
+                {verificationMode ? (
+                  <View style={styles.inputWrapper}>
+                    <Icon
+                      name="shield-check-outline"
+                      size={22}
+                      color="#7A4B00"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      placeholder="Enter OTP"
+                      placeholderTextColor="#8E6230"
+                      style={styles.input}
+                      value={verificationOtp}
+                      onChangeText={setVerificationOtp}
+                      keyboardType="number-pad"
+                      editable={!loading}
+                    />
+                  </View>
+                ) : null}
+
                 <View style={styles.utilityRow}>
                   <TouchableOpacity
                     style={styles.checkboxContainer}
@@ -274,7 +380,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                           : 'checkbox-blank-outline'
                       }
                       size={20}
-                      color="#333"
+                      color="#8C5700"
                     />
                     <Text style={styles.utilityText}>Remember me</Text>
                   </TouchableOpacity>
@@ -295,30 +401,37 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                   </TouchableOpacity>
                 </View>
 
-                {/* UPDATED: Action Buttons Stacked per Screenshot */}
                 <TouchableOpacity
                   style={styles.actionBtnLogin}
-                  onPress={handleLogin}
+                  onPress={verificationMode ? handleVerifyPendingAccount : handleLogin}
                   disabled={loading}
                 >
                   {loading ? (
                     <ActivityIndicator color="#FFF" size="small" />
                   ) : (
-                    <Text style={styles.btnText}>Login</Text>
+                    <Text style={styles.btnText}>
+                      {verificationMode ? 'Verify OTP' : 'Login'}
+                    </Text>
                   )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.actionBtnSignUp}
-                  onPress={() =>
-                    onSignUp ? onSignUp() : navigation.navigate('HomeSixScreen')
+                  onPress={
+                    verificationMode
+                      ? handleResendOtpForPendingAccount
+                      : () =>
+                          onSignUp
+                            ? onSignUp()
+                            : navigation.navigate('HomeSixScreen')
                   }
                   disabled={loading}
                 >
-                  <Text style={styles.signUpText}>Sign Up</Text>
+                  <Text style={styles.signUpText}>
+                    {verificationMode ? 'Resend OTP' : 'Sign Up'}
+                  </Text>
                 </TouchableOpacity>
 
-                {/* Social Login Section */}
                 <View style={styles.socialContainer}>
                   <Text style={styles.socialTitle}>Or continue with</Text>
                   <View style={styles.socialPill}>
@@ -336,7 +449,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     </TouchableOpacity>
                   </View>
                 </View>
-                
               </View>
             </View>
           </View>
@@ -353,63 +465,120 @@ const styles = StyleSheet.create({
     height,
     backgroundColor: LOGIN_SCREEN_YELLOW,
   },
-  overlay: { flex: 1 },
+  overlay: {
+    flex: 1,
+    backgroundColor: LOGIN_SCREEN_YELLOW,
+  },
+  bgOrbOne: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 140,
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+    top: -70,
+    right: -50,
+  },
+  bgOrbTwo: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 160,
+    backgroundColor: 'rgba(255, 140, 0, 0.28)',
+    bottom: 160,
+    left: -90,
+  },
+  bgOrbThree: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 120,
+    backgroundColor: 'rgba(122, 62, 0, 0.16)',
+    bottom: -70,
+    right: -60,
+  },
   keyboardView: { flex: 1 },
   navHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 15,
+    paddingHorizontal: 18,
+    paddingTop: 10,
     alignItems: 'center',
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
   },
-  backText: { color: '#1A1A1A', fontSize: 13, fontWeight: 'bold' },
+  backText: {
+    color: '#2D1800',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
 
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
   },
   loginCard: {
     width: '100%',
-    backgroundColor: '#F5A623',
-    borderRadius: 25,
-    paddingVertical: 20,
-    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 245, 220, 0.62)',
+    borderRadius: 30,
+    paddingVertical: 24,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    marginBottom: 80,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    marginBottom: 56,
+    shadowColor: '#9B4D00',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  cardGlow: {
+    position: 'absolute',
+    top: -90,
+    right: -70,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#2D1800',
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   headerSubTitle: {
     fontSize: 16,
-    color: '#333',
+    color: '#5E3500',
     textAlign: 'center',
-    marginBottom: 25,
+    marginBottom: 24,
+    marginTop: 6,
   },
   cardBody: { padding: 5 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.70)',
+    borderRadius: 16,
     height: 52,
     paddingHorizontal: 15,
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
   },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: '#333', fontSize: 15 },
+  input: { flex: 1, color: '#2A1A00', fontSize: 15 },
 
   utilityRow: {
     flexDirection: 'row',
@@ -418,33 +587,41 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   checkboxContainer: { flexDirection: 'row', alignItems: 'center' },
-  utilityText: { fontSize: 13, color: '#333', marginLeft: 5 },
+  utilityText: { fontSize: 13, color: '#5E3500', marginLeft: 5 },
   actionBtnLogin: {
-    backgroundColor: '#222',
+    backgroundColor: '#2B1A00',
     height: 52,
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
+    shadowColor: '#5B3200',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 7,
   },
   actionBtnSignUp: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.7)',
+    borderColor: 'rgba(122, 72, 0, 0.30)',
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  btnText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
-  signUpText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  btnText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
+  signUpText: { color: '#5B3200', fontSize: 18, fontWeight: '700' },
   socialContainer: { alignItems: 'center', marginTop: 25 },
-  socialTitle: { color: '#333', fontSize: 15, marginBottom: 15 },
+  socialTitle: { color: '#5E3500', fontSize: 15, marginBottom: 15 },
   socialPill: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
+    backgroundColor: 'rgba(255,255,255,0.72)',
     paddingHorizontal: 20,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   socialIcon: { marginHorizontal: 12 },
 });

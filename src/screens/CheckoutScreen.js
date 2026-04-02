@@ -99,11 +99,11 @@ const CheckoutScreen = () => {
                 <View style={styles.rowLeft}>
                   <Text style={styles.itemName}>{item.itemName}</Text>
                   <Text style={styles.itemMeta}>
-                    {item.currency || 'GBP'} {price.toFixed(2)} × {qty}
+                    £ {price.toFixed(2)} × {qty}
                   </Text>
                 </View>
                 <Text style={styles.lineTotal}>
-                  {item.currency || 'GBP'} {lineTotal.toFixed(2)}
+                  £ {lineTotal.toFixed(2)}
                 </Text>
               </View>
             );

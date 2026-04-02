@@ -12,7 +12,6 @@ import {
   Image,
   Modal,
   Pressable,
-  Share,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -69,6 +68,8 @@ const MenuManageScreen = () => {
   const [fileUploadLoading, setFileUploadLoading] = useState(false);
   const [csvUploadLoading, setCsvUploadLoading] = useState(false);
   const [csvExportLoading, setCsvExportLoading] = useState(false);
+  const [csvFileNameModalVisible, setCsvFileNameModalVisible] = useState(false);
+  const [csvExportFileName, setCsvExportFileName] = useState('');
   const [imageUploading, setImageUploading] = useState(false);
   const [addSuccessInModal, setAddSuccessInModal] = useState(false);
   // Category form (add/edit)
@@ -110,29 +111,26 @@ const MenuManageScreen = () => {
   };
 
   const pickAndUploadMenuFile = () => {
-    launchImageLibrary(
-      { mediaType: 'photo', selectionLimit: 1 },
-      async (res) => {
-        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-        const asset = res.assets[0];
-        setFileUploadLoading(true);
-        try {
-          const formData = new FormData();
-          formData.append('file', {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || asset.uri?.split('/').pop() || 'menu.jpg',
-          });
-          await uploadMenuFile(user.token, formData);
-          Alert.alert('Success', 'Menu file uploaded');
-          loadMenu();
-        } catch (e) {
-          Alert.alert('Error', e.message || 'Upload failed');
-        } finally {
-          setFileUploadLoading(false);
-        }
-      },
-    );
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, async res => {
+      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      setFileUploadLoading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', {
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || asset.uri?.split('/').pop() || 'menu.jpg',
+        });
+        await uploadMenuFile(user.token, formData);
+        Alert.alert('Success', 'Menu file uploaded');
+        loadMenu();
+      } catch (e) {
+        Alert.alert('Error', e.message || 'Upload failed');
+      } finally {
+        setFileUploadLoading(false);
+      }
+    });
   };
 
   const pickAndUploadMenuCsv = async () => {
@@ -168,7 +166,7 @@ const MenuManageScreen = () => {
     }
   };
 
-  const escapeCsv = (value) => {
+  const escapeCsv = value => {
     const str = String(value ?? '');
     if (str.includes(',') || str.includes('"') || str.includes('\n')) {
       return `"${str.replace(/"/g, '""')}"`;
@@ -176,11 +174,47 @@ const MenuManageScreen = () => {
     return str;
   };
 
-  const exportMenuCsv = async () => {
+  const sanitizeCsvFileName = value => {
+    const raw = String(value || '')
+      .trim()
+      .replace(/\.csv$/i, '');
+    const cleaned = raw.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '_');
+    return cleaned || `menu_export_${Date.now()}`;
+  };
+
+  const openExportCsvModal = () => {
+    setCsvExportFileName(`menu_export_${Date.now()}`);
+    setCsvFileNameModalVisible(true);
+  };
+
+  const closeExportCsvModal = () => {
+    setCsvFileNameModalVisible(false);
+  };
+
+  const showCsvDownloadedAlert = (fileName, openUri) => {
+    Alert.alert('CSV downloaded', `${fileName}`, [
+      { text: 'OK', style: 'cancel' },
+      {
+        text: 'Open',
+        onPress: async () => {
+          try {
+            await ReactNativeBlobUtil.android.actionViewIntent(
+              openUri,
+              'text/comma-separated-values',
+            );
+          } catch (err) {
+            Alert.alert('Info', 'Please open it from your Downloads folder.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const exportMenuCsv = async customName => {
     try {
       setCsvExportLoading(true);
       const categoryMap = new Map(
-        (categories || []).map((c) => [c.id, c.name || '']),
+        (categories || []).map(c => [c.id, c.name || '']),
       );
       const header = [
         'item_name',
@@ -193,15 +227,15 @@ const MenuManageScreen = () => {
         'veg_nonveg',
         'allergens',
       ];
-      const rows = (list || []).map((item) => {
+      const rows = (list || []).map(item => {
         const dietary =
           item?.dietaryType === 'non_veg'
             ? 'non-veg'
             : item?.dietaryType === 'egg'
-              ? 'egg'
-              : item?.dietaryType === 'veg'
-                ? 'veg'
-                : '';
+            ? 'egg'
+            : item?.dietaryType === 'veg'
+            ? 'veg'
+            : '';
         const categoryName =
           categoryMap.get(item?.categoryId) || item?.category?.name || '';
         const allergens = Array.isArray(item?.allergens)
@@ -219,19 +253,64 @@ const MenuManageScreen = () => {
           allergens,
         ];
       });
-      const csv = [header, ...rows]
-        .map((cols) => cols.map(escapeCsv).join(','))
+      const csvBody = [header, ...rows]
+        .map(cols => cols.map(escapeCsv).join(','))
         .join('\n');
+      // Include UTF-8 BOM so spreadsheet apps reliably detect CSV encoding.
+      const csv = `\uFEFF${csvBody}`;
 
-      const fileName = `menu_export_${Date.now()}.csv`;
-      const filePath = `${ReactNativeBlobUtil.fs.dirs.DocumentDir}/${fileName}`;
-      await ReactNativeBlobUtil.fs.writeFile(filePath, csv, 'utf8');
-      const shareUrl = Platform.OS === 'android' ? `file://${filePath}` : filePath;
-      await Share.share({
-        title: 'Export Menu CSV',
-        message: 'Current menu CSV export',
-        url: shareUrl,
-      });
+      const baseName = sanitizeCsvFileName(customName);
+      const fileName = `${baseName}.csv`;
+
+      if (Platform.OS === 'android') {
+        // Save as a normal named file inside Downloads first.
+        const savedPath = `${ReactNativeBlobUtil.fs.dirs.DownloadDir}/${fileName}`;
+        try {
+          await ReactNativeBlobUtil.fs.writeFile(savedPath, csv, 'utf8');
+          await ReactNativeBlobUtil.fs.scanFile([
+            { path: savedPath, mime: 'text/comma-separated-values' },
+          ]);
+          await ReactNativeBlobUtil.android.addCompleteDownload({
+            title: fileName,
+            description: 'Menu CSV export',
+            mime: 'text/comma-separated-values',
+            path: savedPath,
+            showNotification: true,
+          });
+          const exists = await ReactNativeBlobUtil.fs.exists(savedPath);
+          if (!exists) throw new Error('File save verification failed');
+          showCsvDownloadedAlert(fileName, `file://${savedPath}`);
+        } catch (downloadErr) {
+          // Fallback for devices where direct Downloads write is restricted.
+          const tempPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
+          await ReactNativeBlobUtil.fs.writeFile(tempPath, csv, 'utf8');
+          const mediaStoreUri =
+            await ReactNativeBlobUtil.MediaCollection.copyToMediaStore(
+              {
+                name: fileName,
+                parentFolder: 'Download',
+                mimeType: 'text/comma-separated-values',
+              },
+              'Download',
+              tempPath,
+            );
+          await ReactNativeBlobUtil.android.addCompleteDownload({
+            title: fileName,
+            description: 'Menu CSV export',
+            mime: 'text/comma-separated-values',
+            path: `${ReactNativeBlobUtil.fs.dirs.DownloadDir}/${fileName}`,
+            showNotification: true,
+          });
+          showCsvDownloadedAlert(
+            fileName,
+            mediaStoreUri || `file://${savedPath}`,
+          );
+        }
+      } else {
+        const filePath = `${ReactNativeBlobUtil.fs.dirs.DocumentDir}/${fileName}`;
+        await ReactNativeBlobUtil.fs.writeFile(filePath, csv, 'utf8');
+        Alert.alert('CSV exported', `Saved in Files as ${fileName}`);
+      }
     } catch (e) {
       Alert.alert('Error', e?.message || 'CSV export failed');
     } finally {
@@ -239,30 +318,32 @@ const MenuManageScreen = () => {
     }
   };
 
+  const onConfirmCsvExport = async () => {
+    closeExportCsvModal();
+    await exportMenuCsv(csvExportFileName);
+  };
+
   const pickAndUploadItemImage = () => {
-    launchImageLibrary(
-      { mediaType: 'photo', selectionLimit: 1 },
-      async (res) => {
-        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-        const asset = res.assets[0];
-        setImageUploading(true);
-        try {
-          const formData = new FormData();
-          formData.append('image', {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name: asset.fileName || asset.uri?.split('/').pop() || 'item.jpg',
-          });
-          const data = await uploadMenuItemImage(user.token, formData);
-          setImageUrl(data?.imageUrl || '');
-          setItemImageAsset(asset);
-        } catch (e) {
-          Alert.alert('Error', e.message || 'Image upload failed');
-        } finally {
-          setImageUploading(false);
-        }
-      },
-    );
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, async res => {
+      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      setImageUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name: asset.fileName || asset.uri?.split('/').pop() || 'item.jpg',
+        });
+        const data = await uploadMenuItemImage(user.token, formData);
+        setImageUrl(data?.imageUrl || '');
+        setItemImageAsset(asset);
+      } catch (e) {
+        Alert.alert('Error', e.message || 'Image upload failed');
+      } finally {
+        setImageUploading(false);
+      }
+    });
   };
 
   const openAdd = () => {
@@ -280,15 +361,23 @@ const MenuManageScreen = () => {
     setFormVisible(true);
   };
 
-  const openEdit = (item) => {
+  const openEdit = item => {
     setEditingId(item.id);
     setItemName(item.itemName || '');
     setPrice(String(item.price ?? ''));
     setDescription(String(item.description || '').trim());
     setImageUrl(item.imageUrl || '');
     setItemImageAsset(null);
-    setDietaryType(item.dietaryType && ['veg', 'egg', 'non_veg'].includes(item.dietaryType) ? item.dietaryType : '');
-    setSelectedCategoryId(item.categoryId || item.category?.id || (categories.length > 0 ? categories[0].id : ''));
+    setDietaryType(
+      item.dietaryType && ['veg', 'egg', 'non_veg'].includes(item.dietaryType)
+        ? item.dietaryType
+        : '',
+    );
+    setSelectedCategoryId(
+      item.categoryId ||
+        item.category?.id ||
+        (categories.length > 0 ? categories[0].id : ''),
+    );
     setSelectedAllergens(normalizeAllergens(item.allergens));
     setCustomAllergenIcons(normalizeAllergens(item.allergenIconUrls));
     setAddSuccessInModal(false);
@@ -318,34 +407,33 @@ const MenuManageScreen = () => {
   };
 
   const pickAndUploadAllergenIcon = () => {
-    launchImageLibrary(
-      { mediaType: 'photo', selectionLimit: 1 },
-      async (res) => {
-        if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
-        const asset = res.assets[0];
-        setAllergenIconUploading(true);
-        try {
-          const formData = new FormData();
-          formData.append('image', {
-            uri: asset.uri,
-            type: asset.type || 'image/jpeg',
-            name:
-              asset.fileName || asset.uri?.split('/').pop() || 'allergen-icon.jpg',
-          });
-          const data = await uploadMenuItemImage(user.token, formData);
-          const url = String(data?.imageUrl || '').trim();
-          if (url) {
-            setCustomAllergenIcons(prev =>
-              prev.includes(url) ? prev : [...prev, url],
-            );
-          }
-        } catch (e) {
-          Alert.alert('Error', e.message || 'Allergen icon upload failed');
-        } finally {
-          setAllergenIconUploading(false);
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, async res => {
+      if (res.didCancel || res.errorCode || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      setAllergenIconUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: asset.uri,
+          type: asset.type || 'image/jpeg',
+          name:
+            asset.fileName ||
+            asset.uri?.split('/').pop() ||
+            'allergen-icon.jpg',
+        });
+        const data = await uploadMenuItemImage(user.token, formData);
+        const url = String(data?.imageUrl || '').trim();
+        if (url) {
+          setCustomAllergenIcons(prev =>
+            prev.includes(url) ? prev : [...prev, url],
+          );
         }
-      },
-    );
+      } catch (e) {
+        Alert.alert('Error', e.message || 'Allergen icon upload failed');
+      } finally {
+        setAllergenIconUploading(false);
+      }
+    });
   };
 
   const handleSave = async () => {
@@ -367,15 +455,17 @@ const MenuManageScreen = () => {
         description: description.trim() || undefined,
         imageUrl: imageUrl || undefined,
         ...(selectedCategoryId ? { categoryId: selectedCategoryId } : {}),
-        ...(selectedAllergens.length ? { allergens: selectedAllergens } : { allergens: [] }),
+        ...(selectedAllergens.length
+          ? { allergens: selectedAllergens }
+          : { allergens: [] }),
         ...(customAllergenIcons.length
           ? { allergenIconUrls: customAllergenIcons }
           : { allergenIconUrls: [] }),
         ...(dietaryType
           ? { dietaryType }
           : editingId
-            ? { clearDietary: true }
-            : {}),
+          ? { clearDietary: true }
+          : {}),
       };
       if (editingId) {
         await updateMenuItem(user.token, editingId, payload);
@@ -400,7 +490,7 @@ const MenuManageScreen = () => {
     setCategoryFormVisible(true);
   };
 
-  const openEditCategory = (cat) => {
+  const openEditCategory = cat => {
     setEditingCategoryId(cat.id);
     setCategoryName(cat.name || '');
     setCategoryFormVisible(true);
@@ -436,8 +526,9 @@ const MenuManageScreen = () => {
     }
   };
 
-  const handleDeleteCategory = (cat) => {
-    const count = cat.itemCount ?? list.filter((i) => i.categoryId === cat.id).length;
+  const handleDeleteCategory = cat => {
+    const count =
+      cat.itemCount ?? list.filter(i => i.categoryId === cat.id).length;
     Alert.alert(
       'Delete category',
       count > 0
@@ -463,23 +554,28 @@ const MenuManageScreen = () => {
 
   // Group menu items by category for section list (category order, then uncategorized)
   const menuSections = React.useMemo(() => {
-    const uncategorized = list.filter((i) => !i.categoryId && !i.category?.id);
-    const byCategory = categories.map((cat) => ({
+    const uncategorized = list.filter(i => !i.categoryId && !i.category?.id);
+    const byCategory = categories.map(cat => ({
       id: cat.id,
       title: cat.name,
-      data: list.filter((i) => (i.categoryId || i.category?.id) === cat.id),
+      data: list.filter(i => (i.categoryId || i.category?.id) === cat.id),
     }));
     const sections = [];
-    byCategory.forEach((s) => {
-      if (s.data.length > 0) sections.push({ id: s.id, title: s.title, data: s.data });
+    byCategory.forEach(s => {
+      if (s.data.length > 0)
+        sections.push({ id: s.id, title: s.title, data: s.data });
     });
     if (uncategorized.length > 0) {
-      sections.push({ id: 'uncategorized', title: 'Uncategorized', data: uncategorized });
+      sections.push({
+        id: 'uncategorized',
+        title: 'Uncategorized',
+        data: uncategorized,
+      });
     }
     return sections;
   }, [list, categories]);
 
-  const handleDelete = (item) => {
+  const handleDelete = item => {
     Alert.alert('Delete item', `Delete "${item.itemName}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -514,7 +610,9 @@ const MenuManageScreen = () => {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centered}>
-          <Text style={styles.helperText}>Menu is for restaurant owners and vendors only.</Text>
+          <Text style={styles.helperText}>
+            Menu is for restaurant owners and vendors only.
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -523,7 +621,10 @@ const MenuManageScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backBtn}
+        >
           <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Manage menu</Text>
@@ -542,35 +643,61 @@ const MenuManageScreen = () => {
       >
         {/* 1. Menu categories: create first, then assign to items */}
         <Text style={styles.sectionTitle}>1. Menu categories</Text>
-        <Text style={styles.sectionHint}>Create categories (e.g. Main Course, Breads), then assign them when adding menu items.</Text>
-        <TouchableOpacity style={styles.addCategoryButton} onPress={openAddCategory}>
+        <Text style={styles.sectionHint}>
+          Create categories (e.g. Main Course, Breads), then assign them when
+          adding menu items.
+        </Text>
+        <TouchableOpacity
+          style={styles.addCategoryButton}
+          onPress={openAddCategory}
+        >
           <Icon name="plus" size={20} color={COLORS.white} />
           <Text style={styles.addCategoryButtonText}>Add category</Text>
         </TouchableOpacity>
         {categories.length > 0 ? (
-          categories.map((cat) => (
+          categories.map(cat => (
             <View key={cat.id} style={styles.categoryCard}>
               <Text style={styles.categoryCardName}>{cat.name}</Text>
-              <Text style={styles.categoryCardCount}>{cat.itemCount ?? list.filter((i) => i.categoryId === cat.id).length} items</Text>
+              <Text style={styles.categoryCardCount}>
+                {cat.itemCount ??
+                  list.filter(i => i.categoryId === cat.id).length}{' '}
+                items
+              </Text>
               <View style={styles.categoryCardActions}>
-                <TouchableOpacity onPress={() => openEditCategory(cat)} style={styles.iconBtn}>
+                <TouchableOpacity
+                  onPress={() => openEditCategory(cat)}
+                  style={styles.iconBtn}
+                >
                   <Icon name="pencil" size={20} color={COLORS.primaryOrange} />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => handleDeleteCategory(cat)} style={styles.iconBtn}>
+                <TouchableOpacity
+                  onPress={() => handleDeleteCategory(cat)}
+                  style={styles.iconBtn}
+                >
                   <Icon name="delete-outline" size={20} color={COLORS.error} />
                 </TouchableOpacity>
               </View>
             </View>
           ))
         ) : (
-          <Text style={styles.emptyCategoryText}>No categories yet. Add one above, then add menu items and assign a category.</Text>
+          <Text style={styles.emptyCategoryText}>
+            No categories yet. Add one above, then add menu items and assign a
+            category.
+          </Text>
         )}
 
         {/* 2. Menu file (PDF/image) upload */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>2. Menu file (PDF or image)</Text>
-        <Text style={styles.sectionHint}>Upload your menu as image (optional).</Text>
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+          2. Menu file (PDF or image)
+        </Text>
+        <Text style={styles.sectionHint}>
+          Upload your menu as image (optional).
+        </Text>
         <TouchableOpacity
-          style={[styles.uploadFileButton, fileUploadLoading && styles.buttonDisabled]}
+          style={[
+            styles.uploadFileButton,
+            fileUploadLoading && styles.buttonDisabled,
+          ]}
           onPress={pickAndUploadMenuFile}
           disabled={fileUploadLoading}
         >
@@ -601,7 +728,9 @@ const MenuManageScreen = () => {
             />
           )}
           <Text style={styles.uploadCsvButtonText}>
-            {csvUploadLoading ? 'Importing CSV…' : 'Import menu from CSV (bulk)'}
+            {csvUploadLoading
+              ? 'Importing CSV…'
+              : 'Import menu from CSV (bulk)'}
           </Text>
         </TouchableOpacity>
         <Text style={styles.csvHint}>
@@ -609,14 +738,15 @@ const MenuManageScreen = () => {
           veg_nonveg, allergens
         </Text>
         <Text style={styles.csvHint}>
-          Import mode: replaces all existing menu items/categories with this CSV.
+          Import mode: replaces all existing menu items/categories with this
+          CSV.
         </Text>
         <TouchableOpacity
           style={[
             styles.exportCsvButton,
             csvExportLoading && styles.buttonDisabled,
           ]}
-          onPress={exportMenuCsv}
+          onPress={openExportCsvModal}
           disabled={csvExportLoading}
         >
           {csvExportLoading ? (
@@ -629,41 +759,70 @@ const MenuManageScreen = () => {
           </Text>
         </TouchableOpacity>
         {menuFiles.length > 0 && (
-          <Text style={styles.uploadedCount}>{menuFiles.length} file(s) uploaded</Text>
+          <Text style={styles.uploadedCount}>
+            {menuFiles.length} file(s) uploaded
+          </Text>
         )}
 
         {/* 3. Menu items */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>3. Menu items</Text>
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+          3. Menu items
+        </Text>
         <TouchableOpacity style={styles.addButton} onPress={openAdd}>
           <Icon name="plus" size={22} color={COLORS.white} />
           <Text style={styles.addButtonText}>Add menu item</Text>
         </TouchableOpacity>
 
         {loading ? (
-          <ActivityIndicator size="large" color={COLORS.primaryOrange} style={{ marginTop: 24 }} />
+          <ActivityIndicator
+            size="large"
+            color={COLORS.primaryOrange}
+            style={{ marginTop: 24 }}
+          />
         ) : list.length === 0 ? (
-          <Text style={styles.emptyText}>No menu items yet. Tap "Add menu item" to add.</Text>
+          <Text style={styles.emptyText}>
+            No menu items yet. Tap "Add menu item" to add.
+          </Text>
         ) : (
-          menuSections.map((section) => (
+          menuSections.map(section => (
             <View key={section.id} style={styles.menuSection}>
               <Text style={styles.menuSectionTitle}>{section.title}</Text>
-              {section.data.map((item) => (
+              {section.data.map(item => (
                 <View key={item.id} style={styles.card}>
                   <View style={styles.cardLeft}>
                     {item.imageUrl ? (
-                      <Image source={{ uri: item.imageUrl }} style={styles.cardThumb} />
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.cardThumb}
+                      />
                     ) : null}
                     <View style={styles.cardTextWrap}>
                       <Text style={styles.cardTitle}>{item.itemName}</Text>
-                      <Text style={styles.cardPrice}>€{Number(item.price).toFixed(2)}</Text>
+                      <Text style={styles.cardPrice}>
+                        £{Number(item.price).toFixed(2)}
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.cardActions}>
-                    <TouchableOpacity onPress={() => openEdit(item)} style={styles.iconBtn}>
-                      <Icon name="pencil" size={22} color={COLORS.primaryOrange} />
+                    <TouchableOpacity
+                      onPress={() => openEdit(item)}
+                      style={styles.iconBtn}
+                    >
+                      <Icon
+                        name="pencil"
+                        size={22}
+                        color={COLORS.primaryOrange}
+                      />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDelete(item)} style={styles.iconBtn}>
-                      <Icon name="delete-outline" size={22} color={COLORS.error} />
+                    <TouchableOpacity
+                      onPress={() => handleDelete(item)}
+                      style={styles.iconBtn}
+                    >
+                      <Icon
+                        name="delete-outline"
+                        size={22}
+                        color={COLORS.error}
+                      />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -680,16 +839,25 @@ const MenuManageScreen = () => {
         onRequestClose={closeForm}
       >
         <Pressable style={styles.formOverlay} onPress={closeForm}>
-          <Pressable style={styles.formBox} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={styles.formBox} onPress={e => e.stopPropagation()}>
             <Text style={styles.formTitle}>
-              {editingId ? 'Edit item' : addSuccessInModal ? 'Item added!' : 'New menu item'}
+              {editingId
+                ? 'Edit item'
+                : addSuccessInModal
+                ? 'Item added!'
+                : 'New menu item'}
             </Text>
 
             {addSuccessInModal ? (
               <View style={styles.addAnotherRow}>
-                <Text style={styles.addAnotherText}>Add another item or close.</Text>
+                <Text style={styles.addAnotherText}>
+                  Add another item or close.
+                </Text>
                 <View style={styles.formActions}>
-                  <TouchableOpacity style={styles.addAnotherBtn} onPress={resetFormForAnother}>
+                  <TouchableOpacity
+                    style={styles.addAnotherBtn}
+                    onPress={resetFormForAnother}
+                  >
                     <Text style={styles.addAnotherBtnText}>Add another</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.doneBtn} onPress={closeForm}>
@@ -700,20 +868,47 @@ const MenuManageScreen = () => {
             ) : (
               <>
                 <Text style={styles.inputLabel}>Category</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryPicker}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.categoryPicker}
+                >
                   <TouchableOpacity
-                    style={[styles.categoryChip, !selectedCategoryId && styles.categoryChipActive]}
+                    style={[
+                      styles.categoryChip,
+                      !selectedCategoryId && styles.categoryChipActive,
+                    ]}
                     onPress={() => setSelectedCategoryId('')}
                   >
-                    <Text style={[styles.categoryChipText, !selectedCategoryId && styles.categoryChipTextActive]}>None</Text>
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        !selectedCategoryId && styles.categoryChipTextActive,
+                      ]}
+                    >
+                      None
+                    </Text>
                   </TouchableOpacity>
-                  {categories.map((cat) => (
+                  {categories.map(cat => (
                     <TouchableOpacity
                       key={cat.id}
-                      style={[styles.categoryChip, selectedCategoryId === cat.id && styles.categoryChipActive]}
+                      style={[
+                        styles.categoryChip,
+                        selectedCategoryId === cat.id &&
+                          styles.categoryChipActive,
+                      ]}
                       onPress={() => setSelectedCategoryId(cat.id)}
                     >
-                      <Text style={[styles.categoryChipText, selectedCategoryId === cat.id && styles.categoryChipTextActive]} numberOfLines={1}>{cat.name}</Text>
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          selectedCategoryId === cat.id &&
+                            styles.categoryChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {cat.name}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
@@ -740,14 +935,16 @@ const MenuManageScreen = () => {
                   placeholderTextColor="#999"
                   multiline
                 />
-                <Text style={styles.inputLabel}>Veg / Non-veg (for customer filters)</Text>
+                <Text style={styles.inputLabel}>
+                  Veg / Non-veg (for customer filters)
+                </Text>
                 <View style={styles.dietaryRow}>
                   {[
                     { id: '', label: 'Any' },
                     { id: 'veg', label: 'Veg', icon: 'circle' },
                     { id: 'egg', label: 'Egg', icon: 'egg' },
                     { id: 'non_veg', label: 'Non-veg', icon: 'triangle' },
-                  ].map((d) => (
+                  ].map(d => (
                     <TouchableOpacity
                       key={d.id || 'any'}
                       style={[
@@ -810,7 +1007,9 @@ const MenuManageScreen = () => {
                     );
                   })}
                 </View>
-                <Text style={styles.inputLabel}>Custom allergen icons (upload)</Text>
+                <Text style={styles.inputLabel}>
+                  Custom allergen icons (upload)
+                </Text>
                 <TouchableOpacity
                   style={[
                     styles.uploadImageBtn,
@@ -820,19 +1019,31 @@ const MenuManageScreen = () => {
                   disabled={allergenIconUploading}
                 >
                   {allergenIconUploading ? (
-                    <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.primaryOrange}
+                    />
                   ) : (
-                    <Icon name="image-plus" size={22} color={COLORS.primaryOrange} />
+                    <Icon
+                      name="image-plus"
+                      size={22}
+                      color={COLORS.primaryOrange}
+                    />
                   )}
                   <Text style={styles.uploadImageBtnText}>
-                    {allergenIconUploading ? 'Uploading…' : 'Upload allergen icon'}
+                    {allergenIconUploading
+                      ? 'Uploading…'
+                      : 'Upload allergen icon'}
                   </Text>
                 </TouchableOpacity>
                 {customAllergenIcons.length > 0 ? (
                   <View style={styles.customIconWrap}>
                     {customAllergenIcons.map((uri, idx) => (
                       <View key={`${uri}-${idx}`} style={styles.customIconItem}>
-                        <Image source={{ uri }} style={styles.customIconImage} />
+                        <Image
+                          source={{ uri }}
+                          style={styles.customIconImage}
+                        />
                         <TouchableOpacity
                           style={styles.customIconRemove}
                           onPress={() =>
@@ -847,26 +1058,38 @@ const MenuManageScreen = () => {
                     ))}
                   </View>
                 ) : null}
-                <Text style={styles.inputLabel}>Item image (upload file, no URL)</Text>
+                <Text style={styles.inputLabel}>
+                  Item image (upload file, no URL)
+                </Text>
                 <TouchableOpacity
-                  style={[styles.uploadImageBtn, imageUploading && styles.buttonDisabled]}
+                  style={[
+                    styles.uploadImageBtn,
+                    imageUploading && styles.buttonDisabled,
+                  ]}
                   onPress={pickAndUploadItemImage}
                   disabled={imageUploading}
                 >
                   {imageUploading ? (
-                    <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+                    <ActivityIndicator
+                      size="small"
+                      color={COLORS.primaryOrange}
+                    />
                   ) : (
-                    <Icon name="image-plus" size={22} color={COLORS.primaryOrange} />
+                    <Icon
+                      name="image-plus"
+                      size={22}
+                      color={COLORS.primaryOrange}
+                    />
                   )}
                   <Text style={styles.uploadImageBtnText}>
                     {imageUrl || itemImageAsset
                       ? 'Image uploaded ✓'
                       : imageUploading
-                        ? 'Uploading…'
-                        : 'Upload image'}
+                      ? 'Uploading…'
+                      : 'Upload image'}
                   </Text>
                 </TouchableOpacity>
-                {(imageUrl || itemImageAsset?.uri) ? (
+                {imageUrl || itemImageAsset?.uri ? (
                   <Image
                     source={{ uri: imageUrl || itemImageAsset?.uri }}
                     style={styles.previewImage}
@@ -874,7 +1097,10 @@ const MenuManageScreen = () => {
                 ) : null}
 
                 <View style={styles.formActions}>
-                  <TouchableOpacity style={styles.cancelBtn} onPress={closeForm}>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={closeForm}
+                  >
                     <Text style={styles.cancelBtnText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -885,7 +1111,9 @@ const MenuManageScreen = () => {
                     {submitLoading ? (
                       <ActivityIndicator size="small" color={COLORS.white} />
                     ) : (
-                      <Text style={styles.saveBtnText}>{editingId ? 'Update' : 'Save'}</Text>
+                      <Text style={styles.saveBtnText}>
+                        {editingId ? 'Update' : 'Save'}
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -896,10 +1124,17 @@ const MenuManageScreen = () => {
       </Modal>
 
       {/* Category add/edit modal */}
-      <Modal visible={categoryFormVisible} transparent animationType="fade" onRequestClose={closeCategoryForm}>
+      <Modal
+        visible={categoryFormVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCategoryForm}
+      >
         <Pressable style={styles.formOverlay} onPress={closeCategoryForm}>
-          <Pressable style={styles.formBox} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.formTitle}>{editingCategoryId ? 'Edit category' : 'New category'}</Text>
+          <Pressable style={styles.formBox} onPress={e => e.stopPropagation()}>
+            <Text style={styles.formTitle}>
+              {editingCategoryId ? 'Edit category' : 'New category'}
+            </Text>
             <TextInput
               style={styles.input}
               value={categoryName}
@@ -908,7 +1143,10 @@ const MenuManageScreen = () => {
               placeholderTextColor="#999"
             />
             <View style={styles.formActions}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={closeCategoryForm}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={closeCategoryForm}
+              >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -919,7 +1157,55 @@ const MenuManageScreen = () => {
                 {categorySaveLoading ? (
                   <ActivityIndicator size="small" color={COLORS.white} />
                 ) : (
-                  <Text style={styles.saveBtnText}>{editingCategoryId ? 'Update' : 'Save'}</Text>
+                  <Text style={styles.saveBtnText}>
+                    {editingCategoryId ? 'Update' : 'Save'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={csvFileNameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeExportCsvModal}
+      >
+        <Pressable style={styles.formOverlay} onPress={closeExportCsvModal}>
+          <Pressable style={styles.formBox} onPress={e => e.stopPropagation()}>
+            <Text style={styles.formTitle}>Export CSV filename</Text>
+            <Text style={styles.sectionHint}>
+              Enter the CSV name to save in phone storage.
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={csvExportFileName}
+              onChangeText={setCsvExportFileName}
+              placeholder="menu_export_2026"
+              placeholderTextColor="#999"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={onConfirmCsvExport}
+            />
+            <View style={styles.formActions}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={closeExportCsvModal}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveBtn}
+                onPress={onConfirmCsvExport}
+                disabled={csvExportLoading}
+              >
+                {csvExportLoading ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save CSV</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -932,7 +1218,12 @@ const MenuManageScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
   helperText: { fontSize: 16, color: COLORS.gray600 },
   header: {
     flexDirection: 'row',
@@ -946,7 +1237,12 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '600', color: COLORS.textPrimary },
   scroll: { flex: 1 },
   scrollContent: { padding: SPACING.lg, paddingBottom: 40 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 4 },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
   sectionHint: { fontSize: 13, color: COLORS.gray600, marginBottom: 12 },
   uploadFileButton: {
     flexDirection: 'row',
@@ -957,7 +1253,11 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     gap: 8,
   },
-  uploadFileButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 15 },
+  uploadFileButtonText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 15,
+  },
   uploadCsvButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1005,7 +1305,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  addCategoryButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 15 },
+  addCategoryButtonText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 15,
+  },
   categoryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1014,7 +1318,12 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     marginBottom: 8,
   },
-  categoryCardName: { flex: 1, fontSize: 16, fontWeight: '600', color: COLORS.textPrimary },
+  categoryCardName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+  },
   categoryCardCount: { fontSize: 13, color: COLORS.gray600, marginRight: 8 },
   categoryCardActions: { flexDirection: 'row', gap: 8 },
   emptyCategoryText: { fontSize: 13, color: COLORS.gray600, marginBottom: 8 },
@@ -1040,7 +1349,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   addButtonText: { color: COLORS.white, fontWeight: '600', fontSize: 16 },
-  emptyText: { fontSize: 14, color: COLORS.gray600, textAlign: 'center', marginTop: 24 },
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.gray600,
+    textAlign: 'center',
+    marginTop: 24,
+  },
   menuSection: { marginBottom: 20 },
   menuSectionTitle: {
     fontSize: 15,
@@ -1159,8 +1473,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
-  uploadImageBtnText: { fontSize: 15, color: COLORS.primaryOrange, fontWeight: '600' },
-  previewImage: { width: '100%', height: 120, borderRadius: 8, marginBottom: 12 },
+  uploadImageBtnText: {
+    fontSize: 15,
+    color: COLORS.primaryOrange,
+    fontWeight: '600',
+  },
+  previewImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
   addAnotherRow: { marginTop: 8 },
   addAnotherText: { fontSize: 15, color: COLORS.gray600, marginBottom: 16 },
   formActions: { flexDirection: 'row', gap: 12, marginTop: 8 },

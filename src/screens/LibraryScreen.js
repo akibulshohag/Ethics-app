@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import {
   StyleSheet,
   Text,
@@ -20,6 +26,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appSetUser } from '../redux/actions/appSlice';
@@ -53,6 +60,13 @@ import { shortsService } from '../services/shortsService';
 import { getDownloadedVideos } from '../services/downloadService';
 import { getSocialIcon } from '../constants/socialLinks';
 import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
+import { townOrCityOnlyFromUser } from '../utils/locationFormat';
+import {
+  distanceKmBetween,
+  formatDistanceKm,
+  resolveViewerLocationOpts,
+  getOwnerLatLngFromMediaPayload,
+} from '../utils/geoDistance';
 
 const { width } = Dimensions.get('window');
 
@@ -90,17 +104,55 @@ const formatTimeAgo = dateStr => {
   return 'Recently';
 };
 
-const mapVideoApiToDisplay = v => {
+const mergeChannelProfileIntoMedia = (media, prof) => {
+  if (!media || !prof || typeof prof !== 'object') return media;
+  const u = media.user && typeof media.user === 'object' ? { ...media.user } : {};
+  return {
+    ...media,
+    user: {
+      ...u,
+      id: u.id || prof.id,
+      address: u.address || prof.address,
+      latitude: u.latitude ?? prof.latitude,
+      longitude: u.longitude ?? prof.longitude,
+      nickname: u.nickname || prof.nickname,
+      name: u.name || prof.name,
+    },
+    userId: media.userId || prof.id,
+  };
+};
+
+const mapVideoApiToDisplay = (v, viewerOpts) => {
   const user = v.user || {};
   const viewCount = v.viewCount ?? v._count?.views ?? 0;
   const channelName = user.nickname || user.name || 'Unknown';
   const pubAt = v.publishedAt || v.createdAt;
+  const locationShort = townOrCityOnlyFromUser(user);
+  let distanceLabel = '';
+  const { lat: olat, lng: olng } = getOwnerLatLngFromMediaPayload(v);
+  if (
+    viewerOpts?.viewerLat != null &&
+    viewerOpts?.viewerLng != null &&
+    olat != null &&
+    olng != null
+  ) {
+    const km = distanceKmBetween(
+      viewerOpts.viewerLat,
+      viewerOpts.viewerLng,
+      olat,
+      olng,
+    );
+    if (km != null) distanceLabel = formatDistanceKm(km);
+  }
   return {
     id: v.id,
     type: 'video',
     title: v.title || 'Untitled',
     channelName,
     views: `${formatCount(viewCount)} views`,
+    viewsCompact: formatCount(viewCount),
+    locationShort,
+    distanceLabel,
     publishedAt: formatTimeAgo(pubAt),
     thumbnail:
       safeUri(v.thumbnailUrl || v.videoUrl) ||
@@ -109,11 +161,28 @@ const mapVideoApiToDisplay = v => {
   };
 };
 
-const mapShortApiToDisplay = s => {
+const mapShortApiToDisplay = (s, viewerOpts) => {
   const user = s.user || {};
   const viewCount = s.viewCount ?? s._count?.views ?? 0;
   const pubAt = s.publishedAt || s.createdAt;
   const channelName = user.nickname || user.name || 'Unknown';
+  const locationShort = townOrCityOnlyFromUser(user);
+  let distanceLabel = '';
+  const { lat: olat, lng: olng } = getOwnerLatLngFromMediaPayload(s);
+  if (
+    viewerOpts?.viewerLat != null &&
+    viewerOpts?.viewerLng != null &&
+    olat != null &&
+    olng != null
+  ) {
+    const km = distanceKmBetween(
+      viewerOpts.viewerLat,
+      viewerOpts.viewerLng,
+      olat,
+      olng,
+    );
+    if (km != null) distanceLabel = formatDistanceKm(km);
+  }
   return {
     id: s.id,
     type: 'short',
@@ -122,6 +191,9 @@ const mapShortApiToDisplay = s => {
       (s.title?.length > 80 ? '...' : ''),
     channelName,
     views: `${formatCount(viewCount)} views`,
+    viewsCompact: formatCount(viewCount),
+    locationShort,
+    distanceLabel,
     publishedAt: formatTimeAgo(pubAt),
     thumbnail:
       safeUri(s.thumbnailUrl || s.videoUrl) ||
@@ -167,48 +239,7 @@ const mapVideoApiToModal = (v = {}) => {
   };
 };
 
-const HISTORY_DATA = [
-  {
-    id: '1',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'World of Music',
-    views: '6.4M views',
-    publishedAt: '2 days ago',
-    thumbnail:
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80',
-    duration: '06:42',
-  },
-  {
-    id: '2',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'World of Music',
-    views: '6.4M views',
-    publishedAt: '2 days ago',
-    thumbnail:
-      'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=400&q=80',
-    duration: '04:20',
-  },
-  {
-    id: '3',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'World of Music',
-    views: '6.4M views',
-    publishedAt: '2 days ago',
-    thumbnail:
-      'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?auto=format&fit=crop&w=400&q=80',
-    duration: '08:15',
-  },
-  {
-    id: '4',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
-    channelName: 'BBC Earth',
-    views: '6.4M views',
-    publishedAt: '2 days ago',
-    thumbnail:
-      'https://images.unsplash.com/photo-1484723091739-30a097e8f959?auto=format&fit=crop&w=400&q=80',
-    duration: '05:30',
-  },
-];
+const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 
 const LibraryScreen = ({ navigation }) => {
   const dispatch = useDispatch();
@@ -229,6 +260,47 @@ const LibraryScreen = ({ navigation }) => {
   const [historyRefreshing, setHistoryRefreshing] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('All'); // All | Videos | Shorts
   const [downloadedVideos, setDownloadedVideos] = useState([]);
+  const [savedBrowseCoords, setSavedBrowseCoords] = useState(null);
+
+  const loadStoredBrowseCoords = useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(LOCATION_KEY);
+      if (!raw) {
+        setSavedBrowseCoords(null);
+        return;
+      }
+      const saved = JSON.parse(raw);
+      const lat = saved?.coords?.lat ?? saved?.lat;
+      const lng = saved?.coords?.lng ?? saved?.lng;
+      if (lat != null && lng != null) {
+        setSavedBrowseCoords({ lat: Number(lat), lng: Number(lng) });
+      } else {
+        setSavedBrowseCoords(null);
+      }
+    } catch {
+      setSavedBrowseCoords(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStoredBrowseCoords();
+  }, [loadStoredBrowseCoords]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStoredBrowseCoords();
+    }, [loadStoredBrowseCoords]),
+  );
+
+  const viewerCoords = useMemo(
+    () => resolveViewerLocationOpts(savedBrowseCoords, currentUser),
+    [
+      savedBrowseCoords,
+      currentUser?.latitude,
+      currentUser?.longitude,
+      currentUser?.id,
+    ],
+  );
 
   useEffect(() => {
     const sub = shortsService.onShortUpdated?.(updated => {
@@ -285,14 +357,14 @@ const LibraryScreen = ({ navigation }) => {
       ]);
       const vList = Array.isArray(vRes.videos) ? vRes.videos : vRes?.data || [];
       const sList = Array.isArray(sRes.shorts) ? sRes.shorts : sRes?.data || [];
-      setUserVideos(vList.map(mapVideoApiToDisplay));
-      setUserShorts(sList.map(mapShortApiToDisplay));
+      setUserVideos(vList.map(v => mapVideoApiToDisplay(v, viewerCoords)));
+      setUserShorts(sList.map(s => mapShortApiToDisplay(s, viewerCoords)));
     } catch (e) {
       console.error('Failed to load your videos/shorts:', e);
       setUserVideos([]);
       setUserShorts([]);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, viewerCoords]);
 
   useEffect(() => {
     if (currentView === 'yourVideos' && currentUser?.id) {
@@ -604,14 +676,48 @@ const LibraryScreen = ({ navigation }) => {
       ]);
       const vHistory = Array.isArray(vRes.history) ? vRes.history : [];
       const sHistory = Array.isArray(sRes.history) ? sRes.history : [];
-      const videoItems = vHistory.map(({ video, watchedAt }) => ({
-        ...mapVideoApiToDisplay(video),
-        watchedAt: new Date(watchedAt).getTime(),
-      }));
-      const shortItems = sHistory.map(({ short, watchedAt }) => ({
-        ...mapShortApiToDisplay(short),
-        watchedAt: new Date(watchedAt).getTime(),
-      }));
+
+      const ownerIds = new Set();
+      vHistory.forEach(({ video: vid }) => {
+        const id = vid?.userId || vid?.user?.id;
+        if (id) ownerIds.add(String(id));
+      });
+      sHistory.forEach(({ short: sh }) => {
+        const id = sh?.userId || sh?.user?.id;
+        if (id) ownerIds.add(String(id));
+      });
+
+      const profileById = {};
+      await Promise.allSettled(
+        [...ownerIds].map(async oid => {
+          try {
+            const p = await getChannelProfile(oid, currentUser.id);
+            if (p?.id) profileById[oid] = p;
+          } catch {
+            profileById[oid] = null;
+          }
+        }),
+      );
+
+      const withOwnerProfile = (media, ownerId) => {
+        const p = ownerId ? profileById[String(ownerId)] : null;
+        return p ? mergeChannelProfileIntoMedia(media, p) : media;
+      };
+
+      const videoItems = vHistory.map(({ video, watchedAt }) => {
+        const oid = video?.userId || video?.user?.id;
+        return {
+          ...mapVideoApiToDisplay(withOwnerProfile(video, oid), viewerCoords),
+          watchedAt: new Date(watchedAt).getTime(),
+        };
+      });
+      const shortItems = sHistory.map(({ short, watchedAt }) => {
+        const oid = short?.userId || short?.user?.id;
+        return {
+          ...mapShortApiToDisplay(withOwnerProfile(short, oid), viewerCoords),
+          watchedAt: new Date(watchedAt).getTime(),
+        };
+      });
       const merged = [...videoItems, ...shortItems].sort(
         (a, b) => (b.watchedAt || 0) - (a.watchedAt || 0),
       );
@@ -620,7 +726,7 @@ const LibraryScreen = ({ navigation }) => {
       console.error('Failed to load watch history:', e);
       setWatchHistory([]);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, viewerCoords]);
 
   useEffect(() => {
     if (
@@ -632,7 +738,7 @@ const LibraryScreen = ({ navigation }) => {
       }
       loadHistory().finally(() => setHistoryLoading(false));
     }
-  }, [currentView, currentUser?.id, loadHistory]);
+  }, [currentView, currentUser?.id, loadHistory, viewerCoords]);
 
   const onRefreshHistory = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -1579,7 +1685,9 @@ const LibraryScreen = ({ navigation }) => {
                         gap: 4,
                       }}
                     >
-                      <Text style={{ fontSize: 12, color: '#666' }}>100k</Text>
+                      <Text style={{ fontSize: 12, color: '#666' }}>
+                        {item.viewsCompact ?? '—'}
+                      </Text>
                       <MaterialCommunityIcons
                         name="eye"
                         size={16}
@@ -1604,7 +1712,7 @@ const LibraryScreen = ({ navigation }) => {
                         color="#666"
                       />
                       <Text style={{ fontSize: 12, color: '#666' }}>
-                        Birmingham, UK
+                        {item.locationShort || '—'}
                       </Text>
                     </View>
                     <TouchableOpacity>
@@ -1613,7 +1721,9 @@ const LibraryScreen = ({ navigation }) => {
                         size={16}
                         color="#666"
                       /> */}
-                      <Text style={{ fontSize: 12, color: '#666' }}>12Km</Text>
+                      <Text style={{ fontSize: 12, color: '#666' }}>
+                        {item.distanceLabel || '—'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>

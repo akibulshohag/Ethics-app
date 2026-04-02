@@ -56,9 +56,11 @@ function OrdersTabWrapper(props) {
   const role = String(user?.role || '').toLowerCase();
   const isOwnerOrAdmin = [
     'owner',
+    'vendor',
     'admin',
     'superadmin',
     'super_admin',
+    'super-admin',
   ].includes(role);
   if (isOwnerOrAdmin) return <LiveOrdersScreen {...props} />;
   return <OrderListScreen {...props} />;
