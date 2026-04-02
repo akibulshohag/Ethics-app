@@ -20,9 +20,9 @@ const CompactVideoCard = ({ video, onPress }) => {
               {video.views} • {video.publishedAt}
             </Text>
           </View>
-          <TouchableOpacity style={styles.menuButton}>
+          {/* <TouchableOpacity style={styles.menuButton}>
             <MaterialCommunityIcons name="dots-vertical" size={16} color="#000" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
       </View>
     </TouchableOpacity>
   );

@@ -429,7 +429,6 @@ const BottomNaivgation = () => {
                   redirectToHomeThreeIfGuest(e);
                   return;
                 }
-                // Always land on Library root — avoids reopening CreateShortsScreen / stack after leaving camera
                 e.preventDefault();
                 tabNav.navigate('Library', { screen: 'LibraryScreen' });
               },
@@ -445,14 +444,12 @@ const BottomNaivgation = () => {
                 ...getTabBarStyle(route),
               },
               tabBarIcon: ({ focused }) => (
-                <Image
-                  source={libraryTabIcon}
-                  style={[
-                    styles.libraryTabIcon,
-                    { opacity: focused ? 1 : 0.6 },
-                  ]}
-                  resizeMode="contain"
+                <Icon
+                  name="file-document-outline" 
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
+                
               ),
             })}
           />

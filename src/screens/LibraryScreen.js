@@ -1083,7 +1083,7 @@ const LibraryScreen = ({ navigation }) => {
                   <MaterialCommunityIcons
                     name={emptyTitle ? 'download-outline' : 'video-outline'}
                     size={64}
-                    color="#ccc"
+                    color="#FF7F0B"
                   />
                   <Text style={styles.emptyStateText}>
                     {emptyTitle || `No ${filter.toLowerCase()} yet`}
@@ -1954,12 +1954,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    marginTop: 16,
+    marginTop: 6,
   },
   emptyStateSubtext: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
     marginTop: 8,
+    paddingHorizontal: 20,
+    textAlign: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -2063,7 +2065,7 @@ const styles = StyleSheet.create({
   },
   menuIconContainer: {
     width: 45,
-    height: 45,
+    height: 25,
     borderRadius: 22.5,
     backgroundColor: '#FFF5EE',
     justifyContent: 'center',
