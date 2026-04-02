@@ -62,7 +62,7 @@ export default function MessageListScreen() {
   );
 
   const openChat = (item) => {
-    navigation.navigate('DetailedChatScreen', {
+    navigation.navigate('ChatScreen', {
       partnerId: item.partnerId,
       partnerName: item.partnerName,
       partnerAvatar: item.partnerAvatar,

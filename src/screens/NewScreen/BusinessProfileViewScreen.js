@@ -2959,189 +2959,213 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 ? 'Menu'
                 : 'Video'}
             </Text>
-            <TextInput
-              style={styles.postEditInput}
-              value={itemEditTitle}
-              onChangeText={setItemEditTitle}
-              placeholder={
-                itemActionTarget?.kind === 'menu' ? 'Item Name' : 'Title'
-              }
-              placeholderTextColor="#9CA3AF"
-            />
-            <TextInput
-              style={[styles.postEditInput, styles.postEditTextarea]}
-              value={itemEditDescription}
-              onChangeText={setItemEditDescription}
-              placeholder="Description"
-              placeholderTextColor="#9CA3AF"
-              multiline
-            />
-            {itemActionTarget?.kind === 'menu' ? (
+            <ScrollView
+              style={styles.postEditFormScroll}
+              contentContainerStyle={styles.postEditFormContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <TextInput
                 style={styles.postEditInput}
-                value={itemEditPrice}
-                onChangeText={setItemEditPrice}
-                placeholder="Price"
+                value={itemEditTitle}
+                onChangeText={setItemEditTitle}
+                placeholder={
+                  itemActionTarget?.kind === 'menu' ? 'Item Name' : 'Title'
+                }
                 placeholderTextColor="#9CA3AF"
-                keyboardType="decimal-pad"
               />
-            ) : null}
-            {itemActionTarget?.kind === 'menu' ? (
-              <>
-                <Text style={styles.postEditSmallLabel}>Category</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.postEditChipRow}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.postEditChip,
-                      !itemEditCategoryId && styles.postEditChipActive,
-                    ]}
-                    onPress={() => setItemEditCategoryId('')}
-                    activeOpacity={0.85}
+              <TextInput
+                style={[styles.postEditInput, styles.postEditTextarea]}
+                value={itemEditDescription}
+                onChangeText={setItemEditDescription}
+                placeholder="Description"
+                placeholderTextColor="#9CA3AF"
+                multiline
+              />
+              {itemActionTarget?.kind === 'menu' ? (
+                <TextInput
+                  style={styles.postEditInput}
+                  value={itemEditPrice}
+                  onChangeText={setItemEditPrice}
+                  placeholder="Price"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="decimal-pad"
+                />
+              ) : null}
+              {itemActionTarget?.kind === 'menu' ? (
+                <>
+                  <Text style={styles.postEditSmallLabel}>Category</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.postEditChipRow}
+                    contentContainerStyle={styles.postEditChipRowContent}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <Text
-                      style={[
-                        styles.postEditChipText,
-                        !itemEditCategoryId && styles.postEditChipTextActive,
-                      ]}
-                    >
-                      None
-                    </Text>
-                  </TouchableOpacity>
-                  {(menuCategories || []).map(cat => (
                     <TouchableOpacity
-                      key={cat.id}
                       style={[
                         styles.postEditChip,
-                        itemEditCategoryId === cat.id &&
-                          styles.postEditChipActive,
+                        !itemEditCategoryId && styles.postEditChipActive,
                       ]}
-                      onPress={() => setItemEditCategoryId(cat.id)}
+                      onPress={() => setItemEditCategoryId('')}
                       activeOpacity={0.85}
                     >
                       <Text
                         style={[
                           styles.postEditChipText,
-                          itemEditCategoryId === cat.id &&
-                            styles.postEditChipTextActive,
+                          !itemEditCategoryId && styles.postEditChipTextActive,
                         ]}
-                        numberOfLines={1}
                       >
-                        {cat.name}
+                        None
                       </Text>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <Text style={styles.postEditSmallLabel}>Allergens</Text>
-                <View style={styles.postEditAllergenWrap}>
-                  {ALLERGENS.map(a => {
-                    const active = itemEditAllergens.includes(a.key);
-                    return (
+                    {(menuCategories || []).map(cat => (
                       <TouchableOpacity
-                        key={a.key}
+                        key={cat.id}
                         style={[
-                          styles.postEditAllergenChip,
-                          active && styles.postEditAllergenChipActive,
+                          styles.postEditChip,
+                          itemEditCategoryId === cat.id &&
+                            styles.postEditChipActive,
                         ]}
-                        onPress={() =>
-                          setItemEditAllergens(prev =>
-                            prev.includes(a.key)
-                              ? prev.filter(x => x !== a.key)
-                              : [...prev, a.key],
-                          )
-                        }
+                        onPress={() => setItemEditCategoryId(cat.id)}
                         activeOpacity={0.85}
                       >
-                        <MaterialCommunityIcons
-                          name={a.icon}
-                          size={16}
-                          color={active ? '#fff' : '#666'}
-                        />
+                        <Text
+                          style={[
+                            styles.postEditChipText,
+                            itemEditCategoryId === cat.id &&
+                              styles.postEditChipTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {cat.name}
+                        </Text>
                       </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={styles.postEditSmallLabel}>
-                  Custom allergen icons
-                </Text>
-                <TouchableOpacity
-                  style={styles.postEditMediaBtn}
-                  onPress={pickItemAllergenIcon}
-                  disabled={itemEditAllergenIconUploading}
-                >
-                  {itemEditAllergenIconUploading ? (
-                    <ActivityIndicator size="small" color="#E26A00" />
-                  ) : (
-                    <Text style={styles.postEditMediaBtnText}>
-                      Upload allergen icon
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                {itemEditAllergenIconUrls.length > 0 ? (
-                  <View style={styles.postEditCustomIconWrap}>
-                    {itemEditAllergenIconUrls.map((uri, idx) => (
-                      <View key={`${uri}-${idx}`} style={styles.postEditCustomIconItem}>
-                        <Image source={{ uri }} style={styles.postEditCustomIconImage} />
+                    ))}
+                  </ScrollView>
+                  <Text style={styles.postEditSmallLabel}>Allergens</Text>
+                  <View style={styles.postEditAllergenWrap}>
+                    {ALLERGENS.map(a => {
+                      const active = itemEditAllergens.includes(a.key);
+                      return (
                         <TouchableOpacity
-                          style={styles.postEditCustomIconRemove}
+                          key={a.key}
+                          style={[
+                            styles.postEditAllergenChip,
+                            active && styles.postEditAllergenChipActive,
+                          ]}
                           onPress={() =>
-                            setItemEditAllergenIconUrls(prev =>
-                              prev.filter((_, i) => i !== idx),
+                            setItemEditAllergens(prev =>
+                              prev.includes(a.key)
+                                ? prev.filter(x => x !== a.key)
+                                : [...prev, a.key],
                             )
                           }
+                          activeOpacity={0.85}
                         >
                           <MaterialCommunityIcons
-                            name="close"
-                            size={12}
-                            color="#fff"
+                            name={a.icon}
+                            size={16}
+                            color={active ? '#fff' : '#666'}
                           />
                         </TouchableOpacity>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
-                ) : null}
-              </>
-            ) : null}
-            {itemActionTarget?.kind === 'promotion' ? (
-              <>
-                <TextInput
-                  style={styles.postEditInput}
-                  value={itemEditPromoCode}
-                  onChangeText={setItemEditPromoCode}
-                  placeholder="Promo code"
-                  placeholderTextColor="#9CA3AF"
-                />
-                <TextInput
-                  style={styles.postEditInput}
-                  value={itemEditPromoAmount}
-                  onChangeText={setItemEditPromoAmount}
-                  placeholder="Promo amount (%)"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                />
-              </>
-            ) : null}
-            <View style={styles.postEditRow}>
-              <TouchableOpacity
-                style={styles.postEditMediaBtn}
-                onPress={pickItemThumbnail}
-              >
-                <Text style={styles.postEditMediaBtnText}>
-                  Change Thumbnail
-                </Text>
-              </TouchableOpacity>
-              {itemActionTarget?.kind !== 'menu' ? (
+                  <Text style={styles.postEditSmallLabel}>
+                    Custom allergen icons
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.postEditMediaBtn}
+                    onPress={pickItemAllergenIcon}
+                    disabled={itemEditAllergenIconUploading}
+                  >
+                    <View style={styles.postEditMediaBtnContent}>
+                      {itemEditAllergenIconUploading ? (
+                        <ActivityIndicator size="small" color="#E26A00" />
+                      ) : (
+                        <MaterialCommunityIcons
+                          name="image-plus"
+                          size={18}
+                          color="#E26A00"
+                        />
+                      )}
+                      <Text style={styles.postEditMediaBtnText}>
+                        {itemEditAllergenIconUploading
+                          ? 'Uploading icon...'
+                          : 'Upload allergen icon'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  {itemEditAllergenIconUrls.length > 0 ? (
+                    <View style={styles.postEditCustomIconWrap}>
+                      {itemEditAllergenIconUrls.map((uri, idx) => (
+                        <View
+                          key={`${uri}-${idx}`}
+                          style={styles.postEditCustomIconItem}
+                        >
+                          <Image
+                            source={{ uri }}
+                            style={styles.postEditCustomIconImage}
+                          />
+                          <TouchableOpacity
+                            style={styles.postEditCustomIconRemove}
+                            onPress={() =>
+                              setItemEditAllergenIconUrls(prev =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                          >
+                            <MaterialCommunityIcons
+                              name="close"
+                              size={12}
+                              color="#fff"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
+              {itemActionTarget?.kind === 'promotion' ? (
+                <>
+                  <TextInput
+                    style={styles.postEditInput}
+                    value={itemEditPromoCode}
+                    onChangeText={setItemEditPromoCode}
+                    placeholder="Promo code"
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  <TextInput
+                    style={styles.postEditInput}
+                    value={itemEditPromoAmount}
+                    onChangeText={setItemEditPromoAmount}
+                    placeholder="Promo amount (%)"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                  />
+                </>
+              ) : null}
+              <View style={styles.postEditRow}>
                 <TouchableOpacity
                   style={styles.postEditMediaBtn}
-                  onPress={pickItemVideo}
+                  onPress={pickItemThumbnail}
                 >
-                  <Text style={styles.postEditMediaBtnText}>Change Video</Text>
+                  <Text style={styles.postEditMediaBtnText}>
+                    Change Thumbnail
+                  </Text>
                 </TouchableOpacity>
-              ) : null}
-            </View>
+                {itemActionTarget?.kind !== 'menu' ? (
+                  <TouchableOpacity
+                    style={styles.postEditMediaBtn}
+                    onPress={pickItemVideo}
+                  >
+                    <Text style={styles.postEditMediaBtnText}>Change Video</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </ScrollView>
             <View style={styles.postEditActions}>
               <TouchableOpacity
                 style={[styles.postEditActionBtn, styles.postEditCancelBtn]}
@@ -4885,6 +4909,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 14,
+    maxHeight: '88%',
+  },
+  postEditFormScroll: {
+    maxHeight: '80%',
+  },
+  postEditFormContent: {
+    paddingBottom: 8,
   },
   postEditTitle: {
     fontSize: 17,
@@ -4914,6 +4945,11 @@ const styles = StyleSheet.create({
   },
   postEditChipRow: {
     marginBottom: 10,
+    minHeight: 44,
+  },
+  postEditChipRowContent: {
+    alignItems: 'center',
+    paddingVertical: 2,
   },
   postEditChip: {
     borderWidth: 1,
@@ -4961,7 +4997,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 6,
   },
   postEditCustomIconItem: {
     width: 42,
@@ -4990,6 +5026,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+    marginTop: 2,
     marginBottom: 10,
   },
   postEditMediaBtn: {
@@ -5000,6 +5037,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+  },
+  postEditMediaBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   postEditMediaBtnText: {
     color: '#E26A00',

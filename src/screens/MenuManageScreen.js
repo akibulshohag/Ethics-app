@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   Pressable,
+  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -839,7 +840,11 @@ const MenuManageScreen = () => {
         onRequestClose={closeForm}
       >
         <Pressable style={styles.formOverlay} onPress={closeForm}>
-          <Pressable style={styles.formBox} onPress={e => e.stopPropagation()}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%' }}
+          >
+            <Pressable style={styles.formBox} onPress={e => e.stopPropagation()}>
             <Text style={styles.formTitle}>
               {editingId
                 ? 'Edit item'
@@ -867,240 +872,248 @@ const MenuManageScreen = () => {
               </View>
             ) : (
               <>
-                <Text style={styles.inputLabel}>Category</Text>
                 <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.categoryPicker}
+                  style={styles.formScroll}
+                  contentContainerStyle={styles.formScrollContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
                 >
-                  <TouchableOpacity
-                    style={[
-                      styles.categoryChip,
-                      !selectedCategoryId && styles.categoryChipActive,
-                    ]}
-                    onPress={() => setSelectedCategoryId('')}
+                  <Text style={styles.inputLabel}>Category</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.categoryPicker}
+                    keyboardShouldPersistTaps="handled"
                   >
-                    <Text
-                      style={[
-                        styles.categoryChipText,
-                        !selectedCategoryId && styles.categoryChipTextActive,
-                      ]}
-                    >
-                      None
-                    </Text>
-                  </TouchableOpacity>
-                  {categories.map(cat => (
                     <TouchableOpacity
-                      key={cat.id}
                       style={[
                         styles.categoryChip,
-                        selectedCategoryId === cat.id &&
-                          styles.categoryChipActive,
+                        !selectedCategoryId && styles.categoryChipActive,
                       ]}
-                      onPress={() => setSelectedCategoryId(cat.id)}
+                      onPress={() => setSelectedCategoryId('')}
                     >
                       <Text
                         style={[
                           styles.categoryChipText,
-                          selectedCategoryId === cat.id &&
-                            styles.categoryChipTextActive,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {cat.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                <TextInput
-                  style={styles.input}
-                  value={itemName}
-                  onChangeText={setItemName}
-                  placeholder="Item name"
-                  placeholderTextColor="#999"
-                />
-                <TextInput
-                  style={styles.input}
-                  value={price}
-                  onChangeText={setPrice}
-                  placeholder="Price (e.g. 12.50)"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                />
-                <TextInput
-                  style={[styles.input, styles.textarea]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Description (optional)"
-                  placeholderTextColor="#999"
-                  multiline
-                />
-                <Text style={styles.inputLabel}>
-                  Veg / Non-veg (for customer filters)
-                </Text>
-                <View style={styles.dietaryRow}>
-                  {[
-                    { id: '', label: 'Any' },
-                    { id: 'veg', label: 'Veg', icon: 'circle' },
-                    { id: 'egg', label: 'Egg', icon: 'egg' },
-                    { id: 'non_veg', label: 'Non-veg', icon: 'triangle' },
-                  ].map(d => (
-                    <TouchableOpacity
-                      key={d.id || 'any'}
-                      style={[
-                        styles.dietaryChip,
-                        dietaryType === d.id && styles.dietaryChipActive,
-                      ]}
-                      onPress={() => setDietaryType(d.id)}
-                    >
-                      {d.icon ? (
-                        <Icon
-                          name={d.icon}
-                          size={16}
-                          color={dietaryType === d.id ? COLORS.white : '#666'}
-                        />
-                      ) : null}
-                      <Text
-                        style={[
-                          styles.dietaryChipText,
-                          dietaryType === d.id && styles.dietaryChipTextActive,
+                          !selectedCategoryId && styles.categoryChipTextActive,
                         ]}
                       >
-                        {d.label}
+                        None
                       </Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={styles.inputLabel}>Allergens (tap to select)</Text>
-                <View style={styles.allergenWrap}>
-                  {ALLERGENS.map(a => {
-                    const active = selectedAllergens.includes(a.key);
-                    return (
+                    {categories.map(cat => (
                       <TouchableOpacity
-                        key={a.key}
+                        key={cat.id}
                         style={[
-                          styles.allergenChip,
-                          active && styles.allergenChipActive,
+                          styles.categoryChip,
+                          selectedCategoryId === cat.id &&
+                            styles.categoryChipActive,
                         ]}
-                        onPress={() =>
-                          setSelectedAllergens(prev =>
-                            prev.includes(a.key)
-                              ? prev.filter(x => x !== a.key)
-                              : [...prev, a.key],
-                          )
-                        }
+                        onPress={() => setSelectedCategoryId(cat.id)}
                       >
-                        <Icon
-                          name={a.icon}
-                          size={16}
-                          color={active ? COLORS.white : '#666'}
-                        />
                         <Text
                           style={[
-                            styles.allergenChipText,
-                            active && styles.allergenChipTextActive,
+                            styles.categoryChipText,
+                            selectedCategoryId === cat.id &&
+                              styles.categoryChipTextActive,
                           ]}
+                          numberOfLines={1}
                         >
-                          {a.label}
+                          {cat.name}
                         </Text>
                       </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text style={styles.inputLabel}>
-                  Custom allergen icons (upload)
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.uploadImageBtn,
-                    allergenIconUploading && styles.buttonDisabled,
-                  ]}
-                  onPress={pickAndUploadAllergenIcon}
-                  disabled={allergenIconUploading}
-                >
-                  {allergenIconUploading ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={COLORS.primaryOrange}
-                    />
-                  ) : (
-                    <Icon
-                      name="image-plus"
-                      size={22}
-                      color={COLORS.primaryOrange}
-                    />
-                  )}
-                  <Text style={styles.uploadImageBtnText}>
-                    {allergenIconUploading
-                      ? 'Uploading…'
-                      : 'Upload allergen icon'}
+                    ))}
+                  </ScrollView>
+                  <TextInput
+                    style={styles.input}
+                    value={itemName}
+                    onChangeText={setItemName}
+                    placeholder="Item name"
+                    placeholderTextColor="#999"
+                  />
+                  <TextInput
+                    style={styles.input}
+                    value={price}
+                    onChangeText={setPrice}
+                    placeholder="Price (e.g. 12.50)"
+                    placeholderTextColor="#999"
+                    keyboardType="decimal-pad"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.textarea]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Description (optional)"
+                    placeholderTextColor="#999"
+                    multiline
+                  />
+                  <Text style={styles.inputLabel}>
+                    Veg / Non-veg (for customer filters)
                   </Text>
-                </TouchableOpacity>
-                {customAllergenIcons.length > 0 ? (
-                  <View style={styles.customIconWrap}>
-                    {customAllergenIcons.map((uri, idx) => (
-                      <View key={`${uri}-${idx}`} style={styles.customIconItem}>
-                        <Image
-                          source={{ uri }}
-                          style={styles.customIconImage}
-                        />
+                  <View style={styles.dietaryRow}>
+                    {[
+                      { id: '', label: 'Any' },
+                      { id: 'veg', label: 'Veg', icon: 'circle' },
+                      { id: 'egg', label: 'Egg', icon: 'egg' },
+                      { id: 'non_veg', label: 'Non-veg', icon: 'triangle' },
+                    ].map(d => (
+                      <TouchableOpacity
+                        key={d.id || 'any'}
+                        style={[
+                          styles.dietaryChip,
+                          dietaryType === d.id && styles.dietaryChipActive,
+                        ]}
+                        onPress={() => setDietaryType(d.id)}
+                      >
+                        {d.icon ? (
+                          <Icon
+                            name={d.icon}
+                            size={16}
+                            color={dietaryType === d.id ? COLORS.white : '#666'}
+                          />
+                        ) : null}
+                        <Text
+                          style={[
+                            styles.dietaryChipText,
+                            dietaryType === d.id && styles.dietaryChipTextActive,
+                          ]}
+                        >
+                          {d.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.inputLabel}>Allergens (tap to select)</Text>
+                  <View style={styles.allergenWrap}>
+                    {ALLERGENS.map(a => {
+                      const active = selectedAllergens.includes(a.key);
+                      return (
                         <TouchableOpacity
-                          style={styles.customIconRemove}
+                          key={a.key}
+                          style={[
+                            styles.allergenChip,
+                            active && styles.allergenChipActive,
+                          ]}
                           onPress={() =>
-                            setCustomAllergenIcons(prev =>
-                              prev.filter((_, i) => i !== idx),
+                            setSelectedAllergens(prev =>
+                              prev.includes(a.key)
+                                ? prev.filter(x => x !== a.key)
+                                : [...prev, a.key],
                             )
                           }
                         >
-                          <Icon name="close" size={14} color="#fff" />
+                          <Icon
+                            name={a.icon}
+                            size={16}
+                            color={active ? COLORS.white : '#666'}
+                          />
+                          <Text
+                            style={[
+                              styles.allergenChipText,
+                              active && styles.allergenChipTextActive,
+                            ]}
+                          >
+                            {a.label}
+                          </Text>
                         </TouchableOpacity>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
-                ) : null}
-                <Text style={styles.inputLabel}>
-                  Item image (upload file, no URL)
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.uploadImageBtn,
-                    imageUploading && styles.buttonDisabled,
-                  ]}
-                  onPress={pickAndUploadItemImage}
-                  disabled={imageUploading}
-                >
-                  {imageUploading ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={COLORS.primaryOrange}
-                    />
-                  ) : (
-                    <Icon
-                      name="image-plus"
-                      size={22}
-                      color={COLORS.primaryOrange}
-                    />
-                  )}
-                  <Text style={styles.uploadImageBtnText}>
-                    {imageUrl || itemImageAsset
-                      ? 'Image uploaded ✓'
-                      : imageUploading
-                      ? 'Uploading…'
-                      : 'Upload image'}
+                  <Text style={styles.inputLabel}>
+                    Custom allergen icons (upload)
                   </Text>
-                </TouchableOpacity>
-                {imageUrl || itemImageAsset?.uri ? (
-                  <Image
-                    source={{ uri: imageUrl || itemImageAsset?.uri }}
-                    style={styles.previewImage}
-                  />
-                ) : null}
-
-                <View style={styles.formActions}>
                   <TouchableOpacity
-                    style={styles.cancelBtn}
-                    onPress={closeForm}
+                    style={[
+                      styles.uploadImageBtn,
+                      allergenIconUploading && styles.buttonDisabled,
+                    ]}
+                    onPress={pickAndUploadAllergenIcon}
+                    disabled={allergenIconUploading}
                   >
+                    {allergenIconUploading ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.primaryOrange}
+                      />
+                    ) : (
+                      <Icon
+                        name="image-plus"
+                        size={22}
+                        color={COLORS.primaryOrange}
+                      />
+                    )}
+                    <Text style={styles.uploadImageBtnText}>
+                      {allergenIconUploading
+                        ? 'Uploading…'
+                        : 'Upload allergen icon'}
+                    </Text>
+                  </TouchableOpacity>
+                  {customAllergenIcons.length > 0 ? (
+                    <View style={styles.customIconWrap}>
+                      {customAllergenIcons.map((uri, idx) => (
+                        <View
+                          key={`${uri}-${idx}`}
+                          style={styles.customIconItem}
+                        >
+                          <Image
+                            source={{ uri }}
+                            style={styles.customIconImage}
+                          />
+                          <TouchableOpacity
+                            style={styles.customIconRemove}
+                            onPress={() =>
+                              setCustomAllergenIcons(prev =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                          >
+                            <Icon name="close" size={14} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                  <Text style={styles.inputLabel}>
+                    Item image (upload file, no URL)
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.uploadImageBtn,
+                      imageUploading && styles.buttonDisabled,
+                    ]}
+                    onPress={pickAndUploadItemImage}
+                    disabled={imageUploading}
+                  >
+                    {imageUploading ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.primaryOrange}
+                      />
+                    ) : (
+                      <Icon
+                        name="image-plus"
+                        size={22}
+                        color={COLORS.primaryOrange}
+                      />
+                    )}
+                    <Text style={styles.uploadImageBtnText}>
+                      {imageUrl || itemImageAsset
+                        ? 'Image uploaded ✓'
+                        : imageUploading
+                        ? 'Uploading…'
+                        : 'Upload image'}
+                    </Text>
+                  </TouchableOpacity>
+                  {imageUrl || itemImageAsset?.uri ? (
+                    <Image
+                      source={{ uri: imageUrl || itemImageAsset?.uri }}
+                      style={styles.previewImage}
+                    />
+                  ) : null}
+                </ScrollView>
+
+                <View style={styles.formActionsSticky}>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={closeForm}>
                     <Text style={styles.cancelBtnText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1119,7 +1132,8 @@ const MenuManageScreen = () => {
                 </View>
               </>
             )}
-          </Pressable>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
 
@@ -1389,6 +1403,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: BORDER_RADIUS.lg,
     padding: 24,
+    maxHeight: '86%',
   },
   formTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16 },
   input: {
@@ -1487,6 +1502,16 @@ const styles = StyleSheet.create({
   addAnotherRow: { marginTop: 8 },
   addAnotherText: { fontSize: 15, color: COLORS.gray600, marginBottom: 16 },
   formActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  formActionsSticky: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.gray200,
+  },
+  formScroll: { flexGrow: 0 },
+  formScrollContent: { paddingBottom: 6 },
   addAnotherBtn: {
     flex: 1,
     padding: 12,

@@ -1715,14 +1715,20 @@ const PromotionScreen = ({ onBack }) => {
       navigation.navigate('MessageList');
       return;
     }
-    navigation.navigate('ChatScreen', {
-      partnerId: userId,
-      partnerName: displayName,
-      partnerAvatar: safeImageUri(
-        profile?.channelAvatar ||
-          profile?.photos?.[0]?.src ||
-          profile?.photos?.[0],
-      ),
+    navigation.navigate('Root', {
+      screen: 'Home1',
+      params: {
+        screen: 'ChatScreen',
+        params: {
+          partnerId: userId,
+          partnerName: displayName,
+          partnerAvatar: safeImageUri(
+            profile?.channelAvatar ||
+              profile?.photos?.[0]?.src ||
+              profile?.photos?.[0],
+          ),
+        },
+      },
     });
   }, [
     currentUser?.id,

@@ -14,8 +14,9 @@ import {
   Modal,
   FlatList,
   PermissionsAndroid,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -121,6 +122,7 @@ const EMOJI_LIST = [
 ];
 
 const ChatScreen = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
   const {
@@ -144,6 +146,7 @@ const ChatScreen = () => {
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
   const [sending, setSending] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const recordingDurationRef = useRef(0);
@@ -224,6 +227,25 @@ const ChatScreen = () => {
     const t = setTimeout(() => setPartnerTyping(false), 3000);
     return () => clearTimeout(t);
   }, [partnerTyping]);
+
+  useEffect(() => {
+    const onShow = e => {
+      const h = Number(e?.endCoordinates?.height || 0);
+      setKeyboardHeight(h > 0 ? h : 0);
+      setShowEmoji(false);
+    };
+    const onHide = () => setKeyboardHeight(0);
+    const showEvt =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, onShow);
+    const hideSub = Keyboard.addListener(hideEvt, onHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const sendText = useCallback(async () => {
     const text = inputText.trim();
@@ -522,8 +544,8 @@ const ChatScreen = () => {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -616,9 +638,11 @@ const ChatScreen = () => {
         ) : (
           <ScrollView
             ref={scrollRef}
+            style={{ flex: 1 }}
             contentContainerStyle={styles.chatContainer}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             onContentSizeChange={() =>
               scrollRef.current?.scrollToEnd({ animated: true })
             }
@@ -710,7 +734,16 @@ const ChatScreen = () => {
           </ScrollView>
         )}
 
-        <View style={styles.inputWrapper}>
+        <View
+          style={[
+            styles.inputWrapper,
+            Platform.OS === 'android' && keyboardHeight > 0
+              ? {
+                  marginBottom: Math.max(0, keyboardHeight - insets.bottom),
+                }
+              : null,
+          ]}
+        >
           <TouchableOpacity
             style={styles.plusButton}
             onPress={onPlus}
@@ -739,6 +772,8 @@ const ChatScreen = () => {
               onChangeText={onInputChange}
               multiline
               maxLength={1000}
+              textAlignVertical="center"
+              onFocus={() => setShowEmoji(false)}
             />
             <TouchableOpacity
               onPress={sendText}
@@ -821,7 +856,7 @@ const styles = StyleSheet.create({
   headerTime: { fontSize: 14, color: '#666', marginLeft: 4 },
   headerIconBtn: { marginLeft: 15 },
 
-  chatContainer: { padding: 15, paddingBottom: 24 },
+  chatContainer: { flexGrow: 1, padding: 15, paddingBottom: 10 },
   timestamp: {
     textAlign: 'center',
     color: '#999',
@@ -906,6 +941,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     padding: 15,
+    paddingBottom: Platform.OS === 'android' ? 18 : 12,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',
     backgroundColor: '#fff',
@@ -922,7 +958,14 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     marginLeft: 10,
   },
-  input: { flex: 1, marginHorizontal: 10, fontSize: 14, paddingVertical: 12 },
+  input: {
+    flex: 1,
+    marginHorizontal: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#111',
+    paddingVertical: 10,
+  },
 
   recordingBar: {
     flexDirection: 'row',
