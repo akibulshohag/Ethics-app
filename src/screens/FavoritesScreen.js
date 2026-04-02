@@ -98,7 +98,7 @@ const FavoritesScreen = ({ navigation }) => {
           contentContainerStyle={[styles.listContent, items.length === 0 && styles.emptyListContent]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <MaterialCommunityIcons name="heart-outline" size={64} color="#ccc" />
+              <MaterialCommunityIcons name="heart-outline" size={64} color="#FF7F0B" />
               <Text style={styles.emptyStateText}>No videos in favorites</Text>
             </View>
           }

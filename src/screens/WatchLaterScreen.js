@@ -98,7 +98,7 @@ const WatchLaterScreen = ({ navigation }) => {
           contentContainerStyle={[styles.listContent, items.length === 0 && styles.emptyListContent]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <MaterialCommunityIcons name="clock-outline" size={64} color="#ccc" />
+              <MaterialCommunityIcons name="clock-outline" size={64} color="#FF7F0B" />
               <Text style={styles.emptyStateText}>No videos saved to watch later</Text>
             </View>
           }

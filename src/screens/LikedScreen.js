@@ -226,7 +226,7 @@ const LikedScreen = ({ navigation }) => {
           ListEmptyComponent={
             listData.length === 0 ? (
               <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="thumb-up-outline" size={64} color="#ccc" />
+                <MaterialCommunityIcons name="thumb-up-outline" size={64} color="#FF7F0B" />
                 <Text style={styles.emptyStateText}>No liked videos yet</Text>
                 <Text style={styles.emptyStateSubtext}>
                   Like videos and shorts to see them here
