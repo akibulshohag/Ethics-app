@@ -3699,7 +3699,7 @@ const styles = StyleSheet.create({
   feedPadding: { padding: 15, marginTop: 20 },
   feedHint: {
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: 14,
     color: '#777',
     marginBottom: 20,
   },
