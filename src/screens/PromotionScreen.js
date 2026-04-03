@@ -22,7 +22,9 @@ import {
   Platform,
   Dimensions,
   Share,
+  Linking,
 } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import Video from 'react-native-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
@@ -30,6 +32,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
+import { facebookOAuthRedirectUri } from '../../config';
 import logo from '../assets/short-logo.png';
 import logoIX from '../assets/short-logo-ix.png';
 
@@ -45,6 +48,8 @@ import {
   toggleGalleryPhotoLike,
   toggleGalleryPhotoDislike,
   recordGalleryPhotoShare,
+  getFacebookConnectUrl,
+  getSocialAccounts,
 } from '../services/channelService';
 import {
   pickProfileAvatarCrop,
@@ -260,6 +265,9 @@ const PromotionScreen = ({ onBack }) => {
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editSocialLinks, setEditSocialLinks] = useState([]);
+  const [facebookPages, setFacebookPages] = useState([]);
+  const [facebookConnecting, setFacebookConnecting] = useState(false);
+  const [facebookConnectUrl, setFacebookConnectUrl] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -451,7 +459,8 @@ const PromotionScreen = ({ onBack }) => {
             description: updated?.description ?? v.description,
             thumbnailUrl:
               updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnailUrl,
-            thumbnail: updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnail,
+            thumbnail:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnail,
             coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? v.coverUrl,
             videoUrl: updated?.videoUrl ?? v.videoUrl,
             mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? v.mediaUrl,
@@ -561,7 +570,7 @@ const PromotionScreen = ({ onBack }) => {
     }
     setPostsTabLoading(true);
     try {
-      const res = await getPostsByUser(userId, 1, 50);
+      const res = await getPostsByUser(userId, 1, 50, currentUser?.id);
       const raw = res?.posts || [];
       setPostsTabRaw(raw);
       setPostsTab(raw.map(p => mapPostToCardTab(p, p.user)));
@@ -571,7 +580,7 @@ const PromotionScreen = ({ onBack }) => {
     } finally {
       setPostsTabLoading(false);
     }
-  }, [userId]);
+  }, [userId, currentUser?.id]);
 
   const loadGalleryTab = useCallback(async () => {
     if (!userId) {
@@ -617,7 +626,10 @@ const PromotionScreen = ({ onBack }) => {
     const viewportWidth = promoTabsViewportWidthRef.current;
     if (!scrollNode || !tabLayout || !viewportWidth) return;
 
-    const targetX = Math.max(0, tabLayout.x - (viewportWidth - tabLayout.width) / 2);
+    const targetX = Math.max(
+      0,
+      tabLayout.x - (viewportWidth - tabLayout.width) / 2,
+    );
     requestAnimationFrame(() => {
       scrollNode.scrollTo({ x: targetX, y: 0, animated: true });
     });
@@ -1550,8 +1562,63 @@ const PromotionScreen = ({ onBack }) => {
     setEditSocialLinks(
       SOCIAL_TYPES.map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
     );
+    setFacebookConnectUrl('');
+    loadFacebookPages();
     setEditProfileVisible(true);
   };
+
+  const loadFacebookPages = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const rows = await getSocialAccounts(userId);
+      const pages = (Array.isArray(rows) ? rows : []).filter(
+        r => String(r?.platform || '').toLowerCase() === 'facebook',
+      );
+      setFacebookPages(pages);
+    } catch {
+      setFacebookPages([]);
+    }
+  }, [userId]);
+
+  const handleVerifyFacebook = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || userId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('Facebook', 'Sign in to verify Facebook.');
+      return;
+    }
+    setFacebookConnecting(true);
+    try {
+      const res = await getFacebookConnectUrl(connectUserId);
+      const url = String(res?.url || '').trim();
+      if (!url) {
+        Alert.alert('Facebook', 'Could not get connect link.');
+        return;
+      }
+      setFacebookConnectUrl(url);
+    } catch (e) {
+      Alert.alert(
+        'Facebook',
+        e?.message ||
+          'Could not get Facebook link. Add FACEBOOK_APP_ID on the server or set facebookAppId in config.js.',
+      );
+    } finally {
+      setFacebookConnecting(false);
+    }
+  }, [userId, currentUser?.id]);
+
+  const handleCopyFacebookUrl = useCallback(() => {
+    if (!facebookConnectUrl) return;
+    Clipboard.setString(facebookConnectUrl);
+    Alert.alert('Copied', 'Facebook verify link copied.');
+  }, [facebookConnectUrl]);
+
+  const handleCopyFacebookRedirectUri = useCallback(() => {
+    Clipboard.setString(facebookOAuthRedirectUri());
+    Alert.alert(
+      'Copied',
+      'Paste this into Meta → Facebook Login → Valid OAuth Redirect URIs.',
+    );
+  }, []);
 
   const saveProfile = async () => {
     if (!isOwnProfile) return;
@@ -2300,8 +2367,7 @@ const PromotionScreen = ({ onBack }) => {
                           title: item.title || 'Video',
                           views:
                             item.views || formatCountTab(item.viewCount ?? 0),
-                          location:
-                            item.location || displayLocation || '',
+                          location: item.location || displayLocation || '',
                           distance: item.distance || '',
                         }}
                         onPress={() => openLibraryMedia(item)}
@@ -2976,7 +3042,9 @@ const PromotionScreen = ({ onBack }) => {
                 }}
               >
                 <Icon
-                  name={postPreviewPost?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
+                  name={
+                    postPreviewPost?.isLiked ? 'thumb-up' : 'thumb-up-outline'
+                  }
                   size={20}
                   color={postPreviewPost?.isLiked ? '#FF7F0B' : '#333'}
                 />
@@ -3009,7 +3077,9 @@ const PromotionScreen = ({ onBack }) => {
               <TouchableOpacity
                 style={styles.promoGalleryPostActionBtn}
                 onPress={() =>
-                  setCommentsModalPostId(postPreviewPost?.postId || postPreviewPost?.id)
+                  setCommentsModalPostId(
+                    postPreviewPost?.postId || postPreviewPost?.id,
+                  )
                 }
               >
                 <Icon name="comment-text-outline" size={20} color="#333" />
@@ -3293,6 +3363,91 @@ const PromotionScreen = ({ onBack }) => {
                     />
                   </View>
                 ))}
+              </View>
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                Facebook page verification
+              </Text>
+              <Text style={styles.facebookMetaHint}>
+                If Facebook shows &quot;URL Blocked&quot;: Meta Developer Console →
+                your app → Facebook Login → Settings → turn on Client OAuth Login
+                and Web OAuth Login → add this redirect URI (exact match):
+              </Text>
+              <View style={styles.facebookRedirectRow}>
+                <Text selectable style={styles.facebookRedirectUriText}>
+                  {facebookOAuthRedirectUri()}
+                </Text>
+                <TouchableOpacity
+                  style={styles.facebookRedirectCopyBtn}
+                  onPress={handleCopyFacebookRedirectUri}
+                >
+                  <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.facebookCard}>
+                <View style={styles.facebookActionsRow}>
+                  <TouchableOpacity
+                    style={styles.facebookActionBtn}
+                    onPress={handleVerifyFacebook}
+                    disabled={facebookConnecting}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      {facebookConnecting ? 'Opening...' : 'Verify Facebook'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.facebookActionBtn,
+                      styles.facebookRefreshBtn,
+                    ]}
+                    onPress={loadFacebookPages}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      Refresh pages
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {facebookConnectUrl ? (
+                  <View style={styles.facebookUrlBox}>
+                    <Text selectable style={styles.facebookUrlText}>
+                      {facebookConnectUrl}
+                    </Text>
+                    <View style={styles.facebookUrlActions}>
+                      <TouchableOpacity
+                        style={styles.facebookMiniBtn}
+                        onPress={() => Linking.openURL(facebookConnectUrl)}
+                      >
+                        <Text style={styles.facebookMiniBtnText}>Open</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.facebookMiniBtn}
+                        onPress={handleCopyFacebookUrl}
+                      >
+                        <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
+                {(facebookPages || []).length > 0 ? (
+                  <View style={styles.facebookPagesWrap}>
+                    {facebookPages.map(p => (
+                      <View
+                        key={p?.id || p?.accountId}
+                        style={styles.facebookPageChip}
+                      >
+                        <Text
+                          style={styles.facebookPageChipText}
+                          numberOfLines={1}
+                        >
+                          {p?.accountName || p?.accountId}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.facebookHelpText}>
+                    No Facebook pages connected yet.
+                  </Text>
+                )}
               </View>
             </ScrollView>
             <TouchableOpacity
@@ -3578,7 +3733,11 @@ const styles = StyleSheet.create({
     height: 26,
   },
 
-  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   avatarImage: {
     width: 95,
     height: 95,
@@ -3647,6 +3806,122 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginTop: 4,
+  },
+  facebookMetaHint: {
+    color: '#6B7280',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  facebookRedirectRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 12,
+    padding: 10,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  facebookRedirectUriText: {
+    flex: 1,
+    color: '#111827',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  facebookRedirectCopyBtn: {
+    backgroundColor: '#374151',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  facebookRedirectCopyBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  facebookCard: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: '#fff',
+  },
+  facebookActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  facebookActionBtn: {
+    flex: 1,
+    backgroundColor: '#FF7F0B',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  facebookRefreshBtn: {
+    backgroundColor: '#111827',
+  },
+  facebookActionBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  facebookHelpText: {
+    marginTop: 10,
+    color: '#6B7280',
+    fontSize: 12,
+  },
+  facebookPagesWrap: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  facebookPageChip: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: '100%',
+    backgroundColor: '#F9FAFB',
+  },
+  facebookPageChipText: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  facebookUrlBox: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: '#FAFAFA',
+  },
+  facebookUrlText: {
+    color: '#374151',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  facebookUrlActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  facebookMiniBtn: {
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  facebookMiniBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   socialLinkRow: {
     flexDirection: 'row',

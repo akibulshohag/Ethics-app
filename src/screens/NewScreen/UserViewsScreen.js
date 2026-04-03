@@ -1302,14 +1302,14 @@ const UserViewsScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setPostsLoading(true);
     try {
-      const res = await getPostsByUser(profileUserId, 1, 50);
+      const res = await getPostsByUser(profileUserId, 1, 50, currentUser?.id);
       setRawPosts(res?.posts || []);
     } catch (e) {
       setRawPosts([]);
     } finally {
       setPostsLoading(false);
     }
-  }, [profileUserId]);
+  }, [profileUserId, currentUser?.id]);
 
   const loadGallery = useCallback(async () => {
     if (!profileUserId) return;

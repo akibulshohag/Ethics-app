@@ -14,6 +14,23 @@ const getAuthHeaders = () => {
   return {};
 };
 
+/** IANA zone e.g. Asia/Dhaka — sent with upload for server logs / metadata. */
+const getDeviceTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    return '';
+  }
+};
+
+export const getSocialAccounts = async userId => {
+  const response = await axios.get(`${config.apiBaseUrl}/social-accounts`, {
+    params: { userId },
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
+
 /**
  * Get posts with optional filters: userId (own/profile), nearbyLat, nearbyLng, radiusKm, viewerRole
  */
@@ -51,10 +68,17 @@ export const getNearbyPosts = async (latitude, longitude, params = {}) => {
 /**
  * Get posts by user ID (for profile / own posts)
  */
-export const getPostsByUser = async (userId, page = 1, limit = 20) => {
+export const getPostsByUser = async (
+  userId,
+  page = 1,
+  limit = 20,
+  viewerUserId,
+) => {
   try {
+    const params = { page, limit };
+    if (viewerUserId) params.viewerUserId = viewerUserId;
     const response = await axios.get(`${API_URL}/user/${userId}`, {
-      params: { page, limit },
+      params,
       headers: getAuthHeaders(),
     });
     return response.data;
@@ -91,6 +115,7 @@ export const createPost = async (data) => {
     const response = await axios.post(API_URL, data, {
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     });
+    // Facebook schedule is handled in POST /posts on the server when publishedAt is set.
     return response.data;
   } catch (error) {
     const msg =
@@ -149,6 +174,16 @@ export const uploadPost = async (data) => {
   if (data.duration !== undefined && data.duration != null && !Number.isNaN(Number(data.duration))) {
     formData.append('duration', String(Math.floor(Number(data.duration))));
   }
+  if (data.scheduledPublishAt) {
+    formData.append('scheduledPublishAt', String(data.scheduledPublishAt));
+  }
+  const plats = Array.isArray(data.platforms) ? data.platforms : ['facebook'];
+  formData.append('platforms', JSON.stringify(plats));
+  if (data.facebookAccountId) {
+    formData.append('facebookPageId', String(data.facebookAccountId));
+  }
+  const tz = getDeviceTimeZone();
+  if (tz) formData.append('deviceTimeZone', tz);
   const headers = getAuthHeaders();
   try {
     const controller = new AbortController();
@@ -169,6 +204,7 @@ export const uploadPost = async (data) => {
       console.error('[uploadPost]', response.status, resData);
       throw new Error(msg);
     }
+    // Facebook / scheduled-content is created on the server with the post (no second request).
     return resData;
   } catch (err) {
     const msg =

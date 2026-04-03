@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,55 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { launchImageLibrary } from 'react-native-image-picker';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { uploadPost } from '../services/postService';
+import { uploadPost, getSocialAccounts } from '../services/postService';
+
+const defaultScheduledAt = () => {
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  t.setHours(9, 0, 0, 0);
+  return t;
+};
+
+const mergeDatePart = (base, picked) => {
+  const n = new Date(base);
+  n.setFullYear(picked.getFullYear(), picked.getMonth(), picked.getDate());
+  return n;
+};
+
+const mergeTimePart = (base, picked) => {
+  const n = new Date(base);
+  n.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
+  return n;
+};
+
+const startOfToday = () => {
+  const x = new Date();
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+
+const formatScheduleDateLabel = d =>
+  d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+
+const formatScheduleTimeLabel = d =>
+  d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+const deviceTimeZoneName =
+  typeof Intl !== 'undefined'
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+    : '';
 
 const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   const [title, setTitle] = useState('');
@@ -27,6 +73,13 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   const [videoDuration, setVideoDuration] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [platforms, setPlatforms] = useState(['facebook']);
+  const [socialAccounts, setSocialAccounts] = useState([]);
+  const [facebookAccountId, setFacebookAccountId] = useState('');
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState(() => defaultScheduledAt());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const reset = () => {
     setTitle('');
@@ -38,6 +91,46 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
     setVideoDuration(0);
     setUploading(false);
     setUploadProgress(0);
+    setPlatforms(['facebook']);
+    setFacebookAccountId('');
+    setScheduleEnabled(false);
+    setScheduledAt(defaultScheduledAt());
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!visible || !userId) return;
+    (async () => {
+      try {
+        const rows = await getSocialAccounts(userId);
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : [];
+        setSocialAccounts(list);
+        const fb = list.find(
+          r => String(r?.platform || '').toLowerCase() === 'facebook',
+        );
+        if (fb?.accountId) setFacebookAccountId(String(fb.accountId));
+      } catch {
+        if (!cancelled) setSocialAccounts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, userId]);
+
+  useEffect(() => {
+    if (visible) {
+      setScheduledAt(defaultScheduledAt());
+    }
+  }, [visible]);
+
+  const togglePlatform = key => {
+    setPlatforms(prev =>
+      prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key],
+    );
   };
 
   const handleClose = () => {
@@ -119,6 +212,16 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
       Alert.alert('Thumbnail required', 'Please add a thumbnail image.');
       return;
     }
+    let scheduledPublishAt;
+    if (scheduleEnabled) {
+      const when = scheduledAt;
+      if (when.getTime() <= Date.now() + 60_000) {
+        Alert.alert('Schedule', 'Pick a time at least a few minutes from now.');
+        return;
+      }
+      scheduledPublishAt = when.toISOString();
+    }
+
     setUploading(true);
     setUploadProgress(0);
     try {
@@ -135,6 +238,11 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
         videoType: video?.type,
         videoName: video?.name,
         duration: video ? videoDuration : undefined,
+        platforms,
+        facebookAccountId: platforms.includes('facebook')
+          ? facebookAccountId || undefined
+          : undefined,
+        scheduledPublishAt,
         onUploadProgress: setUploadProgress,
       });
       reset();
@@ -147,6 +255,7 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   };
 
   return (
+    <>
     <Modal
       visible={visible}
       animationType="slide"
@@ -281,6 +390,122 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
               placeholderTextColor="#999"
               editable={!uploading}
             />
+
+            <TouchableOpacity
+              style={styles.scheduleToggleRow}
+              onPress={() => {
+                setScheduleEnabled(s => !s);
+                setShowDatePicker(false);
+                setShowTimePicker(false);
+              }}
+              disabled={uploading}
+            >
+              <MaterialCommunityIcons
+                name={scheduleEnabled ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                size={22}
+                color="#FF7F0B"
+              />
+              <Text style={styles.scheduleToggleText}>
+                Schedule post (app + selected platforms at this time)
+              </Text>
+            </TouchableOpacity>
+            {scheduleEnabled ? (
+              <View style={styles.scheduleFields}>
+                <Text style={styles.scheduleHint}>
+                  {`Uses your phone's local date and time${
+                    deviceTimeZoneName ? ` (${deviceTimeZoneName})` : ''
+                  }. Pick e.g. 3:00 AM and Facebook posts when it is 3:00 AM in that zone — set region to Bangladesh (Asia/Dhaka) in phone settings if you want Bangladesh time.`}
+                </Text>
+                <Text style={styles.scheduleHintSecondary}>
+                  Turn schedule off to post everywhere immediately.
+                </Text>
+                <Text style={styles.label}>Date</Text>
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setShowTimePicker(false);
+                    setShowDatePicker(true);
+                  }}
+                  disabled={uploading}
+                >
+                  <MaterialCommunityIcons name="calendar" size={22} color="#FF7F0B" />
+                  <Text style={styles.pickerRowText}>{formatScheduleDateLabel(scheduledAt)}</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={22} color="#999" />
+                </TouchableOpacity>
+                <Text style={styles.label}>Time</Text>
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    setShowDatePicker(false);
+                    setShowTimePicker(true);
+                  }}
+                  disabled={uploading}
+                >
+                  <MaterialCommunityIcons name="clock-outline" size={22} color="#FF7F0B" />
+                  <Text style={styles.pickerRowText}>{formatScheduleTimeLabel(scheduledAt)}</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={22} color="#999" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            <Text style={styles.label}>Auto-post platforms</Text>
+            <View style={styles.platformRow}>
+              {['facebook', 'instagram', 'tiktok', 'linkedin'].map(p => {
+                const active = platforms.includes(p);
+                return (
+                  <TouchableOpacity
+                    key={p}
+                    style={[styles.platformChip, active && styles.platformChipActive]}
+                    onPress={() => togglePlatform(p)}
+                    disabled={uploading}
+                  >
+                    <Text
+                      style={[
+                        styles.platformChipText,
+                        active && styles.platformChipTextActive,
+                      ]}
+                    >
+                      {p}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {platforms.includes('facebook') ? (
+              <>
+                <Text style={styles.label}>Facebook Page</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 8 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {(socialAccounts || [])
+                    .filter(a => String(a?.platform || '').toLowerCase() === 'facebook')
+                    .map(a => {
+                      const id = String(a?.accountId || '');
+                      const active = facebookAccountId === id;
+                      return (
+                        <TouchableOpacity
+                          key={a.id || id}
+                          style={[styles.pageChip, active && styles.pageChipActive]}
+                          onPress={() => setFacebookAccountId(id)}
+                        >
+                          <Text
+                            style={[
+                              styles.pageChipText,
+                              active && styles.pageChipTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {a?.accountName || id}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                </ScrollView>
+              </>
+            ) : null}
           </ScrollView>
 
           {uploading && (
@@ -298,12 +523,112 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
             disabled={uploading}
           >
             <Text style={styles.submitBtnText}>
-              {uploading ? 'Uploading...' : 'Post'}
+              {uploading
+                ? 'Uploading...'
+                : scheduleEnabled
+                  ? 'Schedule'
+                  : 'Post'}
             </Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'android' && showDatePicker ? (
+            <DateTimePicker
+              value={scheduledAt}
+              mode="date"
+              display="default"
+              minimumDate={startOfToday()}
+              onChange={(_event, date) => {
+                setShowDatePicker(false);
+                if (date) setScheduledAt(s => mergeDatePart(s, date));
+              }}
+            />
+          ) : null}
+          {Platform.OS === 'android' && showTimePicker ? (
+            <DateTimePicker
+              value={scheduledAt}
+              mode="time"
+              display="default"
+              is24Hour
+              onChange={(_event, date) => {
+                setShowTimePicker(false);
+                if (date) setScheduledAt(s => mergeTimePart(s, date));
+              }}
+            />
+          ) : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+    {Platform.OS === 'ios' ? (
+      <Modal
+        visible={showDatePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <TouchableOpacity
+            style={styles.pickerBackdropTouchable}
+            activeOpacity={1}
+            onPress={() => setShowDatePicker(false)}
+          />
+          <View style={styles.pickerSheet}>
+            <DateTimePicker
+              value={scheduledAt}
+              mode="date"
+              display="spinner"
+              themeVariant="light"
+              minimumDate={startOfToday()}
+              onChange={(_, date) => {
+                if (date) setScheduledAt(s => mergeDatePart(s, date));
+              }}
+            />
+            <TouchableOpacity
+              style={styles.pickerDoneBtn}
+              onPress={() => setShowDatePicker(false)}
+            >
+              <Text style={styles.pickerDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    ) : null}
+
+    {Platform.OS === 'ios' ? (
+      <Modal
+        visible={showTimePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTimePicker(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <TouchableOpacity
+            style={styles.pickerBackdropTouchable}
+            activeOpacity={1}
+            onPress={() => setShowTimePicker(false)}
+          />
+          <View style={styles.pickerSheet}>
+            <DateTimePicker
+              value={scheduledAt}
+              mode="time"
+              display="spinner"
+              themeVariant="light"
+              is24Hour
+              onChange={(_, date) => {
+                if (date) setScheduledAt(s => mergeTimePart(s, date));
+              }}
+            />
+            <TouchableOpacity
+              style={styles.pickerDoneBtn}
+              onPress={() => setShowTimePicker(false)}
+            >
+              <Text style={styles.pickerDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    ) : null}
+    </>
   );
 };
 
@@ -350,6 +675,78 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 6,
     marginTop: 12,
+  },
+  scheduleToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+    paddingVertical: 4,
+  },
+  scheduleToggleText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  scheduleFields: {
+    marginBottom: 4,
+  },
+  scheduleHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 6,
+    lineHeight: 17,
+  },
+  scheduleHintSecondary: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#fafafa',
+  },
+  pickerRowText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#111',
+    fontWeight: '500',
+  },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  pickerBackdropTouchable: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  pickerSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    alignItems: 'center',
+  },
+  pickerDoneBtn: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    width: '100%',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eee',
+  },
+  pickerDoneText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FF7F0B',
   },
   input: {
     borderWidth: 1,
@@ -448,6 +845,54 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  platformRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
+  },
+  platformChip: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: '#fff',
+  },
+  platformChipActive: {
+    borderColor: '#FF7F0B',
+    backgroundColor: '#FF7F0B',
+  },
+  platformChipText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  platformChipTextActive: {
+    color: '#fff',
+  },
+  pageChip: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    maxWidth: 190,
+  },
+  pageChipActive: {
+    borderColor: '#FF7F0B',
+    backgroundColor: '#FFF3E8',
+  },
+  pageChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  pageChipTextActive: {
+    color: '#E26A00',
   },
 });
 

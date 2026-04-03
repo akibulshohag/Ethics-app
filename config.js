@@ -42,4 +42,19 @@ export const selectServer = 'production';
 export const config = {
   ...checkConfig(selectServer),
   googleMapsApiKey: 'AIzaSyCfj7v8t-uZ7J60AcQxkrqzWDAEhZCGbLU',
+  /**
+   * Same as backend `FACEBOOK_APP_ID` (public Meta app id). If set, the OAuth
+   * URL is built in the app when the connect API fails (e.g. missing server env).
+   * Matches Savasaachi / add the same id + FACEBOOK_APP_SECRET on eatixapi for callbacks.
+   */
+  facebookAppId: '925009370085316',
+};
+
+/**
+ * Must match backend `APP_URL` + `/social-auth/facebook/callback`.
+ * Add this exact string in Meta: App → Facebook Login → Settings → Valid OAuth Redirect URIs.
+ */
+export const facebookOAuthRedirectUri = () => {
+  const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+  return `${base}/social-auth/facebook/callback`;
 };

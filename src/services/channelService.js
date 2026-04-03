@@ -170,6 +170,96 @@ export const getSubscribedFeed = async (userId, page = 1, limit = 30) => {
   }
 };
 
+/** Must match ethics-backend `social-auth.service` (Pages API use case on Meta). */
+const FB_OAUTH_SCOPES =
+  'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts';
+
+/** Build OAuth dialog URL; must match backend `SocialAuthService.getFacebookConnectUrl`. */
+export const buildFacebookConnectUrl = (userId, appId) => {
+  const uid = String(userId || '').trim();
+  const id = String(appId || '').trim();
+  if (!uid || !id) return '';
+  const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+  const redirectUri = `${base}/social-auth/facebook/callback`;
+  const state = encodeURIComponent(JSON.stringify({ userId: uid }));
+  const scopes = encodeURIComponent(FB_OAUTH_SCOPES);
+  return (
+    `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
+      id,
+    )}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&state=${state}` +
+    `&response_type=code` +
+    `&scope=${scopes}`
+  );
+};
+
+const parseAxiosApiError = err => {
+  let data = err?.response?.data;
+  const status = err?.response?.status;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      const s = data.trim();
+      if (s) return s.length > 400 ? `${s.slice(0, 400)}…` : s;
+    }
+  }
+  let msg = '';
+  if (data && typeof data === 'object') {
+    const m = data.message;
+    if (typeof m === 'string') msg = m.trim();
+    else if (Array.isArray(m)) msg = m.map(String).filter(Boolean).join(', ');
+  }
+  if (!msg && data && typeof data === 'object' && typeof data.error === 'string') {
+    const e = data.error.trim();
+    if (e && e !== 'Bad Request') msg = e;
+  }
+  if (!msg && status) {
+    msg = `Server error (${status}). Add FACEBOOK_APP_ID (and APP_URL) on the Eatix API server, or set facebookAppId in app config.js.`;
+  }
+  if (!msg) msg = String(err?.message || 'Request failed');
+  return msg;
+};
+
+/**
+ * Get connect URL for Facebook OAuth flow.
+ * Uses API when possible; if the request fails and `config.facebookAppId` is set, builds the same URL locally.
+ */
+export const getFacebookConnectUrl = async userId => {
+  const uid = String(userId ?? '').trim();
+  if (!uid) {
+    throw new Error('Sign in required to connect Facebook.');
+  }
+  try {
+    const response = await axios.get(
+      `${config.apiBaseUrl}/social-auth/facebook/connect`,
+      {
+        params: { userId: uid },
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    const localAppId = String(config.facebookAppId || '').trim();
+    if (localAppId) {
+      const url = buildFacebookConnectUrl(uid, localAppId);
+      if (url) return { url };
+    }
+    throw new Error(parseAxiosApiError(error));
+  }
+};
+
+/**
+ * List user's connected social accounts/pages.
+ */
+export const getSocialAccounts = async userId => {
+  const response = await axios.get(`${config.apiBaseUrl}/social-accounts`, {
+    params: { userId },
+    headers: getAuthHeaders(),
+  });
+  return response.data;
+};
 
 /**
  * Update channel profile (nickname, channelAbout, socialLinks, etc.) - only for own channel
@@ -288,7 +378,11 @@ export const getGallery = async (userId, viewerId) => {
   return response.data;
 };
 
-export const toggleGalleryPhotoLike = async (channelUserId, photoId, userId) => {
+export const toggleGalleryPhotoLike = async (
+  channelUserId,
+  photoId,
+  userId,
+) => {
   const response = await axios.post(
     `${API_URL}/${channelUserId}/gallery/${photoId}/like`,
     { userId },
