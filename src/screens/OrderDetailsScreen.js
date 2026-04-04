@@ -847,7 +847,7 @@ const styles = StyleSheet.create({
   acceptBtn: { backgroundColor: '#FDB022' },
   footerBtnText: { color: 'white', fontSize: 18, fontWeight: '700' },
   invoiceBtn: {
-    backgroundColor: '#1D4ED8',
+    backgroundColor: '#D78500',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,

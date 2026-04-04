@@ -3507,7 +3507,7 @@ const FoodCard = ({
     <View style={styles.cardInfo}>
       <View>
         <Text style={styles.cardTitle}>
-          {title.length > 35 ? `${title.substring(0, 35)}...` : title}
+          {title.length > 30 ? `${title.substring(0, 30)}...` : title}
         </Text>
         <Text
           numberOfLines={1}
@@ -3699,7 +3699,7 @@ const styles = StyleSheet.create({
   feedPadding: { padding: 15, marginTop: 20 },
   feedHint: {
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: 14,
     color: '#777',
     marginBottom: 20,
   },

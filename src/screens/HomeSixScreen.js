@@ -261,22 +261,13 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <View
-            style={[
-              styles.navHeader,
-              {
-                paddingTop: Math.max(insets.top, 12) + 8,
-                paddingBottom: 10,
-              },
-            ]}
-          >
+
+          <View style={styles.navHeader}>
             <TouchableOpacity
               onPress={() => (onBack ? onBack() : navigation.goBack())}
               style={styles.backBtn}
-              activeOpacity={0.85}
-              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
             >
-              <Icon name="chevron-left" size={22} color="#1A0F00" />
+              <Icon name="chevron-left" size={18} color="#2D1800" />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
           </View>
@@ -492,43 +483,30 @@ const styles = StyleSheet.create({
     right: -60,
   },
   keyboardView: { flex: 1 },
+
   navHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingTop: 10,
     alignItems: 'center',
-    zIndex: 2,
   },
-  backBtn: {
+
+ backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: 'rgba(215, 133, 0, 0.55)',
-    ...Platform.select({
-      android: {
-        elevation: 4,
-        shadowColor: '#000',
-      },
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.12,
-        shadowRadius: 4,
-      },
-    }),
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
   },
   backText: {
-    color: '#1A0F00',
-    fontSize: 15,
-    fontWeight: '800',
-    marginLeft: 2,
-    letterSpacing: 0.2,
+    color: '#2D1800',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 4,
   },
   centerContainer: {
     flex: 1,
@@ -573,17 +551,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#5E3500',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 6,
     marginTop: 6,
   },
   cardBody: { padding: 5 },
-  radioGroup: { marginBottom: 16 },
+  radioGroup: { marginBottom: 10, justifyContent: 'center', alignItems: 'center' },
   roleLabel: {
     color: '#6F4200',
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 10,
     marginLeft: 4,
+    
   },
   verifyHintText: {
     color: '#6F4200',
@@ -591,22 +570,35 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     marginTop: -2,
   },
+
   roleChips: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
+    justifyContent: 'center', 
+    gap: 5, 
     flexWrap: 'wrap',
-  },
+},
+  // radioButton: {
+  //   flexDirection: 'row',
+  //   alignItems: 'center',
+  //   backgroundColor: 'rgba(255,255,255,0.62)',
+  //   borderRadius: 14,
+  //   paddingHorizontal: 10,
+  //   paddingVertical: 6,
+  //   borderWidth: 1,
+  //   borderColor: 'rgba(255,255,255,0.45)',
+  // },
+
   radioButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.62)',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.45)',
-  },
+},
   radioLabel: {
     marginLeft: 6,
     fontSize: 13,
@@ -620,7 +612,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     height: 52,
     paddingHorizontal: 15,
-    marginBottom: 15,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
   },
@@ -632,8 +624,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 6,
     shadowColor: '#5B3200',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.35,
@@ -651,7 +642,7 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
   signInText: { color: '#5B3200', fontSize: 18, fontWeight: '700' },
-  socialContainer: { alignItems: 'center', marginTop: 22 },
+  socialContainer: { alignItems: 'center', marginTop: 12 },
   socialTitle: { color: '#5E3500', fontSize: 15, marginBottom: 15 },
   socialPill: {
     flexDirection: 'row',
