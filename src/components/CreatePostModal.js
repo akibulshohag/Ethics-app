@@ -63,6 +63,13 @@ const deviceTimeZoneName =
     ? Intl.DateTimeFormat().resolvedOptions().timeZone || ''
     : '';
 
+const formatInstagramChipLabel = a => {
+  const name = a?.accountName != null ? String(a.accountName).trim() : '';
+  if (name) return name.startsWith('@') ? name : `@${name}`;
+  const id = String(a?.accountId || '');
+  return id.length > 14 ? `${id.slice(0, 12)}…` : id || 'Instagram';
+};
+
 const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -73,9 +80,15 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   const [videoDuration, setVideoDuration] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [platforms, setPlatforms] = useState(['facebook']);
+  const [platforms, setPlatforms] = useState([
+    'facebook',
+    'instagram',
+    'tiktok',
+  ]);
   const [socialAccounts, setSocialAccounts] = useState([]);
   const [facebookAccountId, setFacebookAccountId] = useState('');
+  const [instagramAccountId, setInstagramAccountId] = useState('');
+  const [tiktokAccountId, setTiktokAccountId] = useState('');
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduledAt, setScheduledAt] = useState(() => defaultScheduledAt());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -91,8 +104,10 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
     setVideoDuration(0);
     setUploading(false);
     setUploadProgress(0);
-    setPlatforms(['facebook']);
+    setPlatforms(['facebook', 'instagram', 'tiktok']);
     setFacebookAccountId('');
+    setInstagramAccountId('');
+    setTiktokAccountId('');
     setScheduleEnabled(false);
     setScheduledAt(defaultScheduledAt());
     setShowDatePicker(false);
@@ -112,6 +127,14 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
           r => String(r?.platform || '').toLowerCase() === 'facebook',
         );
         if (fb?.accountId) setFacebookAccountId(String(fb.accountId));
+        const ig = list.find(
+          r => String(r?.platform || '').toLowerCase() === 'instagram',
+        );
+        if (ig?.accountId) setInstagramAccountId(String(ig.accountId));
+        const tt = list.find(
+          r => String(r?.platform || '').toLowerCase() === 'tiktok',
+        );
+        if (tt?.accountId) setTiktokAccountId(String(tt.accountId));
       } catch {
         if (!cancelled) setSocialAccounts([]);
       }
@@ -212,6 +235,26 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
       Alert.alert('Thumbnail required', 'Please add a thumbnail image.');
       return;
     }
+    let instagramAccountIdToSend;
+    if (platforms.includes('instagram')) {
+      const igRows = (socialAccounts || []).filter(
+        r => String(r?.platform || '').toLowerCase() === 'instagram',
+      );
+      if (igRows.length === 0) {
+        Alert.alert(
+          'Instagram',
+          'No Instagram Business account connected. Open Edit Profile → Verify Facebook / Check Instagram link.',
+        );
+        return;
+      }
+      instagramAccountIdToSend =
+        instagramAccountId ||
+        (igRows.length === 1 ? String(igRows[0].accountId || '') : '');
+      if (!instagramAccountIdToSend) {
+        Alert.alert('Instagram', 'Select which Instagram account to post to.');
+        return;
+      }
+    }
     let scheduledPublishAt;
     if (scheduleEnabled) {
       const when = scheduledAt;
@@ -241,6 +284,12 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
         platforms,
         facebookAccountId: platforms.includes('facebook')
           ? facebookAccountId || undefined
+          : undefined,
+        instagramAccountId: platforms.includes('instagram')
+          ? instagramAccountIdToSend
+          : undefined,
+        tiktokAccountId: platforms.includes('tiktok')
+          ? tiktokAccountId || undefined
           : undefined,
         scheduledPublishAt,
         onUploadProgress: setUploadProgress,
@@ -490,6 +539,84 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
                           key={a.id || id}
                           style={[styles.pageChip, active && styles.pageChipActive]}
                           onPress={() => setFacebookAccountId(id)}
+                        >
+                          <Text
+                            style={[
+                              styles.pageChipText,
+                              active && styles.pageChipTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {a?.accountName || id}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                </ScrollView>
+              </>
+            ) : null}
+            {platforms.includes('instagram') ? (
+              <>
+                <Text style={styles.label}>Instagram account</Text>
+                <Text style={styles.scheduleHintSecondary}>
+                  Same profiles as Edit Profile (linked to your Facebook Page). Pick which
+                  @ to post to.
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 8 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {(socialAccounts || [])
+                    .filter(a => String(a?.platform || '').toLowerCase() === 'instagram')
+                    .map(a => {
+                      const id = String(a?.accountId || '');
+                      const active = instagramAccountId === id;
+                      return (
+                        <TouchableOpacity
+                          key={a.id || id}
+                          style={[styles.pageChip, active && styles.pageChipActive]}
+                          onPress={() => setInstagramAccountId(id)}
+                        >
+                          <Text
+                            style={[
+                              styles.pageChipText,
+                              active && styles.pageChipTextActive,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {formatInstagramChipLabel(a)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                </ScrollView>
+              </>
+            ) : null}
+            {platforms.includes('tiktok') ? (
+              <>
+                <Text style={styles.label}>TikTok account</Text>
+                <Text style={styles.scheduleHintSecondary}>
+                  Video posts only (public .mp4 URL). Connect TikTok with Content Posting
+                  (video.publish); verify your video URL domain in TikTok Developer Portal.
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 8 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {(socialAccounts || [])
+                    .filter(a => String(a?.platform || '').toLowerCase() === 'tiktok')
+                    .map(a => {
+                      const id = String(a?.accountId || '');
+                      const active = tiktokAccountId === id;
+                      return (
+                        <TouchableOpacity
+                          key={a.id || id}
+                          style={[styles.pageChip, active && styles.pageChipActive]}
+                          onPress={() => setTiktokAccountId(id)}
                         >
                           <Text
                             style={[

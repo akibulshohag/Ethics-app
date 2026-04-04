@@ -48,6 +48,18 @@ export const config = {
    * Matches Savasaachi / add the same id + FACEBOOK_APP_SECRET on eatixapi for callbacks.
    */
   facebookAppId: '925009370085316',
+  /**
+   * Must match server `FACEBOOK_ENABLE_INSTAGRAM_LOGIN`. Set true when Meta OAuth works.
+   */
+  facebookIncludeInstagramScopes: false,
+  /**
+   * Must match server `FACEBOOK_INSTAGRAM_LOGIN_SCOPES` (comma-separated, no spaces).
+   * Leave empty to use default instagram_basic,instagram_content_publish.
+   * If Meta only allows business names: instagram_business_basic,instagram_business_content_publish
+   */
+  facebookInstagramLoginScopes: '',
+  /** Same as backend `TIKTOK_CLIENT_KEY` — optional fallback to build TikTok login URL locally. */
+  tiktokClientKey: '',
 };
 
 /**
@@ -57,4 +69,13 @@ export const config = {
 export const facebookOAuthRedirectUri = () => {
   const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
   return `${base}/social-auth/facebook/callback`;
+};
+
+/**
+ * Add in TikTok Developer Portal → your app → URL properties → Redirect URI / Web desktop.
+ * Must match backend `APP_URL` + `/social-auth/tiktok/callback`.
+ */
+export const tiktokOAuthRedirectUri = () => {
+  const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+  return `${base}/social-auth/tiktok/callback`;
 };

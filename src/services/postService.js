@@ -177,10 +177,18 @@ export const uploadPost = async (data) => {
   if (data.scheduledPublishAt) {
     formData.append('scheduledPublishAt', String(data.scheduledPublishAt));
   }
-  const plats = Array.isArray(data.platforms) ? data.platforms : ['facebook'];
+  const plats = Array.isArray(data.platforms)
+    ? data.platforms
+    : ['facebook', 'instagram', 'tiktok'];
   formData.append('platforms', JSON.stringify(plats));
   if (data.facebookAccountId) {
     formData.append('facebookPageId', String(data.facebookAccountId));
+  }
+  if (data.instagramAccountId) {
+    formData.append('instagramAccountId', String(data.instagramAccountId));
+  }
+  if (data.tiktokAccountId) {
+    formData.append('tiktokAccountId', String(data.tiktokAccountId));
   }
   const tz = getDeviceTimeZone();
   if (tz) formData.append('deviceTimeZone', tz);
@@ -207,11 +215,16 @@ export const uploadPost = async (data) => {
     // Facebook / scheduled-content is created on the server with the post (no second request).
     return resData;
   } catch (err) {
-    const msg =
+    let msg =
       err.name === 'AbortError'
         ? 'Upload timed out. Try again.'
         : err.message || 'Failed to upload post';
-    console.error('[uploadPost]', err.message, err);
+    // RN fetch: no HTTP response — DNS, TLS, offline, firewall, wrong base URL, or server down.
+    if (/network request failed|network error|failed to fetch/i.test(String(msg))) {
+      const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+      msg = `${msg}. Check Wi‑Fi/data, disable VPN if needed, and that the API is up (${base}).`;
+    }
+    console.error('[uploadPost]', config.apiBaseUrl, err.message, err);
     throw new Error(msg);
   }
 };

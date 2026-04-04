@@ -32,7 +32,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-import { facebookOAuthRedirectUri } from '../../config';
+import { facebookOAuthRedirectUri, tiktokOAuthRedirectUri } from '../../config';
 import logo from '../assets/short-logo.png';
 import logoIX from '../assets/short-logo-ix.png';
 
@@ -50,6 +50,8 @@ import {
   recordGalleryPhotoShare,
   getFacebookConnectUrl,
   getSocialAccounts,
+  getTikTokConnectUrl,
+  getInstagramLinkStatus,
 } from '../services/channelService';
 import {
   pickProfileAvatarCrop,
@@ -268,6 +270,11 @@ const PromotionScreen = ({ onBack }) => {
   const [facebookPages, setFacebookPages] = useState([]);
   const [facebookConnecting, setFacebookConnecting] = useState(false);
   const [facebookConnectUrl, setFacebookConnectUrl] = useState('');
+  const [tiktokAccounts, setTiktokAccounts] = useState([]);
+  const [tiktokConnecting, setTiktokConnecting] = useState(false);
+  const [tiktokConnectUrl, setTiktokConnectUrl] = useState('');
+  const [instagramLinkStatus, setInstagramLinkStatus] = useState(null);
+  const [instagramChecking, setInstagramChecking] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -1563,7 +1570,9 @@ const PromotionScreen = ({ onBack }) => {
       SOCIAL_TYPES.map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
     );
     setFacebookConnectUrl('');
+    setTiktokConnectUrl('');
     loadFacebookPages();
+    loadInstagramLinkStatus();
     setEditProfileVisible(true);
   };
 
@@ -1571,12 +1580,31 @@ const PromotionScreen = ({ onBack }) => {
     if (!userId) return;
     try {
       const rows = await getSocialAccounts(userId);
-      const pages = (Array.isArray(rows) ? rows : []).filter(
-        r => String(r?.platform || '').toLowerCase() === 'facebook',
+      const list = Array.isArray(rows) ? rows : [];
+      setFacebookPages(
+        list.filter(
+          r => String(r?.platform || '').toLowerCase() === 'facebook',
+        ),
       );
-      setFacebookPages(pages);
+      setTiktokAccounts(
+        list.filter(r => String(r?.platform || '').toLowerCase() === 'tiktok'),
+      );
     } catch {
       setFacebookPages([]);
+      setTiktokAccounts([]);
+    }
+  }, [userId]);
+
+  const loadInstagramLinkStatus = useCallback(async () => {
+    if (!userId) return;
+    setInstagramChecking(true);
+    try {
+      const res = await getInstagramLinkStatus(userId);
+      setInstagramLinkStatus(res);
+    } catch {
+      setInstagramLinkStatus(null);
+    } finally {
+      setInstagramChecking(false);
     }
   }, [userId]);
 
@@ -1617,6 +1645,46 @@ const PromotionScreen = ({ onBack }) => {
     Alert.alert(
       'Copied',
       'Paste this into Meta → Facebook Login → Valid OAuth Redirect URIs.',
+    );
+  }, []);
+
+  const handleVerifyTiktok = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || userId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('TikTok', 'Sign in to verify TikTok.');
+      return;
+    }
+    setTiktokConnecting(true);
+    try {
+      const res = await getTikTokConnectUrl(connectUserId);
+      const url = String(res?.url || '').trim();
+      if (!url) {
+        Alert.alert('TikTok', 'Could not get connect link.');
+        return;
+      }
+      setTiktokConnectUrl(url);
+    } catch (e) {
+      Alert.alert(
+        'TikTok',
+        e?.message ||
+          'Set TIKTOK_CLIENT_KEY on the server (and tiktokClientKey in config.js as fallback), then add the redirect URI in TikTok Developer Portal.',
+      );
+    } finally {
+      setTiktokConnecting(false);
+    }
+  }, [userId, currentUser?.id]);
+
+  const handleCopyTiktokUrl = useCallback(() => {
+    if (!tiktokConnectUrl) return;
+    Clipboard.setString(tiktokConnectUrl);
+    Alert.alert('Copied', 'TikTok verify link copied.');
+  }, [tiktokConnectUrl]);
+
+  const handleCopyTiktokRedirectUri = useCallback(() => {
+    Clipboard.setString(tiktokOAuthRedirectUri());
+    Alert.alert(
+      'Copied',
+      'Add this redirect URI in TikTok for Developers → your app → Login Kit / URL properties.',
     );
   }, []);
 
@@ -3446,6 +3514,142 @@ const PromotionScreen = ({ onBack }) => {
                 ) : (
                   <Text style={styles.facebookHelpText}>
                     No Facebook pages connected yet.
+                  </Text>
+                )}
+              </View>
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                Instagram (via Facebook Page)
+              </Text>
+              <Text style={styles.facebookMetaHint}>
+                In Meta Business Suite, link an Instagram Business account to your Facebook
+                Page. Use Verify Facebook above (includes Instagram permissions); we save
+                the IG connection for auto-post when available.
+              </Text>
+              <View style={styles.facebookCard}>
+                <View style={styles.facebookActionsRow}>
+                  <TouchableOpacity
+                    style={styles.facebookActionBtn}
+                    onPress={loadInstagramLinkStatus}
+                    disabled={instagramChecking}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      {instagramChecking ? 'Checking...' : 'Check Instagram link'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {instagramLinkStatus?.pages?.length > 0 ? (
+                  <View style={styles.facebookPagesWrap}>
+                    {instagramLinkStatus.pages.map((row, idx) => (
+                      <View
+                        key={row.pageId || String(idx)}
+                        style={styles.facebookPageChip}
+                      >
+                        <Text style={styles.facebookPageChipText} numberOfLines={3}>
+                          {row.pageName || row.pageId}
+                          {row.instagramLinked
+                            ? ` → @${row.instagramUsername || 'linked'}`
+                            : row.error
+                              ? ` — ${row.error}`
+                              : ' — no Instagram Business linked'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.facebookHelpText}>
+                    Connect Facebook pages first, then tap Check Instagram link.
+                  </Text>
+                )}
+                {instagramLinkStatus?.instagramAccounts?.length > 0 ? (
+                  <Text style={[styles.facebookHelpText, { marginTop: 8 }]}>
+                    Auto-post token stored:{' '}
+                    {instagramLinkStatus.instagramAccounts
+                      .map(a => `@${a.accountName || a.accountId}`)
+                      .join(', ')}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                TikTok verification
+              </Text>
+              <Text style={styles.facebookMetaHint}>
+                TikTok for Developers → your app → Login Kit → add this redirect URI (exact
+                match). Enable scopes: user.info.basic, user.info.profile, video.publish.
+              </Text>
+              <View style={styles.facebookRedirectRow}>
+                <Text selectable style={styles.facebookRedirectUriText}>
+                  {tiktokOAuthRedirectUri()}
+                </Text>
+                <TouchableOpacity
+                  style={styles.facebookRedirectCopyBtn}
+                  onPress={handleCopyTiktokRedirectUri}
+                >
+                  <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.facebookCard}>
+                <View style={styles.facebookActionsRow}>
+                  <TouchableOpacity
+                    style={styles.facebookActionBtn}
+                    onPress={handleVerifyTiktok}
+                    disabled={tiktokConnecting}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      {tiktokConnecting ? 'Loading...' : 'Verify TikTok'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.facebookActionBtn,
+                      styles.facebookRefreshBtn,
+                    ]}
+                    onPress={loadFacebookPages}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      Refresh accounts
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {tiktokConnectUrl ? (
+                  <View style={styles.facebookUrlBox}>
+                    <Text selectable style={styles.facebookUrlText}>
+                      {tiktokConnectUrl}
+                    </Text>
+                    <View style={styles.facebookUrlActions}>
+                      <TouchableOpacity
+                        style={styles.facebookMiniBtn}
+                        onPress={() => Linking.openURL(tiktokConnectUrl)}
+                      >
+                        <Text style={styles.facebookMiniBtnText}>Open</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.facebookMiniBtn}
+                        onPress={handleCopyTiktokUrl}
+                      >
+                        <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
+                {(tiktokAccounts || []).length > 0 ? (
+                  <View style={styles.facebookPagesWrap}>
+                    {tiktokAccounts.map(p => (
+                      <View
+                        key={p?.id || p?.accountId}
+                        style={styles.facebookPageChip}
+                      >
+                        <Text
+                          style={styles.facebookPageChipText}
+                          numberOfLines={1}
+                        >
+                          {p?.accountName || p?.accountId}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.facebookHelpText}>
+                    No TikTok accounts connected yet.
                   </Text>
                 )}
               </View>

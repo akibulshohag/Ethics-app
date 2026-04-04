@@ -170,9 +170,19 @@ export const getSubscribedFeed = async (userId, page = 1, limit = 30) => {
   }
 };
 
-/** Must match ethics-backend `social-auth.service` (Pages API use case on Meta). */
-const FB_OAUTH_SCOPES =
+const FB_OAUTH_SCOPES_CORE =
   'public_profile,business_management,pages_show_list,pages_read_engagement,pages_manage_posts';
+const FB_OAUTH_SCOPES_INSTAGRAM_DEFAULT =
+  'instagram_basic,instagram_content_publish';
+
+const getFacebookOAuthScopesString = () => {
+  if (config.facebookIncludeInstagramScopes !== true) {
+    return FB_OAUTH_SCOPES_CORE;
+  }
+  const custom = String(config.facebookInstagramLoginScopes || '').trim();
+  const ig = custom || FB_OAUTH_SCOPES_INSTAGRAM_DEFAULT;
+  return `${FB_OAUTH_SCOPES_CORE},${ig}`;
+};
 
 /** Build OAuth dialog URL; must match backend `SocialAuthService.getFacebookConnectUrl`. */
 export const buildFacebookConnectUrl = (userId, appId) => {
@@ -182,7 +192,7 @@ export const buildFacebookConnectUrl = (userId, appId) => {
   const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
   const redirectUri = `${base}/social-auth/facebook/callback`;
   const state = encodeURIComponent(JSON.stringify({ userId: uid }));
-  const scopes = encodeURIComponent(FB_OAUTH_SCOPES);
+  const scopes = encodeURIComponent(getFacebookOAuthScopesString());
   return (
     `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
       id,
@@ -226,6 +236,71 @@ const parseAxiosApiError = err => {
  * Get connect URL for Facebook OAuth flow.
  * Uses API when possible; if the request fails and `config.facebookAppId` is set, builds the same URL locally.
  */
+const TIKTOK_OAUTH_SCOPES =
+  'user.info.basic,user.info.profile,video.publish';
+
+/** Build TikTok Login Kit URL; must match backend `SocialAuthService.getTikTokConnectUrl`. */
+export const buildTikTokConnectUrl = (userId, clientKey) => {
+  const uid = String(userId || '').trim();
+  const key = String(clientKey || '').trim();
+  if (!uid || !key) return '';
+  const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+  const redirectUri = `${base}/social-auth/tiktok/callback`;
+  const state = encodeURIComponent(JSON.stringify({ userId: uid }));
+  const scope = encodeURIComponent(TIKTOK_OAUTH_SCOPES);
+  return (
+    `https://www.tiktok.com/v2/auth/authorize/?client_key=${encodeURIComponent(
+      key,
+    )}` +
+    `&response_type=code&scope=${scope}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&state=${state}`
+  );
+};
+
+/**
+ * TikTok OAuth connect URL (Content Posting). Requires TIKTOK_CLIENT_KEY on API.
+ */
+export const getTikTokConnectUrl = async userId => {
+  const uid = String(userId ?? '').trim();
+  if (!uid) {
+    throw new Error('Sign in required to connect TikTok.');
+  }
+  try {
+    const response = await axios.get(
+      `${config.apiBaseUrl}/social-auth/tiktok/connect`,
+      {
+        params: { userId: uid },
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    const localKey = String(config.tiktokClientKey || '').trim();
+    if (localKey) {
+      const url = buildTikTokConnectUrl(uid, localKey);
+      if (url) return { url };
+    }
+    throw new Error(parseAxiosApiError(error));
+  }
+};
+
+/**
+ * Instagram Business link status for each connected Facebook Page + saved IG accounts.
+ */
+export const getInstagramLinkStatus = async userId => {
+  const uid = String(userId ?? '').trim();
+  if (!uid) throw new Error('userId required');
+  const response = await axios.get(
+    `${config.apiBaseUrl}/social-accounts/instagram-status`,
+    {
+      params: { userId: uid },
+      headers: getAuthHeaders(),
+    },
+  );
+  return response.data;
+};
+
 export const getFacebookConnectUrl = async userId => {
   const uid = String(userId ?? '').trim();
   if (!uid) {
