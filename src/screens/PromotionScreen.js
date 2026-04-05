@@ -32,7 +32,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-import { facebookOAuthRedirectUri, tiktokOAuthRedirectUri } from '../../config';
+import {
+  facebookOAuthRedirectUri,
+  tiktokOAuthRedirectUri,
+  youtubeOAuthRedirectUri,
+} from '../../config';
 import logo from '../assets/short-logo.png';
 import logoIX from '../assets/short-logo-ix.png';
 
@@ -51,6 +55,7 @@ import {
   getFacebookConnectUrl,
   getSocialAccounts,
   getTikTokConnectUrl,
+  getYouTubeConnectUrl,
   getInstagramLinkStatus,
 } from '../services/channelService';
 import {
@@ -240,6 +245,7 @@ const SOCIAL_TYPES = [
   { value: 'instagram', label: 'Instagram', icon: 'instagram' },
   { value: 'facebook', label: 'Facebook', icon: 'facebook' },
   { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
+  { value: 'youtube', label: 'YouTube', icon: 'youtube' },
   { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
   { value: 'website', label: 'Website', icon: 'web' },
 ];
@@ -273,6 +279,9 @@ const PromotionScreen = ({ onBack }) => {
   const [tiktokAccounts, setTiktokAccounts] = useState([]);
   const [tiktokConnecting, setTiktokConnecting] = useState(false);
   const [tiktokConnectUrl, setTiktokConnectUrl] = useState('');
+  const [youtubeAccounts, setYoutubeAccounts] = useState([]);
+  const [youtubeConnecting, setYoutubeConnecting] = useState(false);
+  const [youtubeConnectUrl, setYoutubeConnectUrl] = useState('');
   const [instagramLinkStatus, setInstagramLinkStatus] = useState(null);
   const [instagramChecking, setInstagramChecking] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -1571,6 +1580,7 @@ const PromotionScreen = ({ onBack }) => {
     );
     setFacebookConnectUrl('');
     setTiktokConnectUrl('');
+    setYoutubeConnectUrl('');
     loadFacebookPages();
     loadInstagramLinkStatus();
     setEditProfileVisible(true);
@@ -1589,9 +1599,13 @@ const PromotionScreen = ({ onBack }) => {
       setTiktokAccounts(
         list.filter(r => String(r?.platform || '').toLowerCase() === 'tiktok'),
       );
+      setYoutubeAccounts(
+        list.filter(r => String(r?.platform || '').toLowerCase() === 'youtube'),
+      );
     } catch {
       setFacebookPages([]);
       setTiktokAccounts([]);
+      setYoutubeAccounts([]);
     }
   }, [userId]);
 
@@ -1685,6 +1699,46 @@ const PromotionScreen = ({ onBack }) => {
     Alert.alert(
       'Copied',
       'Add this redirect URI in TikTok for Developers → your app → Login Kit / URL properties.',
+    );
+  }, []);
+
+  const handleVerifyYoutube = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || userId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('YouTube', 'Sign in to verify YouTube.');
+      return;
+    }
+    setYoutubeConnecting(true);
+    try {
+      const res = await getYouTubeConnectUrl(connectUserId);
+      const url = String(res?.url || '').trim();
+      if (!url) {
+        Alert.alert('YouTube', 'Could not get connect link.');
+        return;
+      }
+      setYoutubeConnectUrl(url);
+    } catch (e) {
+      Alert.alert(
+        'YouTube',
+        e?.message ||
+          'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server (and googleClientId in config.js as fallback). Add the redirect URI in Google Cloud → OAuth client.',
+      );
+    } finally {
+      setYoutubeConnecting(false);
+    }
+  }, [userId, currentUser?.id]);
+
+  const handleCopyYoutubeUrl = useCallback(() => {
+    if (!youtubeConnectUrl) return;
+    Clipboard.setString(youtubeConnectUrl);
+    Alert.alert('Copied', 'YouTube verify link copied.');
+  }, [youtubeConnectUrl]);
+
+  const handleCopyYoutubeRedirectUri = useCallback(() => {
+    Clipboard.setString(youtubeOAuthRedirectUri());
+    Alert.alert(
+      'Copied',
+      'Add this exact redirect URI in Google Cloud Console → Credentials → OAuth 2.0 Web client.',
     );
   }, []);
 
@@ -3650,6 +3704,91 @@ const PromotionScreen = ({ onBack }) => {
                 ) : (
                   <Text style={styles.facebookHelpText}>
                     No TikTok accounts connected yet.
+                  </Text>
+                )}
+              </View>
+              <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                YouTube verification
+              </Text>
+              <Text style={styles.facebookMetaHint}>
+                Google Cloud Console → enable YouTube Data API v3 → OAuth Web client →
+                Authorized redirect URIs (exact match). Scopes: youtube.readonly,
+                youtube.upload. See ethics-backend/docs/YOUTUBE_SETUP.md on the server.
+              </Text>
+              <View style={styles.facebookRedirectRow}>
+                <Text selectable style={styles.facebookRedirectUriText}>
+                  {youtubeOAuthRedirectUri()}
+                </Text>
+                <TouchableOpacity
+                  style={styles.facebookRedirectCopyBtn}
+                  onPress={handleCopyYoutubeRedirectUri}
+                >
+                  <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.facebookCard}>
+                <View style={styles.facebookActionsRow}>
+                  <TouchableOpacity
+                    style={styles.facebookActionBtn}
+                    onPress={handleVerifyYoutube}
+                    disabled={youtubeConnecting}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      {youtubeConnecting ? 'Loading...' : 'Verify YouTube'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.facebookActionBtn,
+                      styles.facebookRefreshBtn,
+                    ]}
+                    onPress={loadFacebookPages}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      Refresh accounts
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {youtubeConnectUrl ? (
+                  <View style={styles.facebookUrlBox}>
+                    <Text selectable style={styles.facebookUrlText}>
+                      {youtubeConnectUrl}
+                    </Text>
+                    <View style={styles.facebookUrlActions}>
+                      <TouchableOpacity
+                        style={styles.facebookMiniBtn}
+                        onPress={() => Linking.openURL(youtubeConnectUrl)}
+                      >
+                        <Text style={styles.facebookMiniBtnText}>Open</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.facebookMiniBtn}
+                        onPress={handleCopyYoutubeUrl}
+                      >
+                        <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
+                {(youtubeAccounts || []).length > 0 ? (
+                  <View style={styles.facebookPagesWrap}>
+                    {youtubeAccounts.map(p => (
+                      <View
+                        key={p?.id || p?.accountId}
+                        style={styles.facebookPageChip}
+                      >
+                        <Text
+                          style={styles.facebookPageChipText}
+                          numberOfLines={1}
+                        >
+                          {p?.accountName || p?.accountId}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.facebookHelpText}>
+                    No YouTube channels connected yet.
                   </Text>
                 )}
               </View>

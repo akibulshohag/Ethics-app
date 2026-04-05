@@ -970,6 +970,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         { value: 'instagram', label: 'Instagram' },
         { value: 'facebook', label: 'Facebook' },
         { value: 'x', label: 'X (Twitter)' },
+        { value: 'youtube', label: 'YouTube' },
         { value: 'google_email', label: 'Google / Email' },
         { value: 'website', label: 'Website' },
       ].map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
@@ -1209,6 +1210,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     { value: 'instagram', label: 'Instagram', icon: 'instagram' },
     { value: 'facebook', label: 'Facebook', icon: 'facebook' },
     { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
+    { value: 'youtube', label: 'YouTube', icon: 'youtube' },
     { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
     { value: 'website', label: 'Website', icon: 'web' },
   ];

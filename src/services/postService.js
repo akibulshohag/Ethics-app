@@ -190,6 +190,9 @@ export const uploadPost = async (data) => {
   if (data.tiktokAccountId) {
     formData.append('tiktokAccountId', String(data.tiktokAccountId));
   }
+  if (data.youtubeChannelId) {
+    formData.append('youtubeChannelId', String(data.youtubeChannelId));
+  }
   const tz = getDeviceTimeZone();
   if (tz) formData.append('deviceTimeZone', tz);
   const headers = getAuthHeaders();

@@ -43,7 +43,8 @@ const SpeedModal = ({visible, onClose, onSelect, selectedSpeed}) => {
               <View style={styles.handle} />
               <Text style={styles.title}>Speed</Text>
               <Text style={styles.subtitle}>
-                Recording speed • Like YouTube Shorts
+                Preview playback speed (0.5x–3x). Export sends speedFactor to
+                the server for processing.
               </Text>
               <View style={styles.options}>
                 {SPEED_OPTIONS.map(opt => (

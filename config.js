@@ -60,6 +60,11 @@ export const config = {
   facebookInstagramLoginScopes: '',
   /** Same as backend `TIKTOK_CLIENT_KEY` — optional fallback to build TikTok login URL locally. */
   tiktokClientKey: '',
+  /**
+   * Same as backend `GOOGLE_CLIENT_ID` (Web client). Optional fallback to build
+   * YouTube OAuth URL locally when `/social-auth/youtube/connect` fails.
+   */
+  googleClientId: '',
 };
 
 /**
@@ -78,4 +83,13 @@ export const facebookOAuthRedirectUri = () => {
 export const tiktokOAuthRedirectUri = () => {
   const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
   return `${base}/social-auth/tiktok/callback`;
+};
+
+/**
+ * Add in Google Cloud Console → APIs & Services → Credentials → your OAuth Web client
+ * → Authorized redirect URIs. Must match backend `APP_URL` + `/social-auth/youtube/callback`.
+ */
+export const youtubeOAuthRedirectUri = () => {
+  const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+  return `${base}/social-auth/youtube/callback`;
 };

@@ -285,6 +285,58 @@ export const getTikTokConnectUrl = async userId => {
   }
 };
 
+const YOUTUBE_OAUTH_SCOPES =
+  'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.upload';
+
+/** Build Google OAuth URL; must match backend `SocialAuthService.getYouTubeConnectUrl`. */
+export const buildYouTubeConnectUrl = (userId, clientId) => {
+  const uid = String(userId || '').trim();
+  const id = String(clientId || '').trim();
+  if (!uid || !id) return '';
+  const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
+  const redirectUri = `${base}/social-auth/youtube/callback`;
+  const state = encodeURIComponent(JSON.stringify({ userId: uid }));
+  const scope = encodeURIComponent(YOUTUBE_OAUTH_SCOPES);
+  return (
+    `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+      id,
+    )}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&response_type=code` +
+    `&scope=${scope}` +
+    `&state=${state}` +
+    `&access_type=offline` +
+    `&prompt=consent`
+  );
+};
+
+/**
+ * YouTube OAuth connect URL. Requires GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET on API.
+ */
+export const getYouTubeConnectUrl = async userId => {
+  const uid = String(userId ?? '').trim();
+  if (!uid) {
+    throw new Error('Sign in required to connect YouTube.');
+  }
+  try {
+    const response = await axios.get(
+      `${config.apiBaseUrl}/social-auth/youtube/connect`,
+      {
+        params: { userId: uid },
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    const localId = String(config.googleClientId || '').trim();
+    if (localId) {
+      const url = buildYouTubeConnectUrl(uid, localId);
+      if (url) return { url };
+    }
+    throw new Error(parseAxiosApiError(error));
+  }
+};
+
 /**
  * Instagram Business link status for each connected Facebook Page + saved IG accounts.
  */

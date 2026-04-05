@@ -7,6 +7,16 @@ export const COLORS = {
   // Primary Colors
   primaryOrange: '#FF7F0B',
   primaryOrangeLight: '#FFB321',
+  /** Gradient / pressed states */
+  primaryOrangeDeep: '#E56D00',
+  primaryOrangeDark: '#CC5C00',
+  /** Warm surfaces (modals, sheets) tinted with brand */
+  surfaceOrange: '#FFF7F0',
+  surfaceOrangeSoft: '#FFFBF7',
+  brandOverlay08: 'rgba(255, 127, 11, 0.08)',
+  brandOverlay12: 'rgba(255, 127, 11, 0.12)',
+  brandOverlay16: 'rgba(255, 127, 11, 0.16)',
+  brandBorderSoft: 'rgba(255, 127, 11, 0.2)',
 
   // Neutrals
   white: '#FFFFFF',
@@ -39,6 +49,19 @@ export const COLORS = {
   warning: '#F59E0B',
   info: '#3B82F6',
 };
+
+/** LinearGradient stops — use with `react-native-linear-gradient` */
+export const ORANGE_GRADIENT_HEADER = [
+  COLORS.primaryOrangeLight,
+  COLORS.primaryOrange,
+  COLORS.primaryOrangeDeep,
+];
+/** Publish / primary actions — centered on #FF7F0B */
+export const ORANGE_GRADIENT_CTA = [
+  '#FF9F40',
+  COLORS.primaryOrange,
+  COLORS.primaryOrangeDeep,
+];
 
 // Typography
 export const FONTS = {

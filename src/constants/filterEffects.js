@@ -1,7 +1,7 @@
 /**
- * Filter effects config - YouTube/Messenger style
- * Each filter defines a visual overlay applied to the preview in real-time
- * overlayColor + overlayOpacity simulates color grading
+ * Filter effects config — in-app preview (overlay).
+ * Upload pipeline: ethics-backend `shorts-ffmpeg-presets.ts` maps the same `id`
+ * values to FFmpeg filters so the stored MP4 matches this look (plus beauty/speed/sound).
  */
 export const FILTER_EFFECTS = [
   {
@@ -117,5 +117,16 @@ export const getFilterOverlayStyle = filter => {
   return {
     backgroundColor: filter.overlayColor || 'transparent',
     opacity: filter.overlayOpacity || 0,
+  };
+};
+
+/** Soft warm overlay for “beauty” (preview only; real face retouch needs native pipeline). */
+export const getBeautyOverlayStyle = level => {
+  const n = Number(level);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const t = Math.min(100, Math.max(0, n)) / 100;
+  return {
+    backgroundColor: 'rgba(255, 248, 240, 1)',
+    opacity: 0.06 + t * 0.38,
   };
 };

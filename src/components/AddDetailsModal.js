@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -50,6 +50,12 @@ const AddDetailsModal = ({
   const [localVideo, setLocalVideo] = useState(null);
   const [localThumb, setLocalThumb] = useState(null);
   const [coverPickerVisible, setCoverPickerVisible] = useState(false);
+
+  useEffect(() => {
+    if (visible && shortsMetadata?.commentsSetting) {
+      setComments(shortsMetadata.commentsSetting);
+    }
+  }, [visible, shortsMetadata?.commentsSetting]);
 
   const videoUri = shortsMetadata?.videoUri || localVideo?.uri;
   const videoMeta = localVideo || shortsMetadata;
