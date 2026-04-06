@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -81,8 +81,11 @@ const HomeThreeScreen = ({ onBack }) => {
   const resTitle =
     route.params?.ownerName || route.params?.title || 'Restaurant';
   const resLocation = route.params?.location || '';
+  const searchKeyword = String(route.params?.searchKeyword || '').trim();
+  const searchKeywordLower = searchKeyword.toLowerCase();
   const singleMenuItem = route.params?.singleMenuItem;
   const promotionMenuItems = route.params?.promotionMenuItems;
+  const searchInitAppliedRef = useRef(false);
 
   const [menuItems, setMenuItems] = useState([]);
   const [menuCategoriesFromApi, setMenuCategoriesFromApi] = useState([]);
@@ -269,6 +272,10 @@ const HomeThreeScreen = ({ onBack }) => {
     }
   }, [menuCategories.length]);
 
+  useEffect(() => {
+    searchInitAppliedRef.current = false;
+  }, [ownerId, searchKeywordLower]);
+
   // Menu items to display: filter by selected category when using API categories
   const displayedMenuItems = useMemo(() => {
     if (!selectedCategoryId || selectedCategoryId === 'all') return menuItems;
@@ -356,6 +363,54 @@ const HomeThreeScreen = ({ onBack }) => {
     appliedHighlyReordered,
     appliedSort,
   ]);
+
+  const searchMatchedMenuItems = useMemo(() => {
+    if (!searchKeywordLower) return [];
+    return menuItems.filter(it => {
+      const haystack = [
+        it?.itemName,
+        it?.description,
+        ...(Array.isArray(it?.tags) ? it.tags : []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(searchKeywordLower);
+    });
+  }, [menuItems, searchKeywordLower]);
+
+  const orderMoreMenuItems = useMemo(() => {
+    if (!searchKeywordLower) return filteredMenuForDisplay;
+    if (searchMatchedMenuItems.length === 0) return menuItems;
+    const matchedIds = new Set(searchMatchedMenuItems.map(it => String(it.id)));
+    return menuItems.filter(it => !matchedIds.has(String(it.id)));
+  }, [filteredMenuForDisplay, menuItems, searchKeywordLower, searchMatchedMenuItems]);
+
+  useEffect(() => {
+    if (!ownerId || !searchKeywordLower || searchInitAppliedRef.current) return;
+    if (!Array.isArray(menuItems) || menuItems.length === 0) return;
+    const matched = menuItems.filter(it => {
+      const haystack = [
+        it?.itemName,
+        it?.description,
+        ...(Array.isArray(it?.tags) ? it.tags : []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(searchKeywordLower);
+    });
+    if (matched.length === 0) return;
+    searchInitAppliedRef.current = true;
+    setSelectedItems(prev => {
+      const hasSelected = Object.values(prev || {}).some(v => Number(v) > 0);
+      if (hasSelected) return prev;
+      const first = matched[0];
+      if (!first?.id) return prev;
+      return { [first.id]: 1 };
+    });
+    // Keep full menu visible for "Order More"; do not force a single category.
+  }, [ownerId, menuItems, searchKeywordLower]);
 
   const filterActiveCount = useMemo(() => {
     let n = 0;
@@ -700,6 +755,71 @@ const HomeThreeScreen = ({ onBack }) => {
     : staticTotal;
   const cartBarDisabled = ownerHasNoMenu;
 
+  const renderMenuItemCard = item => {
+    const qty = selectedItems[item.id] || 0;
+    const to = Number(item.timesOrdered) || 0;
+    return (
+      <View key={item.id} style={styles.menuItemCard}>
+        <View style={styles.itemInfo}>
+          <View style={styles.itemTitleRow}>
+            <Text style={styles.itemTitle}>{item.itemName}</Text>
+            {item.dietaryType === 'veg' ? (
+              <View style={[styles.dietDot, styles.dietDotVeg]} />
+            ) : item.dietaryType === 'egg' ? (
+              <Icon name="egg" size={16} color="#C4A000" />
+            ) : item.dietaryType === 'non_veg' ? (
+              <View style={[styles.dietDot, styles.dietDotNonVeg]} />
+            ) : null}
+          </View>
+          <Text style={styles.itemPrice}>
+            £{Number(item.price || 0).toFixed(2)}
+            {to > 0 ? (
+              <Text style={styles.timesOrderedBadge}> · {to}x sold</Text>
+            ) : null}
+            {item.avgRating != null && Number(item.avgRating) > 0 ? (
+              <Text style={styles.avgRatingBadge}>
+                {' '}
+                ★ {Number(item.avgRating).toFixed(1)}
+                {Number(item.ratingCount) > 0 ? ` (${item.ratingCount})` : ''}
+              </Text>
+            ) : null}
+          </Text>
+          {item.description ? (
+            <Text style={styles.itemDesc} numberOfLines={3}>
+              {item.description}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.imageContainer}>
+          <Image
+            source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+            style={styles.itemImage}
+          />
+          <View style={styles.stepperContainer}>
+            <TouchableOpacity
+              style={styles.stepperBtn}
+              onPress={() => setItemQty(item.id, n => n - 1)}
+              disabled={qty === 0}
+            >
+              <Icon
+                name="minus"
+                size={18}
+                color={qty === 0 ? '#fff' : '#FFF'}
+              />
+            </TouchableOpacity>
+            <Text style={styles.stepperVal}>{qty}</Text>
+            <TouchableOpacity
+              style={styles.stepperBtn}
+              onPress={() => setItemQty(item.id, n => n + 1)}
+            >
+              <Icon name="plus" size={18} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
@@ -764,75 +884,25 @@ const HomeThreeScreen = ({ onBack }) => {
                 </Text>
               </View>
             ) : null}
-            {filteredMenuForDisplay.map(item => {
-              const qty = selectedItems[item.id] || 0;
-              const to = Number(item.timesOrdered) || 0;
-              return (
-                <View key={item.id} style={styles.menuItemCard}>
-                  <View style={styles.itemInfo}>
-                    <View style={styles.itemTitleRow}>
-                      <Text style={styles.itemTitle}>{item.itemName}</Text>
-                      {item.dietaryType === 'veg' ? (
-                        <View style={[styles.dietDot, styles.dietDotVeg]} />
-                      ) : item.dietaryType === 'egg' ? (
-                        <Icon name="egg" size={16} color="#C4A000" />
-                      ) : item.dietaryType === 'non_veg' ? (
-                        <View style={[styles.dietDot, styles.dietDotNonVeg]} />
-                      ) : null}
-                    </View>
-                    <Text style={styles.itemPrice}>
-                      £{Number(item.price || 0).toFixed(2)}
-                      {to > 0 ? (
-                        <Text style={styles.timesOrderedBadge}>
-                          {' '}
-                          · {to}x sold
-                        </Text>
-                      ) : null}
-                      {item.avgRating != null && Number(item.avgRating) > 0 ? (
-                        <Text style={styles.avgRatingBadge}>
-                          {' '}
-                          ★ {Number(item.avgRating).toFixed(1)}
-                          {Number(item.ratingCount) > 0
-                            ? ` (${item.ratingCount})`
-                            : ''}
-                        </Text>
-                      ) : null}
-                    </Text>
-                    {item.description ? (
-                      <Text style={styles.itemDesc} numberOfLines={3}>
-                        {item.description}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <View style={styles.imageContainer}>
-                    <Image
-                      source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
-                      style={styles.itemImage}
-                    />
-                    <View style={styles.stepperContainer}>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => setItemQty(item.id, n => n - 1)}
-                        disabled={qty === 0}
-                      >
-                        <Icon
-                          name="minus"
-                          size={18}
-                          color={qty === 0 ? '#fff' : '#FFF'}
-                        />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperVal}>{qty}</Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => setItemQty(item.id, n => n + 1)}
-                      >
-                        <Icon name="plus" size={18} color="#FFF" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+            {searchKeywordLower && searchMatchedMenuItems.length > 0 ? (
+              <>
+                <Text style={styles.subSectionHeading}>
+                  Search match: "{searchKeyword}"
+                </Text>
+                {searchMatchedMenuItems.map(renderMenuItemCard)}
+                <View style={styles.sectionDividerWrap}>
+                  <View style={styles.sectionDividerLine} />
                 </View>
-              );
-            })}
+              </>
+            ) : null}
+            {searchKeywordLower && orderMoreMenuItems.length > 0 ? (
+              <>
+                <Text style={styles.subSectionHeading}>Order More</Text>
+                {orderMoreMenuItems.map(renderMenuItemCard)}
+              </>
+            ) : !searchKeywordLower ? (
+              filteredMenuForDisplay.map(renderMenuItemCard)
+            ) : null}
           </>
         ) : ownerId ? (
           <View style={styles.emptyMenu}>
@@ -945,6 +1015,11 @@ const HomeThreeScreen = ({ onBack }) => {
             <Text style={styles.menuBtnText}>Menu</Text>
           </TouchableOpacity>
         </View>
+        {searchKeyword ? (
+          <Text style={styles.searchHintText}>
+            Showing menu matches for "{searchKeyword}".
+          </Text>
+        ) : null}
       </View>
 
       {/* Menu modal: category list only – tap one to filter main screen and close */}
@@ -1379,6 +1454,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     marginVertical: 15,
   },
+  subSectionHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#222',
+    paddingHorizontal: 15,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  sectionDividerWrap: {
+    paddingHorizontal: 15,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  sectionDividerLine: {
+    height: 1,
+    backgroundColor: '#E6E6E6',
+  },
   menuItemCard: {
     flexDirection: 'row',
     paddingHorizontal: 15,
@@ -1455,6 +1547,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
+  },
+  searchHintText: {
+    marginTop: 8,
+    color: '#6B4A00',
+    fontSize: 12,
+    fontWeight: '600',
   },
   bottomSearch: {
     flex: 1,

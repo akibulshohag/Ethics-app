@@ -879,6 +879,9 @@ const ShortsVideoScreen = ({ navigation }) => {
   const route = useRoute();
   const initialShortId = route.params?.initialShortId ?? route.params?.shortId;
   const initialShortItem = route.params?.initialShortItem || null;
+  /** When 'owner' + scopedShortsFeed, vertical feed is only that channel's shorts (profile / promotion / user view). */
+  const shortsFeedMode = route.params?.shortsFeedMode;
+  const scopedShortsFeedParam = route.params?.scopedShortsFeed;
   const user = useSelector(state => state?.app?.user);
   const insets = useSafeAreaInsets();
   const [videos, setVideos] = useState([]);
@@ -1124,15 +1127,62 @@ const ShortsVideoScreen = ({ navigation }) => {
   const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
   const firstRowShortId = videos[0]?.id;
 
+  const loadShorts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const useOwnerFeed =
+        shortsFeedMode === 'owner' &&
+        Array.isArray(scopedShortsFeedParam) &&
+        scopedShortsFeedParam.length > 0;
+      if (useOwnerFeed) {
+        const filtered = scopedShortsFeedParam.filter(
+          s => s?.videoUrl && String(s.videoUrl).trim(),
+        );
+        if (filtered.length === 0) {
+          setVideos(MOCK_VIDEOS);
+        } else {
+          const enriched = await enrichShortsWithProfile(filtered);
+          setVideos(enriched.map(mapShortToItem));
+        }
+      } else {
+        const res = await shortsService.getShorts({
+          page: 1,
+          limit: 50,
+          viewerRole: user?.role || 'user',
+          viewerUserId: user?.id,
+        });
+        if (res?.shorts?.length > 0) {
+          const filtered = res.shorts.filter(
+            s => s.videoUrl && String(s.videoUrl).trim(),
+          );
+          const enriched = await enrichShortsWithProfile(filtered);
+          setVideos(enriched.map(mapShortToItem));
+        } else {
+          setVideos(MOCK_VIDEOS);
+        }
+      }
+    } catch (e) {
+      setVideos(MOCK_VIDEOS);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    enrichShortsWithProfile,
+    shortsFeedMode,
+    scopedShortsFeedParam,
+    user?.id,
+    user?.role,
+  ]);
+
   useEffect(() => {
     loadShorts();
-  }, []);
+  }, [loadShorts]);
 
   // When opened from Home with a specific short, put that short first (only reset when id changes — not when initialShortItem identity changes)
   useEffect(() => {
     if (!initialShortId) return;
     hasAppliedInitialShort.current = false;
-  }, [initialShortId]);
+  }, [initialShortId, shortsFeedMode, scopedShortsFeedParam]);
 
   /** Record once per visit: deepLinkVisitSeq changes on each focus with initialShortId */
   useEffect(() => {
@@ -1211,31 +1261,6 @@ const ShortsVideoScreen = ({ navigation }) => {
       hasAppliedInitialShort.current = true;
     }
   }, [loading, videos, initialShortId, initialShortItem]);
-
-  const loadShorts = async () => {
-    try {
-      setLoading(true);
-      const res = await shortsService.getShorts({
-        page: 1,
-        limit: 50,
-        viewerRole: user?.role || 'user',
-        viewerUserId: user?.id,
-      });
-      if (res?.shorts?.length > 0) {
-        const filtered = res.shorts.filter(
-          s => s.videoUrl && String(s.videoUrl).trim(),
-        );
-        const enriched = await enrichShortsWithProfile(filtered);
-        setVideos(enriched.map(mapShortToItem));
-      } else {
-        setVideos(MOCK_VIDEOS);
-      }
-    } catch (e) {
-      setVideos(MOCK_VIDEOS);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLike = async (item, opts = {}) => {
     if (!user?.id) {

@@ -156,6 +156,7 @@ const HomeFourScreen = ({ onBack }) => {
   const defaultDeliveryAddress = String(user?.address || '').trim();
   const selectedDeliveryAddress =
     String(customDeliveryAddress || '').trim() || defaultDeliveryAddress;
+  const hasDeliveryAddress = String(selectedDeliveryAddress || '').trim().length > 0;
   const deliveryAddress = selectedDeliveryAddress || 'Add address';
   const userPhone = user?.phone || user?.pin || '—';
   const userName = user?.name || user?.nickname || '—';
@@ -191,6 +192,14 @@ const HomeFourScreen = ({ onBack }) => {
       navigation.navigate('HomeSevenScreen');
       return;
     }
+    const addressText = String(selectedDeliveryAddress || '').trim();
+    if (!addressText) {
+      Alert.alert(
+        'Delivery address required',
+        'Add an address in your profile, tap Edit to enter a delivery address for this order, or use your default address when it is set.',
+      );
+      return;
+    }
     if (!ownerId || items.length === 0) {
       Alert.alert('No items', 'Add items from the menu to place an order.');
       return;
@@ -198,10 +207,9 @@ const HomeFourScreen = ({ onBack }) => {
     setPlacing(true);
     try {
       const noteText = String(restaurantNote || '').trim();
-      const addressText = String(selectedDeliveryAddress || '').trim();
       const deliveryAddressPayload = noteText
         ? `${addressText}${ORDER_NOTE_MARKER}${noteText}`
-        : addressText || undefined;
+        : addressText;
 
       await createRestaurantOrder(user.token, {
         ownerId,
@@ -268,6 +276,15 @@ const HomeFourScreen = ({ onBack }) => {
           >
             <Text style={styles.useDefaultText}>Use default address</Text>
           </TouchableOpacity>
+        ) : null}
+        {!hasDeliveryAddress && user?.token ? (
+          <View style={styles.addressWarningBanner}>
+            <Icon name="alert-circle-outline" size={20} color="#C62828" />
+            <Text style={styles.addressWarningText}>
+              Enter a delivery address before placing your order. Tap Edit or
+              update your profile address.
+            </Text>
+          </View>
         ) : null}
         {isAddressEditing ? (
           <View style={styles.customAddressCard}>
@@ -497,10 +514,18 @@ const HomeFourScreen = ({ onBack }) => {
         <TouchableOpacity
           style={[
             styles.placeOrderBtn,
-            (!hasItems || !ownerId) && styles.placeOrderBtnDisabled,
+            (!hasItems ||
+              !ownerId ||
+              (!!user?.token && !hasDeliveryAddress)) &&
+              styles.placeOrderBtnDisabled,
           ]}
           onPress={handlePlaceOrder}
-          disabled={placing || !hasItems || !ownerId}
+          disabled={
+            placing ||
+            !hasItems ||
+            !ownerId ||
+            (!!user?.token && !hasDeliveryAddress)
+          }
         >
           <View>
             <Text style={styles.footerPrice}>

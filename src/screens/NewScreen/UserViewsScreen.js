@@ -62,6 +62,10 @@ import {
   buildPostShareMessage,
   buildContentUniversalLink,
 } from '../../utils/contentLinks';
+import {
+  buildOwnerScopedShortsFeed,
+  navigateToScopedShortsPlayer,
+} from '../../utils/navigateToScopedShortsPlayer';
 
 const { width } = Dimensions.get('window');
 
@@ -1245,36 +1249,15 @@ const UserViewsScreen = ({ navigation }) => {
             },
           };
 
-      let nav = navigation;
-      for (let i = 0; i < 16 && nav; i++) {
-        const names = nav.getState?.()?.routeNames;
-        if (Array.isArray(names) && names.includes('Shorts')) {
-          nav.navigate('Shorts', {
-            screen: 'ShortsVideoScreen',
-            params: { shortId: sid, initialShortItem },
-          });
-          return;
-        }
-        nav = nav.getParent?.();
-      }
-      nav = navigation;
-      for (let i = 0; i < 16 && nav; i++) {
-        const names = nav.getState?.()?.routeNames;
-        if (Array.isArray(names) && names.includes('Library')) {
-          nav.navigate('Library', {
-            screen: 'ShortsVideoScreen',
-            params: { shortId: sid, initialShortItem },
-          });
-          return;
-        }
-        nav = nav.getParent?.();
-      }
-      navigation.navigate('Root', {
-        screen: 'Shorts',
-        params: {
-          screen: 'ShortsVideoScreen',
-          params: { shortId: sid, initialShortItem },
-        },
+      const scopedShortsFeed = buildOwnerScopedShortsFeed(
+        rawVideos,
+        profileUserId,
+      );
+      navigateToScopedShortsPlayer(navigation, {
+        shortId: sid,
+        initialShortItem,
+        shortsFeedMode: 'owner',
+        scopedShortsFeed,
       });
     },
     [navigation, rawVideos, profileUserId, profile, currentUser],

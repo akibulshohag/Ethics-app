@@ -78,6 +78,7 @@ import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import { buildContentShareMessage } from '../utils/contentLinks';
 import { getTopRestaurantsByOrders } from '../services/orderService';
+import { getMenuByUserId } from '../services/menuService';
 import {
   buildShortLocationFromUser,
   formatShortProfileLocationLine,
@@ -252,6 +253,7 @@ const HomeOneScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
   const searchDebounceRef = useRef(null);
+  const ownerMenuSearchCacheRef = useRef({});
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
   const [feedVideos, setFeedVideos] = useState([]);
@@ -836,6 +838,88 @@ const HomeOneScreen = () => {
       const q = String(searchTerm || '')
         .toLowerCase()
         .trim();
+      const allMappedMedia = [
+        ...mappedVideos,
+        ...mappedShorts,
+        ...mappedPopularShorts,
+        ...mappedNewestShorts,
+      ];
+      const uniqueOwnerIds = Array.from(
+        new Set(
+          allMappedMedia
+            .map(m => m?.userId ?? m?.user?.id)
+            .filter(Boolean)
+            .map(String),
+        ),
+      );
+      if (q && uniqueOwnerIds.length > 0) {
+        await Promise.allSettled(
+          uniqueOwnerIds.map(async oid => {
+            if (ownerMenuSearchCacheRef.current[oid]) return;
+            try {
+              const res = await getMenuByUserId(oid);
+              const rows = Array.isArray(res?.menu)
+                ? res.menu.map(m => ({
+                    id: m?.id,
+                    itemName: String(m?.itemName || '').trim(),
+                    description: String(m?.description || '').trim(),
+                    tags: Array.isArray(m?.tags) ? m.tags : [],
+                  }))
+                : [];
+              ownerMenuSearchCacheRef.current[oid] = rows;
+            } catch (_) {
+              ownerMenuSearchCacheRef.current[oid] = [];
+            }
+          }),
+        );
+      }
+      const withMenuSearchMeta = item => {
+        const ownerId = item?.userId ?? item?.user?.id;
+        if (!ownerId) return item;
+        const menuRows = ownerMenuSearchCacheRef.current[String(ownerId)] || [];
+        if (!Array.isArray(menuRows) || menuRows.length === 0) return item;
+        const menuBlob = menuRows
+          .map(m =>
+            [
+              m?.itemName,
+              m?.description,
+              ...(Array.isArray(m?.tags) ? m.tags : []),
+            ]
+              .filter(Boolean)
+              .join(' '),
+          )
+          .join(' ')
+          .toLowerCase();
+        const matchedMenuItems =
+          q && q.length > 0
+            ? menuRows
+                .filter(m =>
+                  [
+                    m?.itemName,
+                    m?.description,
+                    ...(Array.isArray(m?.tags) ? m.tags : []),
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase()
+                    .includes(q),
+                )
+                .slice(0, 8)
+            : [];
+        return {
+          ...item,
+          _menuSearchBlob: menuBlob,
+          _matchedMenuItems: matchedMenuItems,
+          _menuSearchKeyword: q,
+        };
+      };
+      const mappedVideosWithMenu = mappedVideos.map(withMenuSearchMeta);
+      const mappedShortsWithMenu = mappedShorts.map(withMenuSearchMeta);
+      const mappedPopularShortsWithMenu =
+        mappedPopularShorts.map(withMenuSearchMeta);
+      const mappedNewestShortsWithMenu = mappedNewestShorts.map(
+        withMenuSearchMeta,
+      );
       const matchesSearch = item => {
         if (!q) return true;
         const haystack = [
@@ -847,16 +931,17 @@ const HomeOneScreen = () => {
           item?.user?.nickname,
           item?.user?.name,
           item?.user?.address,
+          item?._menuSearchBlob,
         ]
           .filter(Boolean)
           .join(' ')
           .toLowerCase();
         return haystack.includes(q);
       };
-      setFeedVideos(mappedVideos.filter(matchesSearch));
-      setFeedShorts(mappedShorts.filter(matchesSearch));
-      setPopularShorts(mappedPopularShorts.filter(matchesSearch));
-      setNewShorts(mappedNewestShorts.filter(matchesSearch));
+      setFeedVideos(mappedVideosWithMenu.filter(matchesSearch));
+      setFeedShorts(mappedShortsWithMenu.filter(matchesSearch));
+      setPopularShorts(mappedPopularShortsWithMenu.filter(matchesSearch));
+      setNewShorts(mappedNewestShortsWithMenu.filter(matchesSearch));
       const topRestaurants = (topRes?.restaurants || []).map(r => {
         const firstPhoto =
           Array.isArray(r?.photos) && r.photos.length > 0 ? r.photos[0] : null;
@@ -2009,21 +2094,33 @@ const HomeOneScreen = () => {
           ) : null}
 
           <View style={styles.locationSection}>
-            <TouchableOpacity
-              style={styles.homeDropdown}
-              activeOpacity={0.8}
-              onPress={() => {
-                setLocationInput(addressText || '');
-                setLocationModalVisible(true);
-              }}
-            >
-              <Icon name="map-marker-radius" size={24} color="#FFF" />
-
-              <Text style={styles.homeText} numberOfLines={1}>
-                {primaryLoc}
-              </Text>
-              <Icon name="chevron-down" size={24} color="#FFF" />
-            </TouchableOpacity>
+            <View style={styles.locationTopRow}>
+              <TouchableOpacity
+                style={styles.homeDropdown}
+                activeOpacity={0.8}
+                onPress={() => {
+                  setLocationInput(addressText || '');
+                  setLocationModalVisible(true);
+                }}
+              >
+                <Icon name="map-marker-radius" size={24} color="#FFF" />
+                <Text style={styles.homeText} numberOfLines={1}>
+                  {primaryLoc}
+                </Text>
+                <Icon name="chevron-down" size={24} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationOrderBtn}
+                activeOpacity={0.85}
+                onPress={() =>
+                  navigation.navigate('OrderNowBrowseScreen', {
+                    initialQuery: searchDebounced || searchQuery || '',
+                  })
+                }
+              >
+                <Text style={styles.locationOrderBtnText}>Order Now</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.addressSubtext} numberOfLines={2}>
               {secondaryLoc}
             </Text>
@@ -2062,7 +2159,7 @@ const HomeOneScreen = () => {
                       <View style={styles.sectionHeaderRow}>
                         <Text style={styles.sectionTitle}>
                           {section.type === 'MOST_POPULAR_SHORTS'
-                            ? 'Most Views'
+                            ? 'Most Viewed'
                             : section.type === 'TRY_NEW_SHORTS'
                             ? 'New Videos'
                             : 'Most Ordered'}
@@ -2074,7 +2171,7 @@ const HomeOneScreen = () => {
                               navigation.navigate('HomeShortsExploreScreen', {
                                 title:
                                   section.type === 'MOST_POPULAR_SHORTS'
-                                    ? 'Most Views'
+                                    ? 'Most Viewed'
                                     : 'New Videos',
                                 sort:
                                   section.type === 'MOST_POPULAR_SHORTS'
@@ -2445,6 +2542,7 @@ const HomeOneScreen = () => {
                             selectedItem?.location ||
                             selectedItem?.creatorAddress ||
                             '',
+                          searchKeyword: String(searchDebounced || '').trim(),
                         });
                       } else {
                         navigation.navigate('HomeThreeScreen');
@@ -2629,6 +2727,7 @@ const HomeOneScreen = () => {
                               selectedItem?.location ||
                               selectedItem?.creatorAddress ||
                               '',
+                            searchKeyword: String(searchDebounced || '').trim(),
                           });
                         } else {
                           navigation.navigate('HomeThreeScreen');
@@ -3656,9 +3755,27 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     position: 'relative',
   },
+  locationTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   homeDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+  },
+  locationOrderBtn: {
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  locationOrderBtnText: {
+    color: '#F5A623',
+    fontWeight: '700',
+    fontSize: 12,
   },
   homeLocationTextCol: {
     flex: 1,

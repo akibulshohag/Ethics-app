@@ -90,6 +90,10 @@ import { appSetUser } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
 import { buildPostShareMessage } from '../../utils/contentLinks';
 import {
+  buildOwnerScopedShortsFeed,
+  navigateToScopedShortsPlayer,
+} from '../../utils/navigateToScopedShortsPlayer';
+import {
   geocodeAddress,
   getCurrentPositionSafe,
   reverseGeocode,
@@ -900,36 +904,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             name: profile?.name || fallbackName,
           },
         };
-        let nav = navigation;
-        for (let i = 0; i < 16 && nav; i++) {
-          const names = nav.getState?.()?.routeNames;
-          if (Array.isArray(names) && names.includes('Shorts')) {
-            nav.navigate('Shorts', {
-              screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem },
-            });
-            return;
-          }
-          nav = nav.getParent?.();
-        }
-        nav = navigation;
-        for (let i = 0; i < 16 && nav; i++) {
-          const names = nav.getState?.()?.routeNames;
-          if (Array.isArray(names) && names.includes('Library')) {
-            nav.navigate('Library', {
-              screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem },
-            });
-            return;
-          }
-          nav = nav.getParent?.();
-        }
-        navigation.navigate('Root', {
-          screen: 'Shorts',
-          params: {
-            screen: 'ShortsVideoScreen',
-            params: { shortId: sid, initialShortItem },
-          },
+        const scopedShortsFeed = buildOwnerScopedShortsFeed(
+          ownerVideos,
+          profileUserId,
+        );
+        navigateToScopedShortsPlayer(navigation, {
+          shortId: sid,
+          initialShortItem,
+          shortsFeedMode: 'owner',
+          scopedShortsFeed,
         });
         return;
       }
@@ -942,7 +925,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
       }
     },
-    [navigation, profileUserId, profile],
+    [navigation, profileUserId, profile, ownerVideos],
   );
 
   const openEditProfile = () => {
@@ -1554,36 +1537,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   name: profile?.name || fallbackName,
                 },
               };
-          let nav = navigation;
-          for (let i = 0; i < 16 && nav; i++) {
-            const names = nav.getState?.()?.routeNames;
-            if (Array.isArray(names) && names.includes('Shorts')) {
-              nav.navigate('Shorts', {
-                screen: 'ShortsVideoScreen',
-                params: { shortId: sid, initialShortItem },
-              });
-              return;
-            }
-            nav = nav.getParent?.();
-          }
-          nav = navigation;
-          for (let i = 0; i < 16 && nav; i++) {
-            const names = nav.getState?.()?.routeNames;
-            if (Array.isArray(names) && names.includes('Library')) {
-              nav.navigate('Library', {
-                screen: 'ShortsVideoScreen',
-                params: { shortId: sid, initialShortItem },
-              });
-              return;
-            }
-            nav = nav.getParent?.();
-          }
-          navigation.navigate('Root', {
-            screen: 'Shorts',
-            params: {
-              screen: 'ShortsVideoScreen',
-              params: { shortId: sid, initialShortItem },
-            },
+          const scopedShortsFeed = buildOwnerScopedShortsFeed(
+            ownerVideos,
+            profileUserId,
+          );
+          navigateToScopedShortsPlayer(navigation, {
+            shortId: sid,
+            initialShortItem,
+            shortsFeedMode: 'owner',
+            scopedShortsFeed,
           });
           return;
         }
