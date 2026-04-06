@@ -139,6 +139,13 @@ const pickHomeFeatured = (list, viewerUser) => {
 // Same shape as VideoDetailsScreen currentVideo so selectedItem has all fields
 const mapToDisplayItem = (v, type, viewerOpts) => {
   const u = v.user || {};
+  const pickNumeric = (...vals) => {
+    for (const val of vals) {
+      const n = Number(val);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
   const channelName = u.nickname || u.name || 'Unknown';
   const firstPhoto =
     Array.isArray(u.photos) && u.photos.length > 0 ? u.photos[0] : null;
@@ -156,6 +163,50 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
     viewCount >= 1000
       ? `${(viewCount / 1000).toFixed(1)}K views`
       : `${viewCount} views`;
+  const rating = pickNumeric(
+    u?.averageRating,
+    u?.average_rating,
+    u?.ratingAverage,
+    u?.rating_average,
+    u?.ratingAvg,
+    u?.rating_avg,
+    u?.avgRating,
+    u?.avg_rating,
+    u?.rating,
+    u?.stars,
+    v?.averageRating,
+    v?.average_rating,
+    v?.ratingAverage,
+    v?.rating_average,
+    v?.ratingAvg,
+    v?.rating_avg,
+    v?.avgRating,
+    v?.avg_rating,
+    v?.rating,
+    v?.stars,
+  );
+  const reviewCount = pickNumeric(
+    u?.reviewCount,
+    u?.review_count,
+    u?.reviewsCount,
+    u?.reviews_count,
+    u?.totalReviews,
+    u?.total_reviews,
+    u?.ratingCount,
+    u?.rating_count,
+    u?._count?.reviews,
+    u?._count?.ratings,
+    v?.reviewCount,
+    v?.review_count,
+    v?.reviewsCount,
+    v?.reviews_count,
+    v?.totalReviews,
+    v?.total_reviews,
+    v?.ratingCount,
+    v?.rating_count,
+    v?._count?.reviews,
+    v?._count?.ratings,
+  );
 
   const locationLine =
     buildShortLocationFromUser(u) ||
@@ -216,6 +267,8 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
     views: viewsStr,
     viewsCompact: formatCount(viewCount),
     viewCount,
+    rating: rating != null ? Math.max(0, Math.min(5, rating)) : 0,
+    reviewCount: reviewCount != null ? Math.max(0, Math.floor(reviewCount)) : 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? v._count?.dislikes ?? 0,
     commentCount: v.commentCount ?? v._count?.comments ?? 0,
@@ -230,6 +283,13 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
 
 const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ORDER_NOW_CUISINES = [
+  { key: 'indian', label: 'Indian', icon: 'food' },
+  { key: 'italian', label: 'Italian', icon: 'pizza' },
+  { key: 'turkish', label: 'Turkish', icon: 'food-drumstick' },
+  { key: 'chinese', label: 'Chinese', icon: 'noodles' },
+  { key: 'bangla', label: 'Bangla', icon: 'rice' },
+];
 
 const HomeOneScreen = () => {
   const insets = useSafeAreaInsets();
@@ -256,6 +316,8 @@ const HomeOneScreen = () => {
   const ownerMenuSearchCacheRef = useRef({});
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
+  /** Same source as restaurant detail: GET channel-profile (sponsored list omits rating). */
+  const [sponsoredChannelRating, setSponsoredChannelRating] = useState(null);
   const [feedVideos, setFeedVideos] = useState([]);
   const [feedShorts, setFeedShorts] = useState([]);
   const [popularShorts, setPopularShorts] = useState([]);
@@ -917,9 +979,8 @@ const HomeOneScreen = () => {
       const mappedShortsWithMenu = mappedShorts.map(withMenuSearchMeta);
       const mappedPopularShortsWithMenu =
         mappedPopularShorts.map(withMenuSearchMeta);
-      const mappedNewestShortsWithMenu = mappedNewestShorts.map(
-        withMenuSearchMeta,
-      );
+      const mappedNewestShortsWithMenu =
+        mappedNewestShorts.map(withMenuSearchMeta);
       const matchesSearch = item => {
         if (!q) return true;
         const haystack = [
@@ -1050,6 +1111,49 @@ const HomeOneScreen = () => {
   useEffect(() => {
     loadContinueWatching();
   }, [loadContinueWatching]);
+
+  useEffect(() => {
+    setSponsoredChannelRating(null);
+    const ownerId =
+      sponsoredVideo?.user?.id ??
+      sponsoredVideo?.video?.userId ??
+      sponsoredVideo?.video?.user?.id;
+    if (ownerId == null || String(ownerId).trim() === '') return;
+    let cancelled = false;
+    getChannelProfile(String(ownerId), user?.id)
+      .then(p => {
+        if (cancelled) return;
+        const avgRaw =
+          p?.averageRating ??
+          p?.ratingAverage ??
+          p?.ratingAvg ??
+          p?.rating;
+        const countRaw =
+          p?.reviewCount ??
+          p?.reviewsCount ??
+          p?.totalReviews ??
+          p?.ratingCount;
+        const avg = Number(avgRaw);
+        const count = Number(countRaw);
+        setSponsoredChannelRating({
+          rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
+          reviewCount: Number.isFinite(count)
+            ? Math.max(0, Math.floor(count))
+            : 0,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setSponsoredChannelRating(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    sponsoredVideo?.user?.id,
+    sponsoredVideo?.video?.userId,
+    sponsoredVideo?.video?.user?.id,
+    user?.id,
+  ]);
 
   // When logged in but Redux user has no photos (e.g. old session), fetch channel profile and update so header shows avatar
   useEffect(() => {
@@ -1879,13 +1983,26 @@ const HomeOneScreen = () => {
           viewerLocationOpts,
         );
         const meta = campaignMetaFrom(sponsoredVideo);
+        const ratingFromProfile =
+          sponsoredChannelRating != null
+            ? sponsoredChannelRating.rating
+            : base.rating;
+        const reviewCountFromProfile =
+          sponsoredChannelRating != null
+            ? sponsoredChannelRating.reviewCount
+            : base.reviewCount;
+        const withRating = {
+          ...base,
+          rating: ratingFromProfile,
+          reviewCount: reviewCountFromProfile,
+        };
         return co?.id
           ? {
-              ...base,
+              ...withRating,
               _campaignOwnerUser: co,
               ...(meta && { _campaignMeta: meta }),
             }
-          : base;
+          : withRating;
       })()
     : null;
 
@@ -2094,33 +2211,20 @@ const HomeOneScreen = () => {
           ) : null}
 
           <View style={styles.locationSection}>
-            <View style={styles.locationTopRow}>
-              <TouchableOpacity
-                style={styles.homeDropdown}
-                activeOpacity={0.8}
-                onPress={() => {
-                  setLocationInput(addressText || '');
-                  setLocationModalVisible(true);
-                }}
-              >
-                <Icon name="map-marker-radius" size={24} color="#FFF" />
-                <Text style={styles.homeText} numberOfLines={1}>
-                  {primaryLoc}
-                </Text>
-                <Icon name="chevron-down" size={24} color="#FFF" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.locationOrderBtn}
-                activeOpacity={0.85}
-                onPress={() =>
-                  navigation.navigate('OrderNowBrowseScreen', {
-                    initialQuery: searchDebounced || searchQuery || '',
-                  })
-                }
-              >
-                <Text style={styles.locationOrderBtnText}>Order Now</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.homeDropdown}
+              activeOpacity={0.8}
+              onPress={() => {
+                setLocationInput(addressText || '');
+                setLocationModalVisible(true);
+              }}
+            >
+              <Icon name="map-marker-radius" size={24} color="#FFF" />
+              <Text style={styles.homeText} numberOfLines={1}>
+                {primaryLoc}
+              </Text>
+              <Icon name="chevron-down" size={24} color="#FFF" />
+            </TouchableOpacity>
             <Text style={styles.addressSubtext} numberOfLines={2}>
               {secondaryLoc}
             </Text>
@@ -2143,6 +2247,57 @@ const HomeOneScreen = () => {
             <Text style={styles.feedHint}>
               your search, served fresh... watch and choose
             </Text>
+            <TouchableOpacity
+              style={styles.orderNowCard}
+              activeOpacity={0.9}
+              onPress={() =>
+                navigation.navigate('OrderNowBrowseScreen', {
+                  initialQuery: searchDebounced || searchQuery || '',
+                  nearLabel: primaryLoc || '',
+                })
+              }
+            >
+              <View style={styles.orderNowCardLeft}>
+                <View style={styles.orderNowIconPill}>
+                  <Icon
+                    name="silverware-fork-knife"
+                    size={18}
+                    color="#F5A623"
+                  />
+                </View>
+                <View style={styles.orderNowCardTextWrap}>
+                  <Text style={styles.orderNowCardTitle}>Order Now</Text>
+                  <Text style={styles.orderNowCardSub}>
+                    feeling hungry? Order now
+                  </Text>
+                </View>
+              </View>
+              <Icon name="chevron-right" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.cuisineChipRow}
+            >
+              {ORDER_NOW_CUISINES.map(cuisine => (
+                <TouchableOpacity
+                  key={cuisine.key}
+                  style={styles.cuisineChip}
+                  onPress={() =>
+                    navigation.navigate('OrderNowBrowseScreen', {
+                      initialQuery: cuisine.label,
+                      nearLabel: primaryLoc || '',
+                    })
+                  }
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.cuisineIconCircle}>
+                    <Icon name={cuisine.icon} size={16} color="#D88900" />
+                  </View>
+                  <Text style={styles.cuisineChipText}>{cuisine.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             {feedLoading ? (
               <View style={styles.feedLoading}>
@@ -2265,9 +2420,12 @@ const HomeOneScreen = () => {
                           >
                             <FoodCard
                               title={item.title}
+                              channelName={item.channelName}
                               location={item.location}
                               views={item.views}
                               distanceLabel={item.distanceLabel}
+                              rating={item.rating}
+                              reviewCount={item.reviewCount}
                               img={item.img}
                               onPress={() =>
                                 navigation.navigate(
@@ -2287,9 +2445,12 @@ const HomeOneScreen = () => {
                         <FoodCard
                           key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
                           title={item.title}
+                          channelName={item.channelName}
                           location={item.location}
                           views={item.views}
                           distanceLabel={item.distanceLabel}
+                          rating={item.rating}
+                          reviewCount={item.reviewCount}
                           isSponsored={section.type === 'SPONSORED'}
                           img={item.img}
                           onPress={() => handleFeedItemPress(item)}
@@ -3590,10 +3751,17 @@ const FoodCard = ({
   onPress,
   views,
   distanceLabel,
+  channelName,
+  rating,
+  reviewCount,
 }) => (
-  <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
+  <TouchableOpacity
+    style={styles.sponsoredCard}
+    onPress={onPress}
+    activeOpacity={0.9}
+  >
     <View style={styles.cardImageContainer}>
-      <Image source={{ uri: img }} style={styles.cardImage} />
+      <Image source={{ uri: img }} style={styles.sponsoredCardImage} />
       <View style={styles.playIconOverlay}>
         <Icon name="play-circle" size={50} color="rgba(255,255,255,0.8)" />
       </View>
@@ -3603,23 +3771,71 @@ const FoodCard = ({
         </View>
       )}
     </View>
-    <View style={styles.cardInfo}>
-      <View>
-        <Text style={styles.cardTitle}>
-          {title.length > 30 ? `${title.substring(0, 30)}...` : title}
+    <View style={[styles.cardInfo, isSponsored && styles.cardInfoSponsored]}>
+      <View style={styles.cardInfoMain}>
+        <Text style={styles.cardTitle} numberOfLines={1}>
+          {(isSponsored ? channelName || title : title).length > 30
+            ? `${(isSponsored ? channelName || title : title).substring(
+                0,
+                30,
+              )}...`
+            : isSponsored
+            ? channelName || title
+            : title}
         </Text>
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={{ width: 150, color: '#666', fontSize: 11 }}
-        >
+        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cardLocText}>
           {location}
         </Text>
+        {isSponsored ? (
+          <View style={styles.sponsoredMetaRow}>
+            <View style={styles.sponsoredMetaItem}>
+              <Icon name="star" size={13} color="#F5A623" />
+              <Text style={styles.sponsoredMetaText}>
+                {Number.isFinite(Number(rating))
+                  ? Number(rating).toFixed(1)
+                  : '0.0'}{' '}
+                (
+                {Number.isFinite(Number(reviewCount)) ? Number(reviewCount) : 0}
+                )
+              </Text>
+            </View>
+            <View style={styles.sponsoredMetaItem}>
+              <Icon name="eye-outline" size={13} color="#777" />
+              <Text style={styles.sponsoredMetaText}>{views || '0 views'}</Text>
+            </View>
+            <Text style={styles.sponsoredMetaText}>{distanceLabel || '—'}</Text>
+          </View>
+        ) : null}
       </View>
-      <View style={styles.cardStats}>
-        <Text style={styles.statSmall}>{views || '—'}</Text>
-        <Text style={styles.statSmall}>{distanceLabel || '—'}</Text>
-      </View>
+      {isSponsored ? (
+        <View style={styles.sponsoredActions}>
+          <View style={styles.sponsoredTopActions}>
+            <TouchableOpacity
+              style={styles.sponsoredOrderBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sponsoredOrderText}>Order Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sponsoredBookBtn}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.sponsoredBookText}>Book Now</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.sponsoredSubscribeBtn}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.sponsoredSubscribeText}>Subscribe</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.cardStats}>
+          <Text style={styles.statSmall}>{views || '—'}</Text>
+          <Text style={styles.statSmall}>{distanceLabel || '—'}</Text>
+        </View>
+      )}
     </View>
   </TouchableOpacity>
 );
@@ -3755,27 +3971,9 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     position: 'relative',
   },
-  locationTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   homeDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
-  locationOrderBtn: {
-    backgroundColor: '#FFF',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  locationOrderBtnText: {
-    color: '#F5A623',
-    fontWeight: '700',
-    fontSize: 12,
   },
   homeLocationTextCol: {
     flex: 1,
@@ -3818,7 +4016,81 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     color: '#777',
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  orderNowCard: {
+    borderWidth: 0,
+    borderRadius: 10,
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#B36B00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.24,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  orderNowCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  orderNowIconPill: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF3DA',
+    borderWidth: 0,
+  },
+  orderNowCardTextWrap: { marginLeft: 8 },
+  orderNowCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  orderNowCardSub: {
+    marginTop: 1,
+    fontSize: 11,
+    color: '#FFF3D7',
+  },
+  cuisineChipRow: {
+    paddingBottom: 10,
+    paddingHorizontal: 1,
+    gap: 8,
+  },
+  cuisineChip: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 66,
+    marginRight: 4,
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+    paddingTop: 5,
+    paddingBottom: 6,
+  },
+  cuisineIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFF8EA',
+    borderWidth: 1,
+    borderColor: '#F2E2BF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cuisineChipText: {
+    color: '#666',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 4,
   },
   sectionTitle: {
     fontSize: 18,
@@ -3901,8 +4173,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: 10,
   },
+  sponsoredCard: {
+    backgroundColor: '#F4F7F8',
+    borderRadius: 15,
+    marginBottom: 25,
+    elevation: 1,
+    overflow: 'hidden',
+  },
   cardImageContainer: { height: 200, position: 'relative' },
   cardImage: { width: '100%', height: '100%', borderRadius: 10 },
+  sponsoredCardImage: {
+    width: '100%',
+    height: '100%',
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+  },
   playIconOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -3919,14 +4204,79 @@ const styles = StyleSheet.create({
   },
   sponsoredTagText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
   cardInfo: {
-    paddingTop: 10,
+    padding: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+  },
+  cardInfoSponsored: {
+    backgroundColor: '#FEF6E7',
+    borderBottomEndRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginTop: -3,
+  },
+  cardInfoMain: {
+    flex: 1,
+    minWidth: 0,
   },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
   cardLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
-  cardLocText: { color: '#666', fontSize: 13, marginLeft: 5 },
+  cardLocText: { color: '#666', fontSize: 11, marginTop: 2 },
+  sponsoredMetaRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sponsoredMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sponsoredMetaText: {
+    marginLeft: 3,
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  sponsoredActions: {
+    marginLeft: 8,
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    minHeight: 64,
+  },
+  sponsoredTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sponsoredOrderBtn: {
+    backgroundColor: '#F5A623',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 6,
+  },
+  sponsoredOrderText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  sponsoredBookBtn: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FFF7EA',
+  },
+  sponsoredBookText: { color: '#F5A623', fontSize: 12, fontWeight: '700' },
+  sponsoredSubscribeBtn: {
+    marginTop: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: '#FFF',
+  },
+  sponsoredSubscribeText: { color: '#222', fontSize: 12, fontWeight: '600' },
   cardStats: { alignItems: 'flex-end' },
   statSmall: { fontSize: 11, color: '#999' },
 

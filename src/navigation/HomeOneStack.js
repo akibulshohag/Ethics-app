@@ -19,6 +19,7 @@ import CartDetailsScreen from '../screens/CartDetailsScreen';
 import CheckoutScreen from '../screens/CheckoutScreen';
 import HomeShortsExploreScreen from '../screens/HomeShortsExploreScreen';
 import OrderNowBrowseScreen from '../screens/OrderNowBrowseScreen';
+import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 
 const HomeOneStack = createStackNavigator();
 
@@ -97,6 +98,10 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="OrderNowBrowseScreen"
         component={OrderNowBrowseScreen}
+      />
+      <HomeOneStack.Screen
+        name="VideoDetailsScreen"
+        component={VideoDetailsScreen}
       />
     </HomeOneStack.Navigator>
   );
