@@ -316,8 +316,10 @@ const HomeOneScreen = () => {
   const ownerMenuSearchCacheRef = useRef({});
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
-  /** Same source as restaurant detail: GET channel-profile (sponsored list omits rating). */
-  const [sponsoredChannelRating, setSponsoredChannelRating] = useState(null);
+  /** Same source as restaurant detail: GET channel-profile (sponsored list omits rating + subscribe). */
+  const [sponsoredChannelMeta, setSponsoredChannelMeta] = useState(null);
+  const [sponsoredSubscribeToggling, setSponsoredSubscribeToggling] =
+    useState(false);
   const [feedVideos, setFeedVideos] = useState([]);
   const [feedShorts, setFeedShorts] = useState([]);
   const [popularShorts, setPopularShorts] = useState([]);
@@ -1113,7 +1115,7 @@ const HomeOneScreen = () => {
   }, [loadContinueWatching]);
 
   useEffect(() => {
-    setSponsoredChannelRating(null);
+    setSponsoredChannelMeta(null);
     const ownerId =
       sponsoredVideo?.user?.id ??
       sponsoredVideo?.video?.userId ??
@@ -1135,15 +1137,16 @@ const HomeOneScreen = () => {
           p?.ratingCount;
         const avg = Number(avgRaw);
         const count = Number(countRaw);
-        setSponsoredChannelRating({
+        setSponsoredChannelMeta({
           rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
           reviewCount: Number.isFinite(count)
             ? Math.max(0, Math.floor(count))
             : 0,
+          isSubscribed: !!p?.isSubscribed,
         });
       })
       .catch(() => {
-        if (!cancelled) setSponsoredChannelRating(null);
+        if (!cancelled) setSponsoredChannelMeta(null);
       });
     return () => {
       cancelled = true;
@@ -1510,6 +1513,100 @@ const HomeOneScreen = () => {
       openRestaurantDetail(item);
     }
   };
+
+  const getSponsoredOwnerId = useCallback(item => {
+    if (!item) return null;
+    return (
+      item.userId ??
+      item?.user?.id ??
+      item?._campaignOwnerUser?.id ??
+      null
+    );
+  }, []);
+
+  const handleSponsoredOrder = useCallback(
+    item => {
+      const ownerId = getSponsoredOwnerId(item);
+      if (!ownerId) return;
+      const ownerName =
+        item?.user?.nickname ||
+        item?.user?.name ||
+        item?.channelName ||
+        '';
+      const location =
+        item?.location ||
+        item?.creatorAddress ||
+        item?.user?.address ||
+        '';
+      if (!user?.token) {
+        navigation.navigate('HomeSevenScreen', {
+          returnToOrder: true,
+          ownerUserId: ownerId,
+        });
+        return;
+      }
+      navigation.navigate('HomeThreeScreen', {
+        ownerId,
+        ownerName,
+        location,
+        searchKeyword: String(searchDebounced || '').trim(),
+      });
+    },
+    [user?.token, navigation, searchDebounced, getSponsoredOwnerId],
+  );
+
+  const handleSponsoredBook = useCallback(
+    item => {
+      const ownerId = getSponsoredOwnerId(item);
+      if (!ownerId) return;
+      const targetRole = String(
+        item?.creatorRole || item?.user?.role || '',
+      ).toLowerCase();
+      if (targetRole === 'user') {
+        navigation.navigate('PromotionScreen', { userId: ownerId });
+      } else {
+        navigation.navigate('BusinessProfileViewScreen', {
+          userId: ownerId,
+          focusVideoTab: true,
+        });
+      }
+    },
+    [navigation, getSponsoredOwnerId],
+  );
+
+  const handleSponsoredSubscribe = useCallback(
+    async item => {
+      const ownerId = getSponsoredOwnerId(item);
+      if (!ownerId) return;
+      if (!user?.id) {
+        navigation.navigate('HomeSevenScreen');
+        return;
+      }
+      if (String(ownerId) === String(user.id)) return;
+      setSponsoredSubscribeToggling(true);
+      const wasSubscribed = !!sponsoredChannelMeta?.isSubscribed;
+      try {
+        if (wasSubscribed) {
+          await unsubscribeFromChannel(user.id, ownerId);
+        } else {
+          await subscribeToChannel(user.id, ownerId);
+        }
+        setSponsoredChannelMeta(prev => ({
+          rating: prev?.rating ?? 0,
+          reviewCount: prev?.reviewCount ?? 0,
+          isSubscribed: !wasSubscribed,
+        }));
+      } catch (e) {
+        Alert.alert(
+          'Subscribe',
+          e?.message || 'Could not update subscription.',
+        );
+      } finally {
+        setSponsoredSubscribeToggling(false);
+      }
+    },
+    [user?.id, sponsoredChannelMeta?.isSubscribed, navigation, getSponsoredOwnerId],
+  );
 
   const handleShortLike = useCallback(
     async item => {
@@ -1984,12 +2081,12 @@ const HomeOneScreen = () => {
         );
         const meta = campaignMetaFrom(sponsoredVideo);
         const ratingFromProfile =
-          sponsoredChannelRating != null
-            ? sponsoredChannelRating.rating
+          sponsoredChannelMeta != null
+            ? sponsoredChannelMeta.rating
             : base.rating;
         const reviewCountFromProfile =
-          sponsoredChannelRating != null
-            ? sponsoredChannelRating.reviewCount
+          sponsoredChannelMeta != null
+            ? sponsoredChannelMeta.reviewCount
             : base.reviewCount;
         const withRating = {
           ...base,
@@ -2441,21 +2538,50 @@ const HomeOneScreen = () => {
                         ))}
                       </View>
                     ) : (
-                      section.data.map((item, index) => (
-                        <FoodCard
-                          key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
-                          title={item.title}
-                          channelName={item.channelName}
-                          location={item.location}
-                          views={item.views}
-                          distanceLabel={item.distanceLabel}
-                          rating={item.rating}
-                          reviewCount={item.reviewCount}
-                          isSponsored={section.type === 'SPONSORED'}
-                          img={item.img}
-                          onPress={() => handleFeedItemPress(item)}
-                        />
-                      ))
+                      section.data.map((item, index) => {
+                        const sponsoredOwnerId = getSponsoredOwnerId(item);
+                        const hideSponsoredSubscribe =
+                          !!user?.id &&
+                          sponsoredOwnerId != null &&
+                          String(user.id) === String(sponsoredOwnerId);
+                        return (
+                          <FoodCard
+                            key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
+                            title={item.title}
+                            channelName={item.channelName}
+                            location={item.location}
+                            views={item.views}
+                            distanceLabel={item.distanceLabel}
+                            rating={item.rating}
+                            reviewCount={item.reviewCount}
+                            isSponsored={section.type === 'SPONSORED'}
+                            img={item.img}
+                            onPress={() => handleFeedItemPress(item)}
+                            onSponsoredOrderPress={
+                              section.type === 'SPONSORED'
+                                ? () => handleSponsoredOrder(item)
+                                : undefined
+                            }
+                            onSponsoredBookPress={
+                              section.type === 'SPONSORED'
+                                ? () => handleSponsoredBook(item)
+                                : undefined
+                            }
+                            onSponsoredSubscribePress={
+                              section.type === 'SPONSORED'
+                                ? () => handleSponsoredSubscribe(item)
+                                : undefined
+                            }
+                            sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                            sponsoredIsSubscribed={
+                              section.type === 'SPONSORED'
+                                ? !!sponsoredChannelMeta?.isSubscribed
+                                : false
+                            }
+                            hideSponsoredSubscribe={hideSponsoredSubscribe}
+                          />
+                        );
+                      })
                     )}
                   </View>
                 ))}
@@ -3754,12 +3880,14 @@ const FoodCard = ({
   channelName,
   rating,
   reviewCount,
-}) => (
-  <TouchableOpacity
-    style={styles.sponsoredCard}
-    onPress={onPress}
-    activeOpacity={0.9}
-  >
+  onSponsoredOrderPress,
+  onSponsoredBookPress,
+  onSponsoredSubscribePress,
+  sponsoredSubscribeBusy,
+  sponsoredIsSubscribed,
+  hideSponsoredSubscribe,
+}) => {
+  const imageSection = (
     <View style={styles.cardImageContainer}>
       <Image source={{ uri: img }} style={styles.sponsoredCardImage} />
       <View style={styles.playIconOverlay}>
@@ -3771,6 +3899,9 @@ const FoodCard = ({
         </View>
       )}
     </View>
+  );
+
+  const infoSection = (
     <View style={[styles.cardInfo, isSponsored && styles.cardInfoSponsored]}>
       <View style={styles.cardInfoMain}>
         <Text style={styles.cardTitle} numberOfLines={1}>
@@ -3813,22 +3944,47 @@ const FoodCard = ({
             <TouchableOpacity
               style={styles.sponsoredOrderBtn}
               activeOpacity={0.85}
+              onPress={onSponsoredOrderPress}
+              disabled={!onSponsoredOrderPress}
             >
               <Text style={styles.sponsoredOrderText}>Order Now</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.sponsoredBookBtn}
               activeOpacity={0.85}
+              onPress={onSponsoredBookPress}
+              disabled={!onSponsoredBookPress}
             >
               <Text style={styles.sponsoredBookText}>Book Now</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.sponsoredSubscribeBtn}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.sponsoredSubscribeText}>Subscribe</Text>
-          </TouchableOpacity>
+          {!hideSponsoredSubscribe ? (
+            <TouchableOpacity
+              style={[
+                styles.sponsoredSubscribeBtn,
+                sponsoredIsSubscribed && styles.sponsoredSubscribeBtnActive,
+              ]}
+              activeOpacity={0.85}
+              onPress={onSponsoredSubscribePress}
+              disabled={
+                !onSponsoredSubscribePress || !!sponsoredSubscribeBusy
+              }
+            >
+              {sponsoredSubscribeBusy ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text
+                  style={[
+                    styles.sponsoredSubscribeText,
+                    sponsoredIsSubscribed &&
+                      styles.sponsoredSubscribeTextActive,
+                  ]}
+                >
+                  {sponsoredIsSubscribed ? 'Subscribed' : 'Subscribe'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : (
         <View style={styles.cardStats}>
@@ -3837,8 +3993,30 @@ const FoodCard = ({
         </View>
       )}
     </View>
-  </TouchableOpacity>
-);
+  );
+
+  if (isSponsored) {
+    return (
+      <View style={styles.sponsoredCard}>
+        <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
+          {imageSection}
+        </TouchableOpacity>
+        {infoSection}
+      </View>
+    );
+  }
+
+  return (
+    <TouchableOpacity
+      style={styles.sponsoredCard}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      {imageSection}
+      {infoSection}
+    </TouchableOpacity>
+  );
+};
 
 const styles = StyleSheet.create({
   // Landing/Feed Styles
@@ -4277,6 +4455,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
   },
   sponsoredSubscribeText: { color: '#222', fontSize: 12, fontWeight: '600' },
+  sponsoredSubscribeBtnActive: {
+    backgroundColor: '#E8E8E8',
+    borderColor: '#ccc',
+  },
+  sponsoredSubscribeTextActive: { color: '#555' },
   cardStats: { alignItems: 'flex-end' },
   statSmall: { fontSize: 11, color: '#999' },
 
