@@ -263,6 +263,7 @@ const styles = StyleSheet.create({
   arrowCircle: COMMON_STYLES.arrowCircle,
   arrowIcon: {
     fontSize: 22,
+    marginBottom: 10,
   },
 });
 
