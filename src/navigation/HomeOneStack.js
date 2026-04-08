@@ -32,6 +32,10 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen name="LandingScreen" component={LandingScreen} />
       <HomeOneStack.Screen name="HomeOneScreen" component={HomeOneScreen} />
       <HomeOneStack.Screen
+        name="HomeOneCuisineScreen"
+        component={HomeOneScreen}
+      />
+      <HomeOneStack.Screen
         name="ProductShortsVideo"
         component={ProductShortsVideo}
       />

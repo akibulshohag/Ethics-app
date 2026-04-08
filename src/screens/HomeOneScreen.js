@@ -64,6 +64,7 @@ import {
 } from '../services/channelService';
 import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
+import categoryIcon from '../assets/icons/category.png';
 import { safeImageUri } from '../utils/helper';
 import {
   SafeAreaView,
@@ -111,29 +112,101 @@ const formatVideoViewsLabel = n => {
 
 const viewerRole = user =>
   (user?.role && String(user.role).toLowerCase()) || 'user';
+const HOME_PROMO_RADIUS_KM = 50;
 
 /**
  * Home banner: one featured row. Prefer the campaign tied to the logged-in user
  * (owner userId on the featured row). If several match, use the first in API order.
  * Owners with no matching campaign see none; other roles / guests see the first global.
  */
-const pickHomeFeatured = (list, viewerUser) => {
+const campaignLatLng = item => {
+  const fromCampaign = {
+    lat: Number(item?.latitude),
+    lng: Number(item?.longitude),
+  };
+  if (Number.isFinite(fromCampaign.lat) && Number.isFinite(fromCampaign.lng)) {
+    return fromCampaign;
+  }
+  const v = item?.video || {};
+  const fromVideo = {
+    lat: Number(
+      v?.creatorLatitude ?? v?.latitude ?? v?.user?.latitude ?? v?.user?.lat,
+    ),
+    lng: Number(
+      v?.creatorLongitude ?? v?.longitude ?? v?.user?.longitude ?? v?.user?.lng,
+    ),
+  };
+  if (Number.isFinite(fromVideo.lat) && Number.isFinite(fromVideo.lng)) {
+    return fromVideo;
+  }
+  return { lat: null, lng: null };
+};
+
+const hasRenderableCampaignPayload = campaign => {
+  if (!campaign || typeof campaign !== 'object') return false;
+  const v = campaign?.video;
+  if (!v || typeof v !== 'object') return false;
+  const media = String(v?.videoUrl || v?.thumbnailUrl || '').trim();
+  if (!media) return false;
+  const ownerName = String(
+    campaign?.user?.nickname ||
+      campaign?.user?.name ||
+      v?.user?.nickname ||
+      v?.user?.name ||
+      '',
+  )
+    .trim()
+    .toLowerCase();
+  if (!ownerName || ownerName === 'unknown' || ownerName === 'restaurant') {
+    return false;
+  }
+  return true;
+};
+
+const pickNearestCampaign = (
+  list,
+  viewerOpts,
+  maxRadiusKm = HOME_PROMO_RADIUS_KM,
+) => {
   if (!Array.isArray(list) || list.length === 0) return null;
-  const withVideo = list.filter(item => item?.video);
+  const withVideo = list.filter(item => hasRenderableCampaignPayload(item));
+  if (withVideo.length === 0) return null;
+  const viewerLat = Number(viewerOpts?.viewerLat);
+  const viewerLng = Number(viewerOpts?.viewerLng);
+  if (!Number.isFinite(viewerLat) || !Number.isFinite(viewerLng)) return null;
+  let best = null;
+  let bestKm = Number.POSITIVE_INFINITY;
+  for (const item of withVideo) {
+    const { lat, lng } = campaignLatLng(item);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const km = distanceKmBetween(viewerLat, viewerLng, lat, lng);
+    if (km != null && km < bestKm) {
+      bestKm = km;
+      best = item;
+    }
+  }
+  if (!best) return null;
+  if (Number.isFinite(maxRadiusKm) && bestKm > Number(maxRadiusKm)) return null;
+  return best;
+};
+
+const pickHomeFeatured = (list, viewerUser, viewerOpts) => {
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const withVideo = list.filter(item => hasRenderableCampaignPayload(item));
   if (withVideo.length === 0) return null;
   const vid = viewerUser?.id != null ? String(viewerUser.id) : null;
   const role = String(viewerUser?.role || '').toLowerCase();
   const isOwner = role === 'owner';
 
   if (vid) {
-    const mine = withVideo.find(f => {
+    const mine = withVideo.filter(f => {
       const ownerId = f?.userId ?? f?.user?.id;
       return ownerId != null && String(ownerId) === vid;
     });
-    if (mine) return mine;
+    if (mine.length > 0) return pickNearestCampaign(mine, viewerOpts);
     if (isOwner) return null;
   }
-  return withVideo[0];
+  return pickNearestCampaign(withVideo, viewerOpts);
 };
 
 // Same shape as VideoDetailsScreen currentVideo so selectedItem has all fields
@@ -283,13 +356,103 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
 
 const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const ORDER_NOW_CUISINES = [
-  { key: 'indian', label: 'Indian', icon: 'food' },
-  { key: 'italian', label: 'Italian', icon: 'pizza' },
-  { key: 'turkish', label: 'Turkish', icon: 'food-drumstick' },
-  { key: 'chinese', label: 'Chinese', icon: 'noodles' },
-  { key: 'bangla', label: 'Bangla', icon: 'rice' },
-];
+const readCuisineText = value => {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number')
+    return String(value);
+  if (typeof value === 'object') {
+    const candidate =
+      value.name ??
+      value.label ??
+      value.title ??
+      value.value ??
+      value.tag ??
+      value.category ??
+      '';
+    return typeof candidate === 'string' || typeof candidate === 'number'
+      ? String(candidate)
+      : '';
+  }
+  return '';
+};
+const normalizeCuisine = value =>
+  readCuisineText(value).trim().toLowerCase().replace(/\s+/g, ' ');
+const isValidCuisineKey = key => {
+  const k = normalizeCuisine(key);
+  if (!k) return false;
+  if (k === '[object object]' || k.includes('object object')) return false;
+  return true;
+};
+const cuisineLabelFromKey = key => {
+  const cleaned = normalizeCuisine(key);
+  if (!isValidCuisineKey(cleaned)) return '';
+  return cleaned
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
+const cuisineIconFromKey = key => {
+  const k = normalizeCuisine(key);
+  if (!k) return 'silverware-fork-knife';
+  if (k.includes('pizza') || k.includes('italian')) return 'pizza';
+  if (k.includes('burger')) return 'hamburger';
+  if (k.includes('dessert') || k.includes('sweet')) return 'cupcake';
+  if (k.includes('bread') || k.includes('bakery')) return 'bread-slice';
+  if (k.includes('coffee') || k.includes('cafe')) return 'coffee';
+  if (k.includes('drink') || k.includes('juice')) return 'cup-water';
+  if (k.includes('grill') || k.includes('bbq')) return 'grill';
+  if (k.includes('seafood') || k.includes('fish')) return 'fish';
+  if (k.includes('chicken')) return 'food-drumstick';
+  if (k.includes('rice') || k.includes('bangla') || k.includes('indian'))
+    return 'rice';
+  if (k.includes('chinese') || k.includes('noodle')) return 'noodles';
+  return 'silverware-fork-knife';
+};
+const shortCuisineLabel = label => {
+  const text = String(label || '').trim();
+  if (!text) return '';
+  const firstWord = text.split(/\s+/)[0] || text;
+  if (firstWord.length <= 6) return firstWord;
+  return `${firstWord.slice(0, 6)}...`;
+};
+const hasRenderablePromoCard = item => {
+  if (!item || typeof item !== 'object') return false;
+  const media = String(item.videoUrl || item.img || '').trim();
+  const name = String(item.channelName || item.title || '').trim();
+  const ownerId =
+    item?.userId ?? item?.user?.id ?? item?._campaignOwnerUser?.id;
+  const hasRemoteMedia = /^https?:\/\//i.test(media);
+  const hasMedia =
+    !!media &&
+    hasRemoteMedia &&
+    !media.includes('images.unsplash.com/photo-1568901346375-23c9450c58cd');
+  const badName =
+    !name ||
+    name.toLowerCase() === 'unknown' ||
+    name.toLowerCase() === 'untitled' ||
+    name.toLowerCase() === 'restaurant' ||
+    name.toLowerCase().replace(/[^a-z]/g, '') === 'restaurant';
+  const hasName = !badName;
+  return hasMedia && hasName && ownerId != null;
+};
+const normalizePromoName = (...values) => {
+  for (const value of values) {
+    const raw = String(value || '').trim();
+    if (!raw) continue;
+    const lower = raw.toLowerCase();
+    const alpha = lower.replace(/[^a-z]/g, '');
+    if (
+      lower === 'unknown' ||
+      lower === 'untitled' ||
+      lower === 'restaurant' ||
+      alpha === 'restaurant'
+    ) {
+      continue;
+    }
+    return raw;
+  }
+  return '';
+};
 
 const HomeOneScreen = () => {
   const insets = useSafeAreaInsets();
@@ -314,12 +477,20 @@ const HomeOneScreen = () => {
   const [searchDebounced, setSearchDebounced] = useState('');
   const searchDebounceRef = useRef(null);
   const ownerMenuSearchCacheRef = useRef({});
+  const ownerCategoryCacheRef = useRef({});
+  const cuisineScrollRef = useRef(null);
+  const cuisineScrollXRef = useRef(0);
+  const cuisineContentWidthRef = useRef(0);
+  const cuisineLayoutWidthRef = useRef(0);
   const [featuredVideo, setFeaturedVideo] = useState(null);
   const [sponsoredVideo, setSponsoredVideo] = useState(null);
+  const [featuredChannelMeta, setFeaturedChannelMeta] = useState(null);
   /** Same source as restaurant detail: GET channel-profile (sponsored list omits rating + subscribe). */
   const [sponsoredChannelMeta, setSponsoredChannelMeta] = useState(null);
   const [sponsoredSubscribeToggling, setSponsoredSubscribeToggling] =
     useState(false);
+  const [selectedCuisine, setSelectedCuisine] = useState('');
+  const [cuisineOptions, setCuisineOptions] = useState([]);
   const [feedVideos, setFeedVideos] = useState([]);
   const [feedShorts, setFeedShorts] = useState([]);
   const [popularShorts, setPopularShorts] = useState([]);
@@ -339,6 +510,22 @@ const HomeOneScreen = () => {
   const route = useRoute();
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
+  const authUserId = useMemo(
+    () =>
+      user?.id ?? user?.userId ?? user?._id ?? user?.uid ?? user?.sub ?? null,
+    [user],
+  );
+  const isAuthenticated = !!(user?.token || authUserId);
+  const isCuisineFilterScreen =
+    route.name === 'HomeOneCuisineScreen' || !!route.params?.cuisineMode;
+  const actorUserId =
+    authUserId ??
+    user?.id ??
+    user?.userId ??
+    user?._id ??
+    user?.uid ??
+    user?.sub ??
+    null;
   const userRef = useRef(user);
   userRef.current = user;
   const userPhotosFetchedRef = useRef(false);
@@ -379,6 +566,19 @@ const HomeOneScreen = () => {
       user?.longitude,
     ],
   );
+  const displayedCuisineOptions = useMemo(() => {
+    if (!Array.isArray(cuisineOptions)) return [];
+    return cuisineOptions
+      .map(c => {
+        const label = readCuisineText(c?.label);
+        const key = normalizeCuisine(c?.key || label);
+        if (!isValidCuisineKey(key) || !label || label === '[object Object]') {
+          return null;
+        }
+        return { ...c, key, label, icon: cuisineIconFromKey(key) };
+      })
+      .filter(Boolean);
+  }, [cuisineOptions]);
 
   useEffect(() => {
     const sub = shortsService.onShortUpdated?.(updated => {
@@ -590,6 +790,19 @@ const HomeOneScreen = () => {
     React.useCallback(() => {
       const stopPlaybackOnBlur = () => setVideoPaused(true);
       const params = route.params || {};
+      const initialCuisineFromParams = readCuisineText(
+        params.initialCuisine,
+      ).trim();
+      if (isCuisineFilterScreen) {
+        if (initialCuisineFromParams) {
+          setSelectedCuisine(initialCuisineFromParams);
+          setSearchQuery(initialCuisineFromParams);
+          setSearchDebounced(initialCuisineFromParams);
+        }
+      } else {
+        // Main Home should always start with full default feed.
+        setSelectedCuisine('');
+      }
       const lib = params.openLibraryDetail;
       if (
         lib?.contentId &&
@@ -726,6 +939,7 @@ const HomeOneScreen = () => {
       }
       return stopPlaybackOnBlur;
     }, [
+      isCuisineFilterScreen,
       route.params,
       navigation,
       user?.id,
@@ -768,43 +982,47 @@ const HomeOneScreen = () => {
       radiusKm: 50,
     };
 
-    // Featured + sponsored: direct GET /featured and GET /sponsored (no location check)
-    getFeatured()
-      .then(({ featured: list }) => {
-        setFeaturedVideo(pickHomeFeatured(list, user));
-      })
-      .catch(() => setFeaturedVideo(null));
-    getSponsored()
-      .then(({ sponsored: list }) => {
-        const first =
-          Array.isArray(list) && list.length > 0 && list[0].video
-            ? list[0]
-            : null;
-        setSponsoredVideo(first);
-      })
-      .catch(() => setSponsoredVideo(null));
-
     try {
-      const [videosRes, shortsRes, popularShortsRes, newestShortsRes, topRes] =
-        await Promise.all([
-          getVideos(videoParams),
-          shortsService.getShorts(shortParams),
-          shortsService.getShorts({
-            ...shortParams,
-            sort: 'trending',
-            page: 1,
-            limit: 16,
-          }),
-          shortsService.getShorts({
-            ...shortParams,
-            sort: 'newest',
-            page: 1,
-            limit: 16,
-          }),
-          getTopRestaurantsByOrders({ page: 1, limit: 10 }).catch(() => ({
-            restaurants: [],
-          })),
-        ]);
+      const [
+        featuredRes,
+        sponsoredRes,
+        videosRes,
+        shortsRes,
+        popularShortsRes,
+        newestShortsRes,
+        topRes,
+      ] = await Promise.all([
+        getFeatured().catch(() => ({ featured: [] })),
+        getSponsored().catch(() => ({ sponsored: [] })),
+        getVideos(videoParams),
+        shortsService.getShorts(shortParams),
+        shortsService.getShorts({
+          ...shortParams,
+          sort: 'trending',
+          page: 1,
+          limit: 16,
+        }),
+        shortsService.getShorts({
+          ...shortParams,
+          sort: 'newest',
+          page: 1,
+          limit: 16,
+        }),
+        getTopRestaurantsByOrders({ page: 1, limit: 100 }).catch(() => ({
+          restaurants: [],
+        })),
+      ]);
+      const pickedFeatured = pickHomeFeatured(
+        featuredRes?.featured,
+        user,
+        voBrowse,
+      );
+      const pickedSponsored = pickNearestCampaign(
+        sponsoredRes?.sponsored,
+        voBrowse,
+      );
+      setFeaturedVideo(pickedFeatured);
+      setSponsoredVideo(pickedSponsored);
       const vo = { viewerLat: lat, viewerLng: lng };
       const mappedVideos = (videosRes?.videos || []).map(v =>
         mapToDisplayItem(v, 'video', vo),
@@ -916,10 +1134,30 @@ const HomeOneScreen = () => {
             .map(String),
         ),
       );
-      if (q && uniqueOwnerIds.length > 0) {
+      const topRestaurantOwnerIds = (topRes?.restaurants || [])
+        .map(r => r?.id)
+        .filter(Boolean)
+        .map(String);
+      const promoOwnerIds = [pickedFeatured, pickedSponsored]
+        .map(
+          item =>
+            item?.userId ??
+            item?.user?.id ??
+            item?.video?.userId ??
+            item?.video?.user?.id,
+        )
+        .filter(Boolean)
+        .map(String);
+      const allOwnerIdsForMenus = Array.from(
+        new Set([
+          ...uniqueOwnerIds,
+          ...topRestaurantOwnerIds,
+          ...promoOwnerIds,
+        ]),
+      );
+      if (allOwnerIdsForMenus.length > 0) {
         await Promise.allSettled(
-          uniqueOwnerIds.map(async oid => {
-            if (ownerMenuSearchCacheRef.current[oid]) return;
+          allOwnerIdsForMenus.map(async oid => {
             try {
               const res = await getMenuByUserId(oid);
               const rows = Array.isArray(res?.menu)
@@ -927,16 +1165,56 @@ const HomeOneScreen = () => {
                     id: m?.id,
                     itemName: String(m?.itemName || '').trim(),
                     description: String(m?.description || '').trim(),
+                    categoryName: readCuisineText(
+                      m?.category?.name ?? m?.categoryName ?? m?.category,
+                    ).trim(),
                     tags: Array.isArray(m?.tags) ? m.tags : [],
                   }))
                 : [];
+              const categories = Array.isArray(res?.categories)
+                ? res.categories
+                    .map(c =>
+                      readCuisineText(
+                        c?.name ?? c?.label ?? c?.title ?? c,
+                      ).trim(),
+                    )
+                    .filter(Boolean)
+                : [];
               ownerMenuSearchCacheRef.current[oid] = rows;
+              ownerCategoryCacheRef.current[oid] = categories;
             } catch (_) {
               ownerMenuSearchCacheRef.current[oid] = [];
+              ownerCategoryCacheRef.current[oid] = [];
             }
           }),
         );
       }
+      const cuisineSet = new Set();
+      allOwnerIdsForMenus.forEach(oid => {
+        const rows = ownerMenuSearchCacheRef.current[String(oid)] || [];
+        const categories = ownerCategoryCacheRef.current[String(oid)] || [];
+        categories.forEach(cat => {
+          const c = normalizeCuisine(cat);
+          if (isValidCuisineKey(c)) cuisineSet.add(c);
+        });
+        rows.forEach(m => {
+          const c = normalizeCuisine(m?.categoryName);
+          if (isValidCuisineKey(c)) cuisineSet.add(c);
+          (Array.isArray(m?.tags) ? m.tags : []).forEach(tag => {
+            const t = normalizeCuisine(tag);
+            if (isValidCuisineKey(t)) cuisineSet.add(t);
+          });
+        });
+      });
+      const dynamicOptions = Array.from(cuisineSet)
+        .filter(isValidCuisineKey)
+        .map(key => ({
+          key,
+          label: cuisineLabelFromKey(key) || 'Cuisine',
+          icon: 'food',
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      setCuisineOptions(dynamicOptions);
       const withMenuSearchMeta = item => {
         const ownerId = item?.userId ?? item?.user?.id;
         if (!ownerId) return item;
@@ -973,6 +1251,20 @@ const HomeOneScreen = () => {
         return {
           ...item,
           _menuSearchBlob: menuBlob,
+          _menuTagsLower: Array.from(
+            new Set(
+              menuRows.flatMap(m => {
+                const acc = [];
+                const c = normalizeCuisine(m?.categoryName);
+                if (c) acc.push(c);
+                (Array.isArray(m?.tags) ? m.tags : []).forEach(tag => {
+                  const t = normalizeCuisine(tag);
+                  if (t) acc.push(t);
+                });
+                return acc;
+              }),
+            ),
+          ),
           _matchedMenuItems: matchedMenuItems,
           _menuSearchKeyword: q,
         };
@@ -1046,6 +1338,22 @@ const HomeOneScreen = () => {
             'https://images.unsplash.com/photo-1552566626-52f8b828add9',
           orderCount: oc,
           views: `${oc} order${oc === 1 ? '' : 's'}`,
+          _menuTagsLower: Array.from(
+            new Set(
+              (ownerMenuSearchCacheRef.current[String(r?.id)] || []).flatMap(
+                m => {
+                  const acc = [];
+                  const c = normalizeCuisine(m?.categoryName);
+                  if (c) acc.push(c);
+                  (Array.isArray(m?.tags) ? m.tags : []).forEach(tag => {
+                    const t = normalizeCuisine(tag);
+                    if (t) acc.push(t);
+                  });
+                  return acc;
+                },
+              ),
+            ),
+          ),
         };
       });
       setMostOrderedRestaurants(topRestaurants);
@@ -1115,6 +1423,53 @@ const HomeOneScreen = () => {
   }, [loadContinueWatching]);
 
   useEffect(() => {
+    setFeaturedChannelMeta(null);
+    const ownerId =
+      featuredVideo?.user?.id ??
+      featuredVideo?.video?.userId ??
+      featuredVideo?.video?.user?.id;
+    if (ownerId == null || String(ownerId).trim() === '') return;
+    let cancelled = false;
+    getChannelProfile(String(ownerId), user?.id)
+      .then(p => {
+        if (cancelled) return;
+        const avgRaw =
+          p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
+        const countRaw =
+          p?.reviewCount ??
+          p?.reviewsCount ??
+          p?.totalReviews ??
+          p?.ratingCount;
+        const avg = Number(avgRaw);
+        const count = Number(countRaw);
+        setFeaturedChannelMeta({
+          rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
+          reviewCount: Number.isFinite(count)
+            ? Math.max(0, Math.floor(count))
+            : 0,
+          phone:
+            p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
+          email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
+          address: p?.address ?? null,
+          channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
+          latitude: p?.latitude ?? p?.lat ?? null,
+          longitude: p?.longitude ?? p?.lng ?? null,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setFeaturedChannelMeta(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    featuredVideo?.user?.id,
+    featuredVideo?.video?.userId,
+    featuredVideo?.video?.user?.id,
+    user?.id,
+  ]);
+
+  useEffect(() => {
     setSponsoredChannelMeta(null);
     const ownerId =
       sponsoredVideo?.user?.id ??
@@ -1126,10 +1481,7 @@ const HomeOneScreen = () => {
       .then(p => {
         if (cancelled) return;
         const avgRaw =
-          p?.averageRating ??
-          p?.ratingAverage ??
-          p?.ratingAvg ??
-          p?.rating;
+          p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
         const countRaw =
           p?.reviewCount ??
           p?.reviewsCount ??
@@ -1143,6 +1495,13 @@ const HomeOneScreen = () => {
             ? Math.max(0, Math.floor(count))
             : 0,
           isSubscribed: !!p?.isSubscribed,
+          phone:
+            p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
+          email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
+          address: p?.address ?? null,
+          channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
+          latitude: p?.latitude ?? p?.lat ?? null,
+          longitude: p?.longitude ?? p?.lng ?? null,
         });
       })
       .catch(() => {
@@ -1157,6 +1516,14 @@ const HomeOneScreen = () => {
     sponsoredVideo?.video?.user?.id,
     user?.id,
   ]);
+
+  // TEMP DEBUG: inspect featured payload + mapped card data.
+  useEffect(() => {
+    try {
+      console.log('[HomeOneScreen][featuredVideo raw]', featuredVideo);
+      console.log('[HomeOneScreen][featuredItem mapped]', featuredItem);
+    } catch (_) {}
+  }, [featuredVideo, featuredItem]);
 
   // When logged in but Redux user has no photos (e.g. old session), fetch channel profile and update so header shows avatar
   useEffect(() => {
@@ -1278,14 +1645,70 @@ const HomeOneScreen = () => {
             item?.type || 'video',
             viewerLocationOpts,
           );
-          const vc = (rawDisplay.viewCount ?? 0) + 1;
+          const itemDescriptionRaw =
+            (item?.description != null && String(item.description).trim()) ||
+            '';
+          const baseViewCount = Math.max(
+            Number(rawDisplay.viewCount ?? 0),
+            Number(item?.viewCount ?? 0),
+          );
+          const vc = baseViewCount + 1;
           const full = {
             ...rawDisplay,
+            // Preserve campaign/card values when present; fill missing fields from detail response.
+            ...item,
+            id: item?.id || rawDisplay?.id || res?.id,
+            type: item?.type || rawDisplay?.type || 'video',
+            _count: res?._count || item?._count || rawDisplay?._count || {},
+            videoUrl:
+              String(item?.videoUrl || '').trim() ||
+              String(rawDisplay?.videoUrl || '').trim() ||
+              String(res?.videoUrl || '').trim(),
+            img:
+              String(item?.img || '').trim() ||
+              String(rawDisplay?.img || '').trim() ||
+              String(res?.thumbnailUrl || '').trim() ||
+              String(res?.videoUrl || '').trim(),
+            title:
+              normalizePromoName(item?.title, rawDisplay?.title, res?.title) ||
+              rawDisplay?.title ||
+              item?.title,
+            channelName:
+              normalizePromoName(
+                item?.channelName,
+                item?._campaignOwnerUser?.nickname,
+                item?._campaignOwnerUser?.name,
+                rawDisplay?.channelName,
+              ) || rawDisplay?.channelName,
+            location:
+              String(item?.location || '').trim() ||
+              String(item?._campaignMeta?.areaName || '').trim() ||
+              rawDisplay?.location ||
+              'Near you',
+            creatorAddress:
+              String(item?.creatorAddress || '').trim() ||
+              String(item?._campaignMeta?.areaName || '').trim() ||
+              rawDisplay?.creatorAddress,
+            _campaignOwnerUser: item?._campaignOwnerUser || null,
+            _campaignMeta: item?._campaignMeta || null,
+            likeCount: Math.max(
+              Number(item?.likeCount ?? 0),
+              Number(rawDisplay?.likeCount ?? 0),
+              Number(res?.likeCount ?? 0),
+              Number(res?._count?.likes ?? 0),
+            ),
+            commentCount: Math.max(
+              Number(item?.commentCount ?? 0),
+              Number(rawDisplay?.commentCount ?? 0),
+              Number(res?.commentCount ?? 0),
+              Number(res?._count?.comments ?? 0),
+            ),
             viewCount: vc,
             views:
               vc >= 1000 ? `${(vc / 1000).toFixed(1)}K views` : `${vc} views`,
           };
           const videoDescriptionRaw =
+            itemDescriptionRaw ||
             (res?.description != null && String(res.description).trim()) ||
             (full.description != null && String(full.description).trim()) ||
             '';
@@ -1298,13 +1721,24 @@ const HomeOneScreen = () => {
               id: co?.id,
               phone:
                 p.phone ??
+                p.mobile ??
                 p.phoneNumber ??
                 p.contactPhone ??
+                p.contact?.phone ??
                 co?.phone ??
+                item?.user?.phone ??
                 full.user?.phone,
-              email: p.email ?? p.contactEmail ?? co?.email ?? full.user?.email,
+              email:
+                p.email ??
+                p.contactEmail ??
+                p.contact?.email ??
+                co?.email ??
+                item?.user?.email ??
+                full.user?.email,
               address: p.address ?? co?.address ?? full.user?.address,
               channelAbout:
+                ((item?.description && String(item.description).trim()) ||
+                  undefined) ??
                 p.channelAbout ??
                 p.about ??
                 p.bio ??
@@ -1332,6 +1766,7 @@ const HomeOneScreen = () => {
               (typeof photo0 === 'string' ? photo0 : photo0?.src) ||
               full.channelAvatar;
             const addrLine =
+              (item?.location && String(item.location).trim()) ||
               (p.address && String(p.address).trim()) ||
               (u.address && String(u.address).trim()) ||
               (campaignMeta?.areaName &&
@@ -1354,6 +1789,7 @@ const HomeOneScreen = () => {
               ),
               location: addrLine,
               creatorAddress:
+                (item?.creatorAddress && String(item.creatorAddress).trim()) ||
                 (p.address && String(p.address).trim()) ||
                 (co?.address && String(co.address).trim()) ||
                 campaignMeta?.areaName ||
@@ -1372,25 +1808,81 @@ const HomeOneScreen = () => {
             };
           };
 
-          if (campaignOwner?.id) {
-            getChannelProfile(campaignOwner.id, user?.id)
+          const ownerIdForProfile =
+            campaignOwner?.id ??
+            item?.userId ??
+            item?.user?.id ??
+            full?.userId ??
+            full?.user?.id ??
+            null;
+          if (ownerIdForProfile) {
+            const ownerSeed =
+              campaignOwner?.id != null
+                ? campaignOwner
+                : {
+                    id: ownerIdForProfile,
+                    nickname: item?.user?.nickname || full?.user?.nickname,
+                    name: item?.user?.name || full?.user?.name,
+                    phone: item?.user?.phone || full?.user?.phone,
+                    email: item?.user?.email || full?.user?.email,
+                    address:
+                      item?.user?.address ||
+                      item?.creatorAddress ||
+                      full?.user?.address,
+                  };
+            getChannelProfile(ownerIdForProfile, user?.id)
               .then(profile => {
                 setSelectedItem(prev => ({
-                  ...applyCampaignOwner(campaignOwner, profile),
+                  ...applyCampaignOwner(ownerSeed, profile),
                   watchedAt: prev?.watchedAt,
                 }));
               })
               .catch(() => {
                 setSelectedItem(prev => ({
-                  ...applyCampaignOwner(campaignOwner, null),
+                  ...applyCampaignOwner(ownerSeed, null),
                   watchedAt: prev?.watchedAt,
                 }));
               });
           } else {
-            setSelectedItem(prev => ({ ...full, watchedAt: prev?.watchedAt }));
+            setSelectedItem(prev => ({
+              ...full,
+              _campaignVideoDetail: !!item?._campaignOwnerUser,
+              watchedAt: prev?.watchedAt,
+            }));
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          // Keep campaign card data usable even if details API fails.
+          const safeFallback = {
+            ...item,
+            id: item?.id,
+            type: item?.type || 'video',
+            videoUrl:
+              String(item?.videoUrl || '').trim() ||
+              String(item?.img || '').trim() ||
+              '',
+            img:
+              String(item?.img || '').trim() ||
+              String(item?.videoUrl || '').trim() ||
+              'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+            _campaignVideoDetail: !!item?._campaignOwnerUser,
+            likeCount: Number(item?.likeCount ?? item?._count?.likes ?? 0),
+            commentCount: Number(
+              item?.commentCount ??
+                item?.topLevelCommentCount ??
+                item?._count?.comments ??
+                0,
+            ),
+            description:
+              String(item?.description || '').trim() ||
+              String(item?.user?.channelAbout || '').trim() ||
+              '',
+          };
+          setSelectedItem(prev => ({
+            ...safeFallback,
+            watchedAt: prev?.watchedAt,
+          }));
+        });
     }
   };
 
@@ -1473,7 +1965,7 @@ const HomeOneScreen = () => {
   ]);
 
   const handleRestaurantSubscribe = useCallback(() => {
-    if (!user?.id) {
+    if (!isAuthenticated || !actorUserId) {
       navigation.navigate('HomeSevenScreen');
       return;
     }
@@ -1484,9 +1976,9 @@ const HomeOneScreen = () => {
       (async () => {
         try {
           if (wasSubscribed) {
-            await unsubscribeFromChannel(user.id, videoChannelOwnerId);
+            await unsubscribeFromChannel(actorUserId, videoChannelOwnerId);
           } else {
-            await subscribeToChannel(user.id, videoChannelOwnerId);
+            await subscribeToChannel(actorUserId, videoChannelOwnerId);
           }
           setResDetailSubscribe({
             isSubscribed: !wasSubscribed,
@@ -1503,7 +1995,13 @@ const HomeOneScreen = () => {
       })();
       return { ...s, toggling: true };
     });
-  }, [user?.id, videoChannelOwnerId, isOwnChannelVideo, navigation]);
+  }, [
+    isAuthenticated,
+    actorUserId,
+    videoChannelOwnerId,
+    isOwnChannelVideo,
+    navigation,
+  ]);
 
   const handleFeedItemPress = item => {
     if (item?.type === 'short') {
@@ -1517,10 +2015,7 @@ const HomeOneScreen = () => {
   const getSponsoredOwnerId = useCallback(item => {
     if (!item) return null;
     return (
-      item.userId ??
-      item?.user?.id ??
-      item?._campaignOwnerUser?.id ??
-      null
+      item.userId ?? item?.user?.id ?? item?._campaignOwnerUser?.id ?? null
     );
   }, []);
 
@@ -1529,15 +2024,9 @@ const HomeOneScreen = () => {
       const ownerId = getSponsoredOwnerId(item);
       if (!ownerId) return;
       const ownerName =
-        item?.user?.nickname ||
-        item?.user?.name ||
-        item?.channelName ||
-        '';
+        item?.user?.nickname || item?.user?.name || item?.channelName || '';
       const location =
-        item?.location ||
-        item?.creatorAddress ||
-        item?.user?.address ||
-        '';
+        item?.location || item?.creatorAddress || item?.user?.address || '';
       if (!user?.token) {
         navigation.navigate('HomeSevenScreen', {
           returnToOrder: true,
@@ -1578,18 +2067,18 @@ const HomeOneScreen = () => {
     async item => {
       const ownerId = getSponsoredOwnerId(item);
       if (!ownerId) return;
-      if (!user?.id) {
+      if (!isAuthenticated || !actorUserId) {
         navigation.navigate('HomeSevenScreen');
         return;
       }
-      if (String(ownerId) === String(user.id)) return;
+      if (String(ownerId) === String(actorUserId)) return;
       setSponsoredSubscribeToggling(true);
       const wasSubscribed = !!sponsoredChannelMeta?.isSubscribed;
       try {
         if (wasSubscribed) {
-          await unsubscribeFromChannel(user.id, ownerId);
+          await unsubscribeFromChannel(actorUserId, ownerId);
         } else {
-          await subscribeToChannel(user.id, ownerId);
+          await subscribeToChannel(actorUserId, ownerId);
         }
         setSponsoredChannelMeta(prev => ({
           rating: prev?.rating ?? 0,
@@ -1605,14 +2094,26 @@ const HomeOneScreen = () => {
         setSponsoredSubscribeToggling(false);
       }
     },
-    [user?.id, sponsoredChannelMeta?.isSubscribed, navigation, getSponsoredOwnerId],
+    [
+      isAuthenticated,
+      actorUserId,
+      sponsoredChannelMeta?.isSubscribed,
+      navigation,
+      getSponsoredOwnerId,
+    ],
   );
 
   const handleShortLike = useCallback(
     async item => {
-      if (!user?.id || item?.type !== 'short' || !item?.id) return;
+      if (
+        !isAuthenticated ||
+        !actorUserId ||
+        item?.type !== 'short' ||
+        !item?.id
+      )
+        return;
       try {
-        const res = await shortsService.toggleLike(item.id, user.id);
+        const res = await shortsService.toggleLike(item.id, actorUserId);
         const nowLiked = res?.liked === true;
         setSelectedItem(prev => {
           if (!prev || prev.id !== item.id) return prev;
@@ -1641,7 +2142,7 @@ const HomeOneScreen = () => {
         });
       } catch (e) {}
     },
-    [user?.id],
+    [isAuthenticated, actorUserId],
   );
 
   const handleShortShare = useCallback(async item => {
@@ -1666,7 +2167,7 @@ const HomeOneScreen = () => {
   }, []);
 
   const handleRestaurantLike = useCallback(async () => {
-    if (!user?.id || !selectedItem?.id) {
+    if (!isAuthenticated || !actorUserId || !selectedItem?.id) {
       navigation.navigate('HomeSevenScreen');
       return;
     }
@@ -1674,8 +2175,8 @@ const HomeOneScreen = () => {
     const isShort = selectedItem?.type === 'short';
     try {
       const res = isShort
-        ? await shortsService.toggleLike(targetId, user.id)
-        : await toggleVideoLike(targetId, user.id);
+        ? await shortsService.toggleLike(targetId, actorUserId)
+        : await toggleVideoLike(targetId, actorUserId);
       const nowLiked = res?.liked === true;
       setSelectedItem(prev => {
         if (!prev || prev.id !== targetId) return prev;
@@ -1705,10 +2206,16 @@ const HomeOneScreen = () => {
         };
       });
     } catch {}
-  }, [navigation, selectedItem?.id, selectedItem?.type, user?.id]);
+  }, [
+    isAuthenticated,
+    actorUserId,
+    navigation,
+    selectedItem?.id,
+    selectedItem?.type,
+  ]);
 
   const handleRestaurantDislike = useCallback(async () => {
-    if (!user?.id || !selectedItem?.id) {
+    if (!isAuthenticated || !actorUserId || !selectedItem?.id) {
       navigation.navigate('HomeSevenScreen');
       return;
     }
@@ -1716,8 +2223,8 @@ const HomeOneScreen = () => {
     const isShort = selectedItem?.type === 'short';
     try {
       const res = isShort
-        ? await shortsService.toggleDislike(targetId, user.id)
-        : await toggleVideoDislike(targetId, user.id);
+        ? await shortsService.toggleDislike(targetId, actorUserId)
+        : await toggleVideoDislike(targetId, actorUserId);
       const nowDisliked = res?.disliked === true;
       setSelectedItem(prev => {
         if (!prev || prev.id !== targetId) return prev;
@@ -1745,7 +2252,13 @@ const HomeOneScreen = () => {
         };
       });
     } catch {}
-  }, [navigation, selectedItem?.id, selectedItem?.type, user?.id]);
+  }, [
+    isAuthenticated,
+    actorUserId,
+    navigation,
+    selectedItem?.id,
+    selectedItem?.type,
+  ]);
 
   const handleRestaurantShare = useCallback(async () => {
     if (!selectedItem?.id) return;
@@ -2039,13 +2552,37 @@ const HomeOneScreen = () => {
       viewerLocationOpts,
     );
     const meta = campaignMetaFrom(featuredVideo);
+    const promoName = normalizePromoName(
+      co?.nickname,
+      co?.name,
+      mergedUser?.nickname,
+      mergedUser?.name,
+      base?.channelName,
+      video?.title,
+      video?.description,
+      base?.title,
+    );
+    const promoTitle = normalizePromoName(video?.title, promoName, base?.title);
+    const ratingFromProfile =
+      featuredChannelMeta != null ? featuredChannelMeta.rating : base.rating;
+    const reviewCountFromProfile =
+      featuredChannelMeta != null
+        ? featuredChannelMeta.reviewCount
+        : base.reviewCount;
+    const withPromoName = {
+      ...base,
+      channelName: promoName,
+      title: promoTitle,
+      rating: ratingFromProfile,
+      reviewCount: reviewCountFromProfile,
+    };
     return co?.id
       ? {
-          ...base,
+          ...withPromoName,
           _campaignOwnerUser: co,
           ...(meta && { _campaignMeta: meta }),
         }
-      : base;
+      : withPromoName;
   })();
 
   const sponsoredItem = sponsoredVideo?.video
@@ -2088,8 +2625,25 @@ const HomeOneScreen = () => {
           sponsoredChannelMeta != null
             ? sponsoredChannelMeta.reviewCount
             : base.reviewCount;
+        const promoName = normalizePromoName(
+          co?.nickname,
+          co?.name,
+          mergedUser?.nickname,
+          mergedUser?.name,
+          base?.channelName,
+          video?.title,
+          video?.description,
+          base?.title,
+        );
+        const promoTitle = normalizePromoName(
+          video?.title,
+          promoName,
+          base?.title,
+        );
         const withRating = {
           ...base,
+          channelName: promoName,
+          title: promoTitle,
           rating: ratingFromProfile,
           reviewCount: reviewCountFromProfile,
         };
@@ -2115,10 +2669,6 @@ const HomeOneScreen = () => {
     const sections = [];
     let sIdx = 0;
     let vIdx = 0;
-
-    if (sponsoredItem) {
-      sections.push({ type: 'SPONSORED', data: [sponsoredItem] });
-    }
 
     const firstPopular = popShorts.slice(0, 6);
     if (firstPopular.length > 0) {
@@ -2196,6 +2746,356 @@ const HomeOneScreen = () => {
     const areaForTitle = areaShort || 'your area';
     const primaryLoc = areaShort || addr || 'Set your address';
     const secondaryLoc = addr || primaryLoc;
+    const cuisineKey = normalizeCuisine(selectedCuisine);
+    const cuisineSelected = isCuisineFilterScreen && !!cuisineKey;
+    const safeChipOptions = displayedCuisineOptions;
+    const getItemMenuTagsLower = item => {
+      const directTags = Array.isArray(item?._menuTagsLower)
+        ? item._menuTagsLower
+        : [];
+      if (directTags.length > 0) return directTags;
+      const ownerId =
+        item?.userId ??
+        item?.user?.id ??
+        item?._campaignOwnerUser?.id ??
+        item?._campaignVideoDetail?.userId ??
+        item?._campaignVideoDetail?.user?.id;
+      if (!ownerId) return [];
+      const oid = String(ownerId);
+      const rows = ownerMenuSearchCacheRef.current[oid] || [];
+      const categories = ownerCategoryCacheRef.current[oid] || [];
+      const merged = [
+        ...categories,
+        ...rows.flatMap(m => [
+          m?.categoryName,
+          ...(Array.isArray(m?.tags) ? m.tags : []),
+        ]),
+      ]
+        .map(normalizeCuisine)
+        .filter(isValidCuisineKey);
+      return Array.from(new Set(merged));
+    };
+    const isPromoInSelectedArea = item => {
+      const viewerLat = Number(viewerLocationOpts?.viewerLat);
+      const viewerLng = Number(viewerLocationOpts?.viewerLng);
+      if (!Number.isFinite(viewerLat) || !Number.isFinite(viewerLng))
+        return false;
+      const metaLat = Number(item?._campaignMeta?.latitude);
+      const metaLng = Number(item?._campaignMeta?.longitude);
+      // Strict: campaign must include area coordinates and be nearby.
+      if (!Number.isFinite(metaLat) || !Number.isFinite(metaLng)) return false;
+      const km = distanceKmBetween(viewerLat, viewerLng, metaLat, metaLng);
+      return km != null && km <= HOME_PROMO_RADIUS_KM;
+    };
+    const withPromoDisplayFallbacks = (item, campaignRaw) => {
+      if (!item) return null;
+      const owner =
+        item?._campaignOwnerUser ||
+        campaignRaw?.user ||
+        item?.user ||
+        campaignRaw?.video?.user ||
+        {};
+      const rawVideo = campaignRaw?.video || {};
+      const fixedChannelName = normalizePromoName(
+        item?.channelName,
+        owner?.nickname,
+        owner?.name,
+        rawVideo?.user?.nickname,
+        rawVideo?.user?.name,
+      );
+      const fixedTitle = normalizePromoName(
+        item?.title,
+        rawVideo?.title,
+        fixedChannelName,
+      );
+      const viewCount = Number(
+        item?.viewCount ?? rawVideo?.viewCount ?? rawVideo?._count?.views ?? 0,
+      );
+      const fixedViews =
+        String(item?.views || '').trim() || formatVideoViewsLabel(viewCount);
+      return {
+        ...item,
+        channelName: fixedChannelName,
+        title: fixedTitle,
+        viewCount: Number.isFinite(viewCount) ? viewCount : 0,
+        views: fixedViews,
+      };
+    };
+    const featuredDisplayItem = withPromoDisplayFallbacks(
+      featuredItem,
+      featuredVideo,
+    );
+    const sponsoredDisplayItem = withPromoDisplayFallbacks(
+      sponsoredItem,
+      sponsoredVideo,
+    );
+    const matchesCuisineItem = item => {
+      if (!cuisineSelected) return true;
+      const tags = getItemMenuTagsLower(item);
+      return tags.includes(cuisineKey);
+    };
+    const featuredForCuisine =
+      featuredDisplayItem &&
+      isPromoInSelectedArea(featuredDisplayItem) &&
+      hasRenderablePromoCard(featuredDisplayItem) &&
+      matchesCuisineItem(featuredDisplayItem);
+    const sponsoredForCuisine =
+      sponsoredDisplayItem &&
+      isPromoInSelectedArea(sponsoredDisplayItem) &&
+      hasRenderablePromoCard(sponsoredDisplayItem) &&
+      matchesCuisineItem(sponsoredDisplayItem);
+    const featuredCardChannelName = normalizePromoName(
+      featuredForCuisine?.channelName,
+      featuredVideo?.user?.nickname,
+      featuredVideo?.user?.name,
+      featuredVideo?.video?.user?.nickname,
+      featuredVideo?.video?.user?.name,
+    );
+    const featuredCardTitle = normalizePromoName(
+      featuredForCuisine?.title,
+      featuredVideo?.video?.title,
+      featuredCardChannelName,
+    );
+    const featuredCardViews =
+      String(featuredForCuisine?.views || '').trim() ||
+      formatVideoViewsLabel(
+        Number(
+          featuredForCuisine?.viewCount ??
+            featuredVideo?.video?.viewCount ??
+            featuredVideo?.video?._count?.views ??
+            0,
+        ),
+      );
+    const featuredCardLocation =
+      String(featuredForCuisine?.location || '').trim() ||
+      String(featuredVideo?._campaignMeta?.areaName || '').trim() ||
+      'Near you';
+    const sponsoredCardChannelName = normalizePromoName(
+      sponsoredForCuisine?.channelName,
+      sponsoredVideo?.user?.nickname,
+      sponsoredVideo?.user?.name,
+      sponsoredVideo?.video?.user?.nickname,
+      sponsoredVideo?.video?.user?.name,
+    );
+    const sponsoredCardTitle = normalizePromoName(
+      sponsoredForCuisine?.title,
+      sponsoredVideo?.video?.title,
+      sponsoredCardChannelName,
+    );
+    const sponsoredCardViews =
+      String(sponsoredForCuisine?.views || '').trim() ||
+      formatVideoViewsLabel(
+        Number(
+          sponsoredForCuisine?.viewCount ??
+            sponsoredVideo?.video?.viewCount ??
+            sponsoredVideo?.video?._count?.views ??
+            0,
+        ),
+      );
+    const sponsoredCardLocation =
+      String(sponsoredForCuisine?.location || '').trim() ||
+      String(sponsoredVideo?._campaignMeta?.areaName || '').trim() ||
+      'Near you';
+    const featuredCardImg =
+      String(featuredForCuisine?.img || '').trim() ||
+      String(featuredVideo?.video?.thumbnailUrl || '').trim() ||
+      String(featuredVideo?.video?.videoUrl || '').trim() ||
+      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+    const sponsoredCardImg =
+      String(sponsoredForCuisine?.img || '').trim() ||
+      String(sponsoredVideo?.video?.thumbnailUrl || '').trim() ||
+      String(sponsoredVideo?.video?.videoUrl || '').trim() ||
+      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+    const featuredOwnerId =
+      featuredForCuisine?._campaignOwnerUser?.id ??
+      featuredVideo?.user?.id ??
+      featuredForCuisine?.userId ??
+      featuredForCuisine?.user?.id;
+    const sponsoredOwnerId =
+      sponsoredForCuisine?._campaignOwnerUser?.id ??
+      sponsoredVideo?.user?.id ??
+      sponsoredForCuisine?.userId ??
+      sponsoredForCuisine?.user?.id;
+    const featuredNavItem = featuredForCuisine
+      ? {
+          ...featuredForCuisine,
+          id:
+            featuredForCuisine?.id ??
+            featuredVideo?.video?.id ??
+            featuredVideo?.id,
+          type: featuredForCuisine?.type || 'video',
+          videoUrl:
+            String(featuredForCuisine?.videoUrl || '').trim() ||
+            String(featuredVideo?.video?.videoUrl || '').trim() ||
+            '',
+          img: featuredCardImg,
+          viewCount: Number(
+            featuredForCuisine?.viewCount ??
+              featuredVideo?.video?.viewCount ??
+              featuredVideo?.video?._count?.views ??
+              0,
+          ),
+          description:
+            String(featuredForCuisine?.description || '').trim() ||
+            String(featuredVideo?.video?.description || '').trim() ||
+            String(featuredChannelMeta?.channelAbout || '').trim(),
+          userId: featuredOwnerId || featuredForCuisine.userId,
+          _campaignOwnerUser:
+            featuredForCuisine?._campaignOwnerUser ||
+            featuredVideo?.user ||
+            null,
+          _campaignMeta:
+            featuredForCuisine?._campaignMeta ||
+            campaignMetaFrom(featuredVideo),
+          location:
+            String(featuredCardLocation || '').trim() ||
+            String(featuredForCuisine?.location || '').trim() ||
+            String(featuredChannelMeta?.address || '').trim() ||
+            'Near you',
+          creatorAddress:
+            String(featuredForCuisine?.creatorAddress || '').trim() ||
+            String(featuredChannelMeta?.address || '').trim() ||
+            String(featuredVideo?._campaignMeta?.areaName || '').trim() ||
+            String(featuredVideo?.video?.user?.address || '').trim(),
+          creatorLatitude:
+            featuredForCuisine?.creatorLatitude ??
+            featuredChannelMeta?.latitude ??
+            featuredVideo?._campaignMeta?.latitude,
+          creatorLongitude:
+            featuredForCuisine?.creatorLongitude ??
+            featuredChannelMeta?.longitude ??
+            featuredVideo?._campaignMeta?.longitude,
+          user: {
+            ...(featuredForCuisine?.user || {}),
+            id: featuredOwnerId || featuredForCuisine?.user?.id,
+            nickname:
+              featuredForCuisine?.user?.nickname ||
+              featuredCardChannelName ||
+              featuredForCuisine?.user?.name,
+            name:
+              featuredForCuisine?.user?.name ||
+              featuredCardChannelName ||
+              featuredForCuisine?.user?.nickname,
+            phone:
+              featuredForCuisine?.user?.phone ??
+              featuredChannelMeta?.phone ??
+              null,
+            email:
+              featuredForCuisine?.user?.email ??
+              featuredChannelMeta?.email ??
+              null,
+            address:
+              featuredForCuisine?.user?.address ??
+              featuredChannelMeta?.address ??
+              null,
+            channelAbout:
+              featuredForCuisine?.user?.channelAbout ??
+              featuredChannelMeta?.channelAbout ??
+              null,
+          },
+        }
+      : null;
+    const sponsoredNavItem = sponsoredForCuisine
+      ? {
+          ...sponsoredForCuisine,
+          id:
+            sponsoredForCuisine?.id ??
+            sponsoredVideo?.video?.id ??
+            sponsoredVideo?.id,
+          type: sponsoredForCuisine?.type || 'video',
+          videoUrl:
+            String(sponsoredForCuisine?.videoUrl || '').trim() ||
+            String(sponsoredVideo?.video?.videoUrl || '').trim() ||
+            '',
+          img: sponsoredCardImg,
+          viewCount: Number(
+            sponsoredForCuisine?.viewCount ??
+              sponsoredVideo?.video?.viewCount ??
+              sponsoredVideo?.video?._count?.views ??
+              0,
+          ),
+          description:
+            String(sponsoredForCuisine?.description || '').trim() ||
+            String(sponsoredVideo?.video?.description || '').trim() ||
+            String(sponsoredChannelMeta?.channelAbout || '').trim(),
+          userId: sponsoredOwnerId || sponsoredForCuisine.userId,
+          _campaignOwnerUser:
+            sponsoredForCuisine?._campaignOwnerUser ||
+            sponsoredVideo?.user ||
+            null,
+          _campaignMeta:
+            sponsoredForCuisine?._campaignMeta ||
+            campaignMetaFrom(sponsoredVideo),
+          location:
+            String(sponsoredCardLocation || '').trim() ||
+            String(sponsoredForCuisine?.location || '').trim() ||
+            String(sponsoredChannelMeta?.address || '').trim() ||
+            'Near you',
+          creatorAddress:
+            String(sponsoredForCuisine?.creatorAddress || '').trim() ||
+            String(sponsoredChannelMeta?.address || '').trim() ||
+            String(sponsoredVideo?._campaignMeta?.areaName || '').trim() ||
+            String(sponsoredVideo?.video?.user?.address || '').trim(),
+          creatorLatitude:
+            sponsoredForCuisine?.creatorLatitude ??
+            sponsoredChannelMeta?.latitude ??
+            sponsoredVideo?._campaignMeta?.latitude,
+          creatorLongitude:
+            sponsoredForCuisine?.creatorLongitude ??
+            sponsoredChannelMeta?.longitude ??
+            sponsoredVideo?._campaignMeta?.longitude,
+          user: {
+            ...(sponsoredForCuisine?.user || {}),
+            id: sponsoredOwnerId || sponsoredForCuisine?.user?.id,
+            nickname:
+              sponsoredForCuisine?.user?.nickname ||
+              sponsoredCardChannelName ||
+              sponsoredForCuisine?.user?.name,
+            name:
+              sponsoredForCuisine?.user?.name ||
+              sponsoredCardChannelName ||
+              sponsoredForCuisine?.user?.nickname,
+            phone:
+              sponsoredForCuisine?.user?.phone ??
+              sponsoredChannelMeta?.phone ??
+              null,
+            email:
+              sponsoredForCuisine?.user?.email ??
+              sponsoredChannelMeta?.email ??
+              null,
+            address:
+              sponsoredForCuisine?.user?.address ??
+              sponsoredChannelMeta?.address ??
+              null,
+            channelAbout:
+              sponsoredForCuisine?.user?.channelAbout ??
+              sponsoredChannelMeta?.channelAbout ??
+              null,
+          },
+        }
+      : null;
+    const shortsPreview = (feedShorts || [])
+      .filter(matchesCuisineItem)
+      .slice(0, 2);
+    const sectionsToRender = cuisineSelected
+      ? feedSections
+          .map(section => ({
+            ...section,
+            data: (section.data || []).filter(matchesCuisineItem),
+          }))
+          .filter(section => (section.data || []).length > 0)
+      : feedSections;
+    const slideCuisineChips = dir => {
+      const step = 5 * 70; // roughly 5 chips per click
+      const maxOffset = Math.max(
+        0,
+        cuisineContentWidthRef.current - cuisineLayoutWidthRef.current,
+      );
+      const current = cuisineScrollXRef.current || 0;
+      const next = Math.max(0, Math.min(maxOffset, current + dir * step));
+      cuisineScrollRef.current?.scrollTo({ x: next, animated: true });
+      cuisineScrollXRef.current = next;
+    };
 
     return (
       <View style={styles.mainContainer}>
@@ -2276,56 +3176,7 @@ const HomeOneScreen = () => {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          {featuredVideo?.video ? (
-            <TouchableOpacity
-              style={styles.bannerWrapper}
-              activeOpacity={0.92}
-              onPress={() => featuredItem && openRestaurantDetail(featuredItem)}
-            >
-              <Image
-                source={{
-                  uri:
-                    featuredVideo.video.thumbnailUrl ||
-                    featuredVideo.video.videoUrl ||
-                    featuredItem?.img ||
-                    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-                }}
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
-              <View style={styles.featuredPlayOverlay} pointerEvents="none">
-                <Icon
-                  name="play-circle"
-                  size={56}
-                  color="rgba(255,255,255,0.92)"
-                />
-              </View>
-              <View style={styles.featuredBadge} pointerEvents="none">
-                <Text style={styles.featuredText}>Featured</Text>
-                <Icon name="chevron-right" size={16} color="#FFF" />
-              </View>
-            </TouchableOpacity>
-          ) : null}
-
           <View style={styles.locationSection}>
-            <TouchableOpacity
-              style={styles.homeDropdown}
-              activeOpacity={0.8}
-              onPress={() => {
-                setLocationInput(addressText || '');
-                setLocationModalVisible(true);
-              }}
-            >
-              <Icon name="map-marker-radius" size={24} color="#FFF" />
-              <Text style={styles.homeText} numberOfLines={1}>
-                {primaryLoc}
-              </Text>
-              <Icon name="chevron-down" size={24} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={styles.addressSubtext} numberOfLines={2}>
-              {secondaryLoc}
-            </Text>
-
             <View style={styles.innerSearchBox}>
               <Icon name="magnify" size={20} color="#999" />
               <TextInput
@@ -2333,7 +3184,15 @@ const HomeOneScreen = () => {
                 placeholderTextColor="#999"
                 style={styles.innerInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={text => {
+                  setSearchQuery(text);
+                  if (
+                    !text ||
+                    normalizeCuisine(text) !== normalizeCuisine(selectedCuisine)
+                  ) {
+                    setSelectedCuisine('');
+                  }
+                }}
                 returnKeyType="search"
                 clearButtonMode="while-editing"
               />
@@ -2341,60 +3200,361 @@ const HomeOneScreen = () => {
           </View>
 
           <View style={styles.feedPadding}>
-            <Text style={styles.feedHint}>
-              your search, served fresh... watch and choose
-            </Text>
-            <TouchableOpacity
-              style={styles.orderNowCard}
-              activeOpacity={0.9}
-              onPress={() =>
-                navigation.navigate('OrderNowBrowseScreen', {
-                  initialQuery: searchDebounced || searchQuery || '',
-                  nearLabel: primaryLoc || '',
-                })
-              }
-            >
-              <View style={styles.orderNowCardLeft}>
-                <View style={styles.orderNowIconPill}>
-                  <Icon
-                    name="silverware-fork-knife"
-                    size={18}
-                    color="#F5A623"
+            {cuisineSelected ? (
+              <>
+                {featuredForCuisine ? (
+                  <FoodCard
+                    title={featuredCardTitle}
+                    channelName={featuredCardChannelName}
+                    location={featuredCardLocation}
+                    views={featuredCardViews}
+                    distanceLabel={featuredForCuisine.distanceLabel}
+                    rating={featuredForCuisine.rating}
+                    reviewCount={featuredForCuisine.reviewCount}
+                    isSponsored
+                    badgeLabel="Featured"
+                    img={featuredCardImg}
+                    onPress={() => handleFeedItemPress(featuredNavItem)}
+                    onSponsoredOrderPress={() =>
+                      handleSponsoredOrder(featuredNavItem)
+                    }
+                    onSponsoredBookPress={() =>
+                      handleSponsoredBook(featuredNavItem)
+                    }
+                    onSponsoredSubscribePress={() =>
+                      handleSponsoredSubscribe(featuredNavItem)
+                    }
+                    sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                    sponsoredIsSubscribed={!!sponsoredChannelMeta?.isSubscribed}
+                    hideSponsoredSubscribe={
+                      !!user?.id &&
+                      getSponsoredOwnerId(featuredForCuisine) != null &&
+                      String(user.id) ===
+                        String(getSponsoredOwnerId(featuredForCuisine))
+                    }
                   />
+                ) : null}
+                <View style={styles.cuisineSliderRow}>
+                  <TouchableOpacity
+                    style={styles.cuisineArrowBtn}
+                    onPress={() => slideCuisineChips(-1)}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="chevron-left" size={20} color="#D88900" />
+                  </TouchableOpacity>
+                  <ScrollView
+                    ref={cuisineScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.cuisineChipRow}
+                    onLayout={e => {
+                      cuisineLayoutWidthRef.current =
+                        e.nativeEvent.layout.width || 0;
+                    }}
+                    onContentSizeChange={(w, _h) => {
+                      cuisineContentWidthRef.current = w || 0;
+                    }}
+                    onScroll={e => {
+                      cuisineScrollXRef.current =
+                        e.nativeEvent.contentOffset.x || 0;
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {safeChipOptions.map(cuisine => (
+                      <TouchableOpacity
+                        key={cuisine.key}
+                        style={styles.cuisineChip}
+                        onPress={() => {
+                          navigation.navigate('HomeOneCuisineScreen', {
+                            cuisineMode: true,
+                            initialCuisine: cuisine.label,
+                            nearLabel: primaryLoc || '',
+                          });
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.cuisineIconCircle}>
+                          <Image
+                            source={categoryIcon}
+                            style={styles.cuisineIconImage}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <Text style={styles.cuisineChipText}>
+                          {shortCuisineLabel(cuisine.label)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={styles.cuisineArrowBtn}
+                    onPress={() => slideCuisineChips(1)}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="chevron-right" size={20} color="#D88900" />
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.orderNowCardTextWrap}>
-                  <Text style={styles.orderNowCardTitle}>Order Now</Text>
-                  <Text style={styles.orderNowCardSub}>
-                    feeling hungry? Order now
-                  </Text>
-                </View>
-              </View>
-              <Icon name="chevron-right" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cuisineChipRow}
-            >
-              {ORDER_NOW_CUISINES.map(cuisine => (
                 <TouchableOpacity
-                  key={cuisine.key}
-                  style={styles.cuisineChip}
+                  style={styles.orderNowCard}
+                  activeOpacity={0.9}
                   onPress={() =>
                     navigation.navigate('OrderNowBrowseScreen', {
-                      initialQuery: cuisine.label,
+                      initialQuery: searchDebounced || searchQuery || '',
                       nearLabel: primaryLoc || '',
                     })
                   }
-                  activeOpacity={0.85}
                 >
-                  <View style={styles.cuisineIconCircle}>
-                    <Icon name={cuisine.icon} size={16} color="#D88900" />
+                  <View style={styles.orderNowCardLeft}>
+                    <View style={styles.orderNowIconPill}>
+                      <Icon
+                        name="silverware-fork-knife"
+                        size={18}
+                        color="#F5A623"
+                      />
+                    </View>
+                    <View style={styles.orderNowCardTextWrap}>
+                      <Text style={styles.orderNowCardTitle}>Order Now</Text>
+                      <Text style={styles.orderNowCardSub}>
+                        feeling hungry? Order now
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.cuisineChipText}>{cuisine.label}</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+                {sponsoredForCuisine ? (
+                  <View style={{ marginTop: 12 }}>
+                    <FoodCard
+                      title={sponsoredCardTitle}
+                      channelName={sponsoredCardChannelName}
+                      location={sponsoredCardLocation}
+                      views={sponsoredCardViews}
+                      distanceLabel={sponsoredForCuisine.distanceLabel}
+                      rating={sponsoredForCuisine.rating}
+                      reviewCount={sponsoredForCuisine.reviewCount}
+                      isSponsored
+                      badgeLabel="Sponsored"
+                      img={sponsoredCardImg}
+                      onPress={() => handleFeedItemPress(sponsoredNavItem)}
+                      onSponsoredOrderPress={() =>
+                        handleSponsoredOrder(sponsoredNavItem)
+                      }
+                      onSponsoredBookPress={() =>
+                        handleSponsoredBook(sponsoredNavItem)
+                      }
+                      onSponsoredSubscribePress={() =>
+                        handleSponsoredSubscribe(sponsoredNavItem)
+                      }
+                      sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                      sponsoredIsSubscribed={
+                        !!sponsoredChannelMeta?.isSubscribed
+                      }
+                      hideSponsoredSubscribe={
+                        !!user?.id &&
+                        getSponsoredOwnerId(sponsoredForCuisine) != null &&
+                        String(user.id) ===
+                          String(getSponsoredOwnerId(sponsoredForCuisine))
+                      }
+                    />
+                  </View>
+                ) : null}
+                {shortsPreview.length > 0 ? (
+                  <View style={{ marginTop: 10 }}>
+                    <View style={styles.shortsGrid}>
+                      {shortsPreview.map((item, index) => (
+                        <View
+                          key={`featured-short-${item.id}-${index}`}
+                          style={styles.shortsGridItem}
+                        >
+                          <ShortCard
+                            title={item.title}
+                            img={item.img}
+                            views={item.views}
+                            onPress={() => handleFeedItemPress(item)}
+                            onMorePress={() => openHomeMoreForShort(item)}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.orderNowCard}
+                  activeOpacity={0.9}
+                  onPress={() =>
+                    navigation.navigate('OrderNowBrowseScreen', {
+                      initialQuery: searchDebounced || searchQuery || '',
+                      nearLabel: primaryLoc || '',
+                    })
+                  }
+                >
+                  <View style={styles.orderNowCardLeft}>
+                    <View style={styles.orderNowIconPill}>
+                      <Icon
+                        name="silverware-fork-knife"
+                        size={18}
+                        color="#F5A623"
+                      />
+                    </View>
+                    <View style={styles.orderNowCardTextWrap}>
+                      <Text style={styles.orderNowCardTitle}>Order Now</Text>
+                      <Text style={styles.orderNowCardSub}>
+                        feeling hungry? Order now
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+                <View style={styles.cuisineSliderRow}>
+                  <TouchableOpacity
+                    style={styles.cuisineArrowBtn}
+                    onPress={() => slideCuisineChips(-1)}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="chevron-left" size={20} color="#D88900" />
+                  </TouchableOpacity>
+                  <ScrollView
+                    ref={cuisineScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.cuisineChipRow}
+                    onLayout={e => {
+                      cuisineLayoutWidthRef.current =
+                        e.nativeEvent.layout.width || 0;
+                    }}
+                    onContentSizeChange={(w, _h) => {
+                      cuisineContentWidthRef.current = w || 0;
+                    }}
+                    onScroll={e => {
+                      cuisineScrollXRef.current =
+                        e.nativeEvent.contentOffset.x || 0;
+                    }}
+                    scrollEventThrottle={16}
+                  >
+                    {safeChipOptions.map(cuisine => (
+                      <TouchableOpacity
+                        key={cuisine.key}
+                        style={styles.cuisineChip}
+                        onPress={() => {
+                          navigation.navigate('HomeOneCuisineScreen', {
+                            cuisineMode: true,
+                            initialCuisine: cuisine.label,
+                            nearLabel: primaryLoc || '',
+                          });
+                        }}
+                        activeOpacity={0.85}
+                      >
+                        <View style={styles.cuisineIconCircle}>
+                          <Image
+                            source={categoryIcon}
+                            style={styles.cuisineIconImage}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <Text style={styles.cuisineChipText}>
+                          {shortCuisineLabel(cuisine.label)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={styles.cuisineArrowBtn}
+                    onPress={() => slideCuisineChips(1)}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="chevron-right" size={20} color="#D88900" />
+                  </TouchableOpacity>
+                </View>
+                {featuredForCuisine ? (
+                  <FoodCard
+                    title={featuredCardTitle}
+                    channelName={featuredCardChannelName}
+                    location={featuredCardLocation}
+                    views={featuredCardViews}
+                    distanceLabel={featuredForCuisine.distanceLabel}
+                    rating={featuredForCuisine.rating}
+                    reviewCount={featuredForCuisine.reviewCount}
+                    isSponsored
+                    badgeLabel="Featured"
+                    img={featuredCardImg}
+                    onPress={() => handleFeedItemPress(featuredNavItem)}
+                    onSponsoredOrderPress={() =>
+                      handleSponsoredOrder(featuredNavItem)
+                    }
+                    onSponsoredBookPress={() =>
+                      handleSponsoredBook(featuredNavItem)
+                    }
+                    onSponsoredSubscribePress={() =>
+                      handleSponsoredSubscribe(featuredNavItem)
+                    }
+                    sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                    sponsoredIsSubscribed={!!sponsoredChannelMeta?.isSubscribed}
+                    hideSponsoredSubscribe={
+                      !!user?.id &&
+                      getSponsoredOwnerId(featuredForCuisine) != null &&
+                      String(user.id) ===
+                        String(getSponsoredOwnerId(featuredForCuisine))
+                    }
+                  />
+                ) : null}
+                {shortsPreview.length > 0 ? (
+                  <View style={{ marginTop: 10 }}>
+                    <View style={styles.shortsGrid}>
+                      {shortsPreview.map((item, index) => (
+                        <View
+                          key={`featured-short-${item.id}-${index}`}
+                          style={styles.shortsGridItem}
+                        >
+                          <ShortCard
+                            title={item.title}
+                            img={item.img}
+                            views={item.views}
+                            onPress={() => handleFeedItemPress(item)}
+                            onMorePress={() => openHomeMoreForShort(item)}
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+                {sponsoredForCuisine ? (
+                  <View style={{ marginTop: 12 }}>
+                    <FoodCard
+                      title={sponsoredCardTitle}
+                      channelName={sponsoredCardChannelName}
+                      location={sponsoredCardLocation}
+                      views={sponsoredCardViews}
+                      distanceLabel={sponsoredForCuisine.distanceLabel}
+                      rating={sponsoredForCuisine.rating}
+                      reviewCount={sponsoredForCuisine.reviewCount}
+                      isSponsored
+                      badgeLabel="Sponsored"
+                      img={sponsoredCardImg}
+                      onPress={() => handleFeedItemPress(sponsoredNavItem)}
+                      onSponsoredOrderPress={() =>
+                        handleSponsoredOrder(sponsoredNavItem)
+                      }
+                      onSponsoredBookPress={() =>
+                        handleSponsoredBook(sponsoredNavItem)
+                      }
+                      onSponsoredSubscribePress={() =>
+                        handleSponsoredSubscribe(sponsoredNavItem)
+                      }
+                      sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                      sponsoredIsSubscribed={
+                        !!sponsoredChannelMeta?.isSubscribed
+                      }
+                      hideSponsoredSubscribe={
+                        !!user?.id &&
+                        getSponsoredOwnerId(sponsoredForCuisine) != null &&
+                        String(user.id) ===
+                          String(getSponsoredOwnerId(sponsoredForCuisine))
+                      }
+                    />
+                  </View>
+                ) : null}
+              </>
+            )}
 
             {feedLoading ? (
               <View style={styles.feedLoading}>
@@ -2403,7 +3563,7 @@ const HomeOneScreen = () => {
               </View>
             ) : (
               <>
-                {feedSections.map((section, sectionIdx) => (
+                {sectionsToRender.map((section, sectionIdx) => (
                   <View key={`${section.type}-${sectionIdx}`}>
                     {(section.type === 'MOST_POPULAR_SHORTS' ||
                       section.type === 'TRY_NEW_SHORTS' ||
@@ -2504,37 +3664,35 @@ const HomeOneScreen = () => {
                     ) : section.type === 'MOST_ORDERS' ? (
                       <View style={styles.shortsGrid}>
                         {section.data.map((item, index) => (
-                          <TouchableOpacity
+                          <View
                             key={`${item.id}-rest-${sectionIdx}-${index}`}
                             style={styles.shortsGridItem}
-                            activeOpacity={0.9}
-                            onPress={() =>
-                              navigation.navigate('BusinessProfileViewScreen', {
-                                userId: item.id,
-                                focusVideoTab: true,
-                              })
-                            }
                           >
-                            <FoodCard
+                            <ShortCard
                               title={item.title}
-                              channelName={item.channelName}
-                              location={item.location}
-                              views={item.views}
-                              distanceLabel={item.distanceLabel}
-                              rating={item.rating}
-                              reviewCount={item.reviewCount}
                               img={item.img}
+                              views={item.views}
                               onPress={() =>
-                                navigation.navigate(
-                                  'BusinessProfileViewScreen',
-                                  {
+                                navigation.navigate('ProductShortsVideo', {
+                                  item: {
+                                    id: String(item.id),
                                     userId: item.id,
-                                    focusVideoTab: true,
+                                    ownerName: item.title,
+                                    title: item.title,
+                                    img: item.img,
+                                    viewCount: Number(item.orderCount || 0),
+                                    views: item.views,
+                                    type: 'short',
+                                    user: {
+                                      id: item.id,
+                                      nickname: item.title,
+                                      name: item.title,
+                                    },
                                   },
-                                )
+                                })
                               }
                             />
-                          </TouchableOpacity>
+                          </View>
                         ))}
                       </View>
                     ) : (
@@ -2557,26 +3715,18 @@ const HomeOneScreen = () => {
                             isSponsored={section.type === 'SPONSORED'}
                             img={item.img}
                             onPress={() => handleFeedItemPress(item)}
-                            onSponsoredOrderPress={
-                              section.type === 'SPONSORED'
-                                ? () => handleSponsoredOrder(item)
-                                : undefined
+                            onSponsoredOrderPress={() =>
+                              handleSponsoredOrder(item)
                             }
-                            onSponsoredBookPress={
-                              section.type === 'SPONSORED'
-                                ? () => handleSponsoredBook(item)
-                                : undefined
+                            onSponsoredBookPress={() =>
+                              handleSponsoredBook(item)
                             }
-                            onSponsoredSubscribePress={
-                              section.type === 'SPONSORED'
-                                ? () => handleSponsoredSubscribe(item)
-                                : undefined
+                            onSponsoredSubscribePress={() =>
+                              handleSponsoredSubscribe(item)
                             }
                             sponsoredSubscribeBusy={sponsoredSubscribeToggling}
                             sponsoredIsSubscribed={
-                              section.type === 'SPONSORED'
-                                ? !!sponsoredChannelMeta?.isSubscribed
-                                : false
+                              !!sponsoredChannelMeta?.isSubscribed
                             }
                             hideSponsoredSubscribe={hideSponsoredSubscribe}
                           />
@@ -2886,6 +4036,42 @@ const HomeOneScreen = () => {
         const viewCountRaw =
           selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0;
         const viewsLabel = formatVideoViewsLabel(viewCountRaw);
+        const likeDisplayCount = Math.max(
+          Number(selectedItem?.likeCount ?? 0),
+          Number(selectedItem?._count?.likes ?? 0),
+        );
+        const commentDisplayCount = Math.max(
+          Number(selectedItem?.commentCount ?? 0),
+          Number(selectedItem?.topLevelCommentCount ?? 0),
+          Number(selectedItem?._count?.comments ?? 0),
+        );
+        const descDisplay =
+          (selectedItem?.description &&
+            String(selectedItem.description).trim()) ||
+          (selectedItem?.user?.channelAbout &&
+            String(selectedItem.user.channelAbout).trim()) ||
+          (selectedItem?._campaignOwnerUser?.channelAbout &&
+            String(selectedItem._campaignOwnerUser.channelAbout).trim()) ||
+          'No description.';
+        const contactPhone =
+          selectedItem?.user?.phone ||
+          selectedItem?.user?.mobile ||
+          selectedItem?._campaignOwnerUser?.phone ||
+          selectedItem?._campaignOwnerUser?.mobile ||
+          selectedItem?.phone ||
+          '—';
+        const contactEmail =
+          selectedItem?.user?.email ||
+          selectedItem?._campaignOwnerUser?.email ||
+          selectedItem?.email ||
+          '—';
+        const contactAddress =
+          selectedItem?.location ||
+          selectedItem?.creatorAddress ||
+          selectedItem?.user?.address ||
+          selectedItem?._campaignOwnerUser?.address ||
+          selectedItem?._campaignMeta?.areaName ||
+          '—';
         return (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -3197,7 +4383,7 @@ const HomeOneScreen = () => {
                   color="#333"
                 />
                 <Text style={styles.resActionText}>
-                  {formatCount(selectedItem?.likeCount ?? 0)}
+                  {formatCount(likeDisplayCount)}
                 </Text>
               </TouchableOpacity>
 
@@ -3223,7 +4409,7 @@ const HomeOneScreen = () => {
               <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={() => {
-                  if (!user?.id) {
+                  if (!isAuthenticated || !actorUserId) {
                     navigation.navigate('HomeSevenScreen');
                     return;
                   }
@@ -3235,7 +4421,7 @@ const HomeOneScreen = () => {
               >
                 <Icon name="comment-text-outline" size={21} color="#333" />
                 <Text style={styles.resActionText}>
-                  {formatCount(selectedItem?.commentCount ?? 0)}
+                  {formatCount(commentDisplayCount)}
                 </Text>
               </TouchableOpacity>
 
@@ -3374,16 +4560,7 @@ const HomeOneScreen = () => {
             <View style={styles.resGlassCard}>
               <View style={styles.descContainer}>
                 <Text style={styles.sectionTitle}>Description</Text>
-                <Text style={styles.descText}>
-                  {selectedItem?._campaignVideoDetail
-                    ? selectedItem?.description &&
-                      String(selectedItem.description).trim()
-                      ? String(selectedItem.description).trim()
-                      : 'No description.'
-                    : selectedItem?.description ||
-                      selectedItem?.user?.channelAbout ||
-                      'No description.'}
-                </Text>
+                <Text style={styles.descText}>{descDisplay}</Text>
               </View>
             </View>
 
@@ -3392,25 +4569,18 @@ const HomeOneScreen = () => {
                 <Text style={styles.contactSectionLabel}>Contact</Text>
                 <View style={styles.contactRow}>
                   <Icon name="phone-outline" size={18} color="#888" />
-                  <Text style={styles.contactRowText}>
-                    {selectedItem?.user?.phone || '—'}
-                  </Text>
+                  <Text style={styles.contactRowText}>{contactPhone}</Text>
                 </View>
                 <View style={styles.contactRow}>
                   <Icon name="email-outline" size={18} color="#888" />
                   <Text style={styles.contactRowText} numberOfLines={2}>
-                    {selectedItem?.user?.email || '—'}
+                    {contactEmail}
                   </Text>
                 </View>
                 <View style={styles.contactDivider} />
                 <View style={[styles.contactRow, styles.contactRowLast]}>
                   <Icon name="map-marker-outline" size={18} color="#888" />
-                  <Text style={styles.contactRowText}>
-                    {selectedItem?.location ||
-                      selectedItem?.creatorAddress ||
-                      selectedItem?.user?.address ||
-                      '—'}
-                  </Text>
+                  <Text style={styles.contactRowText}>{contactAddress}</Text>
                 </View>
                 {selectedItem?.creatorLatitude != null &&
                 selectedItem?.creatorLongitude != null &&
@@ -3521,7 +4691,7 @@ const HomeOneScreen = () => {
           commentCount: selectedItem?.commentCount ?? 0,
           topLevelCommentCount: selectedItem?.commentCount ?? 0,
         }}
-        user={user}
+        user={{ ...(user || {}), id: actorUserId || authUserId || user?.id }}
         onCommentAdded={() => {
           setSelectedItem(prev => {
             if (!prev?.id) return prev;
@@ -3873,6 +5043,7 @@ const FoodCard = ({
   title,
   location,
   isSponsored,
+  badgeLabel,
   img,
   onPress,
   views,
@@ -3886,59 +5057,61 @@ const FoodCard = ({
   sponsoredSubscribeBusy,
   sponsoredIsSubscribed,
   hideSponsoredSubscribe,
+  compact,
 }) => {
+  const displayTitle = String(
+    isSponsored ? channelName || title || '' : title || '',
+  ).trim();
+  const safeTitle = displayTitle || 'Restaurant';
   const imageSection = (
     <View style={styles.cardImageContainer}>
       <Image source={{ uri: img }} style={styles.sponsoredCardImage} />
       <View style={styles.playIconOverlay}>
         <Icon name="play-circle" size={50} color="rgba(255,255,255,0.8)" />
       </View>
-      {isSponsored && (
+      {badgeLabel ? (
         <View style={styles.sponsoredTag}>
-          <Text style={styles.sponsoredTagText}>Sponsored</Text>
+          <Text style={styles.sponsoredTagText}>{badgeLabel}</Text>
         </View>
-      )}
+      ) : null}
     </View>
   );
 
   const infoSection = (
-    <View style={[styles.cardInfo, isSponsored && styles.cardInfoSponsored]}>
+    <View
+      style={[
+        styles.cardInfo,
+        styles.cardInfoSponsored,
+        compact && styles.cardInfoCompact,
+      ]}
+    >
       <View style={styles.cardInfoMain}>
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {(isSponsored ? channelName || title : title).length > 30
-            ? `${(isSponsored ? channelName || title : title).substring(
-                0,
-                30,
-              )}...`
-            : isSponsored
-            ? channelName || title
-            : title}
-        </Text>
-        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cardLocText}>
-          {location}
-        </Text>
-        {isSponsored ? (
-          <View style={styles.sponsoredMetaRow}>
-            <View style={styles.sponsoredMetaItem}>
-              <Icon name="star" size={13} color="#F5A623" />
-              <Text style={styles.sponsoredMetaText}>
-                {Number.isFinite(Number(rating))
-                  ? Number(rating).toFixed(1)
-                  : '0.0'}{' '}
-                (
-                {Number.isFinite(Number(reviewCount)) ? Number(reviewCount) : 0}
-                )
-              </Text>
-            </View>
-            <View style={styles.sponsoredMetaItem}>
-              <Icon name="eye-outline" size={13} color="#777" />
-              <Text style={styles.sponsoredMetaText}>{views || '0 views'}</Text>
-            </View>
-            <Text style={styles.sponsoredMetaText}>{distanceLabel || '—'}</Text>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {safeTitle.length > 30
+              ? `${safeTitle.substring(0, 30)}...`
+              : safeTitle}
+          </Text>
+          <View style={styles.cardInlineRating}>
+            <Icon name="star" size={13} color="#F5A623" />
+            <Text style={styles.sponsoredMetaText}>
+              {Number.isFinite(Number(rating))
+                ? Number(rating).toFixed(1)
+                : '0.0'}{' '}
+              ({Number.isFinite(Number(reviewCount)) ? Number(reviewCount) : 0})
+            </Text>
           </View>
-        ) : null}
+        </View>
+        <View style={styles.sponsoredMetaRow}>
+          <Text style={styles.sponsoredMetaText}>{distanceLabel || '—'}</Text>
+          <View style={styles.sponsoredMetaItem}>
+            <Icon name="eye-outline" size={13} color="#777" />
+            <Text style={styles.sponsoredMetaText}>{views || '0 views'}</Text>
+          </View>
+        </View>
+        <Text style={styles.cardPromoLine}>Like what you see? Get it now</Text>
       </View>
-      {isSponsored ? (
+      {compact ? null : (
         <View style={styles.sponsoredActions}>
           <View style={styles.sponsoredTopActions}>
             <TouchableOpacity
@@ -3966,9 +5139,7 @@ const FoodCard = ({
               ]}
               activeOpacity={0.85}
               onPress={onSponsoredSubscribePress}
-              disabled={
-                !onSponsoredSubscribePress || !!sponsoredSubscribeBusy
-              }
+              disabled={!onSponsoredSubscribePress || !!sponsoredSubscribeBusy}
             >
               {sponsoredSubscribeBusy ? (
                 <ActivityIndicator size="small" color="#555" />
@@ -3986,35 +5157,17 @@ const FoodCard = ({
             </TouchableOpacity>
           ) : null}
         </View>
-      ) : (
-        <View style={styles.cardStats}>
-          <Text style={styles.statSmall}>{views || '—'}</Text>
-          <Text style={styles.statSmall}>{distanceLabel || '—'}</Text>
-        </View>
       )}
     </View>
   );
 
-  if (isSponsored) {
-    return (
-      <View style={styles.sponsoredCard}>
-        <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
-          {imageSection}
-        </TouchableOpacity>
-        {infoSection}
-      </View>
-    );
-  }
-
   return (
-    <TouchableOpacity
-      style={styles.sponsoredCard}
-      onPress={onPress}
-      activeOpacity={0.9}
-    >
-      {imageSection}
+    <View style={styles.sponsoredCard}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
+        {imageSection}
+      </TouchableOpacity>
       {infoSection}
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -4242,33 +5395,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 1,
     gap: 8,
   },
+  cuisineSliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  cuisineArrowBtn: {
+    width: 16,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
   cuisineChip: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 66,
+    width: 62,
     marginRight: 4,
     backgroundColor: '#FFF',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#ECECEC',
-    paddingTop: 5,
-    paddingBottom: 6,
+    paddingTop: 6,
+    paddingBottom: 7,
   },
   cuisineIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#FFF8EA',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF2D8',
     borderWidth: 1,
-    borderColor: '#F2E2BF',
+    borderColor: '#EBCB8A',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  cuisineIconImage: {
+    width: 44,
+    height: 44,
+  },
   cuisineChipText: {
-    color: '#666',
+    color: '#4E4E4E',
     fontSize: 10,
     fontWeight: '600',
     marginTop: 4,
+    textAlign: 'center',
   },
   sectionTitle: {
     fontSize: 18,
@@ -4373,7 +5544,7 @@ const styles = StyleSheet.create({
   },
   sponsoredTag: {
     position: 'absolute',
-    bottom: 10,
+    top: 10,
     left: 10,
     backgroundColor: '#F5A623',
     paddingHorizontal: 10,
@@ -4394,9 +5565,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginTop: -3,
   },
+  cardInfoCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
   cardInfoMain: {
     flex: 1,
     minWidth: 0,
+    paddingRight: 8,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  cardInlineRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    marginLeft: 8,
   },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
   cardLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
@@ -4418,8 +5605,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  cardPromoLine: {
+    marginTop: 3,
+    color: '#8A8A8A',
+    fontSize: 11,
+    fontWeight: '500',
+  },
   sponsoredActions: {
-    marginLeft: 8,
+    marginLeft: 14,
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     minHeight: 64,
@@ -4427,22 +5620,29 @@ const styles = StyleSheet.create({
   sponsoredTopActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   sponsoredOrderBtn: {
     backgroundColor: '#F5A623',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginRight: 6,
+    borderRadius: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginRight: 0,
+    minHeight: 28,
+    justifyContent: 'center',
   },
   sponsoredOrderText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   sponsoredBookBtn: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#F5A623',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 0,
+    borderWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     backgroundColor: '#FFF7EA',
+    minHeight: 28,
+    justifyContent: 'center',
   },
   sponsoredBookText: { color: '#F5A623', fontSize: 12, fontWeight: '700' },
   sponsoredSubscribeBtn: {
