@@ -21,6 +21,10 @@ import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import CustomPlaylistScreen from '../screens/CustomPlaylistScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
 import FeaturedVideoUploadScreen from '../screens/FeaturedVideoUploadScreen';
+import PostEditNew from '../screens/reelsNewScreen/PostEditNew';
+import PostCaptionNew from '../screens/reelsNewScreen/PostCaptionNew';
+import PostPreviewNew from '../screens/reelsNewScreen/PostPreviewNew';
+import PostScheduleNew from '../screens/reelsNewScreen/PostScheduleNew';
 
 const Root = createStackNavigator();
 
@@ -66,6 +70,10 @@ const RootStack = () => {
         name="FeaturedVideoUpload"
         component={FeaturedVideoUploadScreen}
       />
+      <Root.Screen name="PostEditNew" component={PostEditNew} />
+      <Root.Screen name="PostCaptionNew" component={PostCaptionNew} />
+      <Root.Screen name="PostPreviewNew" component={PostPreviewNew} />
+      <Root.Screen name="PostScheduleNew" component={PostScheduleNew} />
     </Root.Navigator>
   );
 };

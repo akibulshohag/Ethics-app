@@ -31,6 +31,7 @@ import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import OrderListScreen from '../screens/OrderListScreen';
+import PostCreateNew from '../screens/reelsNewScreen/PostCreateNew';
 import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
 import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
@@ -117,7 +118,8 @@ const BottomNaivgation = () => {
     }
     const currentRoute = state.routes[state.index || 0];
     const tabName = currentRoute?.name;
-    if (!tabName || tabName === 'Create') return { tab: 'Home1', screen: 'HomeOneScreen' };
+    if (!tabName || tabName === 'Create')
+      return { tab: 'Home1', screen: 'HomeOneScreen' };
     const screenName = getFocusedRouteNameFromRoute(currentRoute);
     const defaults = { Home1: 'LandingScreen', Library: 'LibraryScreen' };
     return {
@@ -141,7 +143,10 @@ const BottomNaivgation = () => {
 
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: isShortsFullScreen ? '#000' : undefined }}
+      style={{
+        flex: 1,
+        backgroundColor: isShortsFullScreen ? '#000' : undefined,
+      }}
       edges={isShortsFullScreen ? [] : ['bottom']}
     >
       <KeyboardAvoidingView
@@ -307,6 +312,23 @@ const BottomNaivgation = () => {
             }}
           />
 
+          <Tab.Screen
+            name="Post"
+            component={PostCreateNew}
+            listeners={{
+              tabPress: redirectToHomeThreeIfGuest,
+            }}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <Icon
+                  name="post-outline"
+                  size={28}
+                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
+                />
+              ),
+            }}
+          />
+
           {/* <Tab.Screen
             name="Subscriptions"
             component={SubscriptionsScreen}
@@ -445,11 +467,10 @@ const BottomNaivgation = () => {
               },
               tabBarIcon: ({ focused }) => (
                 <Icon
-                  name="file-document-outline" 
+                  name="file-document-outline"
                   size={28}
                   color={focused ? COLORS.primaryOrange : COLORS.gray500}
                 />
-                
               ),
             })}
           />
