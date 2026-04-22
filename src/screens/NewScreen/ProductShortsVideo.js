@@ -1,9 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-} from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -42,7 +37,11 @@ import VideoScheduleModal from '../../components/VideoScheduleModal';
 import VideoCoverPickerModal from '../../components/VideoCoverPickerModal';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { safeImageUri, navigationRef, isLocalMediaUri } from '../../utils/helper';
+import {
+  safeImageUri,
+  navigationRef,
+  isLocalMediaUri,
+} from '../../utils/helper';
 import { buildContentShareMessage } from '../../utils/contentLinks';
 import ProductShortsVideoRow from './ProductShortsVideoRow';
 import { listMySubscribersWhoOrderedFromOwner } from '../../services/orderService';
@@ -145,11 +144,7 @@ const normalizeShort = s => {
     (typeof s?.user === 'string' ? s.user : '') ||
     'user';
   const ownerAddress =
-    userObj?.address ||
-    s?.address ||
-    s?.location ||
-    s?.creatorAddress ||
-    '';
+    userObj?.address || s?.address || s?.location || s?.creatorAddress || '';
   const roleRaw =
     userObj?.role != null
       ? userObj.role
@@ -178,8 +173,7 @@ const normalizeShort = s => {
     desc: s.description || s.title || s.desc || 'Description',
     location: ownerAddress || 'Near you',
     creatorAddress: ownerAddress,
-    creatorRole:
-      roleRaw != null ? String(roleRaw).toLowerCase() : undefined,
+    creatorRole: roleRaw != null ? String(roleRaw).toLowerCase() : undefined,
     viewCount,
     views: formatCount(viewCount) || '0',
     likeCount,
@@ -594,8 +588,6 @@ const ProductShortsVideo = () => {
     enrichShortsWithProfile,
   ]);
 
-  const viewRecordedIdsRef = useRef(new Set());
-
   const applyViewIncrement = useCallback(shortId => {
     if (!shortId) return;
     setVideos(prev => {
@@ -620,33 +612,31 @@ const ProductShortsVideo = () => {
     });
   }, []);
 
-  /** Optimistic +1; server in background; revert on failure — same pattern as ShortsVideoScreen */
+  /** Optimistic +1 on every visible event (including revisits). */
   const recordShortViewAndBumpUI = useCallback(
     shortId => {
       if (!shortId) return;
       const sid = String(shortId);
-      if (viewRecordedIdsRef.current.has(sid)) return;
-      viewRecordedIdsRef.current.add(sid);
       applyViewIncrement(sid);
       shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
-        viewRecordedIdsRef.current.delete(sid);
         applyViewDecrement(sid);
       });
     },
     [user?.id, applyViewIncrement, applyViewDecrement],
   );
 
-  useEffect(() => {
-    const sub = navigation.addListener('beforeRemove', () => {
-      viewRecordedIdsRef.current.clear();
-    });
-    return sub;
-  }, [navigation]);
-
-  useEffect(() => {
-    if (!currentShortId || loading) return;
-    recordShortViewAndBumpUI(currentShortId);
-  }, [currentShortId, loading, recordShortViewAndBumpUI]);
+  /** Each double tap should also increment view count (not deduped). */
+  const recordShortViewFromDoubleTap = useCallback(
+    item => {
+      if (!item?.id) return;
+      const sid = String(item.id);
+      applyViewIncrement(sid);
+      shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
+        applyViewDecrement(sid);
+      });
+    },
+    [user?.id, applyViewIncrement, applyViewDecrement],
+  );
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }) => {
@@ -667,23 +657,38 @@ const ProductShortsVideo = () => {
       }
       const forceLike = opts?.forceLike === true;
       if (forceLike && item?.isLiked) return;
+      const previousLiked = !!item?.isLiked;
+      const nextLiked = forceLike ? true : !previousLiked;
+      if (nextLiked === previousLiked) return;
+      const delta = nextLiked ? 1 : -1;
       try {
-        await shortsService.toggleLike(item.id, user.id);
         setVideos(prev =>
           prev.map(v => {
             if (v.id !== item.id) return v;
-            const newLiked = !v.isLiked;
-            const delta = newLiked ? 1 : -1;
             const newCount = Math.max(0, (v.likeCount ?? 0) + delta);
             return {
               ...v,
-              isLiked: newLiked,
+              isLiked: nextLiked,
               likeCount: newCount,
               likes: formatCount(newCount),
             };
           }),
         );
-      } catch (_) {}
+        await shortsService.toggleLike(item.id, user.id);
+      } catch (_) {
+        setVideos(prev =>
+          prev.map(v => {
+            if (v.id !== item.id) return v;
+            const rollbackCount = Math.max(0, (v.likeCount ?? 0) - delta);
+            return {
+              ...v,
+              isLiked: previousLiked,
+              likeCount: rollbackCount,
+              likes: formatCount(rollbackCount),
+            };
+          }),
+        );
+      }
     },
     [user?.id, navigation],
   );
@@ -712,7 +717,7 @@ const ProductShortsVideo = () => {
   }, []);
 
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 80,
+    itemVisiblePercentThreshold: 60,
   }).current;
 
   const getItemLayout = useCallback(
@@ -824,7 +829,7 @@ const ProductShortsVideo = () => {
     setReportVisible(true);
   };
 
-  const openEditShortFromMenuProduct = () => {
+  const openEditShortFromMenuProduct = async () => {
     const t = menuTargetProduct();
     if (!user?.id || !t?.id) {
       navigation.navigate('HomeSevenScreen');
@@ -832,54 +837,115 @@ const ProductShortsVideo = () => {
     }
     const ownerId = t?.userId ?? t?.userObj?.id ?? null;
     if (!ownerId || String(ownerId) !== String(user.id)) return;
-    setEditShortTargetId(String(t.id));
-    setEditShortTitle(String(t?.title || t?.desc || '').trim());
-    setEditShortText(String(t?.desc || t?.title || '').trim());
-    setEditShortThumbnailUri(
-      String(t?.thumbnailUrl || t?.thumbnail || t?.coverUrl || '').trim(),
-    );
-    setEditShortVideoUri(String(t?.videoUrl || t?.mediaUrl || '').trim());
-    const dur = Number(t?.duration);
-    setEditShortDurationSec(
-      Number.isFinite(dur) && dur > 0 ? dur : 15,
-    );
-    setEditLocalThumbMeta(null);
-    setEditVideoPickMeta(null);
-    const pubAt = t?.publishedAt ? new Date(t.publishedAt) : null;
-    const schedAt = t?.scheduledPublishAt
-      ? new Date(t.scheduledPublishAt)
-      : null;
+    let sourceShort = t;
+    try {
+      const detailRes = await shortsService.getShortById(
+        t.id,
+        user.id,
+        String(user?.role || '').toLowerCase() || undefined,
+      );
+      const resolved =
+        detailRes?.short && typeof detailRes.short === 'object'
+          ? detailRes.short
+          : detailRes?.data && typeof detailRes.data === 'object'
+          ? detailRes.data
+          : detailRes;
+      if (resolved && typeof resolved === 'object') sourceShort = resolved;
+    } catch {}
+    const pubAtRaw =
+      sourceShort?.publishedAt ||
+      sourceShort?.publishAt ||
+      sourceShort?.postedAt ||
+      null;
+    const schedAtRaw =
+      sourceShort?.scheduledPublishAt ||
+      sourceShort?.scheduleAt ||
+      sourceShort?.scheduleDate ||
+      sourceShort?.scheduledAt ||
+      null;
+    const pubAt = pubAtRaw ? new Date(pubAtRaw) : null;
+    const schedAt = schedAtRaw ? new Date(schedAtRaw) : null;
     const cand =
       schedAt && Number.isFinite(schedAt.getTime())
         ? schedAt
         : pubAt && Number.isFinite(pubAt.getTime())
-          ? pubAt
-          : null;
+        ? pubAt
+        : null;
     const isFuture =
       cand &&
       Number.isFinite(cand.getTime()) &&
       cand.getTime() > Date.now() + 60_000;
-    setEditShortScheduleDate(isFuture ? cand : null);
-    setEditInitialHadFutureSchedule(!!isFuture);
-    setEditShortVisibility(
-      String(t?.visibility || '').toLowerCase() === 'private'
+    const visibilityLabel =
+      String(sourceShort?.visibility || '').toLowerCase() === 'private'
         ? 'Private'
-        : 'Public',
-    );
-    setEditShortComments(
-      String(t?.commentSetting || '').toLowerCase() === 'disable'
+        : 'Public';
+    const commentsLabel =
+      String(sourceShort?.commentSetting || '').toLowerCase() === 'disable'
         ? 'Disable comments'
-        : String(t?.commentSetting || '').toLowerCase() === 'hold'
+        : String(sourceShort?.commentSetting || '').toLowerCase() === 'hold'
         ? 'Hold potentially inappropriate comments'
-        : 'Allow all comments',
-    );
-    setEditShortAudience({
-      madeForKids:
-        typeof t?.madeForKids === 'boolean' ? Boolean(t.madeForKids) : null,
-      ageRestricted:
-        typeof t?.ageRestricted === 'boolean' ? Boolean(t.ageRestricted) : null,
+        : 'Allow all comments';
+    const durationNum = Number(sourceShort?.duration);
+    navigation.navigate('PostCreateNew', {
+      isEdit: true,
+      shortId: String(sourceShort?.id || t.id),
+      short: sourceShort,
+      editDraft: {
+        source: 'short-edit',
+        shortId: String(sourceShort?.id || t.id),
+        caption: String(
+          sourceShort?.desc || sourceShort?.description || sourceShort?.title || '',
+        ).trim(),
+        title: String(
+          sourceShort?.title || sourceShort?.desc || sourceShort?.description || '',
+        ).trim(),
+        video: {
+          uri: String(sourceShort?.videoUrl || sourceShort?.mediaUrl || '').trim(),
+          type: 'video/mp4',
+          name: `short-${sourceShort?.id || t.id}.mp4`,
+          durationSec:
+            Number.isFinite(durationNum) && durationNum > 0 ? durationNum : 15,
+        },
+        thumbnail: {
+          uri: String(
+            sourceShort?.thumbnailUrl ||
+              sourceShort?.thumbnail ||
+              sourceShort?.coverUrl ||
+              '',
+          ).trim(),
+          type: 'image/jpeg',
+          name: `short-cover-${sourceShort?.id || t.id}.jpg`,
+        },
+        platforms: Array.isArray(sourceShort?.platforms)
+          ? sourceShort.platforms
+          : Array.isArray(sourceShort?.selectedPlatforms)
+          ? sourceShort.selectedPlatforms
+          : [],
+        scheduledPublishAt:
+          sourceShort?.scheduledPublishAt ||
+          sourceShort?.scheduleAt ||
+          (isFuture && cand ? cand.toISOString() : null),
+        edits: {
+          visibility: visibilityLabel,
+          comments: commentsLabel,
+          madeForKids:
+            typeof sourceShort?.madeForKids === 'boolean'
+              ? Boolean(sourceShort.madeForKids)
+              : null,
+          ageRestricted:
+            typeof sourceShort?.ageRestricted === 'boolean'
+              ? Boolean(sourceShort.ageRestricted)
+              : null,
+          scheduledPublishAt: isFuture && cand ? cand.toISOString() : null,
+          hadFutureSchedule: !!isFuture,
+          platforms: Array.isArray(sourceShort?.platforms)
+            ? sourceShort.platforms
+            : Array.isArray(sourceShort?.selectedPlatforms)
+            ? sourceShort.selectedPlatforms
+            : [],
+        },
+      },
     });
-    setEditShortVisible(true);
   };
 
   const openEditCoverFromVideoProduct = () => {
@@ -936,8 +1002,7 @@ const ProductShortsVideo = () => {
     const nextText = String(editShortText || '').trim();
     let thumbOut = String(editShortThumbnailUri || '').trim();
     let vidOut = String(editShortVideoUri || '').trim();
-    const needUpload =
-      isLocalMediaUri(thumbOut) || isLocalMediaUri(vidOut);
+    const needUpload = isLocalMediaUri(thumbOut) || isLocalMediaUri(vidOut);
     const scheduleMs =
       editShortScheduleDate instanceof Date
         ? editShortScheduleDate.getTime()
@@ -979,7 +1044,8 @@ const ProductShortsVideo = () => {
           Toast.show({
             type: 'info',
             text1: 'Media route not found on backend',
-            text2: 'Saved details only. Restart/update backend for media replace.',
+            text2:
+              'Saved details only. Restart/update backend for media replace.',
           });
         }
       }
@@ -1043,8 +1109,8 @@ const ProductShortsVideo = () => {
                 scheduledPublishAt: isFutureSchedule
                   ? editShortScheduleDate.toISOString()
                   : editInitialHadFutureSchedule
-                    ? null
-                    : v.scheduledPublishAt,
+                  ? null
+                  : v.scheduledPublishAt,
               }
             : v,
         ),
@@ -1191,6 +1257,7 @@ const ProductShortsVideo = () => {
           index={index}
           currentIndex={currentIndex}
           onLike={handleLike}
+          onDoubleTapRecordView={recordShortViewFromDoubleTap}
           onShare={handleShare}
           onOpenComments={handleOpenComments}
           onOpenMoreMenu={itemIn => {
@@ -1382,10 +1449,7 @@ const ProductShortsVideo = () => {
                       const d = editShortScheduleDate;
                       if (!(d instanceof Date)) return 'Now';
                       const ms = d.getTime();
-                      if (
-                        !Number.isFinite(ms) ||
-                        ms <= Date.now() + 60_000
-                      ) {
+                      if (!Number.isFinite(ms) || ms <= Date.now() + 60_000) {
                         return 'Now';
                       }
                       return d.toLocaleDateString(undefined, {
@@ -1620,10 +1684,10 @@ const ProductShortsVideo = () => {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         getItemLayout={getItemLayout}
-        initialNumToRender={2}
-        maxToRenderPerBatch={3}
-        windowSize={10}
-        removeClippedSubviews={false}
+        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        windowSize={3}
+        removeClippedSubviews={true}
         extraData={{
           currentIndex,
           editShortVisible,

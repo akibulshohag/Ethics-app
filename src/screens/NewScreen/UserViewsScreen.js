@@ -190,6 +190,7 @@ const mapPostToCard = (p, profile) => {
   return {
     id: p.id,
     postId: p.id,
+    sourceType: 'post',
     title: p.title || 'Untitled',
     channelName: name,
     channelAvatar: avatar,
@@ -216,6 +217,52 @@ const mapPostToCard = (p, profile) => {
     hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
     mediaUrl: p.mediaUrl,
     mediaType: p.mediaType || 'image',
+  };
+};
+
+const mapShortToPostCard = (s, profile, profileUserId) => {
+  const name =
+    profile?.channelName || profile?.nickname || profile?.name || 'Unknown';
+  const avatar = safeImageUri(
+    profile?.channelAvatar || profile?.photos?.[0]?.src || profile?.photos?.[0],
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      name,
+    )}&background=111&color=fff`,
+  );
+  const createdAt = s.publishedAt || s.createdAt;
+  return {
+    id: s.id,
+    postId: s.id,
+    sourceType: 'short',
+    shortId: s.id,
+    title: s.title || 'Short',
+    channelName: name,
+    channelAvatar: avatar,
+    publishedAt: timeAgo(createdAt),
+    sortTime: new Date(createdAt || 0).getTime() || Date.now(),
+    thumbnail: safeImageUri(
+      s.thumbnailUrl || s.coverUrl || s.videoUrl,
+      'https://via.placeholder.com/600',
+    ),
+    duration: s.duration != null ? formatDuration(s.duration) : '',
+    likeCount: s.likeCount ?? 0,
+    dislikeCount: s.dislikeCount ?? 0,
+    commentCount: s.commentCount ?? 0,
+    shareCount: s.shareCount ?? 0,
+    likes: formatCount(s.likeCount ?? 0),
+    dislikes: formatCount(s.dislikeCount ?? 0),
+    comments: formatCount(s.commentCount ?? 0),
+    shares: formatCount(s.shareCount ?? 0),
+    isLiked: s.isLiked ?? false,
+    isDisliked: s.isDisliked ?? false,
+    website: '',
+    hashtags: [],
+    mediaUrl: s.videoUrl || '',
+    videoUrl: s.videoUrl || '',
+    mediaType: 'short',
+    type: 'short',
+    _type: 'short',
+    userId: s.userId || profileUserId,
   };
 };
 
@@ -327,7 +374,11 @@ const UserViewsScreen = ({ navigation }) => {
   }, []);
 
   const posts = useMemo(() => {
-    return (rawPosts || []).map(p => mapPostToCard(p, profile));
+    return (rawPosts || []).map(p =>
+      String(p?.sourceType || '').toLowerCase() === 'short'
+        ? mapShortToPostCard(p, profile, profileUserId)
+        : mapPostToCard(p, profile),
+    );
   }, [rawPosts, profile]);
 
   const instagramFeedItems = useMemo(() => {
@@ -1285,14 +1336,70 @@ const UserViewsScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setPostsLoading(true);
     try {
-      const res = await getPostsByUser(profileUserId, 1, 50, currentUser?.id);
-      setRawPosts(res?.posts || []);
+      const [postRes, shortRes] = await Promise.all([
+        getPostsByUser(profileUserId, 1, 50, currentUser?.id),
+        shortsService.getUserShorts(profileUserId, 1, 50),
+      ]);
+      const postRows = (postRes?.posts || []).map(p => ({
+        ...p,
+        sourceType: 'post',
+      }));
+      const shortRows = (shortRes?.shorts || []).map(s => ({
+        ...s,
+        sourceType: 'short',
+      }));
+      const merged = [...postRows, ...shortRows].sort((a, b) => {
+        const ta = new Date(a?.publishedAt || a?.createdAt || 0).getTime() || 0;
+        const tb = new Date(b?.publishedAt || b?.createdAt || 0).getTime() || 0;
+        return tb - ta;
+      });
+      setRawPosts(merged);
     } catch (e) {
       setRawPosts([]);
     } finally {
       setPostsLoading(false);
     }
   }, [profileUserId, currentUser?.id]);
+
+  const openShortFromPostsTab = useCallback(
+    item => {
+      const sid = String(item?.shortId || item?.id || '').trim();
+      if (!sid) return;
+      const fallbackName =
+        profile?.nickname || profile?.channelName || profile?.name || 'User';
+      const initialShortItem = {
+        ...item,
+        id: sid,
+        type: 'short',
+        userId: item?.userId || profileUserId,
+        videoUrl: item?.videoUrl || item?.mediaUrl,
+        user: {
+          id: profileUserId,
+          nickname: fallbackName,
+          name: profile?.name || fallbackName,
+        },
+      };
+      const scopedShortsFeed = (posts || [])
+        .filter(p => String(p?.sourceType || '').toLowerCase() === 'short')
+        .map(p => ({
+          id: p.shortId || p.id,
+          userId: p.userId || profileUserId,
+          videoUrl: String(p.videoUrl || p.mediaUrl || '').trim(),
+          thumbnailUrl: p.thumbnail,
+          _type: 'short',
+          type: 'short',
+          title: p.title,
+        }))
+        .filter(v => v.id && v.videoUrl);
+      navigateToScopedShortsPlayer(navigation, {
+        shortId: sid,
+        initialShortItem,
+        shortsFeedMode: 'owner',
+        scopedShortsFeed,
+      });
+    },
+    [navigation, posts, profileUserId, profile],
+  );
 
   const loadGallery = useCallback(async () => {
     if (!profileUserId) return;
@@ -1770,6 +1877,10 @@ const UserViewsScreen = ({ navigation }) => {
       );
     }
     if (activeTab === 'Posts')
+      {
+        const isShortItem =
+          String(item?.sourceType || '').toLowerCase() === 'short' ||
+          String(item?.mediaType || '').toLowerCase() === 'short';
       return (
         <BusinessVideoCard
           video={{
@@ -1782,13 +1893,16 @@ const UserViewsScreen = ({ navigation }) => {
           avatarSize={45}
           avatarMarginRight={8}
           hideMenuButton
-          onPress={() => openPostMediaPreview(item)}
-          onLike={() => handlePostLike(item)}
-          onDislike={() => handlePostDislike(item)}
-          onCommentPress={() => openPostComments(item)}
-          onShare={() => handlePostShare(item)}
+          onPress={() =>
+            isShortItem ? openShortFromPostsTab(item) : openPostMediaPreview(item)
+          }
+          onLike={isShortItem ? undefined : () => handlePostLike(item)}
+          onDislike={isShortItem ? undefined : () => handlePostDislike(item)}
+          onCommentPress={isShortItem ? undefined : () => openPostComments(item)}
+          onShare={isShortItem ? undefined : () => handlePostShare(item)}
         />
       );
+      }
     if (activeTab === 'Gallery') {
       return (
         <TouchableOpacity

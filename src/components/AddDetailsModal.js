@@ -180,14 +180,22 @@ const AddDetailsModal = ({
         formData.append('filterName', shortsMetadata.selectedFilter.name);
       }
       if (shortsMetadata.selectedSound) {
-        formData.append('soundId', shortsMetadata.selectedSound.id);
-        formData.append('soundTitle', shortsMetadata.selectedSound.title);
+        if (shortsMetadata.selectedSound.id) {
+          formData.append('soundId', shortsMetadata.selectedSound.id);
+        }
+        formData.append('soundTitle', shortsMetadata.selectedSound.title || '');
         formData.append(
           'soundArtist',
           shortsMetadata.selectedSound.artist || '',
         );
-        if (shortsMetadata.selectedSound.soundUrl) {
-          formData.append('soundUrl', shortsMetadata.selectedSound.soundUrl);
+        const selectedSoundUrl = String(
+          shortsMetadata.selectedSound.soundUrl ||
+            shortsMetadata.selectedSound.previewUrl ||
+            shortsMetadata.selectedSound.url ||
+            '',
+        ).trim();
+        if (selectedSoundUrl) {
+          formData.append('soundUrl', selectedSoundUrl);
         }
       }
       if (shortsMetadata.beautyLevel) {

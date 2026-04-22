@@ -258,6 +258,7 @@ const GalleryVideoDetailModal = ({
   const [videoError, setVideoError] = useState(null);
   const videoRef = useRef(null);
   const isSeekingRef = useRef(false);
+  const seekResetTimerRef = useRef(null);
   const [isSliding, setIsSliding] = useState(false);
   const [slidingValue, setSlidingValue] = useState(0);
 
@@ -348,6 +349,15 @@ const GalleryVideoDetailModal = ({
       setSaveTargetId(null);
     }
   }, [visible]);
+
+  useEffect(() => {
+    return () => {
+      if (seekResetTimerRef.current) {
+        clearTimeout(seekResetTimerRef.current);
+        seekResetTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const moreVideoIdsKey = useMemo(
     () =>
@@ -477,8 +487,12 @@ const GalleryVideoDetailModal = ({
       isSeekingRef.current = true;
       videoRef.current.seek(clamped);
       setVideoProgress(p => ({ ...p, currentTime: clamped }));
-      setTimeout(() => {
+      if (seekResetTimerRef.current) {
+        clearTimeout(seekResetTimerRef.current);
+      }
+      seekResetTimerRef.current = setTimeout(() => {
         isSeekingRef.current = false;
+        seekResetTimerRef.current = null;
       }, 300);
     },
     [videoProgress.duration],

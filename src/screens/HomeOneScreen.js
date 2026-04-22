@@ -2837,8 +2837,7 @@ const HomeOneScreen = () => {
     const featuredForCuisine =
       featuredDisplayItem &&
       isPromoInSelectedArea(featuredDisplayItem) &&
-      hasRenderablePromoCard(featuredDisplayItem) &&
-      matchesCuisineItem(featuredDisplayItem);
+      hasRenderablePromoCard(featuredDisplayItem);
     const sponsoredForCuisine =
       sponsoredDisplayItem &&
       isPromoInSelectedArea(sponsoredDisplayItem) &&
@@ -3301,6 +3300,36 @@ const HomeOneScreen = () => {
                     navigation.navigate('OrderNowBrowseScreen', {
                       initialQuery: searchDebounced || searchQuery || '',
                       nearLabel: primaryLoc || '',
+                      featuredSnapshot:
+                        featuredForCuisine && featuredOwnerId
+                          ? {
+                              ownerUserId: String(featuredOwnerId),
+                              videoId: String(
+                                featuredVideo?.video?.id ??
+                                  featuredForCuisine?.id ??
+                                  '',
+                              ).trim(),
+                              thumbnailUrl: featuredCardImg,
+                              title: featuredCardTitle,
+                              channelName: featuredCardChannelName,
+                              location: featuredCardLocation,
+                              rating: Number(
+                                featuredForCuisine?.rating ??
+                                  featuredChannelMeta?.averageRating ??
+                                  0,
+                              ),
+                              reviewCount: Number(
+                                featuredForCuisine?.reviewCount ??
+                                  featuredChannelMeta?.reviewCount ??
+                                  0,
+                              ),
+                              totalViews: Number(
+                                featuredVideo?.video?.viewCount ??
+                                  featuredForCuisine?.viewCount ??
+                                  0,
+                              ),
+                            }
+                          : undefined,
                     })
                   }
                 >
@@ -3386,6 +3415,36 @@ const HomeOneScreen = () => {
                     navigation.navigate('OrderNowBrowseScreen', {
                       initialQuery: searchDebounced || searchQuery || '',
                       nearLabel: primaryLoc || '',
+                      featuredSnapshot:
+                        featuredForCuisine && featuredOwnerId
+                          ? {
+                              ownerUserId: String(featuredOwnerId),
+                              videoId: String(
+                                featuredVideo?.video?.id ??
+                                  featuredForCuisine?.id ??
+                                  '',
+                              ).trim(),
+                              thumbnailUrl: featuredCardImg,
+                              title: featuredCardTitle,
+                              channelName: featuredCardChannelName,
+                              location: featuredCardLocation,
+                              rating: Number(
+                                featuredForCuisine?.rating ??
+                                  featuredChannelMeta?.averageRating ??
+                                  0,
+                              ),
+                              reviewCount: Number(
+                                featuredForCuisine?.reviewCount ??
+                                  featuredChannelMeta?.reviewCount ??
+                                  0,
+                              ),
+                              totalViews: Number(
+                                featuredVideo?.video?.viewCount ??
+                                  featuredForCuisine?.viewCount ??
+                                  0,
+                              ),
+                            }
+                          : undefined,
                     })
                   }
                 >

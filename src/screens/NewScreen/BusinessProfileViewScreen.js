@@ -36,7 +36,6 @@ import PromotionCard from '../../components/PromotionCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
 import BusinessVideoTabCard from '../../components/BusinessVideoTabCard';
 import CommentsModal from '../../components/CommentsModal';
-import CreatePostModal from '../../components/CreatePostModal';
 import {
   getPostsByUser,
   updatePost,
@@ -154,6 +153,7 @@ const mapPostToCard = (post, user) => {
   return {
     id: post.id,
     postId: post.id,
+    sourceType: 'post',
     title: post.title || 'Untitled',
     channelName,
     channelAvatar,
@@ -171,6 +171,61 @@ const mapPostToCard = (post, user) => {
     description: post.description || post.desc || '',
     mediaUrl: post.mediaUrl || '',
     mediaType: post.mediaType || 'image',
+  };
+};
+
+const mapShortToPostCard = (shortItem, user, profileUserId) => {
+  const u = shortItem.user || user || {};
+  const channelName = u.nickname || u.name || 'Unknown';
+  const avatarRaw =
+    u.photos?.[0] ||
+    (Array.isArray(u.photos) && u.photos[0]) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      channelName,
+    )}&background=111&color=fff`;
+  const channelAvatar =
+    typeof avatarRaw === 'string'
+      ? avatarRaw
+      : (avatarRaw?.src ?? avatarRaw?.uri) ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          channelName,
+        )}&background=111&color=fff`;
+  const createdAt = shortItem.publishedAt || shortItem.createdAt;
+  const duration =
+    shortItem.duration != null
+      ? `${Math.floor(shortItem.duration / 60)}:${String(
+          shortItem.duration % 60,
+        ).padStart(2, '0')}`
+      : '';
+  return {
+    id: shortItem.id,
+    postId: shortItem.id,
+    sourceType: 'short',
+    shortId: shortItem.id,
+    userId: shortItem.userId || profileUserId,
+    title: shortItem.title || 'Short',
+    channelName,
+    channelAvatar,
+    publishedAt: formatTimeAgo(createdAt),
+    sortTime: new Date(createdAt || 0).getTime() || Date.now(),
+    thumbnail:
+      shortItem.thumbnailUrl ||
+      shortItem.coverUrl ||
+      shortItem.videoUrl ||
+      'https://via.placeholder.com/300',
+    duration,
+    likes: formatCount(shortItem.likeCount ?? 0),
+    dislikes: formatCount(shortItem.dislikeCount ?? 0),
+    comments: formatCount(shortItem.commentCount ?? 0),
+    shares: formatCount(shortItem.shareCount ?? 0),
+    website: '',
+    hashtags: [],
+    description: shortItem.description || '',
+    mediaUrl: shortItem.videoUrl || '',
+    mediaType: 'short',
+    videoUrl: shortItem.videoUrl || '',
+    type: 'short',
+    _type: 'short',
   };
 };
 
@@ -354,7 +409,22 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsRefreshing, setPostsRefreshing] = useState(false);
-  const [createPostModalVisible, setCreatePostModalVisible] = useState(false);
+  const openPostCreateNewFlow = useCallback(() => {
+    if (!currentUser?.id) {
+      navigation?.navigate('HomeSevenScreen');
+      return;
+    }
+    let nav = navigation;
+    for (let i = 0; i < 12 && nav; i++) {
+      const names = nav.getState?.()?.routeNames;
+      if (Array.isArray(names) && names.includes('PostCreateNew')) {
+        nav.navigate('PostCreateNew');
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+    navigation?.navigate('PostCreateNew');
+  }, [navigation, currentUser?.id]);
   const [commentsModalPostId, setCommentsModalPostId] = useState(null);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -462,9 +532,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       if (refresh) setPostsRefreshing(true);
       else setPostsLoading(true);
       try {
-        const res = await getPostsByUser(profileUserId, 1, 50, currentUser?.id);
-        const list = (res?.posts || []).map(p => mapPostToCard(p, p.user));
-        setPosts(list);
+        const [postRes, shortRes] = await Promise.all([
+          getPostsByUser(profileUserId, 1, 50, currentUser?.id),
+          shortsService.getUserShorts(profileUserId, 1, 50),
+        ]);
+        const postItems = (postRes?.posts || []).map(p => mapPostToCard(p, p.user));
+        const shortItems = (shortRes?.shorts || []).map(s =>
+          mapShortToPostCard(s, s.user, profileUserId),
+        );
+        const merged = [...postItems, ...shortItems].sort(
+          (a, b) => (b?.sortTime || 0) - (a?.sortTime || 0),
+        );
+        setPosts(merged);
       } catch (e) {
         setPosts([]);
       } finally {
@@ -473,6 +552,46 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       }
     },
     [profileUserId, currentUser?.id],
+  );
+
+  const openShortFromPostsTab = useCallback(
+    item => {
+      const sid = String(item?.shortId || item?.id || '').trim();
+      if (!sid) return;
+      const fallbackName =
+        profile?.nickname || profile?.channelName || profile?.name || 'User';
+      const initialShortItem = {
+        ...item,
+        id: sid,
+        type: 'short',
+        userId: item?.userId || profileUserId,
+        videoUrl: item?.videoUrl || item?.mediaUrl,
+        user: item?.user || {
+          id: profileUserId,
+          nickname: fallbackName,
+          name: profile?.name || fallbackName,
+        },
+      };
+      const scopedShortsFeed = (posts || [])
+        .filter(p => String(p?.sourceType || '').toLowerCase() === 'short')
+        .map(p => ({
+          id: p.shortId || p.id,
+          userId: p.userId || profileUserId,
+          videoUrl: String(p.videoUrl || p.mediaUrl || '').trim(),
+          thumbnailUrl: p.thumbnail,
+          _type: 'short',
+          type: 'short',
+          title: p.title,
+        }))
+        .filter(v => v.id && v.videoUrl);
+      navigateToScopedShortsPlayer(navigation, {
+        shortId: sid,
+        initialShortItem,
+        shortsFeedMode: 'owner',
+        scopedShortsFeed,
+      });
+    },
+    [navigation, posts, profileUserId, profile],
   );
 
   useEffect(() => {
@@ -2172,7 +2291,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Posts' && profileUserId === currentUser?.id ? (
-          <TouchableOpacity onPress={() => setCreatePostModalVisible(true)}>
+          <TouchableOpacity onPress={openPostCreateNewFlow}>
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Video' && profileUserId === currentUser?.id ? (
@@ -2327,6 +2446,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Posts') {
+      const isShortItem =
+        String(item?.sourceType || '').toLowerCase() === 'short' ||
+        String(item?.mediaType || '').toLowerCase() === 'short';
       const postId = item.postId || item.id;
       // Posts API does not return user.photos; use profile (channel) avatar first so owner photo shows
       const profileAvatarUri =
@@ -2356,17 +2478,35 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             channelAvatar: postOwnerAvatar || item.channelAvatar,
           }}
           postId={postId}
-          onPress={() => openPostMediaPreview(item)}
-          onLike={currentUser?.id ? () => handlePostLike(postId) : undefined}
-          onDislike={
-            currentUser?.id ? () => handlePostDislike(postId) : undefined
+          onPress={() =>
+            isShortItem ? openShortFromPostsTab(item) : openPostMediaPreview(item)
           }
-          onCommentPress={() => {
-            setCommentsModalPostId(postId);
-          }}
-          onShare={() => handlePostShare(postId)}
-          onMenuPress={isOwnProfile ? () => openPostActions(item) : undefined}
-          hideMenuButton={!isOwnProfile}
+          onLike={
+            isShortItem
+              ? undefined
+              : currentUser?.id
+              ? () => handlePostLike(postId)
+              : undefined
+          }
+          onDislike={
+            isShortItem
+              ? undefined
+              : currentUser?.id
+              ? () => handlePostDislike(postId)
+              : undefined
+          }
+          onCommentPress={
+            isShortItem
+              ? undefined
+              : () => {
+                  setCommentsModalPostId(postId);
+                }
+          }
+          onShare={isShortItem ? undefined : () => handlePostShare(postId)}
+          onMenuPress={
+            isShortItem || !isOwnProfile ? undefined : () => openPostActions(item)
+          }
+          hideMenuButton={isShortItem || !isOwnProfile}
         />
       );
     }
@@ -2775,12 +2915,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         onCommentDeleted={(_topLevel, count) =>
           handlePostCommentAdded(null, -(count || 1))
         }
-      />
-      <CreatePostModal
-        visible={createPostModalVisible}
-        onClose={() => setCreatePostModalVisible(false)}
-        onSuccess={() => loadPosts(true)}
-        userId={currentUser?.id}
       />
       <CommentsModal
         visible={!!commentsModalGalleryPhotoId}

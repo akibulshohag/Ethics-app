@@ -47,14 +47,24 @@ const FilterModal = ({
       setLoading(true);
       const res = await shortsService.getFilters();
       if (res?.filters?.length > 0) {
-        const merged = [
-          {id: 'none', name: 'None', thumbnailUrl: null, overlayColor: 'transparent', overlayOpacity: 0, isTrending: false},
-          ...res.filters.map(f => ({
-            ...f,
-            overlayColor: f.config?.overlayColor || '#888',
-            overlayOpacity: f.config?.overlayOpacity ?? 0.25,
-          })),
-        ];
+        const noneRow = {
+          id: 'none',
+          name: 'None',
+          thumbnailUrl: null,
+          overlayColor: 'transparent',
+          overlayOpacity: 0,
+          isTrending: false,
+        };
+        const fromApi = res.filters.map(f => ({
+          ...f,
+          overlayColor: f.config?.overlayColor || '#888',
+          overlayOpacity: f.config?.overlayOpacity ?? 0.25,
+        }));
+        const apiIds = new Set(fromApi.map(f => String(f.id)));
+        const appOnly = FILTER_EFFECTS.filter(
+          f => f.id !== 'none' && !apiIds.has(String(f.id)),
+        );
+        const merged = [noneRow, ...fromApi, ...appOnly];
         setFilters(merged);
       }
     } catch (e) {

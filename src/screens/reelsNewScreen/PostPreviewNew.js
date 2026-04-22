@@ -9,13 +9,220 @@ import {
   ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Video from 'react-native-video';
+import { getFilterOverlayStyle } from '../../constants/filterEffects';
+import { computeOverlayPositionStyle } from '../../constants/overlayTextAnchor';
+import SoundsModal from '../../components/SoundsModal';
 
 const { width } = Dimensions.get('window');
 
+function LegacyPreviewOverlayText({ draft, videoW, videoH, s }) {
+  const [box, setBox] = React.useState({ w: 0, h: 0 });
+  const pos = computeOverlayPositionStyle({
+    anchor: 'tl',
+    xPct: draft?.edits?.overlayTextXPct,
+    yPct: draft?.edits?.overlayTextYPct,
+    videoW,
+    videoH,
+    layoutW: box.w,
+    layoutH: box.h,
+  });
+  return (
+    <View pointerEvents="none" style={[s.overlayTextWrap, { left: pos.left, top: pos.top }]}>
+      <View
+        onLayout={e => {
+          const { width: lw, height: lh } = e.nativeEvent.layout;
+          setBox(prev =>
+            prev.w === lw && prev.h === lh ? prev : { w: lw, h: lh },
+          );
+        }}
+      >
+        <Text
+          style={[
+            s.overlayText,
+            {
+              fontSize: Number(draft?.edits?.overlayTextSize || 30),
+              color: String(draft?.edits?.overlayTextColor || '#FFFFFF'),
+              transform: [
+                { rotate: `${Number(draft?.edits?.overlayRotateDeg || 0)}deg` },
+              ],
+            },
+            draft?.edits?.overlayShadowPreset === 'none'
+              ? s.shadowNone
+              : draft?.edits?.overlayShadowPreset === 'hard'
+                ? s.shadowHard
+                : s.shadowSoft,
+          ]}
+        >
+          {String(draft?.edits?.overlayText || '')}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function PreviewOverlayLayer({ layer, videoW, videoH, durationSec, currentSec, s }) {
+  const [box, setBox] = React.useState({ w: 0, h: 0 });
+  const start = Number(layer?.startSec ?? 0);
+  const end = Number(layer?.endSec ?? durationSec);
+  if (currentSec < start || currentSec > end) return null;
+  const pos = computeOverlayPositionStyle({
+    anchor: layer?.anchor,
+    xPct: layer?.xPct,
+    yPct: layer?.yPct,
+    videoW,
+    videoH,
+    layoutW: box.w,
+    layoutH: box.h,
+  });
+  return (
+    <View
+      pointerEvents="none"
+      style={[s.overlayTextWrap, { left: pos.left, top: pos.top }]}
+    >
+      <View
+        onLayout={e => {
+          const { width: lw, height: lh } = e.nativeEvent.layout;
+          setBox(prev =>
+            prev.w === lw && prev.h === lh ? prev : { w: lw, h: lh },
+          );
+        }}
+      >
+        <Text
+          style={[
+            s.overlayText,
+            {
+              fontSize: Number(layer?.size || 30),
+              color: String(layer?.color || '#FFFFFF'),
+              transform: [{ rotate: `${Number(layer?.rotateDeg || 0)}deg` }],
+            },
+            layer?.shadowPreset === 'none'
+              ? s.shadowNone
+              : layer?.shadowPreset === 'hard'
+                ? s.shadowHard
+                : s.shadowSoft,
+          ]}
+        >
+          {String(layer.text)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const PreviewReelScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const draft = route.params?.draft || {};
+  const [selectedSound, setSelectedSound] = React.useState(
+    draft?.edits?.selectedSound || null,
+  );
+  const [originalVolume, setOriginalVolume] = React.useState(
+    Math.max(0, Math.min(2, Number(draft?.edits?.originalVolume ?? 1))),
+  );
+  const [musicVolume, setMusicVolume] = React.useState(
+    Math.max(0, Math.min(2, Number(draft?.edits?.musicVolume ?? 1))),
+  );
+  const filterOverlay = getFilterOverlayStyle(draft?.edits?.selectedFilter);
+  const [videoBoxSize, setVideoBoxSize] = React.useState({ width, height: 280 });
+  const [currentSec, setCurrentSec] = React.useState(0);
+  const [playing, setPlaying] = React.useState(true);
+  const [muteOriginal, setMuteOriginal] = React.useState(
+    Boolean(draft?.edits?.previewMuteOriginal ?? Number(draft?.edits?.originalVolume ?? 1) <= 0),
+  );
+  const [soundsVisible, setSoundsVisible] = React.useState(false);
+  const lastOriginalVolumeRef = React.useRef(Math.max(0.1, Number(draft?.edits?.originalVolume ?? 1)));
+  const lastMusicVolumeRef = React.useRef(Math.max(0.1, Number(draft?.edits?.musicVolume ?? 1)));
+  const videoRef = React.useRef(null);
+  const musicRef = React.useRef(null);
+  const durationSec = Math.max(1, Number(draft?.video?.durationSec || 30));
+  const selectedSoundUrl = String(
+    selectedSound?.soundUrl || selectedSound?.previewUrl || selectedSound?.url || '',
+  ).trim();
+  const { trimStartSec, trimEndSec, trimPreviewActive } = React.useMemo(() => {
+    const d = durationSec;
+    const ts = Math.max(0, Number(draft?.edits?.trimStartSec || 0));
+    let te = Number(draft?.edits?.trimEndSec || 0);
+    if (!te || te > d) {
+      te = d;
+    }
+    te = Math.max(te, ts + 0.05);
+    const eps = 0.08;
+    const active = ts >= eps || te <= d - eps;
+    return {
+      trimStartSec: ts,
+      trimEndSec: te,
+      trimPreviewActive: active,
+    };
+  }, [draft?.edits?.trimEndSec, draft?.edits?.trimStartSec, durationSec]);
+
+  const formatClock = React.useCallback(value => {
+    const v = Math.max(0, Math.floor(Number(value || 0)));
+    const mm = Math.floor(v / 60);
+    const ss = String(v % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+  }, []);
+
+  const seekVideo = React.useCallback(t => {
+    const x = Math.max(0, Number(t) || 0);
+    try {
+      videoRef.current?.seek?.(x);
+    } catch {
+      /* noop */
+    }
+    try {
+      musicRef.current?.seek?.(x);
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (Number(originalVolume) > 0.01) {
+      lastOriginalVolumeRef.current = Number(originalVolume);
+    }
+  }, [originalVolume]);
+
+  React.useEffect(() => {
+    if (Number(musicVolume) > 0.01) {
+      lastMusicVolumeRef.current = Number(musicVolume);
+    }
+  }, [musicVolume]);
+
+  const toggleOriginalAudio = React.useCallback(() => {
+    setMuteOriginal(prev => {
+      const next = !prev;
+      if (!next && Number(originalVolume) <= 0.01) {
+        setOriginalVolume(Math.max(0.1, Number(lastOriginalVolumeRef.current || 1)));
+      }
+      return next;
+    });
+  }, [originalVolume]);
+
+  const toggleMusicAudio = React.useCallback(() => {
+    if (!selectedSoundUrl) {
+      setSoundsVisible(true);
+      return;
+    }
+    if (Number(musicVolume) <= 0.01) {
+      setMusicVolume(Math.max(0.1, Number(lastMusicVolumeRef.current || 1)));
+      return;
+    }
+    setMusicVolume(0);
+  }, [musicVolume, selectedSoundUrl]);
+
+  const removeSelectedMusic = React.useCallback(() => {
+    setSelectedSound(null);
+    setMusicVolume(0);
+  }, []);
+
+  React.useEffect(() => {
+    if (!trimPreviewActive || !draft?.video?.uri) return;
+    seekVideo(trimStartSec);
+  }, [draft?.video?.uri, seekVideo, trimPreviewActive, trimStartSec]);
+
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
 
   const socialIcons = [
@@ -61,15 +268,155 @@ const PreviewReelScreen = () => {
         <View style={styles.previewContainer}>
         <ImageBackground
           source={{
-            uri: 'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=600',
+            uri:
+              draft?.thumbnail?.uri ||
+              'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=600',
           }}
           style={styles.mainVideo}
+          onLayout={e => {
+            const { width: w, height: h } = e.nativeEvent.layout;
+            if (w > 0 && h > 0) setVideoBoxSize({ width: w, height: h });
+          }}
         >
-          <View style={styles.playOverlay}>
-            <View style={styles.pauseCircle}>
-              <Icon name="pause" color="black" size={24} />
+          {draft?.video?.uri ? (
+            <Video
+              ref={videoRef}
+              source={{ uri: draft.video.uri }}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+              repeat={!trimPreviewActive}
+              muted={muteOriginal || originalVolume <= 0}
+              volume={originalVolume}
+              paused={!playing}
+              rate={Number(draft?.edits?.speedFactor || 1)}
+              progressUpdateInterval={100}
+              onLoad={() => {
+                if (trimPreviewActive) seekVideo(trimStartSec);
+              }}
+              onProgress={p => {
+                const t = Number(p?.currentTime || 0);
+                if (!Number.isFinite(t)) return;
+                setCurrentSec(t);
+                if (
+                  trimPreviewActive &&
+                  t >= trimEndSec - 0.12
+                ) {
+                  seekVideo(trimStartSec);
+                  setCurrentSec(trimStartSec);
+                }
+              }}
+            />
+          ) : null}
+          {selectedSoundUrl && musicVolume > 0 ? (
+            <Video
+              ref={musicRef}
+              source={{ uri: selectedSoundUrl }}
+              style={styles.hiddenAudioTrack}
+              audioOnly
+              repeat
+              paused={!playing}
+              muted={false}
+              volume={musicVolume}
+              ignoreSilentSwitch="ignore"
+              onLoad={() => {
+                try {
+                  const t = Math.max(0, Number(currentSec || 0));
+                  musicRef.current?.seek?.(t);
+                } catch {
+                  /* noop */
+                }
+              }}
+              onError={e => {
+                const err = e?.nativeEvent || e;
+                console.warn('PostPreviewNew music playback error:', err);
+              }}
+            />
+          ) : null}
+          {trimPreviewActive ? (
+            <View style={styles.trimPreviewBadge} pointerEvents="none">
+              <Icon name="movie-open-outline" size={14} color="#fff" />
+              <Text style={styles.trimPreviewBadgeText}>
+                Trim preview · {formatClock(trimStartSec)}–{formatClock(trimEndSec)}
+              </Text>
             </View>
+          ) : null}
+          {filterOverlay ? (
+            <View
+              pointerEvents="none"
+              style={[
+                StyleSheet.absoluteFillObject,
+                {
+                  backgroundColor: filterOverlay.backgroundColor,
+                  opacity: filterOverlay.opacity,
+                },
+              ]}
+            />
+          ) : null}
+          <View style={styles.playOverlay}>
+            <TouchableOpacity
+              style={styles.pauseCircle}
+              activeOpacity={0.85}
+              onPress={() => setPlaying(prev => !prev)}
+            >
+              <Icon name={playing ? 'pause' : 'play'} color="black" size={24} />
+            </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={styles.audioToggle}
+            onPress={toggleOriginalAudio}
+            activeOpacity={0.8}
+          >
+            <Icon name={muteOriginal ? 'volume-off' : 'volume-high'} size={16} color="#fff" />
+            <Text style={styles.audioToggleText}>
+              {muteOriginal ? 'Original off' : 'Original on'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.audioToggleMusic}
+            onPress={toggleMusicAudio}
+            activeOpacity={0.8}
+          >
+            <Icon
+              name={selectedSoundUrl && musicVolume > 0 ? 'music-note' : 'music-note-off'}
+              size={16}
+              color="#fff"
+            />
+            <Text style={styles.audioToggleText}>
+              {selectedSoundUrl ? (musicVolume > 0 ? 'Music on' : 'Music off') : 'Add music'}
+            </Text>
+          </TouchableOpacity>
+          {selectedSoundUrl ? (
+            <TouchableOpacity
+              style={styles.audioToggleRemove}
+              onPress={removeSelectedMusic}
+              activeOpacity={0.8}
+            >
+              <Icon name="close-circle-outline" size={16} color="#fff" />
+              <Text style={styles.audioToggleText}>Remove music</Text>
+            </TouchableOpacity>
+          ) : null}
+          {draft?.edits?.overlayText &&
+          !(
+            Array.isArray(draft?.edits?.overlayLayers) &&
+            draft.edits.overlayLayers.some(l => String(l?.text || '').trim())
+          ) ? (
+            <LegacyPreviewOverlayText draft={draft} videoW={videoBoxSize.width} videoH={videoBoxSize.height} s={styles} />
+          ) : null}
+          {Array.isArray(draft?.edits?.overlayLayers)
+            ? draft.edits.overlayLayers
+                .filter(layer => String(layer?.text || '').trim())
+                .map(layer => (
+                  <PreviewOverlayLayer
+                    key={layer.id || `${layer.text}-${layer.xPct}-${layer.yPct}`}
+                    layer={layer}
+                    videoW={videoBoxSize.width}
+                    videoH={videoBoxSize.height}
+                    durationSec={durationSec}
+                    currentSec={currentSec}
+                    s={styles}
+                  />
+                ))
+            : null}
         </ImageBackground>
         </View>
 
@@ -80,12 +427,16 @@ const PreviewReelScreen = () => {
           ))}
         </View>
 
-        <Text style={styles.rankText}>Ranked popular near you by eatix</Text>
+        <Text style={styles.rankText}>
+          {draft?.caption?.trim() || 'Ranked popular near you by eatix'}
+        </Text>
 
         <View style={styles.tagRow}>
-          <Text style={styles.hashtag}>#curry</Text>
-          <Text style={styles.hashtag}>#biryani</Text>
-          <Text style={styles.hashtag}>#LondonEats</Text>
+          {(Array.isArray(draft?.hashtags) ? draft.hashtags : []).map(tag => (
+            <Text key={`${tag}`} style={styles.hashtag}>
+              {tag}
+            </Text>
+          ))}
         </View>
 
         <View style={styles.statsRow}>
@@ -103,7 +454,20 @@ const PreviewReelScreen = () => {
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.postButton}
-            onPress={() => navigation.navigate('PostScheduleNew')}
+            onPress={() =>
+              navigation.navigate('PostScheduleNew', {
+                draft: {
+                  ...draft,
+                  edits: {
+                    ...draft?.edits,
+                    selectedSound,
+                    originalVolume,
+                    musicVolume,
+                    previewMuteOriginal: muteOriginal,
+                  },
+                },
+              })
+            }
           >
             <Text style={styles.postButtonText}>Confirm & Post</Text>
             <Icon name="arrow-right" color="white" size={20} />
@@ -115,7 +479,31 @@ const PreviewReelScreen = () => {
             </Text>
           </View>
         </View>
+        {selectedSound?.title ? (
+          <Text style={styles.rankText}>
+            Sound: {selectedSound.title}
+          </Text>
+        ) : null}
       </View>
+      <SoundsModal
+        visible={soundsVisible}
+        onClose={() => setSoundsVisible(false)}
+        onSelect={sound => {
+          const normalizedSoundUrl = String(
+            sound?.soundUrl || sound?.previewUrl || sound?.url || '',
+          ).trim();
+          setSelectedSound({
+            ...(sound || {}),
+            soundUrl: normalizedSoundUrl,
+          });
+          if (Number(musicVolume) <= 0.01) {
+            setMusicVolume(Math.max(0.1, Number(lastMusicVolumeRef.current || 1)));
+          }
+          setPlaying(true);
+          setSoundsVisible(false);
+        }}
+        selectedSoundId={selectedSound?.id}
+      />
     </SafeAreaView>
   );
 };
@@ -184,6 +572,93 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  overlayTextWrap: {
+    position: 'absolute',
+    maxWidth: '96%',
+  },
+  overlayText: {
+    color: '#fff',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  shadowNone: {
+    textShadowColor: 'transparent',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 0,
+  },
+  shadowSoft: {
+    textShadowColor: 'rgba(0,0,0,0.65)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  shadowHard: {
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 4,
+  },
+  trimPreviewBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    maxWidth: '92%',
+  },
+  trimPreviewBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  audioToggle: {
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  audioToggleMusic: {
+    position: 'absolute',
+    right: 10,
+    top: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  audioToggleRemove: {
+    position: 'absolute',
+    right: 10,
+    top: 82,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(170,40,40,0.78)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  audioToggleText: {
+    color: '#fff',
+    fontSize: 11,
+    marginLeft: 5,
+    fontWeight: '600',
+  },
+  hiddenAudioTrack: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
 
   infoSection: {
     flex: 0.8,
@@ -194,8 +669,8 @@ const styles = StyleSheet.create({
   socialRow: { flexDirection: 'row', marginBottom: 15 },
   socialIcon: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },
   rankText: { color: '#BBB', fontSize: 13, marginBottom: 8 },
-  tagRow: { flexDirection: 'row', marginBottom: 12 },
-  hashtag: { color: '#F5A623', fontSize: 13, marginRight: 10, fontWeight: '500' },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
+  hashtag: { color: '#F5A623', fontSize: 13, marginRight: 10, marginBottom: 6, fontWeight: '500' },
   statsRow: { flexDirection: 'row', alignItems: 'center' },
   locationText: { color: 'white', fontSize: 13, marginRight: 5 },
   starIcon: { marginRight: 8 },

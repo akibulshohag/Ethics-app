@@ -17,6 +17,7 @@ const { height } = Dimensions.get('window');
 const CreateVideoModal = ({
   visible,
   onClose,
+  onCreatePost: onCreatePostProp,
   onCreateShort: onCreateShortProp,
   onUploadVideo: onUploadVideoProp,
   onGoLive: onGoLiveProp,
@@ -31,6 +32,15 @@ const CreateVideoModal = ({
       onCreateShortProp();
     } else {
       navigation.navigate('CreateShortsScreen', { isLive: false });
+    }
+  };
+
+  const handleCreatePost = () => {
+    onClose?.();
+    if (onCreatePostProp) {
+      onCreatePostProp();
+    } else {
+      navigation.navigate('PostCreateNew');
     }
   };
 
@@ -90,6 +100,14 @@ const CreateVideoModal = ({
               <View style={styles.divider} />
 
               <View style={styles.optionsContainer}>
+                {/* Create a Post */}
+                <TouchableOpacity style={styles.optionItem} onPress={handleCreatePost}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="create-outline" size={24} color="#FF8C00" />
+                  </View>
+                  <Text style={styles.optionText}>Create a post</Text>
+                </TouchableOpacity>
+
                 {/* Create a Short */}
                 <TouchableOpacity style={styles.optionItem} onPress={handleCreateShort}>
                   <View style={styles.iconContainer}>

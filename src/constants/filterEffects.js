@@ -1,7 +1,8 @@
 /**
  * Filter effects config — in-app preview (overlay).
- * Upload pipeline: ethics-backend `shorts-ffmpeg-presets.ts` maps the same `id`
- * values to FFmpeg filters so the stored MP4 matches this look (plus beauty/speed/sound).
+ * Upload pipeline: ethics-backend `shorts-ffmpeg-presets.ts` uses the same
+ * overlayColor + overlayOpacity per `id` (FILTER_OVERLAY) to bake the look into the MP4.
+ * If you change a look here, update FILTER_OVERLAY there too.
  */
 export const FILTER_EFFECTS = [
   {
@@ -106,6 +107,70 @@ export const FILTER_EFFECTS = [
     thumbnailUrl: 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?w=200&q=80',
     overlayColor: '#6B6B6B',
     overlayOpacity: 0.5,
+    isTrending: false,
+  },
+  {
+    id: '13',
+    name: 'Golden',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=200&q=80',
+    overlayColor: '#C9A227',
+    overlayOpacity: 0.22,
+    isTrending: true,
+  },
+  {
+    id: '14',
+    name: 'Teal',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=200&q=80',
+    overlayColor: '#2A9D8F',
+    overlayOpacity: 0.22,
+    isTrending: false,
+  },
+  {
+    id: '15',
+    name: 'Vivid',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&q=80',
+    overlayColor: '#E63946',
+    overlayOpacity: 0.18,
+    isTrending: true,
+  },
+  {
+    id: '16',
+    name: 'Matte',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?w=200&q=80',
+    overlayColor: '#6D6875',
+    overlayOpacity: 0.28,
+    isTrending: false,
+  },
+  {
+    id: '17',
+    name: 'Punchy B&W',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=80',
+    overlayColor: '#2B2B2B',
+    overlayOpacity: 0.42,
+    isTrending: true,
+  },
+  {
+    id: '18',
+    name: 'Glow',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1499028344343-cd173ffc68a9?w=200&q=80',
+    overlayColor: '#FFE5B4',
+    overlayOpacity: 0.2,
+    isTrending: false,
+  },
+  {
+    id: '19',
+    name: 'Film',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=200&q=80',
+    overlayColor: '#3D2C1E',
+    overlayOpacity: 0.32,
+    isTrending: true,
+  },
+  {
+    id: '20',
+    name: 'Crush',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=200&q=80',
+    overlayColor: '#1A1A2E',
+    overlayOpacity: 0.38,
     isTrending: false,
   },
 ];

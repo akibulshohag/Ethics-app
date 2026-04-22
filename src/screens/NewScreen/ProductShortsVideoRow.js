@@ -41,6 +41,7 @@ function ProductShortsVideoRow({
   index,
   currentIndex,
   onLike,
+  onDoubleTapRecordView,
   onShare,
   onOpenComments,
   onOpenMoreMenu,
@@ -119,6 +120,7 @@ function ProductShortsVideoRow({
         singleTapTimerRef.current = null;
       }
       onLike?.(item, { forceLike: true });
+      onDoubleTapRecordView?.(item);
       return;
     }
     lastTapMsRef.current = now;
@@ -130,6 +132,9 @@ function ProductShortsVideoRow({
   };
 
   const isPaused = !focused || !isCurrentlyViewable || isPausedLocally;
+  const shouldRenderVideo = focused && Math.abs(currentIndex - index) <= 1;
+  const hasValidVideo =
+    item?.videoUrl && String(item.videoUrl).trim().length > 0;
   const ownerId = item?.userId ?? item?.userObj?.id ?? null;
   const isOwnShort = !!(
     user?.id &&
@@ -232,57 +237,61 @@ function ProductShortsVideoRow({
 
   return (
     <View style={[styles.videoContainer, { height }]}>
-      <Video
-        ref={videoRef}
-        source={videoSource}
-        style={StyleSheet.absoluteFill}
-        resizeMode="cover"
-        repeat={true}
-        paused={isPaused}
-        muted={!!shortsMuted}
-        playInBackground={false}
-        playWhenInactive={false}
-        ignoreSilentSwitch="ignore"
-        controls={false}
-        onLoad={data => {
-          const d = Number(data?.duration || 0);
-          const api = Number(item?.duration);
-          const use =
-            Number.isFinite(d) && d > 0
-              ? d
-              : Number.isFinite(api) && api > 0
-              ? api
-              : 0;
-          setDuration(use);
+      {hasValidVideo && shouldRenderVideo ? (
+        <Video
+          ref={videoRef}
+          source={videoSource}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+          repeat={true}
+          paused={isPaused}
+          muted={!!shortsMuted}
+          playInBackground={false}
+          playWhenInactive={false}
+          ignoreSilentSwitch="ignore"
+          controls={false}
+          onLoad={data => {
+            const d = Number(data?.duration || 0);
+            const api = Number(item?.duration);
+            const use =
+              Number.isFinite(d) && d > 0
+                ? d
+                : Number.isFinite(api) && api > 0
+                ? api
+                : 0;
+            setDuration(use);
 
-          const t = currentTimeRef.current;
-          if (typeof t === 'number' && t > 0.5) {
-            const seekNow = () => {
-              try {
-                videoRef.current?.seek?.(t);
-                setCurrentTime(t);
-              } catch (_) {}
-            };
-            seekNow();
-            setTimeout(seekNow, 120);
-          }
-        }}
-        onProgress={data => {
-          const now = Date.now();
-          if (now - lastProgressUpdate.current < 250) return;
-          lastProgressUpdate.current = now;
-          const t = Number(data?.currentTime || 0);
-          const nextT = Number.isFinite(t) ? t : 0;
+            const t = currentTimeRef.current;
+            if (typeof t === 'number' && t > 0.5) {
+              const seekNow = () => {
+                try {
+                  videoRef.current?.seek?.(t);
+                  setCurrentTime(t);
+                } catch (_) {}
+              };
+              seekNow();
+              setTimeout(seekNow, 120);
+            }
+          }}
+          onProgress={data => {
+            const now = Date.now();
+            if (now - lastProgressUpdate.current < 250) return;
+            lastProgressUpdate.current = now;
+            const t = Number(data?.currentTime || 0);
+            const nextT = Number.isFinite(t) ? t : 0;
 
-          if (nextT > 0.5) {
-            currentTimeRef.current = nextT;
-          }
+            if (nextT > 0.5) {
+              currentTimeRef.current = nextT;
+            }
 
-          if (!isCurrentlyViewable || isPaused) return;
-          if (isSeeking) return;
-          setCurrentTime(nextT);
-        }}
-      />
+            if (!isCurrentlyViewable || isPaused) return;
+            if (isSeeking) return;
+            setCurrentTime(nextT);
+          }}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
+      )}
 
       <View
         style={[

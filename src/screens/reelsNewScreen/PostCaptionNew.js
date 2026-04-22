@@ -11,18 +11,69 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const { width } = Dimensions.get('window');
 
+const normalizeHashtag = raw => {
+  const clean = String(raw || '')
+    .trim()
+    .replace(/^#+/, '')
+    .replace(/[^A-Za-z0-9_]/g, '');
+  return clean ? `#${clean}` : '';
+};
+
+const extractCaptionHashtags = text => {
+  const matches = String(text || '').match(/#[A-Za-z0-9_]+/g) || [];
+  return matches.map(normalizeHashtag).filter(Boolean);
+};
+
 const WriteCaptionScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const incomingDraft = route.params?.draft || {};
   const [caption, setCaption] = useState('');
   const [isOrderButtonEnabled, setIsOrderButtonEnabled] = useState(true);
+  const [hashtagInput, setHashtagInput] = useState('');
+  const [hashtags, setHashtags] = useState(
+    Array.isArray(incomingDraft.hashtags) && incomingDraft.hashtags.length
+      ? incomingDraft.hashtags
+      : ['#curry', '#biryani', '#LondonEats', '#foodie'],
+  );
 
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
-  const hashtags = ['#curry', '#biryani', '#LondonEats', '#foodie'];
+  React.useEffect(() => {
+    if (incomingDraft.caption) setCaption(String(incomingDraft.caption));
+    if (incomingDraft.orderNow != null) {
+      setIsOrderButtonEnabled(Boolean(incomingDraft.orderNow));
+    }
+  }, [incomingDraft.caption, incomingDraft.orderNow]);
+
+  const addHashtag = React.useCallback(() => {
+    const tag = normalizeHashtag(hashtagInput);
+    if (!tag) return;
+    setHashtags(prev => {
+      if (prev.some(x => x.toLowerCase() === tag.toLowerCase())) return prev;
+      return [...prev, tag];
+    });
+    setHashtagInput('');
+  }, [hashtagInput]);
+
+  const insertTagIntoCaption = React.useCallback(tag => {
+    const cleanTag = normalizeHashtag(tag);
+    if (!cleanTag) return;
+    setCaption(prev => {
+      const t = String(prev || '').trimEnd();
+      if (!t) return `${cleanTag} `;
+      if (new RegExp(`(^|\\s)${cleanTag}(\\s|$)`, 'i').test(t)) return `${t} `;
+      return `${t} ${cleanTag} `;
+    });
+  }, []);
+
+  const removeHashtag = React.useCallback(tag => {
+    setHashtags(prev => prev.filter(x => x !== tag));
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeTop} edges={['top']}>
@@ -62,7 +113,9 @@ const WriteCaptionScreen = () => {
         <View style={styles.videoPreviewContainer}>
           <Image
             source={{
-              uri: 'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=800',
+              uri:
+                incomingDraft?.thumbnail?.uri ||
+                'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=800',
             }}
             style={styles.previewImage}
           />
@@ -106,19 +159,63 @@ const WriteCaptionScreen = () => {
 
           <View style={styles.hashtagContainer}>
             {hashtags.map(tag => (
-              <View key={tag} style={styles.tagChip}>
+              <TouchableOpacity
+                key={tag}
+                style={styles.tagChip}
+                activeOpacity={0.8}
+                onPress={() => insertTagIntoCaption(tag)}
+                onLongPress={() => removeHashtag(tag)}
+              >
                 <Text style={styles.tagText}>{tag}</Text>
-              </View>
+              </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.addTagButton}>
+          </View>
+          <View style={styles.addTagRow}>
+            <TextInput
+              style={styles.addTagInput}
+              placeholder="Type hashtag (e.g. londonEats)"
+              placeholderTextColor="#AAA"
+              value={hashtagInput}
+              onChangeText={setHashtagInput}
+              onSubmitEditing={addHashtag}
+              returnKeyType="done"
+              maxLength={32}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity style={styles.addTagButton} onPress={addHashtag}>
               <Icon name="plus" color="#F5A623" size={14} />
               <Text style={styles.addTagText}>Add Hashtag</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.hashtagHint}>
+            Tap a hashtag to insert into caption. Long press to remove.
+          </Text>
 
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={() => navigation.navigate('PostPreviewNew')}
+            onPress={() =>
+              (() => {
+                const normalized = hashtags
+                  .map(normalizeHashtag)
+                  .filter(Boolean);
+                const fromCaption = extractCaptionHashtags(caption);
+                const finalTags = [...normalized];
+                fromCaption.forEach(tag => {
+                  if (!finalTags.some(x => x.toLowerCase() === tag.toLowerCase())) {
+                    finalTags.push(tag);
+                  }
+                });
+                navigation.navigate('PostPreviewNew', {
+                  draft: {
+                    ...incomingDraft,
+                    caption: caption.trim(),
+                    hashtags: finalTags,
+                    orderNow: isOrderButtonEnabled,
+                  },
+                });
+              })()
+            }
           >
             <Text style={styles.nextButtonText}>Next</Text>
             <Icon name="arrow-right" color="white" size={20} />
@@ -213,6 +310,21 @@ const styles = StyleSheet.create({
     borderColor: '#FFE6C0',
   },
   tagText: { color: '#666', fontSize: 12 },
+  addTagRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addTagInput: {
+    flex: 1,
+    height: 36,
+    borderWidth: 1,
+    borderColor: '#FFE6C0',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    color: '#444',
+    marginRight: 8,
+  },
   addTagButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -225,6 +337,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFE6C0',
   },
   addTagText: { color: '#666', fontSize: 12, marginLeft: 4 },
+  hashtagHint: { fontSize: 11, color: '#999', marginTop: 4 },
 
   nextButton: {
     backgroundColor: '#F5A623',

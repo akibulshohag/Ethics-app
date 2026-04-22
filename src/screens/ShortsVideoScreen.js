@@ -6,6 +6,7 @@ import {
   StyleSheet,
   FlatList,
   Dimensions,
+  Platform,
   TouchableOpacity,
   Image,
   StatusBar,
@@ -184,6 +185,7 @@ const MOCK_VIDEOS = [
 const VideoItem = ({
   item,
   isActive,
+  shouldRenderVideo,
   index,
   screenHeight,
   onBack,
@@ -236,6 +238,15 @@ const VideoItem = ({
   useEffect(() => {
     setPaused(!isActive);
   }, [isActive]);
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+        singleTapTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const togglePause = () => {
     setPaused(prev => !prev);
@@ -327,7 +338,7 @@ const VideoItem = ({
     <View
       style={[styles.videoContainer, { height: screenHeight, width: width }]}
     >
-      {hasValidVideo ? (
+      {hasValidVideo && shouldRenderVideo ? (
         <Video
           ref={videoRef}
           source={{ uri: item.videoUrl }}
@@ -891,8 +902,6 @@ const ShortsVideoScreen = ({ navigation }) => {
   /** Bumps each time we focus with a deep-linked short so record effect re-runs (same id reopen from Promotion). */
   const [deepLinkVisitSeq, setDeepLinkVisitSeq] = useState(0);
   const hasAppliedInitialShort = useRef(false);
-  /** Dedupes recordView between the initial-short effect and onViewableItemsChanged */
-  const viewRecordedIdsRef = useRef(new Set());
   const [commentsVisible, setCommentsVisible] = useState(false);
 
   const applyViewIncrement = useCallback(shortId => {
@@ -927,16 +936,13 @@ const ShortsVideoScreen = ({ navigation }) => {
     });
   }, []);
 
-  /** Optimistic +1 immediately; server call in background; revert on failure */
+  /** Optimistic +1 on each time a short becomes visible (including revisits). */
   const recordShortViewAndBumpUI = useCallback(
     shortId => {
       if (!shortId) return;
       const sid = String(shortId);
-      if (viewRecordedIdsRef.current.has(sid)) return;
-      viewRecordedIdsRef.current.add(sid);
       applyViewIncrement(sid);
       shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
-        viewRecordedIdsRef.current.delete(sid);
         applyViewDecrement(sid);
       });
     },
@@ -976,10 +982,9 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   };
 
-  // When leaving this screen (pop), clear dedupe + allow merge again on next entry with same navigator instance
+  // When leaving this screen (pop), allow merge again on next entry with same navigator instance
   useEffect(() => {
     const sub = navigation.addListener('beforeRemove', () => {
-      viewRecordedIdsRef.current.clear();
       hasAppliedInitialShort.current = false;
     });
     return sub;
@@ -1184,20 +1189,6 @@ const ShortsVideoScreen = ({ navigation }) => {
     hasAppliedInitialShort.current = false;
   }, [initialShortId, shortsFeedMode, scopedShortsFeedParam]);
 
-  /** Record once per visit: deepLinkVisitSeq changes on each focus with initialShortId */
-  useEffect(() => {
-    if (!initialShortId || loading) return;
-    const sid = String(initialShortId);
-    if (!firstRowShortId || String(firstRowShortId) !== sid) return;
-    recordShortViewAndBumpUI(sid);
-  }, [
-    initialShortId,
-    loading,
-    firstRowShortId,
-    recordShortViewAndBumpUI,
-    deepLinkVisitSeq,
-  ]);
-
   useEffect(() => {
     if (
       !loading &&
@@ -1269,23 +1260,38 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
     const forceLike = opts?.forceLike === true;
     if (forceLike && item?.isLiked) return;
+    const previousLiked = !!item?.isLiked;
+    const nextLiked = forceLike ? true : !previousLiked;
+    if (nextLiked === previousLiked) return;
+    const delta = nextLiked ? 1 : -1;
     try {
-      await shortsService.toggleLike(item.id, user.id);
       setVideos(prev =>
         prev.map(v => {
           if (String(v.id) !== String(item.id)) return v;
-          const newLiked = !v.isLiked;
-          const delta = newLiked ? 1 : -1;
           const newCount = Math.max(0, (v._likeCount ?? 0) + delta);
           return {
             ...v,
-            isLiked: newLiked,
+            isLiked: nextLiked,
             _likeCount: newCount,
             likesDisplay: formatCount(newCount),
           };
         }),
       );
-    } catch (e) {}
+      await shortsService.toggleLike(item.id, user.id);
+    } catch (e) {
+      setVideos(prev =>
+        prev.map(v => {
+          if (String(v.id) !== String(item.id)) return v;
+          const rollbackCount = Math.max(0, (v._likeCount ?? 0) - delta);
+          return {
+            ...v,
+            isLiked: previousLiked,
+            _likeCount: rollbackCount,
+            likesDisplay: formatCount(rollbackCount),
+          };
+        }),
+      );
+    }
   };
 
   const handleDislike = async item => {
@@ -1466,7 +1472,7 @@ const ShortsVideoScreen = ({ navigation }) => {
     setReportVisible(true);
   };
 
-  const openEditShortFromMenu = () => {
+  const openEditShortFromMenu = async () => {
     const t = menuTargetShort();
     if (!user?.id || !t?.id) {
       navigateToHomeScreen('HomeSevenScreen');
@@ -1474,22 +1480,24 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
     const ownerId = t?.user?.id ?? t?.userId ?? null;
     if (!ownerId || String(ownerId) !== String(user.id)) return;
-    setEditShortTargetId(String(t.id));
-    setEditShortTitle(String(t?.title || t?.description || '').trim());
-    setEditShortText(String(t?.description || t?.title || '').trim());
-    setEditShortThumbnailUri(
-      String(t?.thumbnailUrl || t?.thumbnail || t?.coverUrl || '').trim(),
-    );
-    setEditShortVideoUri(String(t?.videoUrl || t?.mediaUrl || '').trim());
-    const dur = Number(t?.duration);
-    setEditShortDurationSec(
-      Number.isFinite(dur) && dur > 0 ? dur : 15,
-    );
-    setEditLocalThumbMeta(null);
-    setEditVideoPickMeta(null);
-    const pubAt = t?.publishedAt ? new Date(t.publishedAt) : null;
-    const schedAt = t?.scheduledPublishAt
-      ? new Date(t.scheduledPublishAt)
+    let sourceShort = t;
+    try {
+      const detailRes = await shortsService.getShortById(
+        t.id,
+        user.id,
+        String(user?.role || '').toLowerCase() || undefined,
+      );
+      const resolved =
+        detailRes?.short && typeof detailRes.short === 'object'
+          ? detailRes.short
+          : detailRes?.data && typeof detailRes.data === 'object'
+          ? detailRes.data
+          : detailRes;
+      if (resolved && typeof resolved === 'object') sourceShort = resolved;
+    } catch {}
+    const pubAt = sourceShort?.publishedAt ? new Date(sourceShort.publishedAt) : null;
+    const schedAt = sourceShort?.scheduledPublishAt
+      ? new Date(sourceShort.scheduledPublishAt)
       : null;
     const cand =
       schedAt && Number.isFinite(schedAt.getTime())
@@ -1501,27 +1509,73 @@ const ShortsVideoScreen = ({ navigation }) => {
       cand &&
       Number.isFinite(cand.getTime()) &&
       cand.getTime() > Date.now() + 60_000;
-    setEditShortScheduleDate(isFuture ? cand : null);
-    setEditInitialHadFutureSchedule(!!isFuture);
-    setEditShortVisibility(
-      String(t?.visibility || '').toLowerCase() === 'private'
+    const visibilityLabel =
+      String(sourceShort?.visibility || '').toLowerCase() === 'private'
         ? 'Private'
-        : 'Public',
-    );
-    setEditShortComments(
-      String(t?.commentSetting || '').toLowerCase() === 'disable'
+        : 'Public';
+    const commentsLabel =
+      String(sourceShort?.commentSetting || '').toLowerCase() === 'disable'
         ? 'Disable comments'
-        : String(t?.commentSetting || '').toLowerCase() === 'hold'
+        : String(sourceShort?.commentSetting || '').toLowerCase() === 'hold'
         ? 'Hold potentially inappropriate comments'
-        : 'Allow all comments',
-    );
-    setEditShortAudience({
-      madeForKids:
-        typeof t?.madeForKids === 'boolean' ? Boolean(t.madeForKids) : null,
-      ageRestricted:
-        typeof t?.ageRestricted === 'boolean' ? Boolean(t.ageRestricted) : null,
+        : 'Allow all comments';
+    const durationNum = Number(sourceShort?.duration);
+    navigation.navigate('PostCreateNew', {
+      isEdit: true,
+      shortId: String(sourceShort?.id || t.id),
+      short: sourceShort,
+      editDraft: {
+        source: 'short-edit',
+        shortId: String(sourceShort?.id || t.id),
+        caption: String(sourceShort?.description || sourceShort?.title || '').trim(),
+        title: String(sourceShort?.title || sourceShort?.description || '').trim(),
+        video: {
+          uri: String(sourceShort?.videoUrl || sourceShort?.mediaUrl || '').trim(),
+          type: 'video/mp4',
+          name: `short-${sourceShort?.id || t.id}.mp4`,
+          durationSec:
+            Number.isFinite(durationNum) && durationNum > 0 ? durationNum : 15,
+        },
+        thumbnail: {
+          uri: String(
+            sourceShort?.thumbnailUrl ||
+              sourceShort?.thumbnail ||
+              sourceShort?.coverUrl ||
+              '',
+          ).trim(),
+          type: 'image/jpeg',
+          name: `short-cover-${sourceShort?.id || t.id}.jpg`,
+        },
+        platforms: Array.isArray(sourceShort?.platforms)
+          ? sourceShort.platforms
+          : Array.isArray(sourceShort?.selectedPlatforms)
+          ? sourceShort.selectedPlatforms
+          : [],
+        scheduledPublishAt:
+          sourceShort?.scheduledPublishAt ||
+          sourceShort?.scheduleAt ||
+          (isFuture && cand ? cand.toISOString() : null),
+        edits: {
+          visibility: visibilityLabel,
+          comments: commentsLabel,
+          madeForKids:
+            typeof sourceShort?.madeForKids === 'boolean'
+              ? Boolean(sourceShort.madeForKids)
+              : null,
+          ageRestricted:
+            typeof sourceShort?.ageRestricted === 'boolean'
+              ? Boolean(sourceShort.ageRestricted)
+              : null,
+          scheduledPublishAt: isFuture && cand ? cand.toISOString() : null,
+          hadFutureSchedule: !!isFuture,
+          platforms: Array.isArray(sourceShort?.platforms)
+            ? sourceShort.platforms
+            : Array.isArray(sourceShort?.selectedPlatforms)
+            ? sourceShort.selectedPlatforms
+            : [],
+        },
+      },
     });
-    setEditShortVisible(true);
   };
 
   const openEditCoverFromVideo = () => {
@@ -1813,7 +1867,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   );
 
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 80,
+    itemVisiblePercentThreshold: 60,
   }).current;
 
   return (
@@ -1837,6 +1891,11 @@ const ShortsVideoScreen = ({ navigation }) => {
                 isScreenFocused &&
                 activeVideoIndex === index &&
                 !editShortVisible
+              }
+              shouldRenderVideo={
+                isScreenFocused &&
+                !editShortVisible &&
+                Math.abs(activeVideoIndex - index) <= 1
               }
               index={index}
               screenHeight={screenHeight}
@@ -1883,10 +1942,10 @@ const ShortsVideoScreen = ({ navigation }) => {
           decelerationRate="fast"
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
-          initialNumToRender={2} // Increased
-          maxToRenderPerBatch={3} // Increased
-          windowSize={10} // Increased to keep more videos ready
-          removeClippedSubviews={false} // Disabled for Android reliability
+          initialNumToRender={1}
+          maxToRenderPerBatch={2}
+          windowSize={3}
+          removeClippedSubviews={Platform.OS === 'android'}
           extraData={{
             activeVideoIndex,
             editShortVisible,

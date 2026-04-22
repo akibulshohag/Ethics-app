@@ -19,9 +19,24 @@ const getAuthHeaders = () => {
  * creatorRole: 'owner' | 'vendor' — show promotions created by that role nearby. Default 'owner'.
  * Returns { promotions: [...], pagination: { total, page, limit, totalPages } }
  */
-export const getNearbyPromotions = async (latitude, longitude, radiusKm = 50, page = 1, limit = 50, creatorRole = 'owner') => {
-  if (latitude == null || longitude == null || Number.isNaN(latitude) || Number.isNaN(longitude)) {
-    return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+export const getNearbyPromotions = async (
+  latitude,
+  longitude,
+  radiusKm = 50,
+  page = 1,
+  limit = 50,
+  creatorRole = 'owner',
+) => {
+  if (
+    latitude == null ||
+    longitude == null ||
+    Number.isNaN(latitude) ||
+    Number.isNaN(longitude)
+  ) {
+    return {
+      promotions: [],
+      pagination: { total: 0, page: 1, limit, totalPages: 0 },
+    };
   }
   try {
     const response = await axios.get(`${API_URL}/nearby`, {
@@ -31,7 +46,10 @@ export const getNearbyPromotions = async (latitude, longitude, radiusKm = 50, pa
     return response.data;
   } catch (error) {
     console.error('Error fetching nearby promotions:', error);
-    return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+    return {
+      promotions: [],
+      pagination: { total: 0, page: 1, limit, totalPages: 0 },
+    };
   }
 };
 
@@ -40,7 +58,11 @@ export const getNearbyPromotions = async (latitude, longitude, radiusKm = 50, pa
  * Returns { promotions: [...], pagination: { total, page, limit, totalPages } }
  */
 export const getPromotionsByUser = async (userId, page = 1, limit = 50) => {
-  if (!userId) return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+  if (!userId)
+    return {
+      promotions: [],
+      pagination: { total: 0, page: 1, limit, totalPages: 0 },
+    };
   try {
     const response = await axios.get(`${API_URL}/user/${userId}`, {
       params: { page, limit },
@@ -49,14 +71,17 @@ export const getPromotionsByUser = async (userId, page = 1, limit = 50) => {
     return response.data;
   } catch (error) {
     console.error('Error fetching promotions:', error);
-    return { promotions: [], pagination: { total: 0, page: 1, limit, totalPages: 0 } };
+    return {
+      promotions: [],
+      pagination: { total: 0, page: 1, limit, totalPages: 0 },
+    };
   }
 };
 
 /**
  * Create promotion (JSON body). Owner only. Use uploadPromotion when you have thumbnail/video files.
  */
-export const createPromotion = async (data) => {
+export const createPromotion = async data => {
   if (!data?.userId) {
     throw new Error('User ID is required. Please log in.');
   }
@@ -82,7 +107,7 @@ export const createPromotion = async (data) => {
  * data: { userId, title, description?, promoAmount, promoCode, startDate, expireDate, menuItemIds?, thumbnailUri, thumbnailType?, thumbnailName?, videoUri?, videoType?, videoName?, duration?, token? }
  * Pass token when calling (e.g. from Redux) so auth is guaranteed; otherwise getAuthHeaders() is used.
  */
-export const uploadPromotion = async (data) => {
+export const uploadPromotion = async data => {
   if (!data?.userId) {
     throw new Error('User ID is required. Please log in.');
   }
@@ -92,8 +117,15 @@ export const uploadPromotion = async (data) => {
   if (!data?.thumbnailUri && !data?.videoUri) {
     throw new Error('Either thumbnail image or video is required.');
   }
-  if (data?.promoAmount == null || data?.promoCode?.trim() === '' || !data?.startDate || !data?.expireDate) {
-    throw new Error('Promo amount, code, start date and expire date are required.');
+  if (
+    data?.promoAmount == null ||
+    data?.promoCode?.trim() === '' ||
+    !data?.startDate ||
+    !data?.expireDate
+  ) {
+    throw new Error(
+      'Promo amount, code, start date and expire date are required.',
+    );
   }
   const formData = new FormData();
   if (data?.thumbnailUri) {
@@ -122,10 +154,16 @@ export const uploadPromotion = async (data) => {
   if (Array.isArray(data.menuItemIds) && data.menuItemIds.length > 0) {
     formData.append('menuItemIds', JSON.stringify(data.menuItemIds));
   }
-  if (data.duration !== undefined && data.duration != null && !Number.isNaN(Number(data.duration))) {
+  if (
+    data.duration !== undefined &&
+    data.duration != null &&
+    !Number.isNaN(Number(data.duration))
+  ) {
     formData.append('duration', String(Math.floor(Number(data.duration))));
   }
-  const headers = data.token ? { Authorization: `Bearer ${data.token}` } : getAuthHeaders();
+  const headers = data.token
+    ? { Authorization: `Bearer ${data.token}` }
+    : getAuthHeaders();
   if (!headers.Authorization) {
     throw new Error('You must be logged in to create a promotion.');
   }
@@ -151,10 +189,13 @@ export const uploadPromotion = async (data) => {
   } catch (err) {
     const isNetworkFailure =
       err.name === 'AbortError' ||
-      (err.message && (err.message === 'Network request failed' || err.message.includes('Network Error')));
-    const msg = err.name === 'AbortError'
-      ? 'Upload timed out. Try again.'
-      : isNetworkFailure
+      (err.message &&
+        (err.message === 'Network request failed' ||
+          err.message.includes('Network Error')));
+    const msg =
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : isNetworkFailure
         ? 'Network request failed. Check your internet connection and try again.'
         : err.message || 'Failed to upload promotion';
     if (__DEV__) {

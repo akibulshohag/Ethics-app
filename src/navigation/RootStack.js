@@ -21,6 +21,7 @@ import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import CustomPlaylistScreen from '../screens/CustomPlaylistScreen';
 import CartDetailsScreen from '../screens/CartDetailsScreen';
 import FeaturedVideoUploadScreen from '../screens/FeaturedVideoUploadScreen';
+import PostCreateNew from '../screens/reelsNewScreen/PostCreateNew';
 import PostEditNew from '../screens/reelsNewScreen/PostEditNew';
 import PostCaptionNew from '../screens/reelsNewScreen/PostCaptionNew';
 import PostPreviewNew from '../screens/reelsNewScreen/PostPreviewNew';
@@ -70,6 +71,7 @@ const RootStack = () => {
         name="FeaturedVideoUpload"
         component={FeaturedVideoUploadScreen}
       />
+      <Root.Screen name="PostCreateNew" component={PostCreateNew} />
       <Root.Screen name="PostEditNew" component={PostEditNew} />
       <Root.Screen name="PostCaptionNew" component={PostCaptionNew} />
       <Root.Screen name="PostPreviewNew" component={PostPreviewNew} />

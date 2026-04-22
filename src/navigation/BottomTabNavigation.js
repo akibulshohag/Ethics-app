@@ -31,7 +31,6 @@ import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import OrderListScreen from '../screens/OrderListScreen';
-import PostCreateNew from '../screens/reelsNewScreen/PostCreateNew';
 import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
 import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
@@ -308,23 +307,6 @@ const BottomNaivgation = () => {
                 <View style={styles.fabContainer}>
                   <Icon name="plus" size={30} color={COLORS.white} />
                 </View>
-              ),
-            }}
-          />
-
-          <Tab.Screen
-            name="Post"
-            component={PostCreateNew}
-            listeners={{
-              tabPress: redirectToHomeThreeIfGuest,
-            }}
-            options={{
-              tabBarIcon: ({ focused }) => (
-                <Icon
-                  name="post-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
               ),
             }}
           />

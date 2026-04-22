@@ -90,7 +90,6 @@ import { getNotificationsByUserId } from '../services/notificationService';
 import BusinessVideoCard from '../components/BusinessVideoCard';
 import BusinessVideoTabCard from '../components/BusinessVideoTabCard';
 import CommentsModal from '../components/CommentsModal';
-import CreatePostModal from '../components/CreatePostModal';
 import GalleryVideoDetailModal from '../components/GalleryVideoDetailModal';
 import {
   abbrevCountryLabel,
@@ -220,10 +219,12 @@ const mapPostToCardTab = (post, user) => {
   return {
     id: post.id,
     postId: post.id,
+    sourceType: 'post',
     title: post.title || 'Untitled',
     channelName,
     channelAvatar,
     publishedAt: formatTimeAgoTab(post.publishedAt || post.createdAt),
+    sortTime: new Date(post.publishedAt || post.createdAt || 0).getTime() || 0,
     thumbnail:
       post.thumbnailUrl || post.mediaUrl || 'https://via.placeholder.com/300',
     duration,
@@ -242,6 +243,62 @@ const mapPostToCardTab = (post, user) => {
     mediaUrl: post.mediaUrl,
     mediaType: post.mediaType || 'image',
     description: post.description || post.desc || '',
+  };
+};
+
+const mapShortToPostCardTab = (shortItem, profile, userId) => {
+  const channelName =
+    profile?.nickname || profile?.channelName || profile?.name || 'Unknown';
+  const avatarRaw =
+    profile?.photos?.[0] ||
+    (Array.isArray(profile?.photos) && profile.photos[0]) ||
+    profile?.channelAvatar ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      channelName,
+    )}&background=111&color=fff`;
+  const channelAvatar =
+    typeof avatarRaw === 'string' ? avatarRaw : avatarRaw?.src ?? avatarRaw?.uri;
+  const duration =
+    shortItem.duration != null
+      ? `${Math.floor(shortItem.duration / 60)}:${String(
+          shortItem.duration % 60,
+        ).padStart(2, '0')}`
+      : '';
+  const createdAt = shortItem.publishedAt || shortItem.createdAt;
+  return {
+    id: shortItem.id,
+    postId: shortItem.id,
+    sourceType: 'short',
+    shortId: shortItem.id,
+    title: shortItem.title || 'Short',
+    channelName,
+    channelAvatar,
+    publishedAt: formatTimeAgoTab(createdAt),
+    sortTime: new Date(createdAt || 0).getTime() || 0,
+    thumbnail:
+      shortItem.thumbnailUrl ||
+      shortItem.coverUrl ||
+      shortItem.videoUrl ||
+      'https://via.placeholder.com/300',
+    duration,
+    likes: formatCountTab(shortItem.likeCount ?? 0),
+    dislikes: formatCountTab(shortItem.dislikeCount ?? 0),
+    comments: formatCountTab(shortItem.commentCount ?? 0),
+    shares: formatCountTab(shortItem.shareCount ?? 0),
+    likeCount: shortItem.likeCount ?? 0,
+    dislikeCount: shortItem.dislikeCount ?? 0,
+    commentCount: shortItem.commentCount ?? 0,
+    shareCount: shortItem.shareCount ?? 0,
+    isLiked: shortItem.isLiked ?? false,
+    isDisliked: shortItem.isDisliked ?? false,
+    website: '',
+    hashtags: [],
+    mediaUrl: shortItem.videoUrl || '',
+    mediaType: 'short',
+    description: shortItem.description || '',
+    videoUrl: shortItem.videoUrl || '',
+    type: 'short',
+    userId: shortItem.userId || userId,
   };
 };
 
@@ -309,7 +366,6 @@ const PromotionScreen = ({ onBack }) => {
   const [promoGalleryVideoModal, setPromoGalleryVideoModal] = useState(null);
   /** Full gallery row from API while photo modal is open (counts + flags). */
   const [galleryEngagePhoto, setGalleryEngagePhoto] = useState(null);
-  const [createPostTabVisible, setCreatePostTabVisible] = useState(false);
   /** Visitor Gallery: same flow as UserViewsScreen Instagram/Gallery grid. */
   const [promoIgPreviewVisible, setPromoIgPreviewVisible] = useState(false);
   const [promoIgPreviewItem, setPromoIgPreviewItem] = useState(null);
@@ -590,17 +646,27 @@ const PromotionScreen = ({ onBack }) => {
     }
     setPostsTabLoading(true);
     try {
-      const res = await getPostsByUser(userId, 1, 50, currentUser?.id);
-      const raw = res?.posts || [];
+      const [postRes, shortRes] = await Promise.all([
+        getPostsByUser(userId, 1, 50, currentUser?.id),
+        shortsService.getUserShorts(userId, 1, 50),
+      ]);
+      const raw = postRes?.posts || [];
+      const postCards = raw.map(p => mapPostToCardTab(p, p.user));
+      const shortCards = (shortRes?.shorts || []).map(s =>
+        mapShortToPostCardTab(s, profile, userId),
+      );
+      const merged = [...postCards, ...shortCards].sort(
+        (a, b) => (b?.sortTime || 0) - (a?.sortTime || 0),
+      );
       setPostsTabRaw(raw);
-      setPostsTab(raw.map(p => mapPostToCardTab(p, p.user)));
+      setPostsTab(merged);
     } catch {
       setPostsTabRaw([]);
       setPostsTab([]);
     } finally {
       setPostsTabLoading(false);
     }
-  }, [userId, currentUser?.id]);
+  }, [userId, currentUser?.id, profile]);
 
   const loadGalleryTab = useCallback(async () => {
     if (!userId) {
@@ -1291,9 +1357,123 @@ const PromotionScreen = ({ onBack }) => {
     setItemActionsVisible(true);
   }, []);
 
-  const openEditForTarget = useCallback(() => {
+  const openEditForTarget = useCallback(async () => {
     if (!actionTarget) return;
     setItemActionsVisible(false);
+
+    if (actionTarget.kind === 'short' && userId) {
+      try {
+        const detailRes = await shortsService.getShortById(
+          actionTarget.id,
+          userId,
+          String(currentUser?.role || '').toLowerCase() || undefined,
+        );
+        const short =
+          detailRes?.short && typeof detailRes.short === 'object'
+            ? detailRes.short
+            : detailRes?.data && typeof detailRes.data === 'object'
+            ? detailRes.data
+            : detailRes;
+        const safeShort = short && typeof short === 'object' ? short : {};
+        const durationNum = Number(safeShort?.duration);
+        const schedRaw =
+          safeShort?.scheduledPublishAt ||
+          safeShort?.scheduleAt ||
+          safeShort?.scheduleDate ||
+          safeShort?.scheduledAt ||
+          null;
+        const pubRaw =
+          safeShort?.publishedAt ||
+          safeShort?.publishAt ||
+          safeShort?.postedAt ||
+          null;
+        const schedAt = schedRaw ? new Date(schedRaw) : null;
+        const pubAt = pubRaw ? new Date(pubRaw) : null;
+        const cand =
+          schedAt && Number.isFinite(schedAt.getTime())
+            ? schedAt
+            : pubAt && Number.isFinite(pubAt.getTime())
+            ? pubAt
+            : null;
+        const isFuture =
+          cand &&
+          Number.isFinite(cand.getTime()) &&
+          cand.getTime() > Date.now() + 60_000;
+        openPostCreateNewFlow({
+          isEdit: true,
+          shortId: String(safeShort?.id || actionTarget.id),
+          short: safeShort,
+          editDraft: {
+            source: 'promotion-short-edit',
+            shortId: String(safeShort?.id || actionTarget.id),
+            title: String(
+              safeShort?.title || safeShort?.description || actionTarget?.title || '',
+            ).trim(),
+            caption: String(
+              safeShort?.description || safeShort?.title || actionTarget?.description || '',
+            ).trim(),
+            video: {
+              uri: String(safeShort?.videoUrl || safeShort?.mediaUrl || '').trim(),
+              type: 'video/mp4',
+              name: `short-${safeShort?.id || actionTarget.id}.mp4`,
+              durationSec:
+                Number.isFinite(durationNum) && durationNum > 0 ? durationNum : 15,
+            },
+            thumbnail: {
+              uri: String(
+                safeShort?.thumbnailUrl ||
+                  safeShort?.thumbnail ||
+                  safeShort?.coverUrl ||
+                  '',
+              ).trim(),
+              type: 'image/jpeg',
+              name: `short-cover-${safeShort?.id || actionTarget.id}.jpg`,
+            },
+            platforms: Array.isArray(safeShort?.platforms)
+              ? safeShort.platforms
+              : Array.isArray(safeShort?.selectedPlatforms)
+              ? safeShort.selectedPlatforms
+              : [],
+            scheduledPublishAt:
+              safeShort?.scheduledPublishAt ||
+              safeShort?.scheduleAt ||
+              (isFuture && cand ? cand.toISOString() : null),
+            edits: {
+              visibility:
+                String(safeShort?.visibility || '').toLowerCase() === 'private'
+                  ? 'Private'
+                  : 'Public',
+              comments:
+                String(safeShort?.commentSetting || '').toLowerCase() === 'disable'
+                  ? 'Disable comments'
+                  : String(safeShort?.commentSetting || '').toLowerCase() === 'hold'
+                  ? 'Hold potentially inappropriate comments'
+                  : 'Allow all comments',
+              madeForKids:
+                typeof safeShort?.madeForKids === 'boolean'
+                  ? Boolean(safeShort.madeForKids)
+                  : null,
+              ageRestricted:
+                typeof safeShort?.ageRestricted === 'boolean'
+                  ? Boolean(safeShort.ageRestricted)
+                  : null,
+              scheduledPublishAt:
+                isFuture && cand ? cand.toISOString() : null,
+              platforms: Array.isArray(safeShort?.platforms)
+                ? safeShort.platforms
+                : Array.isArray(safeShort?.selectedPlatforms)
+                ? safeShort.selectedPlatforms
+                : [],
+            },
+          },
+        });
+        return;
+      } catch (e) {
+        Alert.alert('Edit failed', e?.message || 'Could not load short details');
+        return;
+      }
+    }
+
     setEditTitle(String(actionTarget?.title || '').trim());
     setEditDescription(
       String(actionTarget?.description || actionTarget?.desc || '').trim(),
@@ -1315,7 +1495,7 @@ const PromotionScreen = ({ onBack }) => {
       String(actionTarget?.videoUrl || actionTarget?.mediaUrl || '').trim(),
     );
     setItemEditVisible(true);
-  }, [actionTarget]);
+  }, [actionTarget, userId, currentUser?.role, openPostCreateNewFlow]);
 
   const handlePickEditThumbnail = useCallback(() => {
     launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, res => {
@@ -1794,6 +1974,23 @@ const PromotionScreen = ({ onBack }) => {
     }
   }, [navigation, currentUser?.id]);
 
+  const openPostCreateNewFlow = useCallback((params = {}) => {
+    if (!currentUser?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    let nav = navigation;
+    for (let i = 0; i < 12 && nav; i++) {
+      const names = nav.getState?.()?.routeNames;
+      if (Array.isArray(names) && names.includes('PostCreateNew')) {
+        nav.navigate('PostCreateNew', params);
+        return;
+      }
+      nav = nav.getParent?.();
+    }
+    navigation.navigate('PostCreateNew', params);
+  }, [navigation, currentUser?.id]);
+
   const handleCoverPress = () => {
     if (!isOwnProfile) return;
     if (!userId || uploadingCover) return;
@@ -2194,7 +2391,7 @@ const PromotionScreen = ({ onBack }) => {
                   <Text style={styles.promoTabSectionTitle}>Posts</Text>
                   {isOwnProfile ? (
                     <TouchableOpacity
-                      onPress={() => setCreatePostTabVisible(true)}
+                      onPress={openPostCreateNewFlow}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Icon name="plus" size={24} color="#333" />
@@ -2216,6 +2413,9 @@ const PromotionScreen = ({ onBack }) => {
                   </Text>
                 ) : (
                   postsTab.map(item => {
+                    const isShortItem =
+                      String(item?.sourceType || '').toLowerCase() === 'short' ||
+                      String(item?.mediaType || '').toLowerCase() === 'short';
                     const postId = item.postId || item.id;
                     const profileAvatarUri =
                       profile?.channelAvatar &&
@@ -2248,9 +2448,11 @@ const PromotionScreen = ({ onBack }) => {
                           channelAvatar: postOwnerAvatar || item.channelAvatar,
                         }}
                         postId={postId}
-                        onPress={() => openPostMediaPreview(item)}
+                        onPress={() =>
+                          isShortItem ? openLibraryMedia(item) : openPostMediaPreview(item)
+                        }
                         onMenuPress={
-                          isOwnProfile
+                          isOwnProfile && !isShortItem
                             ? () =>
                                 openItemActions({
                                   kind: 'post',
@@ -2268,17 +2470,19 @@ const PromotionScreen = ({ onBack }) => {
                             : undefined
                         }
                         onLike={
-                          currentUser?.id
+                          !isShortItem && currentUser?.id
                             ? () => handlePostTabLike(postId)
                             : undefined
                         }
                         onDislike={
-                          currentUser?.id
+                          !isShortItem && currentUser?.id
                             ? () => handlePostTabDislike(postId)
                             : undefined
                         }
-                        onCommentPress={() => setCommentsModalPostId(postId)}
-                        onShare={() => handlePostTabShare(postId)}
+                        onCommentPress={
+                          isShortItem ? undefined : () => setCommentsModalPostId(postId)
+                        }
+                        onShare={isShortItem ? undefined : () => handlePostTabShare(postId)}
                       />
                     );
                   })
@@ -2684,12 +2888,6 @@ const PromotionScreen = ({ onBack }) => {
         onCommentDeleted={(_top, count) =>
           handleGalleryCommentAdded(null, -(count || 1))
         }
-      />
-      <CreatePostModal
-        visible={createPostTabVisible}
-        onClose={() => setCreatePostTabVisible(false)}
-        onSuccess={() => loadPostsTab()}
-        userId={currentUser?.id}
       />
 
       <GalleryVideoDetailModal

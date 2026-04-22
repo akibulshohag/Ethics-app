@@ -68,6 +68,11 @@ const CreateVideoModalScreen = () => {
     });
   };
 
+  const handleCreatePost = () => {
+    setModalVisible(false);
+    navigateToRootRoute(navigation, 'PostCreateNew');
+  };
+
   const handleUploadVideo = () => {
     setModalVisible(false);
     navigation.navigate('Library', { screen: 'UploadVideoScreen' });
@@ -91,6 +96,7 @@ const CreateVideoModalScreen = () => {
       <CreateVideoModal
         visible={modalVisible}
         onClose={handleClose}
+        onCreatePost={handleCreatePost}
         onCreateShort={handleCreateShort}
         onUploadVideo={handleUploadVideo}
         onGoLive={handleGoLive}
