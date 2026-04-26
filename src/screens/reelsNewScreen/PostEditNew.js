@@ -15,7 +15,7 @@ import {
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Video from 'react-native-video';
@@ -175,6 +175,7 @@ function DraggableOverlayLayer({
 const EditReelScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const isFocused = useIsFocused();
   const incomingDraft = route.params?.draft || {};
   const [draft, setDraft] = React.useState(incomingDraft);
   const [soundsVisible, setSoundsVisible] = React.useState(false);
@@ -272,6 +273,7 @@ const EditReelScreen = () => {
   const [isScrubbing, setIsScrubbing] = React.useState(false);
   const [savedDrafts, setSavedDrafts] = React.useState([]);
   const [playing, setPlaying] = React.useState(true);
+  const resumePlayingRef = React.useRef(true);
   const [activePanel, setActivePanel] = React.useState(null);
   const [timelineTrackW, setTimelineTrackW] = React.useState(1);
   const [scrubBarW, setScrubBarW] = React.useState(1);
@@ -315,6 +317,15 @@ const EditReelScreen = () => {
   React.useEffect(() => {
     trimEndRef.current = trimEndSec;
   }, [trimEndSec]);
+
+  React.useEffect(() => {
+    if (isFocused) {
+      setPlaying(Boolean(resumePlayingRef.current));
+      return;
+    }
+    resumePlayingRef.current = playing;
+    setPlaying(false);
+  }, [isFocused, playing]);
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
 
   const videoUri = draft?.video?.uri;
@@ -868,7 +879,7 @@ const EditReelScreen = () => {
                 repeat={!trimLoopActive}
                 muted={previewMuteOriginal || Number(originalVolume) <= 0}
                 volume={Math.max(0, Math.min(2, Number(originalVolume) || 0))}
-                paused={!playing}
+                paused={!playing || !isFocused}
                 rate={Number(speedFactor) || 1}
                 progressUpdateInterval={120}
                 onProgress={p => {
@@ -890,7 +901,7 @@ const EditReelScreen = () => {
                   style={styles.hiddenAudioTrack}
                   audioOnly
                   repeat
-                  paused={!playing}
+                  paused={!playing || !isFocused}
                   volume={Math.max(0, Math.min(2, Number(musicVolume) || 0))}
                   muted={false}
                   ignoreSilentSwitch="ignore"

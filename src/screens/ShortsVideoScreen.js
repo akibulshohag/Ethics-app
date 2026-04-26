@@ -87,6 +87,20 @@ const mapCommentsForApi = c => {
   return 'allow';
 };
 
+const extractShortPayload = payload => {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.short && typeof payload.short === 'object') return payload.short;
+  if (payload.data && typeof payload.data === 'object') return payload.data;
+  return payload;
+};
+
+const isRemoteMediaUri = uri => {
+  const raw = String(uri || '')
+    .trim()
+    .toLowerCase();
+  return raw.startsWith('http://') || raw.startsWith('https://');
+};
+
 const firstNameFromSubscriber = u => {
   const raw = String(u?.name || u?.nickname || u?.email || '').trim();
   if (!raw) return 'Someone';
@@ -1493,7 +1507,9 @@ const ShortsVideoScreen = ({ navigation }) => {
           : detailRes?.data && typeof detailRes.data === 'object'
           ? detailRes.data
           : detailRes;
-      if (resolved && typeof resolved === 'object') sourceShort = resolved;
+      if (resolved && typeof resolved === 'object') {
+        sourceShort = { ...t, ...resolved };
+      }
     } catch {}
     const pubAt = sourceShort?.publishedAt ? new Date(sourceShort.publishedAt) : null;
     const schedAt = sourceShort?.scheduledPublishAt
@@ -1520,6 +1536,16 @@ const ShortsVideoScreen = ({ navigation }) => {
         ? 'Hold potentially inappropriate comments'
         : 'Allow all comments';
     const durationNum = Number(sourceShort?.duration);
+    const inferredPlatforms = Array.isArray(sourceShort?.platforms)
+      ? sourceShort.platforms
+      : Array.isArray(sourceShort?.selectedPlatforms)
+      ? sourceShort.selectedPlatforms
+      : [
+          sourceShort?.facebookPageId ? 'facebook' : null,
+          sourceShort?.instagramAccountId ? 'instagram' : null,
+          sourceShort?.tiktokAccountId ? 'tiktok' : null,
+          sourceShort?.youtubeChannelId ? 'youtube' : null,
+        ].filter(Boolean);
     navigation.navigate('PostCreateNew', {
       isEdit: true,
       shortId: String(sourceShort?.id || t.id),
@@ -1546,11 +1572,7 @@ const ShortsVideoScreen = ({ navigation }) => {
           type: 'image/jpeg',
           name: `short-cover-${sourceShort?.id || t.id}.jpg`,
         },
-        platforms: Array.isArray(sourceShort?.platforms)
-          ? sourceShort.platforms
-          : Array.isArray(sourceShort?.selectedPlatforms)
-          ? sourceShort.selectedPlatforms
-          : [],
+        platforms: inferredPlatforms,
         scheduledPublishAt:
           sourceShort?.scheduledPublishAt ||
           sourceShort?.scheduleAt ||
@@ -1568,11 +1590,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               : null,
           scheduledPublishAt: isFuture && cand ? cand.toISOString() : null,
           hadFutureSchedule: !!isFuture,
-          platforms: Array.isArray(sourceShort?.platforms)
-            ? sourceShort.platforms
-            : Array.isArray(sourceShort?.selectedPlatforms)
-            ? sourceShort.selectedPlatforms
-            : [],
+          platforms: inferredPlatforms,
         },
       },
     });
@@ -1645,7 +1663,7 @@ const ShortsVideoScreen = ({ navigation }) => {
       setEditShortSubmitting(true);
       if (needUpload) {
         try {
-          const mediaResult = await shortsService.replaceShortMedia(
+          const mediaResponse = await shortsService.replaceShortMedia(
             editShortTargetId,
             user.id,
             {
@@ -1657,11 +1675,45 @@ const ShortsVideoScreen = ({ navigation }) => {
               thumbnailName: editLocalThumbMeta?.name,
             },
           );
-          if (mediaResult?.thumbnailUrl) {
-            thumbOut = mediaResult.thumbnailUrl;
+          const mediaResult = extractShortPayload(mediaResponse) || {};
+          if (mediaResult?.thumbnailUrl || mediaResult?.coverUrl) {
+            thumbOut = String(
+              mediaResult.thumbnailUrl || mediaResult.coverUrl || thumbOut,
+            ).trim();
           }
-          if (mediaResult?.videoUrl) {
-            vidOut = mediaResult.videoUrl;
+          if (mediaResult?.videoUrl || mediaResult?.mediaUrl) {
+            vidOut = String(mediaResult.videoUrl || mediaResult.mediaUrl || vidOut).trim();
+          }
+          const needsVideoCheck = isLocalMediaUri(editShortVideoUri);
+          const needsThumbCheck = isLocalMediaUri(editShortThumbnailUri);
+          if (
+            (needsVideoCheck && !isRemoteMediaUri(vidOut)) ||
+            (needsThumbCheck && !isRemoteMediaUri(thumbOut))
+          ) {
+            try {
+              const freshRes = await shortsService.getShortById(
+                editShortTargetId,
+                user.id,
+                String(user?.role || '').toLowerCase() || undefined,
+              );
+              const fresh = extractShortPayload(freshRes) || {};
+              if (needsVideoCheck && !isRemoteMediaUri(vidOut)) {
+                vidOut = String(fresh?.videoUrl || fresh?.mediaUrl || vidOut).trim();
+              }
+              if (needsThumbCheck && !isRemoteMediaUri(thumbOut)) {
+                thumbOut = String(
+                  fresh?.thumbnailUrl || fresh?.coverUrl || thumbOut,
+                ).trim();
+              }
+            } catch {
+              // keep previous values
+            }
+          }
+          if (needsVideoCheck && !isRemoteMediaUri(vidOut)) {
+            throw new Error('Updated video upload did not complete. Please retry.');
+          }
+          if (needsThumbCheck && !isRemoteMediaUri(thumbOut)) {
+            throw new Error('Updated thumbnail upload did not complete. Please retry.');
           }
         } catch (mediaErr) {
           const msg = String(
@@ -1671,12 +1723,12 @@ const ShortsVideoScreen = ({ navigation }) => {
             mediaErr?.response?.status === 404 ||
             msg.includes('Cannot POST') ||
             msg.includes('/media');
-          if (!unsupported) throw mediaErr;
-          Toast.show({
-            type: 'info',
-            text1: 'Media route not found on backend',
-            text2: 'Saved details only. Restart/update backend for media replace.',
-          });
+          if (unsupported) {
+            throw new Error(
+              'Media update route is not available on backend. Please update backend and try again.',
+            );
+          }
+          throw mediaErr;
         }
       }
 
@@ -1702,11 +1754,16 @@ const ShortsVideoScreen = ({ navigation }) => {
         patch.publishImmediately = true;
       }
 
-      const saved = await shortsService.updateShort(
+      const savedResponse = await shortsService.updateShort(
         editShortTargetId,
         user.id,
         patch,
       );
+      const saved = extractShortPayload(savedResponse) || {};
+      const savedThumb = String(
+        saved?.thumbnailUrl || saved?.coverUrl || thumbOut || '',
+      ).trim();
+      const savedVideo = String(saved?.videoUrl || saved?.mediaUrl || vidOut || '').trim();
 
       setVideos(prev =>
         prev.map(v =>
@@ -1715,15 +1772,11 @@ const ShortsVideoScreen = ({ navigation }) => {
                 ...v,
                 description: nextText || v.description,
                 title: nextTitle || v.title,
-                thumbnailUrl: saved.thumbnailUrl ?? thumbOut ?? v.thumbnailUrl,
-                thumbnail: saved.thumbnailUrl ?? thumbOut ?? v.thumbnail,
-                coverUrl:
-                  saved.coverUrl ??
-                  saved.thumbnailUrl ??
-                  thumbOut ??
-                  v.coverUrl,
-                videoUrl: saved.videoUrl ?? vidOut ?? v.videoUrl,
-                mediaUrl: saved.videoUrl ?? vidOut ?? v.mediaUrl,
+                thumbnailUrl: savedThumb || v.thumbnailUrl,
+                thumbnail: savedThumb || v.thumbnail,
+                coverUrl: savedThumb || v.coverUrl,
+                videoUrl: savedVideo || v.videoUrl,
+                mediaUrl: savedVideo || v.mediaUrl,
                 visibility: mapVisibilityForApi(editShortVisibility),
                 commentSetting: mapCommentsForApi(editShortComments),
                 madeForKids:

@@ -9,6 +9,8 @@ const API_URL = `${config.apiBaseUrl}/shorts`;
 const SHORT_UPDATED_EVENT = 'shorts:updated';
 const UPLOAD_TIMEOUT_MS = 1_800_000;
 const UPLOAD_MAX_RETRIES = 2;
+const REPLACE_MEDIA_TIMEOUT_MS = 1_800_000;
+const REPLACE_MEDIA_MAX_RETRIES = 2;
 
 const toUpdatedShortPayload = payload => {
   if (!payload) return null;
@@ -338,43 +340,74 @@ export const shortsService = {
       thumbnailType,
       thumbnailName,
     } = payload;
-    const formData = new FormData();
-    formData.append('userId', userId);
-    let n = 0;
-    if (videoUri && isLocalMediaUri(videoUri)) {
-      formData.append('files', {
-        uri: normalizeUploadUri(videoUri),
-        type: videoType || 'video/mp4',
-        name: videoName || 'short.mp4',
-      });
-      n += 1;
-    }
-    if (thumbnailUri && isLocalMediaUri(thumbnailUri)) {
-      formData.append('files', {
-        uri: normalizeUploadUri(thumbnailUri),
-        type: thumbnailType || 'image/jpeg',
-        name: thumbnailName || 'thumb.jpg',
-      });
-      n += 1;
-    }
-    if (n === 0) {
+    const hasVideo = videoUri && isLocalMediaUri(videoUri);
+    const hasThumb = thumbnailUri && isLocalMediaUri(thumbnailUri);
+    if (!hasVideo && !hasThumb) {
       throw new Error('No local video or thumbnail to upload');
     }
-    const response = await axios.post(`${API_URL}/${shortId}/media`, formData, {
-      headers: {
-        ...getAuthHeaders(),
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 120000,
-    });
-    const updated = toUpdatedShortPayload(response.data);
-    if (updated?.id || shortId) {
-      DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
-        ...(updated || {}),
-        id: String(updated?.id || shortId),
-      });
+    const buildReplaceFormData = () => {
+      const formData = new FormData();
+      formData.append('userId', String(userId));
+      if (hasVideo) {
+        formData.append('files', {
+          uri: normalizeUploadUri(videoUri),
+          type: videoType || 'video/mp4',
+          name: videoName || 'short.mp4',
+        });
+      }
+      if (hasThumb) {
+        formData.append('files', {
+          uri: normalizeUploadUri(thumbnailUri),
+          type: thumbnailType || 'image/jpeg',
+          name: thumbnailName || 'thumb.jpg',
+        });
+      }
+      return formData;
+    };
+
+    for (let attempt = 0; attempt <= REPLACE_MEDIA_MAX_RETRIES; attempt += 1) {
+      let timeoutId;
+      try {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), REPLACE_MEDIA_TIMEOUT_MS);
+        const response = await fetch(`${API_URL}/${shortId}/media`, {
+          method: 'POST',
+          headers: {
+            ...getAuthHeaders(),
+          },
+          body: buildReplaceFormData(),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const msg = Array.isArray(data?.message)
+            ? data.message.join('\n')
+            : data?.message ||
+              data?.error ||
+              `Replace media failed (${response.status})`;
+          const error = new Error(msg);
+          error.response = { status: response.status, data };
+          throw error;
+        }
+        const updated = toUpdatedShortPayload(data);
+        if (updated?.id || shortId) {
+          DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
+            ...(updated || {}),
+            id: String(updated?.id || shortId),
+          });
+        }
+        return data;
+      } catch (err) {
+        if (attempt < REPLACE_MEDIA_MAX_RETRIES && isRetryableUploadError(err)) {
+          await sleep(1000 * (attempt + 1));
+          continue;
+        }
+        throw err;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
     }
-    return response.data;
+    throw new Error('Replace media failed');
   },
 
   onShortUpdated(callback) {
@@ -392,6 +425,12 @@ export const shortsService = {
       data: {userId},
       headers: getAuthHeaders(),
     });
+    if (shortId) {
+      DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
+        id: String(shortId),
+        _deleted: true,
+      });
+    }
     return response.data;
   },
 

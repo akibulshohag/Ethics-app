@@ -71,7 +71,7 @@ import { shortsService } from '../services/shortsService';
 import { getWatchLater } from '../services/playlistService';
 import { getNearbyPromotions } from '../services/promotionService';
 import { appSetUser } from '../redux/actions/appSlice';
-import { safeImageUri } from '../utils/helper';
+import { safeImageUri, isLocalMediaUri } from '../utils/helper';
 import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 import {
   buildOwnerScopedShortsFeed,
@@ -97,6 +97,20 @@ import {
 } from '../utils/locationFormat';
 
 const { width } = Dimensions.get('window');
+
+const extractShortPayload = payload => {
+  if (!payload || typeof payload !== 'object') return null;
+  if (payload.short && typeof payload.short === 'object') return payload.short;
+  if (payload.data && typeof payload.data === 'object') return payload.data;
+  return payload;
+};
+
+const isRemoteMediaUri = uri => {
+  const raw = String(uri || '')
+    .trim()
+    .toLowerCase();
+  return raw.startsWith('http://') || raw.startsWith('https://');
+};
 
 const VideoSection = ({
   title,
@@ -509,7 +523,7 @@ const PromotionScreen = ({ onBack }) => {
         ...s,
         type: 'short',
         id: s.id,
-        thumbnailUrl: s.thumbnailUrl || s.coverUrl,
+        thumbnailUrl: s.thumbnailUrl || s.coverUrl || s.thumbnail || s.mediaThumb,
         title: s.title || 'Short',
       }));
       setMyVideos([...videos, ...shorts]);
@@ -524,6 +538,10 @@ const PromotionScreen = ({ onBack }) => {
     const sub = shortsService.onShortUpdated?.(updated => {
       const sid = String(updated?.id || '').trim();
       if (!sid) return;
+      if (updated?._deleted) {
+        setMyVideos(prev => prev.filter(v => String(v?.id) !== sid));
+        return;
+      }
       setMyVideos(prev =>
         prev.map(v => {
           if (String(v?.id) !== sid) return v;
@@ -534,11 +552,21 @@ const PromotionScreen = ({ onBack }) => {
             title: updated?.title ?? v.title,
             description: updated?.description ?? v.description,
             thumbnailUrl:
-              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnailUrl,
+              updated?.thumbnailUrl ??
+              updated?.coverUrl ??
+              updated?.thumbnail ??
+              v.thumbnailUrl,
             thumbnail:
-              updated?.thumbnailUrl ?? updated?.coverUrl ?? v.thumbnail,
-            coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? v.coverUrl,
-            videoUrl: updated?.videoUrl ?? v.videoUrl,
+              updated?.thumbnailUrl ??
+              updated?.coverUrl ??
+              updated?.thumbnail ??
+              v.thumbnail,
+            coverUrl:
+              updated?.coverUrl ??
+              updated?.thumbnailUrl ??
+              updated?.thumbnail ??
+              v.coverUrl,
+            videoUrl: updated?.videoUrl ?? updated?.mediaUrl ?? v.videoUrl,
             mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? v.mediaUrl,
             visibility: updated?.visibility ?? v.visibility,
             commentSetting: updated?.commentSetting ?? v.commentSetting,
@@ -1374,7 +1402,10 @@ const PromotionScreen = ({ onBack }) => {
             : detailRes?.data && typeof detailRes.data === 'object'
             ? detailRes.data
             : detailRes;
-        const safeShort = short && typeof short === 'object' ? short : {};
+        const safeShort =
+          short && typeof short === 'object'
+            ? { ...(actionTarget || {}), ...short }
+            : { ...(actionTarget || {}) };
         const durationNum = Number(safeShort?.duration);
         const schedRaw =
           safeShort?.scheduledPublishAt ||
@@ -1399,6 +1430,16 @@ const PromotionScreen = ({ onBack }) => {
           cand &&
           Number.isFinite(cand.getTime()) &&
           cand.getTime() > Date.now() + 60_000;
+        const inferredPlatforms = Array.isArray(safeShort?.platforms)
+          ? safeShort.platforms
+          : Array.isArray(safeShort?.selectedPlatforms)
+          ? safeShort.selectedPlatforms
+          : [
+              safeShort?.facebookPageId ? 'facebook' : null,
+              safeShort?.instagramAccountId ? 'instagram' : null,
+              safeShort?.tiktokAccountId ? 'tiktok' : null,
+              safeShort?.youtubeChannelId ? 'youtube' : null,
+            ].filter(Boolean);
         openPostCreateNewFlow({
           isEdit: true,
           shortId: String(safeShort?.id || actionTarget.id),
@@ -1429,11 +1470,7 @@ const PromotionScreen = ({ onBack }) => {
               type: 'image/jpeg',
               name: `short-cover-${safeShort?.id || actionTarget.id}.jpg`,
             },
-            platforms: Array.isArray(safeShort?.platforms)
-              ? safeShort.platforms
-              : Array.isArray(safeShort?.selectedPlatforms)
-              ? safeShort.selectedPlatforms
-              : [],
+            platforms: inferredPlatforms,
             scheduledPublishAt:
               safeShort?.scheduledPublishAt ||
               safeShort?.scheduleAt ||
@@ -1459,11 +1496,7 @@ const PromotionScreen = ({ onBack }) => {
                   : null,
               scheduledPublishAt:
                 isFuture && cand ? cand.toISOString() : null,
-              platforms: Array.isArray(safeShort?.platforms)
-                ? safeShort.platforms
-                : Array.isArray(safeShort?.selectedPlatforms)
-                ? safeShort.selectedPlatforms
-                : [],
+              platforms: inferredPlatforms,
             },
           },
         });
@@ -1592,13 +1625,15 @@ const PromotionScreen = ({ onBack }) => {
       );
       return;
     }
+    let nextThumbnailUri = editThumbnailUri.trim();
+    let nextVideoUri = editVideoUri.trim();
     const payload = {
       title: editTitle.trim() || undefined,
       description: editDescription.trim() || undefined,
       website: editWebsite.trim() || undefined,
-      thumbnailUrl: editThumbnailUri.trim() || undefined,
-      mediaUrl: editVideoUri.trim() || undefined,
-      videoUrl: editVideoUri.trim() || undefined,
+      thumbnailUrl: nextThumbnailUri || undefined,
+      mediaUrl: nextVideoUri || undefined,
+      videoUrl: nextVideoUri || undefined,
       hashtags: editHashtags
         .split(/[\s,]+/)
         .map(t => t.trim())
@@ -1648,6 +1683,66 @@ const PromotionScreen = ({ onBack }) => {
           ),
         );
       } else if (actionTarget.kind === 'short') {
+        const shouldReplaceShortMedia =
+          isLocalMediaUri(nextThumbnailUri) || isLocalMediaUri(nextVideoUri);
+        if (shouldReplaceShortMedia) {
+          const replaceRes = await shortsService.replaceShortMedia(
+            actionTarget.id,
+            userId,
+            {
+              videoUri: isLocalMediaUri(nextVideoUri) ? nextVideoUri : undefined,
+              thumbnailUri: isLocalMediaUri(nextThumbnailUri)
+                ? nextThumbnailUri
+                : undefined,
+            },
+          );
+          const replaced = extractShortPayload(replaceRes) || {};
+          const replacedVideo = String(
+            replaced?.videoUrl || replaced?.mediaUrl || '',
+          ).trim();
+          const replacedThumb = String(
+            replaced?.thumbnailUrl || replaced?.coverUrl || '',
+          ).trim();
+          if (isRemoteMediaUri(replacedVideo)) {
+            nextVideoUri = replacedVideo;
+          }
+          if (isRemoteMediaUri(replacedThumb)) {
+            nextThumbnailUri = replacedThumb;
+          }
+          const needsVideoCheck = isLocalMediaUri(editVideoUri);
+          const needsThumbCheck = isLocalMediaUri(editThumbnailUri);
+          if (
+            (needsVideoCheck && !isRemoteMediaUri(nextVideoUri)) ||
+            (needsThumbCheck && !isRemoteMediaUri(nextThumbnailUri))
+          ) {
+            const freshRes = await shortsService.getShortById(
+              actionTarget.id,
+              userId,
+            );
+            const fresh = extractShortPayload(freshRes) || {};
+            if (needsVideoCheck && !isRemoteMediaUri(nextVideoUri)) {
+              nextVideoUri = String(
+                fresh?.videoUrl || fresh?.mediaUrl || nextVideoUri,
+              ).trim();
+            }
+            if (needsThumbCheck && !isRemoteMediaUri(nextThumbnailUri)) {
+              nextThumbnailUri = String(
+                fresh?.thumbnailUrl || fresh?.coverUrl || nextThumbnailUri,
+              ).trim();
+            }
+          }
+          if (needsVideoCheck && !isRemoteMediaUri(nextVideoUri)) {
+            throw new Error('Updated video upload did not complete. Please retry.');
+          }
+          if (needsThumbCheck && !isRemoteMediaUri(nextThumbnailUri)) {
+            throw new Error(
+              'Updated thumbnail upload did not complete. Please retry.',
+            );
+          }
+          payload.videoUrl = nextVideoUri || undefined;
+          payload.mediaUrl = nextVideoUri || undefined;
+          payload.thumbnailUrl = nextThumbnailUri || undefined;
+        }
         await shortsService.updateShort(actionTarget.id, userId, payload);
         setMyVideos(prev =>
           prev.map(v =>

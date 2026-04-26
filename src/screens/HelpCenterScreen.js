@@ -7,24 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
-
-// LayoutAnimation: skip in New Architecture (fabric) to avoid "no-op" warning
-if (
-  Platform.OS === 'android' &&
-  typeof UIManager !== 'undefined' &&
-  typeof UIManager.setLayoutAnimationEnabledExperimental === 'function' &&
-  !(typeof global !== 'undefined' && global.__turboModuleProxy)
-) {
-  try {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  } catch (_) {}
-}
 
 const HelpCenterScreen = () => {
   const navigation = useNavigation();
@@ -69,7 +55,14 @@ const HelpCenterScreen = () => {
   ];
 
   const toggleAccordion = index => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const isNewArchitecture =
+      typeof global !== 'undefined' &&
+      (Boolean(global.nativeFabricUIManager) ||
+        Boolean(global.__turboModuleProxy) ||
+        Boolean(global.RN$Bridgeless));
+    if (!isNewArchitecture) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
     setExpandedIndex(expandedIndex === index ? null : index);
   };
 

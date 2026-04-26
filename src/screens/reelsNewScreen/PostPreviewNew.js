@@ -9,7 +9,7 @@ import {
   ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import { getFilterOverlayStyle } from '../../constants/filterEffects';
@@ -115,6 +115,7 @@ function PreviewOverlayLayer({ layer, videoW, videoH, durationSec, currentSec, s
 const PreviewReelScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const isFocused = useIsFocused();
   const draft = route.params?.draft || {};
   const [selectedSound, setSelectedSound] = React.useState(
     draft?.edits?.selectedSound || null,
@@ -129,6 +130,7 @@ const PreviewReelScreen = () => {
   const [videoBoxSize, setVideoBoxSize] = React.useState({ width, height: 280 });
   const [currentSec, setCurrentSec] = React.useState(0);
   const [playing, setPlaying] = React.useState(true);
+  const resumePlayingRef = React.useRef(true);
   const [muteOriginal, setMuteOriginal] = React.useState(
     Boolean(draft?.edits?.previewMuteOriginal ?? Number(draft?.edits?.originalVolume ?? 1) <= 0),
   );
@@ -223,6 +225,15 @@ const PreviewReelScreen = () => {
     seekVideo(trimStartSec);
   }, [draft?.video?.uri, seekVideo, trimPreviewActive, trimStartSec]);
 
+  React.useEffect(() => {
+    if (isFocused) {
+      setPlaying(Boolean(resumePlayingRef.current));
+      return;
+    }
+    resumePlayingRef.current = playing;
+    setPlaying(false);
+  }, [isFocused, playing]);
+
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
 
   const socialIcons = [
@@ -236,7 +247,12 @@ const PreviewReelScreen = () => {
     <SafeAreaView style={styles.safeTop} edges={['top']}>
       <View style={styles.container}>
         <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          onPress={() => {
+            setPlaying(false);
+            navigation.goBack();
+          }}
+        >
           <Icon name="chevron-left" color="white" size={28} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
@@ -287,7 +303,7 @@ const PreviewReelScreen = () => {
               repeat={!trimPreviewActive}
               muted={muteOriginal || originalVolume <= 0}
               volume={originalVolume}
-              paused={!playing}
+              paused={!playing || !isFocused}
               rate={Number(draft?.edits?.speedFactor || 1)}
               progressUpdateInterval={100}
               onLoad={() => {
@@ -314,7 +330,7 @@ const PreviewReelScreen = () => {
               style={styles.hiddenAudioTrack}
               audioOnly
               repeat
-              paused={!playing}
+              paused={!playing || !isFocused}
               muted={false}
               volume={musicVolume}
               ignoreSilentSwitch="ignore"
@@ -454,7 +470,8 @@ const PreviewReelScreen = () => {
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.postButton}
-            onPress={() =>
+            onPress={() => {
+              setPlaying(false);
               navigation.navigate('PostScheduleNew', {
                 draft: {
                   ...draft,
@@ -466,8 +483,8 @@ const PreviewReelScreen = () => {
                     previewMuteOriginal: muteOriginal,
                   },
                 },
-              })
-            }
+              });
+            }}
           >
             <Text style={styles.postButtonText}>Confirm & Post</Text>
             <Icon name="arrow-right" color="white" size={20} />
