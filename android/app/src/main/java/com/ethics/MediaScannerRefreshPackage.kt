@@ -1,4 +1,4 @@
-package com.ethics
+package com.eatix.app
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

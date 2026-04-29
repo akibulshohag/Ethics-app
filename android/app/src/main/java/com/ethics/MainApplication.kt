@@ -1,4 +1,4 @@
-package com.ethics
+package com.eatix.app
 
 import android.app.Application
 import com.facebook.react.PackageList

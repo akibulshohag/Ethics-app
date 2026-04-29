@@ -1,4 +1,4 @@
-package com.ethics
+package com.eatix.app
 
 import android.graphics.Bitmap
 import android.media.MediaScannerConnection
