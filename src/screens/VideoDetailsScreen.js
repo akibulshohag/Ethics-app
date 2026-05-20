@@ -50,6 +50,7 @@ import {
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
 import { safeImageUri } from '../utils/helper';
+import { BORDER_RADIUS, COLORS, SHADOWS } from '../constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -561,7 +562,7 @@ const VideoDetailsScreen = () => {
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#F97507" />
+        <ActivityIndicator size="large" color={COLORS.primaryOrange} />
         <Text style={styles.loadingText}>Loading video...</Text>
       </View>
     );
@@ -1218,7 +1219,7 @@ export default VideoDetailsScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.white,
   },
   centered: {
     justifyContent: 'center',
@@ -1240,8 +1241,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#F97507',
-    borderRadius: 8,
+    backgroundColor: COLORS.primaryOrange,
+    borderRadius: BORDER_RADIUS.md,
   },
   retryButtonText: {
     color: '#fff',
@@ -1355,6 +1356,7 @@ const styles = StyleSheet.create({
   infoContainer: {
     paddingHorizontal: 16,
     paddingVertical: 24,
+    backgroundColor: COLORS.white,
   },
   titleRow: {
     flexDirection: 'row',
@@ -1380,6 +1382,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: COLORS.gray100,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
   },
   actionButton: {
     alignItems: 'center',
@@ -1399,10 +1405,10 @@ const styles = StyleSheet.create({
   },
   ctaButton: {
     flex: 1,
-    backgroundColor: '#F97507',
+    backgroundColor: COLORS.primaryOrange,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 18,
+    borderRadius: BORDER_RADIUS.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1418,7 +1424,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#e5e5e5',
+    borderColor: COLORS.gray200,
   },
   channelInfo: {
     flexDirection: 'row',
@@ -1463,10 +1469,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   subscribeButton: {
-    backgroundColor: '#F97507',
+    backgroundColor: COLORS.primaryOrange,
     paddingVertical: 6,
     paddingHorizontal: 16,
-    borderRadius: 18,
+    borderRadius: BORDER_RADIUS.full,
   },
   subscribedButton: {
     backgroundColor: '#f2f2f2',
@@ -1522,6 +1528,9 @@ const styles = StyleSheet.create({
   },
   commentsPreview: {
     marginTop: 16,
+    padding: 12,
+    backgroundColor: COLORS.gray100,
+    borderRadius: BORDER_RADIUS.lg,
   },
   commentsHeader: {
     flexDirection: 'row',
@@ -1552,12 +1561,13 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   commentInputPlaceholder: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.white,
     paddingHorizontal: 20,
-    borderRadius: 40,
+    borderRadius: BORDER_RADIUS.full,
     flex: 1,
     height: 45,
     justifyContent: 'center',
+    ...SHADOWS.small,
   },
   commentInputText: {
     color: '#212121',

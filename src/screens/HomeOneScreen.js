@@ -24,6 +24,8 @@ import {
   Share,
   BackHandler,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -33,6 +35,7 @@ import {
   useFocusEffect,
 } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import LinearGradient from 'react-native-linear-gradient';
 import { useSelector, useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -93,6 +96,47 @@ import {
 } from '../utils/geoDistance';
 
 const { width, height } = Dimensions.get('window');
+const HOME_FEED_H_PADDING = 15;
+const HOME_CAROUSEL_GAP = 10;
+const HOME_CAROUSEL_CARD_WIDTH =
+  (width - HOME_FEED_H_PADDING * 2 - HOME_CAROUSEL_GAP * 2) / 2.5;
+const HOME_HERO_GRADIENT = ['#FFF4EC', '#FFE8DC', '#FFF0FA', '#F0FDF4'];
+const HOME_AI_GRADIENT = ['#EEF4FF', '#F0FDF4', '#FFF4EC', '#FCE7FF'];
+const HOME_SURFACE_BORDER = 'rgba(99, 102, 241, 0.12)';
+
+const getTimeOfDayGreeting = () => {
+  const now = new Date();
+  const totalMinutes = now.getHours() * 60 + now.getMinutes();
+
+  if (totalMinutes >= 360 && totalMinutes <= 660) {
+    return 'Good Morning';
+  }
+  if (totalMinutes >= 661 && totalMinutes <= 1080) {
+    return 'Good Afternoon';
+  }
+  if (totalMinutes >= 1081 && totalMinutes <= 1170) {
+    return 'Good Evening';
+  }
+  return 'Good Night';
+};
+
+const getUserProfileAvatar = u => {
+  const displayName = u?.name || u?.nickname || 'User';
+  const firstPhoto =
+    Array.isArray(u?.photos) && u.photos.length > 0 ? u.photos[0] : null;
+  const raw =
+    u?.channelAvatar ||
+    u?.avatar ||
+    u?.profileImage ||
+    u?.photoUrl ||
+    (typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src);
+  return safeImageUri(
+    raw,
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      displayName,
+    )}&background=FF6A3D&color=fff`,
+  );
+};
 
 const formatCount = n => {
   if (n == null || n < 0) return '0';
@@ -510,6 +554,10 @@ const HomeOneScreen = () => {
   const route = useRoute();
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
+  const headerProfileAvatarUri = useMemo(
+    () => getUserProfileAvatar(user),
+    [user],
+  );
   const authUserId = useMemo(
     () =>
       user?.id ?? user?.userId ?? user?._id ?? user?.uid ?? user?.sub ?? null,
@@ -2398,6 +2446,35 @@ const HomeOneScreen = () => {
     return true;
   }, [navigation, user?.id]);
 
+  const openUserProfile = useCallback(() => {
+    const role = (user?.role || '').toLowerCase();
+    if (role === 'owner' || role === 'vendor') {
+      navigation.navigate('BusinessProfileViewScreen');
+    } else if (role === 'user') {
+      navigation.navigate('PromotionScreen');
+    } else if (role === 'admin') {
+      navigation.getParent()?.navigate('Admin');
+    } else {
+      navigation
+        .getParent()
+        ?.navigate('Library', { screen: 'ProfileScreen' });
+    }
+  }, [navigation, user?.role]);
+
+  const openLocationPicker = useCallback(() => {
+    setLocationInput((addressText && String(addressText).trim()) || '');
+    setLocationSuggestions([]);
+    setLocationModalVisible(true);
+  }, [addressText]);
+
+  const openNotifications = useCallback(() => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    navigation.navigate('NotificationScreen');
+  }, [navigation, user?.id]);
+
   const onMoreSavePlaylist = useCallback(() => {
     if (!homeMoreTarget?.contentId) return;
     if (!requireLogin()) return;
@@ -3076,14 +3153,19 @@ const HomeOneScreen = () => {
     const shortsPreview = (feedShorts || [])
       .filter(matchesCuisineItem)
       .slice(0, 2);
-    const sectionsToRender = cuisineSelected
-      ? feedSections
-          .map(section => ({
-            ...section,
-            data: (section.data || []).filter(matchesCuisineItem),
-          }))
-          .filter(section => (section.data || []).length > 0)
-      : feedSections;
+    const mostViewedCarousel = (popularShorts || [])
+      .filter(matchesCuisineItem)
+      .slice(0, 12);
+    const sectionsToRender = (
+      cuisineSelected
+        ? feedSections
+            .map(section => ({
+              ...section,
+              data: (section.data || []).filter(matchesCuisineItem),
+            }))
+            .filter(section => (section.data || []).length > 0)
+        : feedSections
+    ).filter(section => section.type !== 'MOST_POPULAR_SHORTS');
     const slideCuisineChips = dir => {
       const step = 5 * 70; // roughly 5 chips per click
       const maxOffset = Math.max(
@@ -3098,88 +3180,62 @@ const HomeOneScreen = () => {
 
     return (
       <View style={styles.mainContainer}>
-        <View style={styles.header}>
-          <View style={styles.navRow}>
-            {/* <TouchableOpacity
-            onPress={() => navigation.navigate('LandingScreen')}
-            style={styles.navBtn}
-          >
-            <Text style={styles.navBtnText}>{'<'} Home</Text>
-          </TouchableOpacity> */}
-            <View style={styles.headerLogoContainer}>
-              <Image
-                source={logo}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
-            {!(user?.token || user?.id) ? (
-              <TouchableOpacity
-                style={[styles.navBtn]}
-                onPress={() => navigation.navigate('HomeSevenScreen')}
-              >
-                <Text style={styles.navBtnText}>Login {'>'}</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                // style={[styles.navBtn]}
-                onPress={() => {
-                  const role = (user?.role || '').toLowerCase();
-                  if (role === 'owner' || role === 'vendor') {
-                    navigation.navigate('BusinessProfileViewScreen');
-                  } else if (role === 'user') {
-                    navigation.navigate('PromotionScreen');
-                  } else if (role === 'admin') {
-                    navigation.getParent()?.navigate('Admin');
-                  } else {
-                    navigation
-                      .getParent()
-                      ?.navigate('Library', { screen: 'ProfileScreen' });
-                  }
-                }}
-              >
-                {(() => {
-                  // Same as PromotionScreen: backend photos are [{ src, title }]; use first photo src
-                  const firstPhoto =
-                    user?.photos?.[0] ??
-                    (Array.isArray(user?.photos) ? user.photos[0] : null);
-                  const photo =
-                    user?.avatar ||
-                    (typeof firstPhoto === 'string'
-                      ? firstPhoto
-                      : firstPhoto?.src) ||
-                    null;
-                  const profileImageUri =
-                    typeof photo === 'string' && photo.trim()
-                      ? photo.trim()
-                      : null;
-                  const hasProfileImage =
-                    profileImageUri &&
-                    String(profileImageUri).trim().length > 0;
-                  if (hasProfileImage) {
-                    return (
-                      <Image
-                        source={{ uri: safeImageUri(profileImageUri) }}
-                        style={styles.profileAvatar}
-                      />
-                    );
-                  }
-                  return <Icon name="account-outline" size={28} color="#FFF" />;
-                })()}
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={styles.resultsTitle}>
-            Your search results in {areaForTitle}...
-          </Text>
-        </View>
-
         <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <View style={styles.modernTopRow}>
+              <TouchableOpacity
+                style={styles.deliveryPill}
+                activeOpacity={0.85}
+                onPress={openLocationPicker}
+              >
+                <Icon name="map-marker" size={16} color="#FF6A3D" />
+                <View style={styles.deliveryPillTextWrap}>
+                  <Text style={styles.deliveryLabel}>Deliver to</Text>
+                  <Text style={styles.deliveryArea} numberOfLines={1}>
+                    {areaForTitle}
+                  </Text>
+                </View>
+                <Icon name="chevron-down" size={18} color="#1F2937" />
+              </TouchableOpacity>
+              <View style={styles.modernTopActions}>
+                <TouchableOpacity
+                  style={styles.modernHeaderIconBtn}
+                  activeOpacity={0.85}
+                  onPress={openNotifications}
+                >
+                  <Icon name="bell-outline" size={20} color="#1F2937" />
+                </TouchableOpacity>
+                {!(user?.token || user?.id) ? (
+                  <TouchableOpacity
+                    style={[styles.navBtn, { marginLeft: 8 }]}
+                    onPress={() => navigation.navigate('HomeSevenScreen')}
+                  >
+                    <Text style={styles.navBtnText}>Login</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.modernAvatarShell, { marginLeft: 8 }]}
+                    onPress={openUserProfile}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={{ uri: headerProfileAvatarUri }}
+                      style={styles.modernAvatar}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            <AnimatedHeroSection
+              displayName={user?.name || user?.nickname || ''}
+            />
+          </View>
           <View style={styles.locationSection}>
             <View style={styles.innerSearchBox}>
               <Icon name="magnify" size={20} color="#999" />
               <TextInput
-                placeholder="Search"
+                placeholder="Search for recipes, cuisines, ingredients..."
                 placeholderTextColor="#999"
                 style={styles.innerInput}
                 value={searchQuery}
@@ -3195,160 +3251,280 @@ const HomeOneScreen = () => {
                 returnKeyType="search"
                 clearButtonMode="while-editing"
               />
+              <View style={styles.searchFilterDivider} />
+              <Icon name="tune-variant" size={20} color="#FF6A3D" />
             </View>
           </View>
 
           <View style={styles.feedPadding}>
-            {cuisineSelected ? (
-              <>
-                {featuredForCuisine ? (
-                  <FoodCard
-                    title={featuredCardTitle}
-                    channelName={featuredCardChannelName}
-                    location={featuredCardLocation}
-                    views={featuredCardViews}
-                    distanceLabel={featuredForCuisine.distanceLabel}
-                    rating={featuredForCuisine.rating}
-                    reviewCount={featuredForCuisine.reviewCount}
-                    isSponsored
-                    badgeLabel="Featured"
-                    img={featuredCardImg}
-                    onPress={() => handleFeedItemPress(featuredNavItem)}
-                    onSponsoredOrderPress={() =>
-                      handleSponsoredOrder(featuredNavItem)
-                    }
-                    onSponsoredBookPress={() =>
-                      handleSponsoredBook(featuredNavItem)
-                    }
-                    onSponsoredSubscribePress={() =>
-                      handleSponsoredSubscribe(featuredNavItem)
-                    }
-                    sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                    sponsoredIsSubscribed={!!sponsoredChannelMeta?.isSubscribed}
-                    hideSponsoredSubscribe={
-                      !!user?.id &&
-                      getSponsoredOwnerId(featuredForCuisine) != null &&
-                      String(user.id) ===
-                        String(getSponsoredOwnerId(featuredForCuisine))
-                    }
+            <TouchableOpacity
+              style={styles.orderNowCard}
+              activeOpacity={0.9}
+              onPress={() =>
+                navigation.navigate('OrderNowBrowseScreen', {
+                  initialQuery: searchDebounced || searchQuery || '',
+                  nearLabel: primaryLoc || '',
+                  featuredSnapshot:
+                    featuredForCuisine && featuredOwnerId
+                      ? {
+                          ownerUserId: String(featuredOwnerId),
+                          videoId: String(
+                            featuredVideo?.video?.id ??
+                              featuredForCuisine?.id ??
+                              '',
+                          ).trim(),
+                          thumbnailUrl: featuredCardImg,
+                          title: featuredCardTitle,
+                          channelName: featuredCardChannelName,
+                          location: featuredCardLocation,
+                          rating: Number(
+                            featuredForCuisine?.rating ??
+                              featuredChannelMeta?.averageRating ??
+                              0,
+                          ),
+                          reviewCount: Number(
+                            featuredForCuisine?.reviewCount ??
+                              featuredChannelMeta?.reviewCount ??
+                              0,
+                          ),
+                          totalViews: Number(
+                            featuredVideo?.video?.viewCount ??
+                              featuredForCuisine?.viewCount ??
+                              0,
+                          ),
+                        }
+                      : undefined,
+                })
+              }
+            >
+              <View style={styles.orderNowCardLeft}>
+                <View style={styles.orderNowIconPill}>
+                  <Icon
+                    name="silverware-fork-knife"
+                    size={18}
+                    color="#F5A623"
                   />
-                ) : null}
-                <View style={styles.cuisineSliderRow}>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(-1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-left" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                  <ScrollView
-                    ref={cuisineScrollRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.cuisineChipRow}
-                    onLayout={e => {
-                      cuisineLayoutWidthRef.current =
-                        e.nativeEvent.layout.width || 0;
-                    }}
-                    onContentSizeChange={(w, _h) => {
-                      cuisineContentWidthRef.current = w || 0;
-                    }}
-                    onScroll={e => {
-                      cuisineScrollXRef.current =
-                        e.nativeEvent.contentOffset.x || 0;
-                    }}
-                    scrollEventThrottle={16}
-                  >
-                    {safeChipOptions.map(cuisine => (
-                      <TouchableOpacity
-                        key={cuisine.key}
-                        style={styles.cuisineChip}
-                        onPress={() => {
-                          navigation.navigate('HomeOneCuisineScreen', {
-                            cuisineMode: true,
-                            initialCuisine: cuisine.label,
-                            nearLabel: primaryLoc || '',
-                          });
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.cuisineIconCircle}>
-                          <Image
-                            source={categoryIcon}
-                            style={styles.cuisineIconImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-                        <Text style={styles.cuisineChipText}>
-                          {shortCuisineLabel(cuisine.label)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-right" size={20} color="#D88900" />
+                </View>
+                <View style={styles.orderNowCardTextWrap}>
+                  <Text style={styles.orderNowCardTitle}>Order Now</Text>
+                  <Text style={styles.orderNowCardSub}>
+                    Feeling hungry? Order your favorite meal
+                  </Text>
+                  <TouchableOpacity style={styles.orderNowInnerBtn}>
+                    <Text style={styles.orderNowInnerBtnText}>Order Now</Text>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.orderNowCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate('OrderNowBrowseScreen', {
-                      initialQuery: searchDebounced || searchQuery || '',
-                      nearLabel: primaryLoc || '',
-                      featuredSnapshot:
-                        featuredForCuisine && featuredOwnerId
-                          ? {
-                              ownerUserId: String(featuredOwnerId),
-                              videoId: String(
-                                featuredVideo?.video?.id ??
-                                  featuredForCuisine?.id ??
-                                  '',
-                              ).trim(),
-                              thumbnailUrl: featuredCardImg,
-                              title: featuredCardTitle,
-                              channelName: featuredCardChannelName,
-                              location: featuredCardLocation,
-                              rating: Number(
-                                featuredForCuisine?.rating ??
-                                  featuredChannelMeta?.averageRating ??
-                                  0,
-                              ),
-                              reviewCount: Number(
-                                featuredForCuisine?.reviewCount ??
-                                  featuredChannelMeta?.reviewCount ??
-                                  0,
-                              ),
-                              totalViews: Number(
-                                featuredVideo?.video?.viewCount ??
-                                  featuredForCuisine?.viewCount ??
-                                  0,
-                              ),
-                            }
-                          : undefined,
-                    })
-                  }
-                >
-                  <View style={styles.orderNowCardLeft}>
-                    <View style={styles.orderNowIconPill}>
-                      <Icon
-                        name="silverware-fork-knife"
-                        size={18}
-                        color="#F5A623"
+              </View>
+              <View style={styles.orderNowVisualWrap}>
+                <Image
+                  source={{
+                    uri: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=600',
+                  }}
+                  style={styles.orderNowFoodImg}
+                />
+                <View style={styles.orderNowBadge}>
+                  <Text style={styles.orderNowBadgeText}>Hot & Fresh</Text>
+                </View>
+                <View style={styles.orderNowArrowCircle}>
+                  <Icon name="arrow-right" size={20} color="#FF6A3D" />
+                </View>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.cuisineSliderRow}>
+              <TouchableOpacity
+                style={styles.cuisineArrowBtn}
+                onPress={() => slideCuisineChips(-1)}
+                activeOpacity={0.85}
+              >
+                <Icon name="chevron-left" size={20} color="#D88900" />
+              </TouchableOpacity>
+              <ScrollView
+                ref={cuisineScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.cuisineChipRow}
+                onLayout={e => {
+                  cuisineLayoutWidthRef.current =
+                    e.nativeEvent.layout.width || 0;
+                }}
+                onContentSizeChange={(w, _h) => {
+                  cuisineContentWidthRef.current = w || 0;
+                }}
+                onScroll={e => {
+                  cuisineScrollXRef.current =
+                    e.nativeEvent.contentOffset.x || 0;
+                }}
+                scrollEventThrottle={16}
+              >
+                {safeChipOptions.map(cuisine => (
+                  <TouchableOpacity
+                    key={cuisine.key}
+                    style={styles.cuisineChip}
+                    onPress={() => {
+                      navigation.navigate('HomeOneCuisineScreen', {
+                        cuisineMode: true,
+                        initialCuisine: cuisine.label,
+                        nearLabel: primaryLoc || '',
+                      });
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.cuisineIconCircle}>
+                      <Image
+                        source={categoryIcon}
+                        style={styles.cuisineIconImage}
+                        resizeMode="contain"
                       />
                     </View>
-                    <View style={styles.orderNowCardTextWrap}>
-                      <Text style={styles.orderNowCardTitle}>Order Now</Text>
-                      <Text style={styles.orderNowCardSub}>
-                        feeling hungry? Order now
+                    <Text style={styles.cuisineChipText}>
+                      {shortCuisineLabel(cuisine.label)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.cuisineArrowBtn}
+                onPress={() => slideCuisineChips(1)}
+                activeOpacity={0.85}
+              >
+                <Icon name="chevron-right" size={20} color="#D88900" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modernAiCardWrap}>
+              <LinearGradient
+                colors={HOME_AI_GRADIENT}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.modernAiCard}
+              >
+                <View style={styles.modernAiBlobPurple} />
+                <View style={styles.modernAiBlobOrange} />
+                <View style={styles.modernAiInner}>
+                  <View style={styles.modernAiLeft}>
+                    <View style={styles.modernAiAvatarWrap}>
+                      <Image
+                        source={{
+                          uri: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=200',
+                        }}
+                        style={styles.modernAiAvatar}
+                      />
+                    </View>
+                    <View style={styles.modernAiTextWrap}>
+                      <Text style={styles.modernAiTitle}>
+                        AI food assistant
+                      </Text>
+                      <Text style={styles.modernAiSub}>
+                        Smart insights for healthier food choices
                       </Text>
                     </View>
                   </View>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modernGenerateBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="auto-fix" size={14} color="#FFF" />
+                    <Text style={styles.modernGenerateText}>Generate</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+
+            {!feedLoading && mostViewedCarousel.length > 0 ? (
+              <View style={styles.mostViewedCarouselWrap}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.mostViewedCarouselTitle}>
+                    Most Viewed
+                  </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      navigation.navigate('HomeShortsExploreScreen', {
+                        title: 'Most Viewed',
+                        sort: 'trending',
+                      })
+                    }
+                  >
+                    <Text style={styles.viewMoreText}>View more</Text>
+                  </TouchableOpacity>
+                </View>
+                <FlatList
+                  horizontal
+                  data={mostViewedCarousel}
+                  keyExtractor={(item, index) =>
+                    `most-viewed-${item.id}-${index}`
+                  }
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled
+                  decelerationRate="fast"
+                  snapToInterval={HOME_CAROUSEL_CARD_WIDTH + HOME_CAROUSEL_GAP}
+                  snapToAlignment="start"
+                  disableIntervalMomentum
+                  contentContainerStyle={styles.mostViewedCarouselContent}
+                  style={styles.mostViewedCarouselScroll}
+                  renderItem={({ item }) => (
+                    <View
+                      style={[
+                        styles.mostViewedCarouselCard,
+                        { width: HOME_CAROUSEL_CARD_WIDTH },
+                      ]}
+                    >
+                      <ShortCard
+                        title={item.title}
+                        img={item.img}
+                        views={item.views}
+                        height={210}
+                        onPress={() => handleFeedItemPress(item)}
+                        onMorePress={() => openHomeMoreForShort(item)}
+                      />
+                    </View>
+                  )}
+                  ItemSeparatorComponent={() => (
+                    <View style={{ width: HOME_CAROUSEL_GAP }} />
+                  )}
+                />
+              </View>
+            ) : null}
+
+            {cuisineSelected ? (
+              <>
+                {featuredForCuisine ? (
+                  <View style={styles.featuredSectionOuter}>
+                    <FoodCard
+                      title={featuredCardTitle}
+                      channelName={featuredCardChannelName}
+                      location={featuredCardLocation}
+                      views={featuredCardViews}
+                      distanceLabel={featuredForCuisine.distanceLabel}
+                      rating={featuredForCuisine.rating}
+                      reviewCount={featuredForCuisine.reviewCount}
+                      isSponsored
+                      badgeLabel="Featured"
+                      img={featuredCardImg}
+                      onPress={() => handleFeedItemPress(featuredNavItem)}
+                      onSponsoredOrderPress={() =>
+                        handleSponsoredOrder(featuredNavItem)
+                      }
+                      onSponsoredBookPress={() =>
+                        handleSponsoredBook(featuredNavItem)
+                      }
+                      onSponsoredSubscribePress={() =>
+                        handleSponsoredSubscribe(featuredNavItem)
+                      }
+                      sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                      sponsoredIsSubscribed={
+                        !!sponsoredChannelMeta?.isSubscribed
+                      }
+                      hideSponsoredSubscribe={
+                        !!user?.id &&
+                        getSponsoredOwnerId(featuredForCuisine) != null &&
+                        String(user.id) ===
+                          String(getSponsoredOwnerId(featuredForCuisine))
+                      }
+                    />
+                  </View>
+                ) : null}
                 {sponsoredForCuisine ? (
                   <View style={{ marginTop: 12 }}>
                     <FoodCard
@@ -3408,153 +3584,41 @@ const HomeOneScreen = () => {
               </>
             ) : (
               <>
-                <TouchableOpacity
-                  style={styles.orderNowCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate('OrderNowBrowseScreen', {
-                      initialQuery: searchDebounced || searchQuery || '',
-                      nearLabel: primaryLoc || '',
-                      featuredSnapshot:
-                        featuredForCuisine && featuredOwnerId
-                          ? {
-                              ownerUserId: String(featuredOwnerId),
-                              videoId: String(
-                                featuredVideo?.video?.id ??
-                                  featuredForCuisine?.id ??
-                                  '',
-                              ).trim(),
-                              thumbnailUrl: featuredCardImg,
-                              title: featuredCardTitle,
-                              channelName: featuredCardChannelName,
-                              location: featuredCardLocation,
-                              rating: Number(
-                                featuredForCuisine?.rating ??
-                                  featuredChannelMeta?.averageRating ??
-                                  0,
-                              ),
-                              reviewCount: Number(
-                                featuredForCuisine?.reviewCount ??
-                                  featuredChannelMeta?.reviewCount ??
-                                  0,
-                              ),
-                              totalViews: Number(
-                                featuredVideo?.video?.viewCount ??
-                                  featuredForCuisine?.viewCount ??
-                                  0,
-                              ),
-                            }
-                          : undefined,
-                    })
-                  }
-                >
-                  <View style={styles.orderNowCardLeft}>
-                    <View style={styles.orderNowIconPill}>
-                      <Icon
-                        name="silverware-fork-knife"
-                        size={18}
-                        color="#F5A623"
-                      />
-                    </View>
-                    <View style={styles.orderNowCardTextWrap}>
-                      <Text style={styles.orderNowCardTitle}>Order Now</Text>
-                      <Text style={styles.orderNowCardSub}>
-                        feeling hungry? Order now
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.cuisineSliderRow}>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(-1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-left" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                  <ScrollView
-                    ref={cuisineScrollRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.cuisineChipRow}
-                    onLayout={e => {
-                      cuisineLayoutWidthRef.current =
-                        e.nativeEvent.layout.width || 0;
-                    }}
-                    onContentSizeChange={(w, _h) => {
-                      cuisineContentWidthRef.current = w || 0;
-                    }}
-                    onScroll={e => {
-                      cuisineScrollXRef.current =
-                        e.nativeEvent.contentOffset.x || 0;
-                    }}
-                    scrollEventThrottle={16}
-                  >
-                    {safeChipOptions.map(cuisine => (
-                      <TouchableOpacity
-                        key={cuisine.key}
-                        style={styles.cuisineChip}
-                        onPress={() => {
-                          navigation.navigate('HomeOneCuisineScreen', {
-                            cuisineMode: true,
-                            initialCuisine: cuisine.label,
-                            nearLabel: primaryLoc || '',
-                          });
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.cuisineIconCircle}>
-                          <Image
-                            source={categoryIcon}
-                            style={styles.cuisineIconImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-                        <Text style={styles.cuisineChipText}>
-                          {shortCuisineLabel(cuisine.label)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-right" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                </View>
                 {featuredForCuisine ? (
-                  <FoodCard
-                    title={featuredCardTitle}
-                    channelName={featuredCardChannelName}
-                    location={featuredCardLocation}
-                    views={featuredCardViews}
-                    distanceLabel={featuredForCuisine.distanceLabel}
-                    rating={featuredForCuisine.rating}
-                    reviewCount={featuredForCuisine.reviewCount}
-                    isSponsored
-                    badgeLabel="Featured"
-                    img={featuredCardImg}
-                    onPress={() => handleFeedItemPress(featuredNavItem)}
-                    onSponsoredOrderPress={() =>
-                      handleSponsoredOrder(featuredNavItem)
-                    }
-                    onSponsoredBookPress={() =>
-                      handleSponsoredBook(featuredNavItem)
-                    }
-                    onSponsoredSubscribePress={() =>
-                      handleSponsoredSubscribe(featuredNavItem)
-                    }
-                    sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                    sponsoredIsSubscribed={!!sponsoredChannelMeta?.isSubscribed}
-                    hideSponsoredSubscribe={
-                      !!user?.id &&
-                      getSponsoredOwnerId(featuredForCuisine) != null &&
-                      String(user.id) ===
-                        String(getSponsoredOwnerId(featuredForCuisine))
-                    }
-                  />
+                  <View style={styles.featuredSectionOuter}>
+                    <FoodCard
+                      title={featuredCardTitle}
+                      channelName={featuredCardChannelName}
+                      location={featuredCardLocation}
+                      views={featuredCardViews}
+                      distanceLabel={featuredForCuisine.distanceLabel}
+                      rating={featuredForCuisine.rating}
+                      reviewCount={featuredForCuisine.reviewCount}
+                      isSponsored
+                      badgeLabel="Featured"
+                      img={featuredCardImg}
+                      onPress={() => handleFeedItemPress(featuredNavItem)}
+                      onSponsoredOrderPress={() =>
+                        handleSponsoredOrder(featuredNavItem)
+                      }
+                      onSponsoredBookPress={() =>
+                        handleSponsoredBook(featuredNavItem)
+                      }
+                      onSponsoredSubscribePress={() =>
+                        handleSponsoredSubscribe(featuredNavItem)
+                      }
+                      sponsoredSubscribeBusy={sponsoredSubscribeToggling}
+                      sponsoredIsSubscribed={
+                        !!sponsoredChannelMeta?.isSubscribed
+                      }
+                      hideSponsoredSubscribe={
+                        !!user?.id &&
+                        getSponsoredOwnerId(featuredForCuisine) != null &&
+                        String(user.id) ===
+                          String(getSponsoredOwnerId(featuredForCuisine))
+                      }
+                    />
+                  </View>
                 ) : null}
                 {shortsPreview.length > 0 ? (
                   <View style={{ marginTop: 10 }}>
@@ -4676,13 +4740,13 @@ const HomeOneScreen = () => {
     ? 'dark-content'
     : isVideoDetail
     ? 'light-content'
-    : 'light-content';
+    : 'dark-content';
 
   const statusBarBg = isRestaurantDetail
     ? '#FFFFFF'
     : isVideoDetail
     ? '#000'
-    : '#F5A623';
+    : '#FFFFFF';
 
   const safeAreaBg = isVideoDetail ? '#000' : statusBarBg;
 
@@ -5067,9 +5131,107 @@ const HomeOneScreen = () => {
 
 // --- SUB-COMPONENT ---
 
+const AnimatedHeroSection = ({ displayName }) => {
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(20)).current;
+  const bowlFloat = useRef(new Animated.Value(0)).current;
+  const greeting = getTimeOfDayGreeting();
+  const greetingLine = displayName
+    ? `${greeting}, ${displayName} 👋`
+    : `${greeting} 👋`;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(cardTranslateY, {
+        toValue: 0,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bowlFloat, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bowlFloat, {
+          toValue: 0,
+          duration: 2400,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [bowlFloat, cardOpacity, cardTranslateY]);
+
+  const floatUp = bowlFloat.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.heroSection,
+        {
+          opacity: cardOpacity,
+          transform: [{ translateY: cardTranslateY }],
+        },
+      ]}
+    >
+      <LinearGradient
+        colors={HOME_HERO_GRADIENT}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroGradientCard}
+      >
+        <View style={styles.heroBlobOrange} />
+        <View style={styles.heroBlobPink} />
+        <View style={styles.heroBlobMint} />
+        <Text style={styles.heroHelloLine}>{greetingLine}</Text>
+        <View style={styles.heroRow}>
+          <View style={styles.heroTextWrap}>
+            <Text style={styles.modernHeadline}>
+              What are you{'\n'}
+              <Text style={styles.modernHeadlineAccent}>eating</Text> today?
+            </Text>
+          </View>
+          <Animated.View style={{ transform: [{ translateY: floatUp }] }}>
+            <View style={styles.heroBowlWrapClean}>
+              <Image
+                source={{
+                  uri: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=500',
+                }}
+                style={styles.heroBowlImage}
+                resizeMode="cover"
+              />
+            </View>
+          </Animated.View>
+        </View>
+      </LinearGradient>
+    </Animated.View>
+  );
+};
+
 // Two-per-row short card (HomeVersion-style): image, play overlay, bottom overlay with title + views
-const ShortCard = ({ title, img, views, onPress, onMorePress }) => (
-  <View style={styles.shortCard}>
+const ShortCard = ({
+  title,
+  img,
+  views,
+  onPress,
+  onMorePress,
+  height = 280,
+}) => (
+  <View style={[styles.shortCard, { height }]}>
     <TouchableOpacity
       style={styles.shortCardPress}
       onPress={onPress}
@@ -5135,6 +5297,69 @@ const FoodCard = ({
       ) : null}
     </View>
   );
+
+  if (compact) {
+    return (
+      <View style={styles.featuredCompactCard}>
+        <TouchableOpacity
+          style={styles.featuredCompactMediaWrap}
+          onPress={onPress}
+          activeOpacity={0.9}
+        >
+          <Image source={{ uri: img }} style={styles.featuredCompactImage} />
+          <View style={styles.featuredCompactPlay}>
+            <Icon name="play-circle" size={38} color="rgba(255,255,255,0.9)" />
+          </View>
+          {badgeLabel ? (
+            <View style={styles.featuredCompactBadge}>
+              <Text style={styles.featuredCompactBadgeText}>{badgeLabel}</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+        <View style={styles.featuredCompactInfo}>
+          <Text style={styles.featuredCompactTitle} numberOfLines={1}>
+            {safeTitle}
+          </Text>
+          <View style={styles.featuredCompactMetaRow}>
+            <Icon name="star" size={13} color="#F59E0B" />
+            <Text style={styles.featuredCompactMetaText}>
+              {Number.isFinite(Number(rating))
+                ? Number(rating).toFixed(1)
+                : '0.0'}{' '}
+              ({Number.isFinite(Number(reviewCount)) ? Number(reviewCount) : 0})
+            </Text>
+          </View>
+          <View style={styles.featuredCompactMetaRow}>
+            <Icon name="eye-outline" size={13} color="#6B7280" />
+            <Text style={styles.featuredCompactMetaText}>
+              {views || '0 views'}
+            </Text>
+          </View>
+          <Text style={styles.featuredCompactDesc} numberOfLines={2}>
+            A perfect blend of spices and aromas.
+          </Text>
+          <View style={styles.featuredCompactActions}>
+            <TouchableOpacity
+              style={styles.featuredCompactOrderBtn}
+              onPress={onSponsoredOrderPress}
+              disabled={!onSponsoredOrderPress}
+            >
+              <Text style={styles.featuredCompactOrderText}>Order Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.featuredCompactSaveBtn}
+              onPress={onSponsoredSubscribePress}
+              disabled={!onSponsoredSubscribePress || !!sponsoredSubscribeBusy}
+            >
+              <Text style={styles.featuredCompactSaveText}>
+                {sponsoredIsSubscribed ? 'Saved' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   const infoSection = (
     <View
@@ -5294,26 +5519,72 @@ const styles = StyleSheet.create({
   slogan: { color: '#FFF', marginTop: 20, fontSize: 14, fontWeight: '500' },
   feedLoading: { paddingVertical: 40, alignItems: 'center' },
   feedLoadingText: { marginTop: 10, fontSize: 14, color: '#666' },
-  mainContainer: { flex: 1, backgroundColor: '#FFF' },
-  header: { backgroundColor: '#F5A623', padding: 15 },
+  mainContainer: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
+  modernTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  deliveryPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    borderWidth: 1,
+    borderColor: '#ECEFF3',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    minWidth: 0,
+    marginRight: 10,
+  },
+  deliveryPillTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 8,
+    marginRight: 4,
+  },
+  deliveryLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  deliveryArea: {
+    marginTop: 1,
+    fontSize: 17 / 1.2,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  modernTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   navBtn: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   profileAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  navBtnText: { color: '#424242', fontSize: 12, fontWeight: '600' },
+  navBtnText: { color: '#1F2937', fontSize: 12, fontWeight: '700' },
   headerLogo: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
   headerLogoContainer: {
     flex: 1,
@@ -5325,10 +5596,220 @@ const styles = StyleSheet.create({
     height: 30,
   },
   resultsTitle: {
-    color: '#FFF',
+    color: '#111827',
+    marginTop: 12,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  modernUserIntro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modernAvatarShell: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#FF6A3D',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  modernAvatar: { width: '100%', height: '100%' },
+  modernHello: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
+  modernLocationLine: {
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  modernHeaderIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernHeadline: {
+    fontSize: 36,
+    lineHeight: 42,
+    color: '#111827',
+    letterSpacing: -1.1,
+    fontWeight: '800',
+  },
+  modernHeadlineAccent: { color: '#FF6A3D' },
+  modernHelloHeadline: {
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  heroSection: {
     marginTop: 10,
-    fontSize: 18,
+    marginBottom: 6,
+  },
+  heroGradientCard: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 106, 61, 0.12)',
+  },
+  heroHelloLine: {
+    marginTop: 2,
+    marginBottom: 8,
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '600',
+    zIndex: 1,
+  },
+  heroBowlWrapClean: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  heroBlobOrange: {
+    position: 'absolute',
+    top: -20,
+    right: -6,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FF6A3D',
+    opacity: 0.12,
+  },
+  heroBlobPink: {
+    position: 'absolute',
+    bottom: -16,
+    left: -18,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#FF6B9D',
+    opacity: 0.1,
+  },
+  heroBlobMint: {
+    position: 'absolute',
+    top: 40,
+    right: 60,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#22C55E',
+    opacity: 0.1,
+  },
+  heroBlobYellow: {
+    position: 'absolute',
+    top: 48,
+    left: '42%',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#FFB347',
+    opacity: 0.08,
+  },
+  heroBlobGreen: {
+    position: 'absolute',
+    bottom: 18,
+    right: 72,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#22C55E',
+    opacity: 0.08,
+  },
+  heroHelloRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    zIndex: 1,
+  },
+  heroFreshBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginLeft: 8,
+  },
+  heroFreshBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: '700',
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    zIndex: 1,
+  },
+  heroTextWrap: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  heroAccentBarWrap: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+  },
+  heroAccentBar: {
+    height: 5,
+    width: 92,
+    borderRadius: 3,
+  },
+  heroVisualWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroBowlRing: {
+    padding: 3,
+    borderRadius: 62,
+  },
+  heroEmoji1: {
+    position: 'absolute',
+    top: -6,
+    right: -2,
+    fontSize: 22,
+    zIndex: 2,
+  },
+  heroEmoji2: {
+    position: 'absolute',
+    bottom: 10,
+    left: -16,
+    fontSize: 20,
+    zIndex: 2,
+  },
+  heroEmoji3: {
+    position: 'absolute',
+    top: 52,
+    right: -14,
+    fontSize: 18,
+    zIndex: 2,
+  },
+  heroBowlWrap: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  heroBowlImage: {
+    width: '100%',
+    height: '100%',
   },
   bannerWrapper: { width: '100%', height: 210, position: 'relative' },
   bannerImage: { width: '100%', height: '100%' },
@@ -5355,11 +5836,10 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   locationSection: {
-    backgroundColor: '#F5A623',
+    backgroundColor: 'transparent',
     paddingHorizontal: 15,
-    paddingBottom: 20,
+    paddingBottom: 8,
     paddingTop: 10,
-    position: 'relative',
   },
   homeDropdown: {
     flexDirection: 'row',
@@ -5384,24 +5864,172 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   innerSearchBox: {
-    position: 'absolute',
-    bottom: -22,
-    left: 15,
-    right: 15,
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    height: 45,
-    borderRadius: 8,
+    height: 52,
+    borderRadius: 14,
     alignItems: 'center',
     paddingHorizontal: 12,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    borderWidth: 1,
+    borderColor: '#E5E9F0',
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  },
+  searchFilterDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 10,
   },
   innerInput: { flex: 1, marginLeft: 10, fontSize: 15 },
-  feedPadding: { padding: 15, marginTop: 20 },
+  feedPadding: { padding: 15, marginTop: 4 },
+  modernAiCardWrap: {
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  modernAiCard: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: HOME_SURFACE_BORDER,
+  },
+  modernAiBlobPurple: {
+    position: 'absolute',
+    top: -18,
+    right: 36,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#A855F7',
+    opacity: 0.1,
+  },
+  modernAiBlobOrange: {
+    position: 'absolute',
+    bottom: -14,
+    left: -8,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FF6A3D',
+    opacity: 0.1,
+  },
+  modernAiInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 1,
+  },
+  modernAiLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  modernAiAvatarWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  modernAiAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  modernAiTextWrap: {
+    flex: 1,
+  },
+  modernAiTitle: {
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modernAiSub: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  modernGenerateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FF6A3D',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  modernGenerateText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  modernQuickChipRow: {
+    paddingBottom: 12,
+    gap: 8,
+  },
+  modernQuickChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E6EBF2',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 9,
+    minWidth: 84,
+    alignItems: 'center',
+  },
+  modernQuickChipActive: {
+    borderColor: '#FFC9B7',
+    backgroundColor: '#FFF6F2',
+  },
+  modernQuickChipText: {
+    color: '#4B5563',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  modernQuickChipTextActive: {
+    color: '#FF6A3D',
+    fontWeight: '700',
+  },
+  modernQuickChipIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7EBF0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  modernQuickChipIconActive: {
+    borderColor: '#FFBFA8',
+  },
+  modernQuickChipImg: {
+    width: '100%',
+    height: '100%',
+  },
+  modernQuickChipBadge: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   feedHint: {
     textAlign: 'center',
     fontSize: 14,
@@ -5409,20 +6037,19 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   orderNowCard: {
-    borderWidth: 0,
-    borderRadius: 10,
-    backgroundColor: '#F5A623',
+    borderWidth: 1,
+    borderColor: '#FF845F',
+    borderRadius: 14,
+    backgroundColor: '#FF6A3D',
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#B36B00',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.24,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   orderNowCardLeft: {
     flexDirection: 'row',
@@ -5435,7 +6062,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFF3DA',
+    backgroundColor: '#FFECE5',
     borderWidth: 0,
   },
   orderNowCardTextWrap: { marginLeft: 8 },
@@ -5447,12 +6074,61 @@ const styles = StyleSheet.create({
   orderNowCardSub: {
     marginTop: 1,
     fontSize: 11,
-    color: '#FFF3D7',
+    color: '#FFE4D5',
+  },
+  orderNowInnerBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFF4EE',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  orderNowInnerBtnText: {
+    color: '#D4552D',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  orderNowVisualWrap: {
+    width: 148,
+    height: 92,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 12,
+  },
+  orderNowFoodImg: {
+    width: '100%',
+    height: '100%',
+  },
+  orderNowBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: '#FFE9C7',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  orderNowBadgeText: {
+    color: '#B45309',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  orderNowArrowCircle: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cuisineChipRow: {
     paddingBottom: 10,
     paddingHorizontal: 1,
-    gap: 8,
+    gap: 12,
   },
   cuisineSliderRow: {
     flexDirection: 'row',
@@ -5470,34 +6146,27 @@ const styles = StyleSheet.create({
   cuisineChip: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 62,
-    marginRight: 4,
-    backgroundColor: '#FFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-    paddingTop: 6,
-    paddingBottom: 7,
+    width: 64,
+    marginRight: 2,
+    paddingVertical: 4,
+    backgroundColor: 'transparent',
   },
   cuisineIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFF2D8',
-    borderWidth: 1,
-    borderColor: '#EBCB8A',
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   cuisineIconImage: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
   },
   cuisineChipText: {
-    color: '#4E4E4E',
-    fontSize: 10,
+    color: '#374151',
+    fontSize: 11,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 6,
     textAlign: 'center',
   },
   sectionTitle: {
@@ -5517,6 +6186,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     marginTop: 8,
+  },
+  mostViewedCarouselWrap: {
+    marginTop: 18,
+  },
+  mostViewedCarouselTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  mostViewedCarouselScroll: {
+    marginHorizontal: -HOME_FEED_H_PADDING,
+    marginTop: 4,
+  },
+  mostViewedCarouselContent: {
+    paddingHorizontal: HOME_FEED_H_PADDING,
+    paddingBottom: 6,
+  },
+  mostViewedCarouselCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   shortsGrid: {
     flexDirection: 'row',
@@ -5582,11 +6271,17 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   sponsoredCard: {
-    backgroundColor: '#F4F7F8',
-    borderRadius: 15,
-    marginBottom: 25,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: '#E8EDF4',
     elevation: 1,
     overflow: 'hidden',
+    shadowColor: '#0B1220',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
   },
   cardImageContainer: { height: 200, position: 'relative' },
   cardImage: { width: '100%', height: '100%', borderRadius: 10 },
@@ -5605,7 +6300,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
-    backgroundColor: '#F5A623',
+    backgroundColor: '#FF6A3D',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 5,
@@ -5618,11 +6313,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   cardInfoSponsored: {
-    backgroundColor: '#FEF6E7',
-    borderBottomEndRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    marginTop: -3,
+    backgroundColor: '#FFFFFF',
+    borderBottomEndRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   cardInfoCompact: {
     paddingHorizontal: 8,
@@ -5644,7 +6338,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginLeft: 8,
   },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#222' },
+  cardTitle: { fontSize: 17, fontWeight: '800', color: '#1E2430' },
   cardLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   cardLocText: { color: '#666', fontSize: 11, marginTop: 2 },
   sponsoredMetaRow: {
@@ -5660,9 +6354,9 @@ const styles = StyleSheet.create({
   },
   sponsoredMetaText: {
     marginLeft: 3,
-    color: '#666',
+    color: '#667085',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   cardPromoLine: {
     marginTop: 3,
@@ -5680,12 +6374,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#F5A623',
+    borderColor: '#FF6A3D',
     borderRadius: 8,
     overflow: 'hidden',
   },
   sponsoredOrderBtn: {
-    backgroundColor: '#F5A623',
+    backgroundColor: '#FF6A3D',
     borderRadius: 0,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -5699,11 +6393,11 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    backgroundColor: '#FFF7EA',
+    backgroundColor: '#FFF2EC',
     minHeight: 28,
     justifyContent: 'center',
   },
-  sponsoredBookText: { color: '#F5A623', fontSize: 12, fontWeight: '700' },
+  sponsoredBookText: { color: '#FF6A3D', fontSize: 12, fontWeight: '700' },
   sponsoredSubscribeBtn: {
     marginTop: 8,
     borderRadius: 8,
@@ -5721,6 +6415,118 @@ const styles = StyleSheet.create({
   sponsoredSubscribeTextActive: { color: '#555' },
   cardStats: { alignItems: 'flex-end' },
   statSmall: { fontSize: 11, color: '#999' },
+  featuredSectionOuter: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  featuredSectionWrap: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8EDF4',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginTop: 4,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  featuredSectionTitle: {
+    fontSize: 18,
+    color: '#1F2937',
+    fontWeight: '700',
+  },
+  featuredSectionViewAll: {
+    fontSize: 13,
+    color: '#FF6A3D',
+    fontWeight: '700',
+    marginTop: 0,
+  },
+  featuredCompactCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  featuredCompactMediaWrap: {
+    width: 44 * 2.7,
+    height: 138,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    marginRight: 12,
+  },
+  featuredCompactImage: { width: '100%', height: '100%' },
+  featuredCompactPlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featuredCompactBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#FF6A3D',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  featuredCompactBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  featuredCompactInfo: { flex: 1, minWidth: 0 },
+  featuredCompactTitle: {
+    fontSize: 17,
+    color: '#111827',
+    fontWeight: '800',
+  },
+  featuredCompactMetaRow: {
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  featuredCompactMetaText: {
+    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  featuredCompactDesc: {
+    marginTop: 6,
+    color: '#6B7280',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  featuredCompactActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  featuredCompactOrderBtn: {
+    backgroundColor: '#FF6A3D',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  featuredCompactOrderText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  featuredCompactSaveBtn: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  featuredCompactSaveText: {
+    color: '#374151',
+    fontWeight: '700',
+    fontSize: 13,
+  },
 
   // Video Detail (short full-screen)
   videoBackground: {

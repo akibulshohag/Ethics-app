@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
@@ -24,6 +25,7 @@ import {
 } from '../utils/geolocation';
 import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
+import { BORDER_RADIUS, COLORS, SHADOWS, SPACING } from '../constants/theme';
 
 const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -210,14 +212,19 @@ const LandingScreen = () => {
 
   return (
     <View style={styles.landingContainer}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surfaceOrangeSoft} />
       <View style={styles.centerContent}>
-        <View style={[styles.logoContainer, { marginBottom: 20 }]}>
+        <View style={styles.logoContainer}>
           <Image
             source={logo}
             style={{ width: 200, height: 50 }}
             resizeMode="contain"
           />
         </View>
+        <Text style={styles.title}>Discover food near you</Text>
+        <Text style={styles.subtitle}>
+          Fast, clean and personalized browsing for nearby restaurants and creators.
+        </Text>
         <View style={styles.landingSearchBox}>
           <Icon name="magnify" size={22} color="#999" style={styles.landingSearchIcon} />
           <TextInput
@@ -280,30 +287,52 @@ const LandingScreen = () => {
             )}
           </View>
         )}
-        <Text style={styles.slogan}>See it, Love it, order it</Text>
+        <TouchableOpacity
+          onPress={useMyLocation}
+          style={styles.useLocationPill}
+          disabled={locationLoading}
+          activeOpacity={0.8}
+        >
+          <Icon name="crosshairs-gps" size={18} color={COLORS.primaryOrange} />
+          <Text style={styles.useLocationText}>Use current location</Text>
+        </TouchableOpacity>
+        <Text style={styles.slogan}>See it. Love it. Order it.</Text>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  landingContainer: { flex: 1, backgroundColor: '#F5A623' },
+  landingContainer: { flex: 1, backgroundColor: COLORS.surfaceOrangeSoft },
   centerContent: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 24,
   },
-  logoContainer: {},
+  logoContainer: { marginBottom: SPACING.xl },
+  title: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    marginBottom: 22,
+    lineHeight: 21,
+  },
   landingSearchBox: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.white,
     width: '100%',
-    height: 55,
-    borderRadius: 10,
+    height: 58,
+    borderRadius: BORDER_RADIUS.xl,
     alignItems: 'center',
-    paddingHorizontal: 12,
-    elevation: 5,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    ...SHADOWS.medium,
     overflow: 'hidden',
   },
   landingSearchIcon: { marginRight: 8 },
@@ -318,11 +347,13 @@ const styles = StyleSheet.create({
   landingMapIcon: { padding: 8, marginLeft: 4 },
   suggestionsContainer: {
     width: '100%',
-    marginTop: 8,
-    backgroundColor: '#FFF',
-    borderRadius: 10,
+    marginTop: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
     maxHeight: 220,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    ...SHADOWS.medium,
     overflow: 'hidden',
   },
   suggestionItem: {
@@ -331,13 +362,36 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
+    borderBottomColor: COLORS.gray200,
     gap: 10,
   },
   suggestionText: { flex: 1, fontSize: 15, color: '#333' },
   suggestionHint: { flex: 1, fontSize: 14, color: '#666' },
   suggestionsScroll: { maxHeight: 260 },
-  slogan: { color: '#FFF', marginTop: 20, fontSize: 14, fontWeight: '500' },
+  useLocationPill: {
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.brandBorderSoft,
+    borderRadius: BORDER_RADIUS.full,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  useLocationText: {
+    color: COLORS.primaryOrange,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  slogan: {
+    color: COLORS.textTertiary,
+    marginTop: 20,
+    fontSize: 13,
+    fontWeight: '500',
+  },
 });
 
 export default LandingScreen;

@@ -39,6 +39,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS } from '../constants/theme';
+import FluidTabBar from './FluidTabBar';
 
 const libraryTabIcon = require('../assets/Group.png');
 
@@ -96,6 +97,16 @@ const BottomNaivgation = () => {
   };
 
   const Tab = createBottomTabNavigator();
+  const defaultTabBarStyle = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    elevation: 0,
+    height: Platform.OS === 'ios' ? 88 : 76,
+  };
 
   /** If not logged in, prevent opening Create/Library and go to HomeSevenScreen (login) inside Home1 tab */
   const redirectToHomeThreeIfGuest = e => {
@@ -146,7 +157,7 @@ const BottomNaivgation = () => {
         flex: 1,
         backgroundColor: isShortsFullScreen ? '#000' : undefined,
       }}
-      edges={isShortsFullScreen ? [] : ['bottom']}
+      edges={isShortsFullScreen ? [] : ['left', 'right']}
     >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -155,47 +166,22 @@ const BottomNaivgation = () => {
       >
         <Tab.Navigator
           initialRouteName="Home1"
+          tabBar={props => <FluidTabBar {...props} />}
           screenOptions={{
             headerShown: false,
             popToTopOnBlur: true,
-            tabBarStyle: {
-              backgroundColor: COLORS.white,
-              borderTopWidth: 1,
-              borderTopColor: COLORS.gray200,
-              height: tabHeight,
-              paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-              paddingTop: 8,
-            },
+            tabBarStyle: defaultTabBarStyle,
             tabBarActiveTintColor: COLORS.primaryOrange,
-            tabBarInactiveTintColor: COLORS.gray500,
-            tabBarLabelStyle: styles.tabBarLabelStyle,
+            tabBarInactiveTintColor: COLORS.gray600,
             tabBarShowLabel: false,
           }}
         >
           <Tab.Screen
             name="Home1"
             component={HomeOneNavigation}
-            options={({ route }) => {
-              const hidden = getTabBarStyle(route);
-              const defaultVisibleStyle = {
-                backgroundColor: COLORS.white,
-                borderTopWidth: 1,
-                borderTopColor: COLORS.gray200,
-                height: tabHeight,
-                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-                paddingTop: 8,
-              };
-              return {
-                tabBarIcon: ({ focused, color }) => (
-                  <Icon
-                    name="home"
-                    size={28}
-                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                  />
-                ),
-                tabBarStyle: hidden ?? defaultVisibleStyle,
-              };
-            }}
+            options={({ route }) => ({
+              tabBarStyle: getTabBarStyle(route) ?? defaultTabBarStyle,
+            })}
           />
 
           {/* <Tab.Screen
@@ -243,27 +229,9 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Shorts"
             component={ShortsNavigation}
-            options={({ route }) => {
-              const hidden = getTabBarStyle(route);
-              const defaultVisibleStyle = {
-                backgroundColor: COLORS.white,
-                borderTopWidth: 1,
-                borderTopColor: COLORS.gray200,
-                height: tabHeight,
-                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-                paddingTop: 8,
-              };
-              return {
-                tabBarIcon: ({ focused, color }) => (
-                  <Icon
-                    name="play-box-multiple-outline"
-                    size={28}
-                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                  />
-                ),
-                tabBarStyle: hidden ?? defaultVisibleStyle,
-              };
-            }}
+            options={({ route }) => ({
+              tabBarStyle: getTabBarStyle(route) ?? defaultTabBarStyle,
+            })}
           />
 
           {/* <Tab.Screen
@@ -303,11 +271,7 @@ const BottomNaivgation = () => {
               tabPress: e => onCreateTabPress(e, tabNavigation),
             })}
             options={{
-              tabBarIcon: () => (
-                <View style={styles.fabContainer}>
-                  <Icon name="plus" size={30} color={COLORS.white} />
-                </View>
-              ),
+              tabBarStyle: defaultTabBarStyle,
             }}
           />
 
@@ -364,12 +328,7 @@ const BottomNaivgation = () => {
             component={HomeNavigation}
             options={({ route }) => ({
               tabBarStyle: {
-                backgroundColor: COLORS.white,
-                borderTopWidth: 1,
-                borderTopColor: COLORS.gray200,
-                height: tabHeight,
-                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-                paddingTop: 8,
+                ...defaultTabBarStyle,
                 ...getTabBarStyle(route),
               },
               tabBarIcon: ({ focused, color }) => (
@@ -387,13 +346,7 @@ const BottomNaivgation = () => {
               name="Admin"
               component={AdminScreen}
               options={{
-                tabBarIcon: ({ focused, color }) => (
-                  <Icon
-                    name="cog"
-                    size={28}
-                    color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                  />
-                ),
+                tabBarStyle: defaultTabBarStyle,
               }}
             />
           )}
@@ -405,22 +358,7 @@ const BottomNaivgation = () => {
               tabPress: redirectToHomeThreeIfGuest,
             }}
             options={({ route }) => ({
-              tabBarStyle: {
-                backgroundColor: COLORS.white,
-                borderTopWidth: 1,
-                borderTopColor: COLORS.gray200,
-                height: tabHeight,
-                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-                paddingTop: 8,
-                ...getTabBarStyle(route),
-              },
-              tabBarIcon: ({ focused }) => (
-                <Icon
-                  name="cart-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
+              tabBarStyle: getTabBarStyle(route) ?? defaultTabBarStyle,
             })}
           />
 
@@ -438,22 +376,7 @@ const BottomNaivgation = () => {
               },
             })}
             options={({ route }) => ({
-              tabBarStyle: {
-                backgroundColor: COLORS.white,
-                borderTopWidth: 1,
-                borderTopColor: COLORS.gray200,
-                height: tabHeight,
-                paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-                paddingTop: 8,
-                ...getTabBarStyle(route),
-              },
-              tabBarIcon: ({ focused }) => (
-                <Icon
-                  name="file-document-outline"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
+              tabBarStyle: getTabBarStyle(route) ?? defaultTabBarStyle,
             })}
           />
         </Tab.Navigator>
@@ -466,25 +389,6 @@ const styles = StyleSheet.create({
   libraryTabIcon: {
     width: 26,
     height: 26,
-  },
-  tabBarLabelStyle: {
-    fontSize: 11,
-    fontWeight: '400',
-    marginTop: 4,
-  },
-  fabContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.primaryOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: -20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 8,
   },
 });
 

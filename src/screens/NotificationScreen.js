@@ -8,43 +8,17 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { COLORS, SPACING, FONTS } from '../constants/theme';
+import { COLORS, SPACING } from '../constants/theme';
 import { useSelector } from 'react-redux';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getNotificationsByUserId, markNotificationRead } from '../services/notificationService';
 import { onNotification } from '../services/notificationSocket';
 
-const formatTime = createdAt => {
-  if (!createdAt) return '';
-  const d = new Date(createdAt);
-  const now = new Date();
-  const diffMs = now - d;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString();
-};
-
-const getIconForType = type => {
-  switch (type) {
-    case 'video_like':
-    case 'short_like':
-      return 'thumb-up-outline';
-    case 'video_comment':
-    case 'short_comment':
-      return 'comment-outline';
-    case 'restaurant_order':
-      return 'cart-outline';
-    default:
-      return 'bell-outline';
-  }
-};
-
 const NotificationScreen = ({ onBack }) => {
+  const navigation = useNavigation();
+  const handleBack = onBack || (() => navigation.goBack());
   const { user: currentUser } = useSelector(state => state.app) || {};
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +32,9 @@ const NotificationScreen = ({ onBack }) => {
     }
     try {
       const data = await getNotificationsByUserId(currentUser.id);
-      setNotifications(Array.isArray(data) ? data : []);
+      setNotifications(
+        Array.isArray(data) ? data : data?.notifications ?? [],
+      );
     } catch (e) {
       setNotifications([]);
     } finally {
@@ -84,7 +60,7 @@ const NotificationScreen = ({ onBack }) => {
   };
 
   const handlePressNotification = async item => {
-    if (item.status !== 'read') {
+    if (item.status === 'unread' || item.status !== 'read') {
       try {
         await markNotificationRead(item.id);
         setNotifications(prev =>
@@ -97,34 +73,43 @@ const NotificationScreen = ({ onBack }) => {
 
   const renderNotification = ({ item }) => (
     <TouchableOpacity
-      style={[styles.notiRow, item.status !== 'read' && styles.notiRowUnread]}
+      style={[styles.notiRow, item.status === 'unread' && styles.notiRowUnread]}
       onPress={() => handlePressNotification(item)}
       activeOpacity={0.7}
     >
-      <View style={styles.iconWrap}>
-        <Icon
-          name={getIconForType(item.type)}
-          size={24}
-          color={COLORS.primaryOrange}
-        />
-      </View>
+      <Icon
+        name="bell"
+        size={22}
+        color="#666"
+        style={styles.notiBellIcon}
+      />
       <View style={styles.notiInfo}>
         <Text style={styles.notiTitle} numberOfLines={2}>
           {item.message}
         </Text>
-        <Text style={styles.notiTime}>• {formatTime(item.createdAt)}</Text>
+        <Text style={styles.notiMeta}>
+          {item.type || 'general'} •{' '}
+          {item.createdAt
+            ? new Date(item.createdAt).toLocaleDateString()
+            : ''}
+        </Text>
       </View>
+      {item.status === 'unread' ? <View style={styles.unreadDot} /> : null}
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack}>
-          <Icon name="arrow-left" size={28} color="#000" />
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backBtn}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Icon name="arrow-left" size={26} color="#111" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 28 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
       {!currentUser?.id ? (
@@ -158,7 +143,7 @@ const NotificationScreen = ({ onBack }) => {
           }
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -167,41 +152,61 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginLeft: 15,
-    color: '#000',
+    fontSize: 20,
+    fontWeight: '700',
+    marginLeft: 4,
+    color: '#111',
+  },
+  headerSpacer: {
+    width: 40,
   },
   notiRow: {
     flexDirection: 'row',
-    padding: 15,
-    alignItems: 'flex-start',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   notiRowUnread: {
-    backgroundColor: '#FFF8F2',
+    backgroundColor: '#FFFAF8',
   },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFF5F0',
-    alignItems: 'center',
-    justifyContent: 'center',
+  notiBellIcon: {
     marginRight: 12,
   },
-  notiInfo: { flex: 1 },
+  notiInfo: { flex: 1, minWidth: 0 },
   notiTitle: {
     fontSize: 14,
-    color: '#000',
+    color: '#111',
     fontWeight: '500',
     lineHeight: 20,
   },
-  notiTime: { fontSize: 12, color: '#666', marginTop: 5 },
+  notiMeta: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primaryOrange,
+    marginLeft: 8,
+  },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyWrap: {
     flex: 1,

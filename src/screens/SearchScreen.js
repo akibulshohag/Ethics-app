@@ -10,11 +10,12 @@ import {
   ActivityIndicator,
   Keyboard,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import { COLORS, SPACING } from '../constants/theme';
+import { BORDER_RADIUS, COLORS, SHADOWS, SPACING } from '../constants/theme';
 import { shortsService } from '../services/shortsService';
 import { getVideos } from '../services/videoService';
 
@@ -265,6 +266,7 @@ const SearchScreen = ({ onBack }) => {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.backgroundLight} />
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Icon name="arrow-left" size={28} color="#333" />
@@ -297,7 +299,7 @@ const SearchScreen = ({ onBack }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.backgroundLight,
     paddingTop: SPACING.xxl,
   },
   header: {
@@ -311,12 +313,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF5F0',
-    borderRadius: 30,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.full,
     borderWidth: 1,
-    borderColor: '#FFD7C2',
+    borderColor: COLORS.gray200,
     paddingHorizontal: 15,
-    height: 45,
+    height: 48,
+    ...SHADOWS.small,
   },
   searchIcon: { marginRight: 8 },
   input: {
@@ -352,7 +355,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: COLORS.gray200,
   },
   suggestText: {
     fontSize: 16,
@@ -393,7 +396,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: COLORS.gray200,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
   },
   tab: {
     flex: 1,
@@ -413,14 +419,21 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: COLORS.primaryOrange,
   },
-  listContent: { padding: SPACING.lg },
+  listContent: {
+    padding: SPACING.lg,
+    backgroundColor: COLORS.white,
+    borderBottomLeftRadius: BORDER_RADIUS.xl,
+    borderBottomRightRadius: BORDER_RADIUS.xl,
+    minHeight: 420,
+  },
   row: { justifyContent: 'space-between' },
   shortCard: {
     width: '48%',
     height: 220,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
     marginBottom: 15,
+    ...SHADOWS.small,
   },
   shortImage: { width: '100%', height: '100%' },
   shortOverlay: {
@@ -432,7 +445,13 @@ const styles = StyleSheet.create({
   },
   shortTitle: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   shortViews: { color: '#fff', fontSize: 11, marginTop: 4 },
-  videoCard: { marginBottom: 15 },
+  videoCard: {
+    marginBottom: 15,
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    ...SHADOWS.small,
+  },
   thumbnailWrapper: { width: '100%', height: 200 },
   videoThumbnail: { width: '100%', height: '100%' },
   durationBadge: {

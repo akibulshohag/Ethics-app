@@ -5,49 +5,51 @@ const { width, height } = Dimensions.get('window');
 // Colors
 export const COLORS = {
   // Primary Colors
-  primaryOrange: '#FF7F0B',
-  primaryOrangeLight: '#FFB321',
+  primaryOrange: '#FF6A3D',
+  primaryOrangeLight: '#FF8C66',
   /** Gradient / pressed states */
-  primaryOrangeDeep: '#E56D00',
-  primaryOrangeDark: '#CC5C00',
+  primaryOrangeDeep: '#E6532A',
+  primaryOrangeDark: '#B93C16',
   /** Warm surfaces (modals, sheets) tinted with brand */
-  surfaceOrange: '#FFF7F0',
-  surfaceOrangeSoft: '#FFFBF7',
-  brandOverlay08: 'rgba(255, 127, 11, 0.08)',
-  brandOverlay12: 'rgba(255, 127, 11, 0.12)',
-  brandOverlay16: 'rgba(255, 127, 11, 0.16)',
-  brandBorderSoft: 'rgba(255, 127, 11, 0.2)',
+  surfaceOrange: '#FFF5F1',
+  surfaceOrangeSoft: '#FFFAF8',
+  brandOverlay08: 'rgba(255, 106, 61, 0.08)',
+  brandOverlay12: 'rgba(255, 106, 61, 0.12)',
+  brandOverlay16: 'rgba(255, 106, 61, 0.16)',
+  brandBorderSoft: 'rgba(255, 106, 61, 0.24)',
 
   // Neutrals
   white: '#FFFFFF',
   black: '#000000',
-  darkCharcoal: '#1A1D1E',
+  darkCharcoal: '#15171C',
 
   // Grays
-  gray100: '#f5f5f5',
-  gray200: '#EEEEEE',
-  gray300: '#DDD',
-  gray400: '#BBB',
-  gray500: '#999',
-  gray600: '#777',
-  gray700: '#666',
-  gray800: '#333',
+  gray100: '#F8F9FB',
+  gray200: '#EEF0F4',
+  gray300: '#E2E5EA',
+  gray400: '#CAD0DA',
+  gray500: '#9FA8B7',
+  gray600: '#6D7788',
+  gray700: '#4C5563',
+  gray800: '#27303D',
 
   // Backgrounds
   backgroundWhite: '#FFFFFF',
-  backgroundLight: '#F8F9FA',
+  backgroundLight: '#F3F5F8',
 
   // Text Colors
-  textPrimary: '#333333',
-  textSecondary: '#666666',
-  textTertiary: '#999999',
+  textPrimary: '#161B22',
+  textSecondary: '#4F5A6B',
+  textTertiary: '#7F8A9D',
   textWhite: '#FFFFFF',
 
   // Status Colors
   success: '#12B76A',
   error: '#EF4444',
-  warning: '#F59E0B',
+  warning: '#F7A941',
   info: '#3B82F6',
+  successSoft: '#E9F8EF',
+  errorSoft: '#FDEEEE',
 };
 
 /** LinearGradient stops — use with `react-native-linear-gradient` */
@@ -58,7 +60,7 @@ export const ORANGE_GRADIENT_HEADER = [
 ];
 /** Publish / primary actions — centered on #FF7F0B */
 export const ORANGE_GRADIENT_CTA = [
-  '#FF9F40',
+  '#FF9F7A',
   COLORS.primaryOrange,
   COLORS.primaryOrangeDeep,
 ];
@@ -108,8 +110,8 @@ export const SPACING = {
 export const BORDER_RADIUS = {
   xs: 4,
   sm: 6,
-  md: 8,
-  lg: 12,
+  md: 10,
+  lg: 14,
   xl: 20,
   xxl: 30,
   xxxl: 35,
@@ -119,31 +121,31 @@ export const BORDER_RADIUS = {
 // Shadows
 export const SHADOWS = {
   small: {
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowColor: '#0B1220',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
     elevation: 2,
   },
   medium: {
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    shadowColor: '#0B1220',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
     elevation: 4,
   },
   large: {
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    shadowColor: '#0B1220',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
     elevation: 8,
   },
   orange: {
     shadowColor: COLORS.primaryOrange,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
     elevation: 8,
   },
 };

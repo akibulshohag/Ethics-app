@@ -14,6 +14,7 @@ import {
   RefreshControl,
   Share,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -725,6 +726,13 @@ const HomeVersion = () => {
       : featuredCard != null && !isVendorUser
       ? [{ ...featuredCard, type: 'VIDEO' }, ...baseFeed]
       : baseFeed;
+  const heroItem =
+    featuredCard ||
+    vendorFeaturedCard ||
+    sponsoredCard ||
+    vendorSponsoredCard ||
+    videosData?.[0] ||
+    null;
 
   const StoryCircle = ({ channel }) => (
     <TouchableOpacity
@@ -1020,11 +1028,22 @@ const HomeVersion = () => {
               <Text style={styles.videoMetaMerged}>
                 {item.author} • {item.views} • {item.time}
               </Text>
+              <View style={styles.videoCtaRow}>
+                <TouchableOpacity style={styles.videoPrimaryCta}>
+                  <Text style={styles.videoPrimaryCtaText}>Order now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.videoSecondaryCta}>
+                  <Text style={styles.videoSecondaryCtaText}>Book now</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <TouchableOpacity onPress={() => openOptions(item)}>
               <Icon name="dots-vertical" size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity style={styles.subscribePill}>
+            <Text style={styles.subscribePillText}>Subscribe</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       );
 
@@ -1053,11 +1072,22 @@ const HomeVersion = () => {
               <Text style={styles.videoMetaMerged}>
                 {item.author} • {item.views} • {item.time}
               </Text>
+              <View style={styles.videoCtaRow}>
+                <TouchableOpacity style={styles.videoPrimaryCta}>
+                  <Text style={styles.videoPrimaryCtaText}>Order now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.videoSecondaryCta}>
+                  <Text style={styles.videoSecondaryCtaText}>Book now</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <TouchableOpacity onPress={() => openOptions(item)}>
               <Icon name="dots-vertical" size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
           </View>
+          <TouchableOpacity style={styles.subscribePill}>
+            <Text style={styles.subscribePillText}>Subscribe</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       );
     }
@@ -1092,33 +1122,46 @@ const HomeVersion = () => {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryOrange} />
       {/* Header Section */}
       <SafeAreaView edges={['top']} style={styles.safeArea}>
         <View style={styles.navBar}>
-          <Text style={styles.logoText}>
-            eat<Text style={{ color: COLORS.primaryOrange }}>ix</Text>
-          </Text>
+          <View style={styles.userInfoWrap}>
+            <View style={styles.userAvatarWrap}>
+              {currentUser?.photos?.[0] ? (
+                <Image
+                  source={{ uri: safeImageUri(currentUser?.photos?.[0]) }}
+                  style={styles.userAvatar}
+                />
+              ) : (
+                <Icon name="account" size={20} color={COLORS.textSecondary} />
+              )}
+            </View>
+            <View>
+              <Text style={styles.greetingText}>
+                Hello {currentUser?.name || currentUser?.nickname || 'Foodie'}
+              </Text>
+              <Text style={styles.locationText}>
+                {selectedLocation
+                  ? 'Nearby recommendations'
+                  : 'Set location for nearby food'}
+              </Text>
+            </View>
+          </View>
           <View style={styles.navIcons}>
-            <TouchableOpacity onPress={handleSearchPress}>
-              <Icon
-                name="magnify"
-                size={26}
-                color={COLORS.textPrimary}
-                style={styles.iconSpaced}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => setShowNotifications(true)}>
-              <Icon
-                name="bell-outline"
-                size={26}
-                color={COLORS.textPrimary}
-                style={styles.iconSpaced}
-              />
+            <TouchableOpacity style={styles.iconButton} onPress={handleSearchPress}>
+              <Icon name="magnify" size={22} color={COLORS.primaryOrange} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.profileMini}
+              style={[styles.iconButton, styles.iconSpaced]}
+              onPress={() => setShowNotifications(true)}
+            >
+              <Icon name="bell-outline" size={22} color={COLORS.primaryOrange} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.loginBtn}
               onPress={() => {
                 if (!currentUser) {
                   navigationRef.current?.navigate('Login');
@@ -1126,8 +1169,12 @@ const HomeVersion = () => {
                 }
                 navigation.navigate('Library', { screen: 'ProfileScreen' });
               }}
-              activeOpacity={0.7}
-            />
+              activeOpacity={0.8}
+            >
+              <Text style={styles.loginBtnText}>
+                {currentUser ? 'Profile >' : 'Login >'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
@@ -1187,7 +1234,80 @@ const HomeVersion = () => {
             </ScrollView>
             */}
 
-            {/* Use my location always visible; no need to click Nearby. When clicked, current logic runs (set location, feed, featured/sponsored if logged in). */}
+            <Text style={styles.heroHeadline}>
+              What are you{'\n'}
+              <Text style={styles.heroHeadlineAccent}>eating</Text> today?
+            </Text>
+
+            <TouchableOpacity
+              style={styles.searchBarContainer}
+              onPress={handleSearchPress}
+            >
+              <Icon name="magnify" size={22} color={COLORS.gray600} />
+              <Text style={styles.searchPlaceholder}>Search food, shorts, videos</Text>
+              <View style={styles.filterButton}>
+                <Icon
+                  name="tune-vertical"
+                  size={18}
+                  color={COLORS.primaryOrange}
+                />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.aiCard}>
+              <View>
+                <Text style={styles.aiTitle}>AI food assistant</Text>
+                <Text style={styles.aiSubTitle}>
+                  Smart insights for healthier food choices
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.generateBtn} activeOpacity={0.85}>
+                <Icon name="auto-fix" size={14} color={COLORS.white} />
+                <Text style={styles.generateBtnText}>Generate</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.modernChipScroll}
+            >
+              {['Popular', 'Quick & Easy', 'Diets', 'Low Carb'].map(chip => (
+                <View key={chip} style={styles.modernChip}>
+                  <Text style={styles.modernChipText}>{chip}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            {heroItem && (
+              <View style={styles.recommendedWrap}>
+                <View style={styles.recommendedHeader}>
+                  <Text style={styles.recommendedTitle}>Recommended for you</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.recommendedCard}
+                  onPress={() => handleVideoPress(heroItem.id)}
+                  activeOpacity={0.92}
+                >
+                  <Image
+                    source={{ uri: safeImageUri(heroItem.thumbnail) }}
+                    style={styles.recommendedImage}
+                  />
+                  <View style={styles.recommendedMeta}>
+                    <Text style={styles.recommendedItemTitle} numberOfLines={1}>
+                      {heroItem.title}
+                    </Text>
+                    <Text style={styles.recommendedItemSub} numberOfLines={1}>
+                      {heroItem.views || 'Popular now'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.recommendedAddBtn}>
+                    <Text style={styles.recommendedAddText}>+ Add</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={styles.nearbyLocationBar}>
               <Text style={styles.nearbyLocationLabel}>
                 {selectedLocation
@@ -1216,21 +1336,6 @@ const HomeVersion = () => {
                 </Text>
               </TouchableOpacity>
             </View>
-
-            {selectedLocation && (
-              <TouchableOpacity
-                style={styles.searchBarContainer}
-                onPress={handleSearchPress}
-              >
-                <Icon name="magnify" size={24} color="#666" />
-                <Text style={styles.searchPlaceholder}>Search</Text>
-                <Icon
-                  name="tune-vertical"
-                  size={22}
-                  color={COLORS.primaryOrange}
-                />
-              </TouchableOpacity>
-            )}
 
             {activeTab === 'Nearby' && !isVendorUser && featuredCard && (
               <View style={styles.whiteSection}>
@@ -1418,7 +1523,7 @@ const HomeVersion = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: '#F3F3F3',
   },
   centered: {
     justifyContent: 'center',
@@ -1430,7 +1535,10 @@ const styles = StyleSheet.create({
     color: COLORS.gray500,
   },
   safeArea: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.primaryOrange,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+    overflow: 'hidden',
   },
   navBar: {
     flexDirection: 'row',
@@ -1438,17 +1546,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     alignItems: 'center',
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.primaryOrange,
   },
   logoText: { fontSize: FONTS.xxl, fontWeight: FONTS.bold },
-  navIcons: { flexDirection: 'row', alignItems: 'center' },
-  iconSpaced: { marginRight: SPACING.md },
-  profileMini: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.gray300,
+  userInfoWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  userAvatarWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.gray200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
+  userAvatar: { width: '100%', height: '100%' },
+  greetingText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.94)',
+    fontWeight: '500',
+  },
+  locationText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.86)',
+    marginTop: 2,
+  },
+  navIcons: { flexDirection: 'row', alignItems: 'center' },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconSpaced: { marginLeft: SPACING.sm },
+  loginBtn: {
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  loginBtnText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  heroHeadline: {
+    fontSize: 33,
+    lineHeight: 38,
+    letterSpacing: -1.2,
+    color: COLORS.white,
+    fontWeight: FONTS.extraBold,
+    paddingHorizontal: SPACING.lg,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  heroHeadlineAccent: { color: '#FFE2B6' },
   chipScroll: { marginVertical: SPACING.md, paddingLeft: SPACING.lg },
   chip: {
     paddingHorizontal: SPACING.lg,
@@ -1468,12 +1623,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     marginBottom: SPACING.sm,
-    backgroundColor: '#FFF8F2',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     marginHorizontal: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
     marginTop: 30,
   },
-  nearbyLocationLabel: { fontSize: 12, color: COLORS.gray700, flex: 1 },
+  nearbyLocationLabel: { fontSize: 12, color: COLORS.white, flex: 1 },
   nearbyLocationButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1493,28 +1648,147 @@ const styles = StyleSheet.create({
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.white,
     marginHorizontal: SPACING.lg,
     marginVertical: 10,
     paddingHorizontal: 15,
     paddingVertical: 10,
-    borderRadius: 30,
+    borderRadius: BORDER_RADIUS.full,
     borderWidth: 1,
-    borderColor: '#EEE',
+    borderColor: COLORS.gray200,
   },
   searchPlaceholder: {
     flex: 1,
     marginLeft: 10,
-    color: '#999',
-    fontSize: 16,
+    color: COLORS.gray500,
+    fontSize: 15,
+  },
+  filterButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  aiCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  aiSubTitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.88)',
+  },
+  generateBtn: {
+    backgroundColor: COLORS.darkCharcoal,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  generateBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 12 },
+  modernChipScroll: {
+    marginTop: 10,
+    marginBottom: 8,
+    paddingLeft: SPACING.lg,
+  },
+  modernChip: {
+    marginRight: 8,
+    borderRadius: BORDER_RADIUS.full,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  modernChipText: {
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  recommendedWrap: { marginTop: 4, marginBottom: 12 },
+  recommendedHeader: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  recommendedTitle: {
+    fontSize: 20,
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  recommendedCard: {
+    marginHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.xl,
+    backgroundColor: '#E8F7CC',
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  recommendedImage: {
+    width: 84,
+    height: 84,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  recommendedMeta: {
+    flex: 1,
+    marginHorizontal: 10,
+  },
+  recommendedItemTitle: {
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  recommendedItemSub: {
+    marginTop: 3,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+  },
+  recommendedAddBtn: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.full,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#FFD7A8',
+  },
+  recommendedAddText: {
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  whiteSection: {
+    paddingTop: 6,
+    backgroundColor: '#F3F3F3',
   },
   storyScroll: { paddingLeft: SPACING.lg, marginBottom: SPACING.lg },
   storyContainer: { alignItems: 'center', marginRight: SPACING.md },
   storyBorder: {
     padding: 3,
     borderRadius: 40,
-    borderWidth: 2,
-    borderColor: COLORS.primaryOrange,
+    borderWidth: 1.5,
+    borderColor: COLORS.brandBorderSoft,
   },
   storyImage: { width: 65, height: 65, borderRadius: 32.5 },
   storyLabel: { fontSize: 11, marginTop: 5, color: '#666' },
@@ -1528,12 +1802,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 8,
-    color: '#000',
+    color: COLORS.textPrimary,
   },
   shortCard: {
     width: width * 0.45,
     height: 280,
-    borderRadius: 15,
+    borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
     marginHorizontal: 5,
   },
@@ -1553,7 +1827,7 @@ const styles = StyleSheet.create({
     width: 170,
     height: 100,
     marginRight: 12,
-    borderRadius: 12,
+    borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -1574,9 +1848,21 @@ const styles = StyleSheet.create({
     width: '70%',
     backgroundColor: COLORS.primaryOrange,
   },
-  videoCard: { marginBottom: 15 },
-  thumbnailWrapper: { width: '100%', height: 220, padding: 10 },
-  videoThumbnail: { width: '100%', height: '100%', borderRadius: 10 },
+  videoCard: {
+    marginBottom: 18,
+    marginHorizontal: SPACING.lg,
+    backgroundColor: '#F8F1E2',
+    borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1,
+    borderColor: '#EADBBC',
+    overflow: 'hidden',
+  },
+  thumbnailWrapper: { width: '100%', height: 220 },
+  videoThumbnail: {
+    width: '100%',
+    height: '100%',
+    borderRadius: BORDER_RADIUS.lg,
+  },
   sponsoredBadge: {
     position: 'absolute',
     top: 8,
@@ -1612,6 +1898,52 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   videoMetaMerged: { fontSize: 12, color: '#606060', marginTop: 2 },
+  videoCtaRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  videoPrimaryCta: {
+    backgroundColor: COLORS.primaryOrange,
+    borderRadius: BORDER_RADIUS.full,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  videoPrimaryCtaText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  videoSecondaryCta: {
+    borderWidth: 1,
+    borderColor: COLORS.primaryOrange,
+    borderRadius: BORDER_RADIUS.full,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFF9EF',
+  },
+  videoSecondaryCtaText: {
+    color: COLORS.primaryOrange,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  subscribePill: {
+    alignSelf: 'flex-end',
+    marginRight: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#D8D8D8',
+    backgroundColor: '#F5F5F5',
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  subscribePillText: {
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+    fontSize: 12,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
