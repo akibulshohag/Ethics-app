@@ -21,6 +21,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
+import { menuItemMatchesDiscoveryCategory } from '../constants/menuDiscoveryCategories';
 import { useSelector } from 'react-redux';
 import { getChannelProfile } from '../services/channelService';
 
@@ -83,9 +84,54 @@ const HomeThreeScreen = ({ onBack }) => {
   const resLocation = route.params?.location || '';
   const searchKeyword = String(route.params?.searchKeyword || '').trim();
   const searchKeywordLower = searchKeyword.toLowerCase();
+  const discoveryCategoryKey = String(
+    route.params?.discoveryCategoryKey || '',
+  ).trim();
+  const menuItemMatchesSearchKeyword = useCallback(
+    it => {
+      if (discoveryCategoryKey) {
+        return menuItemMatchesDiscoveryCategory(it, discoveryCategoryKey);
+      }
+      if (!searchKeywordLower) return false;
+      const haystack = [
+        it?.itemName,
+        it?.description,
+        it?.category?.name,
+        it?.categoryName,
+        ...(Array.isArray(it?.tags) ? it.tags : []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(searchKeywordLower);
+    },
+    [discoveryCategoryKey, searchKeywordLower],
+  );
   const singleMenuItem = route.params?.singleMenuItem;
   const promotionMenuItems = route.params?.promotionMenuItems;
   const searchInitAppliedRef = useRef(false);
+
+  useEffect(() => {
+    const sort = route.params?.discoverySort;
+    const dietary = route.params?.discoveryDietary;
+    const highly = route.params?.discoveryHighlyReordered;
+    if (sort === 'price_low' || sort === 'price_high') {
+      setAppliedSort(sort);
+      setDraftSort(sort);
+    }
+    if (dietary === 'veg' || dietary === 'egg' || dietary === 'non_veg') {
+      setAppliedDietary(dietary);
+      setDraftDietary(dietary);
+    }
+    if (highly === true) {
+      setAppliedHighlyReordered(true);
+      setDraftHighlyReordered(true);
+    }
+  }, [
+    route.params?.discoverySort,
+    route.params?.discoveryDietary,
+    route.params?.discoveryHighlyReordered,
+  ]);
 
   const [menuItems, setMenuItems] = useState([]);
   const [menuCategoriesFromApi, setMenuCategoriesFromApi] = useState([]);
@@ -365,41 +411,32 @@ const HomeThreeScreen = ({ onBack }) => {
   ]);
 
   const searchMatchedMenuItems = useMemo(() => {
-    if (!searchKeywordLower) return [];
-    return menuItems.filter(it => {
-      const haystack = [
-        it?.itemName,
-        it?.description,
-        ...(Array.isArray(it?.tags) ? it.tags : []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(searchKeywordLower);
-    });
-  }, [menuItems, searchKeywordLower]);
+    if (!searchKeywordLower && !discoveryCategoryKey) return [];
+    return menuItems.filter(menuItemMatchesSearchKeyword);
+  }, [menuItems, searchKeywordLower, discoveryCategoryKey, menuItemMatchesSearchKeyword]);
 
   const orderMoreMenuItems = useMemo(() => {
-    if (!searchKeywordLower) return filteredMenuForDisplay;
+    if (!searchKeywordLower && !discoveryCategoryKey) return filteredMenuForDisplay;
     if (searchMatchedMenuItems.length === 0) return menuItems;
     const matchedIds = new Set(searchMatchedMenuItems.map(it => String(it.id)));
     return menuItems.filter(it => !matchedIds.has(String(it.id)));
-  }, [filteredMenuForDisplay, menuItems, searchKeywordLower, searchMatchedMenuItems]);
+  }, [
+    filteredMenuForDisplay,
+    menuItems,
+    searchKeywordLower,
+    discoveryCategoryKey,
+    searchMatchedMenuItems,
+  ]);
 
   useEffect(() => {
-    if (!ownerId || !searchKeywordLower || searchInitAppliedRef.current) return;
+    if (
+      !ownerId ||
+      (!searchKeywordLower && !discoveryCategoryKey) ||
+      searchInitAppliedRef.current
+    )
+      return;
     if (!Array.isArray(menuItems) || menuItems.length === 0) return;
-    const matched = menuItems.filter(it => {
-      const haystack = [
-        it?.itemName,
-        it?.description,
-        ...(Array.isArray(it?.tags) ? it.tags : []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(searchKeywordLower);
-    });
+    const matched = menuItems.filter(menuItemMatchesSearchKeyword);
     if (matched.length === 0) return;
     searchInitAppliedRef.current = true;
     setSelectedItems(prev => {
@@ -410,7 +447,7 @@ const HomeThreeScreen = ({ onBack }) => {
       return { [first.id]: 1 };
     });
     // Keep full menu visible for "Order More"; do not force a single category.
-  }, [ownerId, menuItems, searchKeywordLower]);
+  }, [ownerId, menuItems, searchKeywordLower, discoveryCategoryKey, menuItemMatchesSearchKeyword]);
 
   const filterActiveCount = useMemo(() => {
     let n = 0;
@@ -884,7 +921,8 @@ const HomeThreeScreen = ({ onBack }) => {
                 </Text>
               </View>
             ) : null}
-            {searchKeywordLower && searchMatchedMenuItems.length > 0 ? (
+            {(searchKeywordLower || discoveryCategoryKey) &&
+            searchMatchedMenuItems.length > 0 ? (
               <>
                 <Text style={styles.subSectionHeading}>
                   Search match: "{searchKeyword}"
@@ -895,12 +933,13 @@ const HomeThreeScreen = ({ onBack }) => {
                 </View>
               </>
             ) : null}
-            {searchKeywordLower && orderMoreMenuItems.length > 0 ? (
+            {(searchKeywordLower || discoveryCategoryKey) &&
+            orderMoreMenuItems.length > 0 ? (
               <>
                 <Text style={styles.subSectionHeading}>Order More</Text>
                 {orderMoreMenuItems.map(renderMenuItemCard)}
               </>
-            ) : !searchKeywordLower ? (
+            ) : !searchKeywordLower && !discoveryCategoryKey ? (
               filteredMenuForDisplay.map(renderMenuItemCard)
             ) : null}
           </>

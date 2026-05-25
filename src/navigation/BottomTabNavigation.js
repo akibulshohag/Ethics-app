@@ -175,6 +175,27 @@ const BottomNaivgation = () => {
           <Tab.Screen
             name="Home1"
             component={HomeOneNavigation}
+            listeners={({ navigation: tabNav, route }) => ({
+              tabPress: e => {
+                const routeName =
+                  getFocusedRouteNameFromRoute(route) ?? 'LandingScreen';
+                if (routeName === 'LandingScreen') return;
+                if (
+                  routeName === 'HomeOneScreen' ||
+                  routeName === 'HomeOneCuisineScreen'
+                ) {
+                  e.preventDefault();
+                  tabNav.navigate('Home1', {
+                    screen: routeName,
+                    params: { homeTabReset: Date.now() },
+                    merge: true,
+                  });
+                  return;
+                }
+                e.preventDefault();
+                tabNav.navigate('Home1', { screen: 'HomeOneScreen' });
+              },
+            })}
             options={({ route }) => {
               const hidden = getTabBarStyle(route);
               const defaultVisibleStyle = {

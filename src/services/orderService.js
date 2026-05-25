@@ -173,3 +173,25 @@ export const getTopRestaurantsByOrders = async (params = {}) => {
   if (!res.ok) throw new Error('Failed to load top restaurants');
   return res.json();
 };
+
+/**
+ * Global most-ordered menu items (when API supports public access).
+ * Falls back to empty list — discoveryService aggregates from per-restaurant menus.
+ */
+export const getTopMenuItemsByOrders = async (params = {}) => {
+  const q = new URLSearchParams();
+  if (params.page != null) q.set('page', String(params.page));
+  if (params.limit != null) q.set('limit', String(params.limit));
+  const url = q.toString()
+    ? `${API_URL}/top-items?${q.toString()}`
+    : `${API_URL}/top-items`;
+  const res = await fetch(url);
+  if (!res.ok) return { items: [] };
+  const data = await res.json();
+  const items = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data?.menuItems)
+    ? data.menuItems
+    : [];
+  return { ...data, items };
+};

@@ -27,7 +27,12 @@ import {
   Pressable,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
+import eatixLogo from '../../assets/logo.png';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -105,6 +110,19 @@ import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 import { ALLERGENS, normalizeAllergens } from '../../constants/allergens';
 
 const { width } = Dimensions.get('window');
+
+const BUSINESS_SOCIAL_BAR = [
+  { type: 'instagram', icon: 'instagram' },
+  { type: 'facebook', icon: 'facebook' },
+  { type: 'x', image: require('../../assets/icons/x.png') },
+  { type: 'tiktok', image: require('../../assets/icons/tiktok.png') },
+  {
+    type: 'tripadvisor',
+    image: require('../../assets/icons/tripadvisor.png'),
+  },
+  { type: 'google_email', icon: 'google' },
+  { type: 'website', icon: 'web' },
+];
 
 const formatCount = n => {
   if (n == null || n < 0) return '0';
@@ -401,6 +419,7 @@ const MOCK_VIDEOS = [
 const BusinessProfileViewScreen = ({ navigation }) => {
   const route = useRoute();
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
   const currentUser = useSelector(state => state.app?.user);
   const profileUserId = route.params?.userId ?? currentUser?.id;
   const isOwnProfile = profileUserId === currentUser?.id;
@@ -2134,34 +2153,78 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Top Navigation - OUTSIDE the image */}
-      <View style={styles.topNavigation}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation?.goBack()}
-        >
-          <View style={styles.backButtonInner}>
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={16}
-              color="#fff"
-            />
-            <Text style={styles.backText}>Back</Text>
-          </View>
-        </TouchableOpacity>
-        {/* <TouchableOpacity style={styles.moreIcon}>
-          <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
-        </TouchableOpacity> */}
-      </View>
-
       <BusinessProfileCard
         profile={profile}
         isOwnProfile={isOwnProfile}
+        isOwnerOrVendor={isOwnerOrVendor}
         onEditProfile={openEditProfile}
         onAvatarPress={handleAvatarPress}
         onCoverPress={handleCoverPress}
         coverUploading={uploadingCover}
       />
+
+      {isOwnProfile && isOwnerOrVendor ? (
+        <View style={styles.profileSocialRow}>
+          {(() => {
+            const raw = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
+            const links = Array.isArray(raw)
+              ? raw
+              : raw && typeof raw === 'object'
+              ? [raw]
+              : [];
+            const normalized = links.map(l => ({
+              type: String(l?.type || 'others').toLowerCase(),
+              url: String(l?.url || '').trim(),
+            }));
+
+            return BUSINESS_SOCIAL_BAR.map(({ type, icon, image }) => {
+              const match = normalized.find(
+                l =>
+                  l.type === type ||
+                  (type === 'google_email' &&
+                    (l.type === 'google' || l.type === 'google_email')),
+              );
+              const url = match?.url || '';
+              const disabled = !url;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.profileSocialBtn,
+                    disabled && styles.profileSocialBtnDisabled,
+                  ]}
+                  disabled={disabled}
+                  onPress={() => {
+                    if (!url) return;
+                    Linking.openURL(
+                      url.startsWith('http') ? url : `https://${url}`,
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {image ? (
+                    <Image
+                      source={image}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        tintColor: disabled ? '#BDBDBD' : null,
+                      }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name={icon || getSocialIcon(type)}
+                      size={20}
+                      color={disabled ? '#BDBDBD' : '#111'}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            });
+          })()}
+        </View>
+      ) : null}
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
@@ -2756,8 +2819,47 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="#F6B041"
+        translucent
+      />
+      <LinearGradient
+        colors={['#F6B041', '#F69E23']}
+        style={[styles.promoTopGradient, { paddingTop: insets.top }]}
+      >
+        <View style={styles.topNav}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation?.goBack()}
+            activeOpacity={0.85}
+          >
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={18}
+              color="#FFF"
+            />
+            <Text style={styles.topNavBackText}>Back</Text>
+          </TouchableOpacity>
+          <Image
+            source={eatixLogo}
+            style={styles.promoHeaderLogo}
+            resizeMode="contain"
+          />
+          <TouchableOpacity
+            style={styles.promoHeaderBell}
+            onPress={() => navigation.navigate('MessageList')}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="bell-outline"
+              size={24}
+              color="#1F2937"
+            />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
       {activeTab === 'Posts' && postsLoading && posts.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
@@ -4075,8 +4177,63 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 20,
   },
+  promoTopGradient: {
+    paddingBottom: 0,
+  },
+  topNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minWidth: 72,
+  },
+  topNavBackText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  promoHeaderLogo: {
+    width: 88,
+    height: 28,
+  },
+  promoHeaderBell: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerContainer: {
     paddingBottom: 0,
+    backgroundColor: '#FFFFFF',
+  },
+  profileSocialRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 18,
+    paddingTop: 0,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  profileSocialBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileSocialBtnDisabled: {
+    opacity: 0.45,
   },
   topNavigation: {
     flexDirection: 'row',
@@ -4295,10 +4452,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   tabsContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginVertical: 10,
+    marginTop: 0,
+    marginBottom: 10,
     paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
   },
   tabItem: {
     paddingHorizontal: 12,

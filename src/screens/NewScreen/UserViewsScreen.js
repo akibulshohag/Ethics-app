@@ -16,9 +16,14 @@ import {
   Linking,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import UserProfileCard from '../../components/UserProfileCard';
+import eatixLogo from '../../assets/logo.png';
 import VideoCard from '../../components/VideoCard';
 import CompactVideoCard from '../../components/CompactVideoCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
@@ -66,6 +71,7 @@ import {
   buildOwnerScopedShortsFeed,
   navigateToScopedShortsPlayer,
 } from '../../utils/navigateToScopedShortsPlayer';
+import { recordRecentChatPartner } from '../../services/chatRecentStorage';
 
 const { width } = Dimensions.get('window');
 
@@ -267,6 +273,7 @@ const mapShortToPostCard = (s, profile, profileUserId) => {
 };
 
 const UserViewsScreen = ({ navigation }) => {
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('Gallery');
   const route = useRoute();
   const currentUser = useSelector(state => state.app?.user);
@@ -1178,15 +1185,23 @@ const UserViewsScreen = ({ navigation }) => {
       navigation.navigate('MessageList');
       return;
     }
+    const partnerName =
+      profile?.channelName || profile?.nickname || profile?.name || 'User';
+    const partnerAvatar = safeImageUri(
+      profile?.channelAvatar ||
+        profile?.photos?.[0]?.src ||
+        profile?.photos?.[0],
+    );
+    recordRecentChatPartner({
+      partnerId: profileUserId,
+      partnerName,
+      partnerAvatar,
+      partnerRole: profile?.role,
+    });
     navigation.navigate('ChatScreen', {
       partnerId: profileUserId,
-      partnerName:
-        profile?.channelName || profile?.nickname || profile?.name || 'User',
-      partnerAvatar: safeImageUri(
-        profile?.channelAvatar ||
-          profile?.photos?.[0]?.src ||
-          profile?.photos?.[0],
-      ),
+      partnerName,
+      partnerAvatar,
     });
   }, [profileUserId, currentUser?.id, navigation, profile]);
 
@@ -1215,6 +1230,35 @@ const UserViewsScreen = ({ navigation }) => {
       location,
     });
   }, [profileUserId, profile, currentUser?.token, navigation]);
+
+  const handleChannelBookNow = useCallback(() => {
+    if (!profileUserId) return;
+    const ownerName =
+      profile?.channelName || profile?.nickname || profile?.name || '';
+    const goFlow = (screen, params) => {
+      navigation.navigate('Root', {
+        screen: 'Home1',
+        params: { screen, params },
+      });
+    };
+    if (!currentUser?.token) {
+      goFlow('HomeSevenScreen', {
+        returnToBook: true,
+        ownerUserId: profileUserId,
+      });
+      return;
+    }
+    goFlow('HomeSevenScreen', {
+      ownerUserId: profileUserId,
+      ownerName,
+      title: ownerName,
+      location: profile?.address || '',
+    });
+  }, [profileUserId, profile, currentUser?.token, navigation]);
+
+  const profileRole = String(profile?.role || '').toLowerCase();
+  const isViewingBusinessProfile =
+    profileRole === 'owner' || profileRole === 'vendor';
 
   /** Followers / Following lists live on Home1 stack (same as BusinessProfileCard) */
   const handlePressFollowers = useCallback(() => {
@@ -1538,26 +1582,6 @@ const UserViewsScreen = ({ navigation }) => {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Top Navigation - OUTSIDE the image */}
-      <View style={styles.topNavigation}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation?.goBack()}
-        >
-          <View style={styles.backButtonInner}>
-            <MaterialCommunityIcons
-              name="chevron-left"
-              size={16}
-              color="#fff"
-            />
-            <Text style={styles.backText}>Back</Text>
-          </View>
-        </TouchableOpacity>
-        {/* <TouchableOpacity style={styles.moreIcon}>
-          <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
-        </TouchableOpacity> */}
-      </View>
-
       <UserProfileCard
         profile={profile}
         loading={profileLoading}
@@ -1565,7 +1589,6 @@ const UserViewsScreen = ({ navigation }) => {
         onSubscribe={handleProfileSubscribe}
         onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
-        onOrderNowPress={handleChannelOrderNow}
         onPressFollowers={handlePressFollowers}
         onPressFollowing={handlePressFollowing}
         onPressReviews={() => {
@@ -1579,6 +1602,12 @@ const UserViewsScreen = ({ navigation }) => {
               'Channel',
           });
         }}
+        onOrderNowPress={
+          isViewingBusinessProfile ? handleChannelOrderNow : undefined
+        }
+        onBookNowPress={
+          isViewingBusinessProfile ? handleChannelBookNow : undefined
+        }
       />
 
       {/* Social icons row — business profiles only (hidden for role "user") */}
@@ -1656,7 +1685,6 @@ const UserViewsScreen = ({ navigation }) => {
         </View>
       ) : null}
 
-      {/* Tabs */}
       <View style={styles.tabsContainer}>
         {TABS.map(tab => {
           const isGrid = tab === 'Gallery';
@@ -1670,12 +1698,13 @@ const UserViewsScreen = ({ navigation }) => {
                 isGrid && styles.gridTabItem,
               ]}
               onPress={() => setActiveTab(tab)}
+              activeOpacity={0.85}
             >
               {isGrid ? (
                 <MaterialCommunityIcons
                   name={tab === 'Instagram' ? 'instagram' : 'view-grid'}
                   size={22}
-                  color={isActive ? '#FF7F0B' : '#444'}
+                  color={isActive ? '#F5A623' : '#9CA3AF'}
                 />
               ) : (
                 <Text
@@ -1993,8 +2022,47 @@ const UserViewsScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="#F6B041"
+        translucent
+      />
+      <LinearGradient
+        colors={['#F6B041', '#F69E23']}
+        style={[styles.promoTopGradient, { paddingTop: insets.top }]}
+      >
+        <View style={styles.topNav}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation?.goBack()}
+            activeOpacity={0.85}
+          >
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={18}
+              color="#FFF"
+            />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+          <Image
+            source={eatixLogo}
+            style={styles.promoHeaderLogo}
+            resizeMode="contain"
+          />
+          <TouchableOpacity
+            style={styles.promoHeaderBell}
+            onPress={handleProfileMessagePress}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="bell-outline"
+              size={24}
+              color="#1F2937"
+            />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
       {!profileUserId ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Login required</Text>
@@ -3128,87 +3196,93 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#777',
   },
+  promoTopGradient: {
+    paddingBottom: 0,
+  },
+  topNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    minWidth: 72,
+  },
+  backText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  promoHeaderLogo: {
+    width: 88,
+    height: 28,
+  },
+  promoHeaderBell: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerContainer: {
     paddingBottom: 0,
+    backgroundColor: '#FFFFFF',
   },
   profileSocialRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 14,
-    paddingTop: 10,
-    paddingBottom: 6,
+    gap: 18,
+    paddingTop: 0,
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
   },
   profileSocialBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 17,
-    backgroundColor: '#fff',
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#eee',
   },
   profileSocialBtnDisabled: {
-    backgroundColor: '#FAFAFA',
-    borderColor: '#F0F0F0',
-  },
-  topNavigation: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  backButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  backButtonInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  moreIcon: {
-    padding: 4,
+    opacity: 0.45,
   },
   tabsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around', // Distribute evenly
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginVertical: 5,
-    paddingHorizontal: 16,
+    alignItems: 'flex-end',
+    marginTop: 0,
+    paddingHorizontal: 8,
     marginBottom: 16,
   },
   tabItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    minWidth: 50,
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
   },
   activeTabItem: {
-    borderBottomWidth: 3,
-    borderBottomColor: '#FFAD33', // Orange active border
+    borderBottomColor: '#F5A623',
   },
   gridTabItem: {
-    paddingBottom: 8, // slight adjustment for icon centering
+    paddingBottom: 12,
   },
   tabText: {
-    fontSize: 15,
-    color: '#999',
+    fontSize: 13,
+    color: '#9CA3AF',
     fontWeight: '500',
   },
   activeTabText: {
-    color: '#FFAD33',
-    fontWeight: '600',
+    color: '#F5A623',
+    fontWeight: '700',
   },
   gridColumnWrapper: {
     justifyContent: 'flex-start',

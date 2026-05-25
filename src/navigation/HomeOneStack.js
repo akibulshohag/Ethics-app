@@ -20,6 +20,8 @@ import CheckoutScreen from '../screens/CheckoutScreen';
 import HomeShortsExploreScreen from '../screens/HomeShortsExploreScreen';
 import OrderNowBrowseScreen from '../screens/OrderNowBrowseScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
+import HomeSearchScreen from '../screens/HomeSearchScreen';
+import HomeSearchCategoryScreen from '../screens/HomeSearchCategoryScreen';
 
 const HomeOneStack = createStackNavigator();
 
@@ -106,6 +108,14 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="VideoDetailsScreen"
         component={VideoDetailsScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeSearchScreen"
+        component={HomeSearchScreen}
+      />
+      <HomeOneStack.Screen
+        name="HomeSearchCategoryScreen"
+        component={HomeSearchCategoryScreen}
       />
     </HomeOneStack.Navigator>
   );

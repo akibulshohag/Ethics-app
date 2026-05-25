@@ -16,6 +16,7 @@ import {
   getChannelFollowing,
   getChannelProfile,
 } from '../../services/channelService';
+import { recordRecentChatPartner } from '../../services/chatRecentStorage';
 
 const ChannelItem = ({ item, onPressMessage, onPressView }) => (
   <View style={styles.card}>
@@ -155,6 +156,12 @@ export default function FollowingListScreen({ navigation }) {
 
   const handleMessage = channel => {
     if (!channel?.userId) return;
+    recordRecentChatPartner({
+      partnerId: channel.userId,
+      partnerName: channel.name,
+      partnerAvatar: channel.image,
+      partnerRole: channel.role,
+    });
     nav.navigate('ChatScreen', {
       partnerId: channel.userId,
       partnerName: channel.name,

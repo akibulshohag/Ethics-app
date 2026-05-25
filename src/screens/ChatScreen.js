@@ -27,10 +27,11 @@ import { COLORS } from '../constants/theme';
 const ActionSheetIOS =
   Platform.OS === 'ios' ? require('react-native').ActionSheetIOS : null;
 import {
-  getMessages,
+  getThreadMessages,
   uploadChatFiles,
   getAttachmentFullUrl,
 } from '../services/chatService';
+import { recordRecentChatPartner } from '../services/chatRecentStorage';
 import {
   connectChatSocket,
   disconnectChatSocket,
@@ -133,8 +134,10 @@ const ChatScreen = () => {
     orderDetails,
   } = route.params || {};
   const partnerId = normalizeId(rawPartnerId);
+  const partnerIdForApi = String(rawPartnerId ?? '').trim() || partnerId;
   const user = useSelector(s => s?.app?.user);
   const myId = user?.id ? normalizeId(user.id) : '';
+  const myIdForApi = String(user?.id ?? '').trim() || myId;
   const displayName = partnerName || 'Chat';
   const isOrderChat = !!orderId;
 
@@ -153,7 +156,7 @@ const ChatScreen = () => {
 
   const apiToMessage = useCallback(
     m => {
-      const isMe = m.senderId === myId;
+      const isMe = normalizeId(m.senderId) === myId;
       return {
         id: m.id,
         isMe,
@@ -170,6 +173,15 @@ const ChatScreen = () => {
   );
 
   useEffect(() => {
+    if (!partnerId) return;
+    recordRecentChatPartner({
+      partnerId: partnerIdForApi,
+      partnerName: displayName,
+      partnerAvatar,
+    });
+  }, [partnerIdForApi, displayName, partnerAvatar]);
+
+  useEffect(() => {
     if (!myId || !partnerId) {
       setLoading(false);
       return;
@@ -178,7 +190,11 @@ const ChatScreen = () => {
     connectChatSocket(user.id);
     (async () => {
       try {
-        const list = await getMessages(user?.token, myId, partnerId);
+        const list = await getThreadMessages(
+          user?.token,
+          myIdForApi,
+          partnerIdForApi,
+        );
         if (cancelled) return;
         const next = (list || []).map(apiToMessage);
         setMessages(next);
@@ -192,7 +208,7 @@ const ChatScreen = () => {
       cancelled = true;
       disconnectChatSocket();
     };
-  }, [myId, partnerId]);
+  }, [myId, partnerId, myIdForApi, partnerIdForApi, user?.token, user?.id, apiToMessage]);
 
   useEffect(() => {
     const unsubMsg = onChatMessage(payload => {
@@ -270,6 +286,12 @@ const ChatScreen = () => {
         message: text,
         timestamp,
         type: 'text',
+      });
+      recordRecentChatPartner({
+        partnerId: partnerIdForApi,
+        partnerName: displayName,
+        partnerAvatar,
+        lastMessage: text,
       });
       setMessages(prev =>
         prev.map(m =>

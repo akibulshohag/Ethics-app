@@ -26,6 +26,7 @@ import {
   Platform,
 } from 'react-native';
 import Video from 'react-native-video';
+import LinearGradient from 'react-native-linear-gradient';
 import Slider from '@react-native-community/slider';
 import {
   useNavigation,
@@ -34,6 +35,12 @@ import {
 } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector, useDispatch } from 'react-redux';
+import { fetchDiscoveryData } from '../redux/actions/discoverySlice';
+import {
+  setHomeFeedCache,
+  isHomeFeedCacheFresh,
+} from '../redux/actions/homeFeedSlice';
+import { buildDiscoveryCacheKey } from '../utils/discoveryCacheKey';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCurrentPositionSafe,
@@ -64,7 +71,17 @@ import {
 } from '../services/channelService';
 import { saveLastLocationToBackend } from '../services/userLocationService';
 import logo from '../assets/logo.png';
-import categoryIcon from '../assets/icons/category.png';
+import { cuisineImageUriFromKey } from '../constants/cuisineCategoryImages';
+import {
+  buildDiscoveryCategoriesFromMenuCaches,
+  buildMenuCuisineTags,
+  ownerMenuMatchesCuisineFilter,
+  resolveDiscoveryCategoryFromFilter,
+} from '../constants/menuDiscoveryCategories';
+import DiscoveryTrendingCard from '../components/DiscoveryTrendingCard';
+import { browseRestaurantsByCategory } from '../services/menuBrowseService';
+import { openDiscoveryMedia } from '../utils/openDiscoveryMedia';
+import spicePromoBg from '../assets/img/spice.png';
 import { safeImageUri } from '../utils/helper';
 import {
   SafeAreaView,
@@ -93,6 +110,18 @@ import {
 } from '../utils/geoDistance';
 
 const { width, height } = Dimensions.get('window');
+const FEED_HORIZONTAL_PAD = 15;
+const SHORT_CAROUSEL_GAP = 8;
+/** ~3 full cards + half peek (per eatix home design) */
+const SHORT_CAROUSEL_CARD_WIDTH =
+  (width - FEED_HORIZONTAL_PAD * 2 - SHORT_CAROUSEL_GAP * 3) / 3.5;
+const SHORT_CAROUSEL_CARD_HEIGHT = Math.round(SHORT_CAROUSEL_CARD_WIDTH * 1.42);
+const FEATURED_HERO_HEIGHT = Math.round(
+  (width - FEED_HORIZONTAL_PAD * 2) * 0.5,
+);
+const TRENDING_CARD_IMAGE_HEIGHT = Math.round(
+  (width - FEED_HORIZONTAL_PAD * 2) * 0.42,
+);
 
 const formatCount = n => {
   if (n == null || n < 0) return '0';
@@ -496,6 +525,8 @@ const HomeOneScreen = () => {
   const [popularShorts, setPopularShorts] = useState([]);
   const [newShorts, setNewShorts] = useState([]);
   const [mostOrderedRestaurants, setMostOrderedRestaurants] = useState([]);
+  const [categoryBrowseRows, setCategoryBrowseRows] = useState([]);
+  const [categoryBrowseLoading, setCategoryBrowseLoading] = useState(false);
   const [continueData, setContinueData] = useState([]);
   const [feedLoading, setFeedLoading] = useState(false);
   const [videoPaused, setVideoPaused] = useState(true);
@@ -518,6 +549,11 @@ const HomeOneScreen = () => {
   const isAuthenticated = !!(user?.token || authUserId);
   const isCuisineFilterScreen =
     route.name === 'HomeOneCuisineScreen' || !!route.params?.cuisineMode;
+  const cuisineFilterKey = String(
+    route.params?.discoveryCategoryKey ||
+      normalizeCuisine(route.params?.initialCuisine || selectedCuisine) ||
+      '',
+  ).trim();
   const actorUserId =
     authUserId ??
     user?.id ??
@@ -566,6 +602,9 @@ const HomeOneScreen = () => {
       user?.longitude,
     ],
   );
+  const homeFeedCache = useSelector(state => state.homeFeed);
+  const homeFeedCacheRef = useRef(homeFeedCache);
+  homeFeedCacheRef.current = homeFeedCache;
   const displayedCuisineOptions = useMemo(() => {
     if (!Array.isArray(cuisineOptions)) return [];
     return cuisineOptions
@@ -575,7 +614,13 @@ const HomeOneScreen = () => {
         if (!isValidCuisineKey(key) || !label || label === '[object Object]') {
           return null;
         }
-        return { ...c, key, label, icon: cuisineIconFromKey(key) };
+        return {
+          ...c,
+          key,
+          label,
+          icon: cuisineIconFromKey(key),
+          imageUri: cuisineImageUriFromKey(key),
+        };
       })
       .filter(Boolean);
   }, [cuisineOptions]);
@@ -786,6 +831,16 @@ const HomeOneScreen = () => {
     return () => sub.remove();
   }, [isRestaurantDetail, handleRestaurantDetailBack]);
 
+  /** Bottom tab Home: exit inline video/restaurant detail back to main feed */
+  useEffect(() => {
+    if (!route.params?.homeTabReset) return;
+    libraryDetailReturnRef.current = null;
+    setVideoPaused(true);
+    setIsRestaurantDetail(false);
+    setIsVideoDetail(false);
+    navigation.setParams({ homeTabReset: undefined });
+  }, [route.params?.homeTabReset, navigation]);
+
   useFocusEffect(
     React.useCallback(() => {
       const stopPlaybackOnBlur = () => setVideoPaused(true);
@@ -952,9 +1007,73 @@ const HomeOneScreen = () => {
     ]),
   );
 
+  useEffect(() => {
+    if (!isCuisineFilterScreen || !cuisineFilterKey) {
+      setCategoryBrowseRows([]);
+      setCategoryBrowseLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCategoryBrowseLoading(true);
+    browseRestaurantsByCategory({
+      category: cuisineFilterKey,
+      limit: 30,
+    })
+      .then(res => {
+        if (cancelled) return;
+        setCategoryBrowseRows(
+          Array.isArray(res?.restaurants) ? res.restaurants : [],
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCategoryBrowseRows([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCategoryBrowseLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCuisineFilterScreen, cuisineFilterKey]);
+
   const loadFeaturedAndFeed = useCallback(async () => {
     const voBrowse = resolveViewerLocationOpts(selectedLocation, user);
     if (!voBrowse) return;
+    const feedCacheKey = buildDiscoveryCacheKey(voBrowse, user?.id);
+    const searchTermEarly = searchDebounced?.trim() || undefined;
+    const cached = homeFeedCacheRef.current;
+    const hasHomeCacheData =
+      cached.cacheKey === feedCacheKey &&
+      (cached.feedVideos?.length > 0 ||
+        cached.feedShorts?.length > 0 ||
+        cached.popularShorts?.length > 0);
+    const homeCacheFresh =
+      !searchTermEarly &&
+      hasHomeCacheData &&
+      isHomeFeedCacheFresh(cached.fetchedAt, cached.cacheKey, feedCacheKey);
+
+    if (!searchTermEarly && hasHomeCacheData) {
+      setFeaturedVideo(cached.featuredVideo);
+      setSponsoredVideo(cached.sponsoredVideo);
+      setFeedVideos(cached.feedVideos || []);
+      setFeedShorts(cached.feedShorts || []);
+      setPopularShorts(cached.popularShorts || []);
+      setNewShorts(cached.newShorts || []);
+      setMostOrderedRestaurants(cached.mostOrderedRestaurants || []);
+      setCuisineOptions(cached.cuisineOptions || []);
+      setFeedLoading(false);
+      dispatch(
+        fetchDiscoveryData({
+          currentUserId: user?.id || null,
+          cacheKey: feedCacheKey,
+          force: false,
+        }),
+      );
+      if (homeCacheFresh) {
+        return;
+      }
+    }
+
     setFeedLoading(true);
     const lat = voBrowse.viewerLat;
     const lng = voBrowse.viewerLng;
@@ -1189,31 +1308,41 @@ const HomeOneScreen = () => {
           }),
         );
       }
-      const cuisineSet = new Set();
+      const menuCacheSnapshot = {};
+      allOwnerIdsForMenus.forEach(oid => {
+        menuCacheSnapshot[oid] = ownerMenuSearchCacheRef.current[String(oid)] || [];
+      });
+      const discoveryOptions = buildDiscoveryCategoriesFromMenuCaches(
+        menuCacheSnapshot,
+      );
+      const discoveryKeys = new Set(discoveryOptions.map(o => o.key));
+      const rawCuisineSet = new Set();
       allOwnerIdsForMenus.forEach(oid => {
         const rows = ownerMenuSearchCacheRef.current[String(oid)] || [];
         const categories = ownerCategoryCacheRef.current[String(oid)] || [];
         categories.forEach(cat => {
           const c = normalizeCuisine(cat);
-          if (isValidCuisineKey(c)) cuisineSet.add(c);
+          if (!isValidCuisineKey(c)) return;
+          if (!discoveryKeys.has(c) && !resolveDiscoveryCategoryFromFilter(c)) {
+            rawCuisineSet.add(c);
+          }
         });
         rows.forEach(m => {
           const c = normalizeCuisine(m?.categoryName);
-          if (isValidCuisineKey(c)) cuisineSet.add(c);
-          (Array.isArray(m?.tags) ? m.tags : []).forEach(tag => {
-            const t = normalizeCuisine(tag);
-            if (isValidCuisineKey(t)) cuisineSet.add(t);
-          });
+          if (!isValidCuisineKey(c)) return;
+          if (!discoveryKeys.has(c) && !resolveDiscoveryCategoryFromFilter(c)) {
+            rawCuisineSet.add(c);
+          }
         });
       });
-      const dynamicOptions = Array.from(cuisineSet)
-        .filter(isValidCuisineKey)
+      const rawOptions = Array.from(rawCuisineSet)
         .map(key => ({
           key,
-          label: cuisineLabelFromKey(key) || 'Cuisine',
-          icon: 'food',
+          label: cuisineLabelFromKey(key) || 'Menu',
+          icon: cuisineIconFromKey(key),
         }))
         .sort((a, b) => a.label.localeCompare(b.label));
+      const dynamicOptions = [...discoveryOptions, ...rawOptions];
       setCuisineOptions(dynamicOptions);
       const withMenuSearchMeta = item => {
         const ownerId = item?.userId ?? item?.user?.id;
@@ -1251,19 +1380,9 @@ const HomeOneScreen = () => {
         return {
           ...item,
           _menuSearchBlob: menuBlob,
-          _menuTagsLower: Array.from(
-            new Set(
-              menuRows.flatMap(m => {
-                const acc = [];
-                const c = normalizeCuisine(m?.categoryName);
-                if (c) acc.push(c);
-                (Array.isArray(m?.tags) ? m.tags : []).forEach(tag => {
-                  const t = normalizeCuisine(tag);
-                  if (t) acc.push(t);
-                });
-                return acc;
-              }),
-            ),
+          _menuTagsLower: buildMenuCuisineTags(
+            menuRows,
+            ownerCategoryCacheRef.current[String(ownerId)] || [],
           ),
           _matchedMenuItems: matchedMenuItems,
           _menuSearchKeyword: q,
@@ -1338,25 +1457,33 @@ const HomeOneScreen = () => {
             'https://images.unsplash.com/photo-1552566626-52f8b828add9',
           orderCount: oc,
           views: `${oc} order${oc === 1 ? '' : 's'}`,
-          _menuTagsLower: Array.from(
-            new Set(
-              (ownerMenuSearchCacheRef.current[String(r?.id)] || []).flatMap(
-                m => {
-                  const acc = [];
-                  const c = normalizeCuisine(m?.categoryName);
-                  if (c) acc.push(c);
-                  (Array.isArray(m?.tags) ? m.tags : []).forEach(tag => {
-                    const t = normalizeCuisine(tag);
-                    if (t) acc.push(t);
-                  });
-                  return acc;
-                },
-              ),
-            ),
+          _menuTagsLower: buildMenuCuisineTags(
+            ownerMenuSearchCacheRef.current[String(r?.id)] || [],
+            ownerCategoryCacheRef.current[String(r?.id)] || [],
           ),
         };
       });
       setMostOrderedRestaurants(topRestaurants);
+      dispatch(
+        setHomeFeedCache({
+          cacheKey: feedCacheKey,
+          feedVideos: mappedVideosWithMenu.filter(matchesSearch),
+          feedShorts: mappedShortsWithMenu.filter(matchesSearch),
+          popularShorts: mappedPopularShortsWithMenu.filter(matchesSearch),
+          newShorts: mappedNewestShortsWithMenu.filter(matchesSearch),
+          mostOrderedRestaurants: topRestaurants,
+          cuisineOptions: dynamicOptions,
+          featuredVideo: pickedFeatured,
+          sponsoredVideo: pickedSponsored,
+        }),
+      );
+      dispatch(
+        fetchDiscoveryData({
+          currentUserId: user?.id || null,
+          cacheKey: feedCacheKey,
+          force: false,
+        }),
+      );
     } catch (e) {
       console.error('HomeOne load feed:', e);
       setFeedVideos([]);
@@ -1367,7 +1494,7 @@ const HomeOneScreen = () => {
     } finally {
       setFeedLoading(false);
     }
-  }, [selectedLocation, user, searchDebounced]);
+  }, [selectedLocation, user, searchDebounced, dispatch]);
 
   const loadContinueWatching = useCallback(async () => {
     if (!user?.id) return;
@@ -2044,6 +2171,39 @@ const HomeOneScreen = () => {
     [user?.token, navigation, searchDebounced, getSponsoredOwnerId],
   );
 
+  const openCategoryRestaurant = useCallback(
+    (row, categoryLabelForSearch = '') => {
+      if (!row?.id) return;
+      const ownerName = row?.name || 'Restaurant';
+      const location = row?.address || '';
+      const discoveryKey =
+        route.params?.discoveryCategoryKey || cuisineFilterKey || '';
+      const searchKw =
+        String(categoryLabelForSearch || selectedCuisine || '').trim();
+      if (!user?.token) {
+        navigation.navigate('HomeSevenScreen', {
+          returnToOrder: true,
+          ownerUserId: row.id,
+        });
+        return;
+      }
+      navigation.navigate('HomeThreeScreen', {
+        ownerId: row.id,
+        ownerName,
+        location,
+        searchKeyword: searchKw,
+        discoveryCategoryKey: discoveryKey,
+      });
+    },
+    [
+      navigation,
+      user?.token,
+      route.params?.discoveryCategoryKey,
+      cuisineFilterKey,
+      selectedCuisine,
+    ],
+  );
+
   const handleSponsoredBook = useCallback(
     item => {
       const ownerId = getSponsoredOwnerId(item);
@@ -2368,6 +2528,24 @@ const HomeOneScreen = () => {
     setHomeMoreVisible(true);
   }, []);
 
+  const openHomeMoreForFeedItem = useCallback(item => {
+    if (!item?.id) return;
+    const isShort = String(item.type || '').toLowerCase() === 'short';
+    setHomeMoreTarget({
+      contentType: isShort ? 'short' : 'video',
+      contentId: item.id,
+      videoUrl: item.videoUrl,
+      title:
+        item.title ||
+        item.channelName ||
+        (item.description || '').substring(0, 80) ||
+        'Video',
+      channelName:
+        item.channelName || item.user?.nickname || item.user?.name || '',
+    });
+    setHomeMoreVisible(true);
+  }, []);
+
   const openHomeMoreFromSelected = useCallback(() => {
     if (!selectedItem?.id) return;
     const isShort = selectedItem.type === 'short';
@@ -2657,23 +2835,18 @@ const HomeOneScreen = () => {
       })()
     : null;
 
-  // Curated feed order:
-  // sponsored -> most popular shorts -> 2 videos -> try new shorts -> 1 video
-  // -> most ordered restaurants -> 2 videos -> continue -> remaining mixed feed.
+  // Future: re-enable feed sections below Trending (Most Ordered, Continue watching, etc.)
+  // Curated feed order (top carousel / trending shown separately above):
+  // 2 videos -> try new shorts -> 1 video -> most ordered -> 2 videos -> continue -> mixed feed.
+  /*
   const buildFeedSections = () => {
     const shorts = feedShorts || [];
     const videos = feedVideos || [];
-    const popShorts = popularShorts || [];
     const freshShorts = newShorts || [];
     const topRestaurants = mostOrderedRestaurants || [];
     const sections = [];
     let sIdx = 0;
     let vIdx = 0;
-
-    const firstPopular = popShorts.slice(0, 6);
-    if (firstPopular.length > 0) {
-      sections.push({ type: 'MOST_POPULAR_SHORTS', data: firstPopular });
-    }
 
     const firstVideos = videos.slice(vIdx, vIdx + 2);
     vIdx += firstVideos.length;
@@ -2735,8 +2908,9 @@ const HomeOneScreen = () => {
     }
     return sections;
   };
+  */
 
-  const feedSections = buildFeedSections();
+  // const feedSections = buildFeedSections();
 
   // --- RENDERING HELPERS ---
 
@@ -2762,18 +2936,33 @@ const HomeOneScreen = () => {
         item?._campaignVideoDetail?.user?.id;
       if (!ownerId) return [];
       const oid = String(ownerId);
-      const rows = ownerMenuSearchCacheRef.current[oid] || [];
-      const categories = ownerCategoryCacheRef.current[oid] || [];
-      const merged = [
-        ...categories,
-        ...rows.flatMap(m => [
-          m?.categoryName,
-          ...(Array.isArray(m?.tags) ? m.tags : []),
-        ]),
-      ]
-        .map(normalizeCuisine)
-        .filter(isValidCuisineKey);
-      return Array.from(new Set(merged));
+      return buildMenuCuisineTags(
+        ownerMenuSearchCacheRef.current[oid] || [],
+        ownerCategoryCacheRef.current[oid] || [],
+      );
+    };
+    const ownerMatchesSelectedCuisine = ownerId => {
+      if (!cuisineSelected || !ownerId) return false;
+      const oid = String(ownerId);
+      return ownerMenuMatchesCuisineFilter(
+        ownerMenuSearchCacheRef.current[oid] || [],
+        ownerCategoryCacheRef.current[oid] || [],
+        cuisineKey,
+      );
+    };
+    const matchesCuisineItem = item => {
+      if (!cuisineSelected) return true;
+      const tags = getItemMenuTagsLower(item);
+      if (tags.includes(cuisineKey)) return true;
+      const discovery = resolveDiscoveryCategoryFromFilter(cuisineKey);
+      if (discovery && tags.includes(discovery.key)) return true;
+      const ownerId =
+        item?.userId ??
+        item?.user?.id ??
+        item?._campaignOwnerUser?.id ??
+        item?._campaignVideoDetail?.userId ??
+        item?._campaignVideoDetail?.user?.id;
+      return ownerMatchesSelectedCuisine(ownerId);
     };
     const isPromoInSelectedArea = item => {
       const viewerLat = Number(viewerLocationOpts?.viewerLat);
@@ -2829,15 +3018,11 @@ const HomeOneScreen = () => {
       sponsoredItem,
       sponsoredVideo,
     );
-    const matchesCuisineItem = item => {
-      if (!cuisineSelected) return true;
-      const tags = getItemMenuTagsLower(item);
-      return tags.includes(cuisineKey);
-    };
     const featuredForCuisine =
       featuredDisplayItem &&
       isPromoInSelectedArea(featuredDisplayItem) &&
-      hasRenderablePromoCard(featuredDisplayItem);
+      hasRenderablePromoCard(featuredDisplayItem) &&
+      matchesCuisineItem(featuredDisplayItem);
     const sponsoredForCuisine =
       sponsoredDisplayItem &&
       isPromoInSelectedArea(sponsoredDisplayItem) &&
@@ -3073,17 +3258,51 @@ const HomeOneScreen = () => {
           },
         }
       : null;
-    const shortsPreview = (feedShorts || [])
+    const itemViewCount = item => Number(item?.viewCount ?? 0);
+    const shortsCarouselItems = (
+      popularShorts.length > 0 ? popularShorts : feedShorts
+    )
       .filter(matchesCuisineItem)
-      .slice(0, 2);
-    const sectionsToRender = cuisineSelected
-      ? feedSections
-          .map(section => ({
-            ...section,
-            data: (section.data || []).filter(matchesCuisineItem),
-          }))
-          .filter(section => (section.data || []).length > 0)
-      : feedSections;
+      .slice(0, 16);
+    const carouselShortIds = new Set(
+      shortsCarouselItems.map(s => String(s.id)),
+    );
+    const trendingTopVideos = (feedVideos || [])
+      .filter(matchesCuisineItem)
+      .slice()
+      .sort((a, b) => itemViewCount(b) - itemViewCount(a))
+      .slice(0, 3);
+    // Future: used to hide trending videos from feed sections below when re-enabled.
+    /*
+    const trendingVideoIds = new Set(
+      trendingTopVideos.map(v => String(v.id)),
+    );
+    */
+    // Future: re-enable when restoring sections below Trending on home feed.
+    /*
+    const sectionsToRender = feedSections
+      .map(section => ({
+        ...section,
+        data: (section.data || []).filter(item => {
+          if (cuisineSelected && !matchesCuisineItem(item)) return false;
+          if (
+            section.type === 'VIDEOS' &&
+            trendingVideoIds.size > 0 &&
+            trendingVideoIds.has(String(item.id))
+          ) {
+            return false;
+          }
+          if (
+            (section.type === 'SHORTS' || section.type === 'TRY_NEW_SHORTS') &&
+            carouselShortIds.has(String(item.id))
+          ) {
+            return false;
+          }
+          return true;
+        }),
+      }))
+      .filter(section => (section.data || []).length > 0);
+    */
     const slideCuisineChips = dir => {
       const step = 5 * 70; // roughly 5 chips per click
       const maxOffset = Math.max(
@@ -3169,452 +3388,330 @@ const HomeOneScreen = () => {
               </TouchableOpacity>
             )}
           </View>
-          <Text style={styles.resultsTitle}>
-            Your search results in {areaForTitle}...
-          </Text>
+          <TouchableOpacity
+            style={styles.eatixLocationRow}
+            activeOpacity={0.85}
+            onPress={() => setLocationModalVisible(true)}
+          >
+            <Icon name="map-marker-outline" size={17} color="#FFF" />
+            <View style={styles.eatixLocationLabelWrap}>
+              <Text style={styles.eatixLocationText} numberOfLines={1}>
+                {primaryLoc}
+              </Text>
+              <Icon
+                name="chevron-down"
+                size={16}
+                color="#FFF"
+                style={styles.eatixLocationChevron}
+              />
+            </View>
+          </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.locationSection}>
-            <View style={styles.innerSearchBox}>
-              <Icon name="magnify" size={20} color="#999" />
-              <TextInput
-                placeholder="Search"
-                placeholderTextColor="#999"
-                style={styles.innerInput}
-                value={searchQuery}
-                onChangeText={text => {
-                  setSearchQuery(text);
-                  if (
-                    !text ||
-                    normalizeCuisine(text) !== normalizeCuisine(selectedCuisine)
-                  ) {
-                    setSelectedCuisine('');
-                  }
-                }}
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-              />
+          <View style={styles.eatixSearchBlock}>
+            <Text style={styles.eatixSearchHint}>
+              Watch what's popular near you, tap to get it
+            </Text>
+            <View style={styles.eatixSearchRow}>
+              <TouchableOpacity
+                style={styles.eatixSearchInputWrap}
+                activeOpacity={0.9}
+                onPress={() =>
+                  navigation.navigate('HomeSearchScreen', {
+                    nearLabel: primaryLoc || '',
+                    autoFocus: true,
+                    viewerLat: selectedLocation?.lat ?? user?.latitude,
+                    viewerLng: selectedLocation?.lng ?? user?.longitude,
+                  })
+                }
+              >
+                <Icon name="magnify" size={22} color="#9CA3AF" />
+                <Text style={styles.eatixSearchPlaceholder}>
+                  Search for restaurants or dishes...
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.eatixFilterBtn}
+                activeOpacity={0.85}
+                onPress={() =>
+                  navigation.navigate('HomeSearchScreen', {
+                    nearLabel: primaryLoc || '',
+                    viewerLat: selectedLocation?.lat ?? user?.latitude,
+                    viewerLng: selectedLocation?.lng ?? user?.longitude,
+                  })
+                }
+              >
+                <Icon name="tune-variant" size={22} color="#FFF" />
+              </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.feedPadding}>
+            <ScrollView
+              ref={cuisineScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.cuisineChipRow}
+              onLayout={e => {
+                cuisineLayoutWidthRef.current = e.nativeEvent.layout.width || 0;
+              }}
+              onContentSizeChange={(w, _h) => {
+                cuisineContentWidthRef.current = w || 0;
+              }}
+              onScroll={e => {
+                cuisineScrollXRef.current = e.nativeEvent.contentOffset.x || 0;
+              }}
+              scrollEventThrottle={16}
+              style={styles.cuisineScroll}
+            >
+              {safeChipOptions.map(cuisine => {
+                const isActive =
+                  cuisineSelected &&
+                  normalizeCuisine(cuisine.label) === cuisineKey;
+                return (
+                  <TouchableOpacity
+                    key={cuisine.key}
+                    style={styles.cuisineChip}
+                    onPress={() => {
+                      navigation.navigate('HomeSearchCategoryScreen', {
+                        categoryKey: cuisine.key,
+                        categoryLabel: cuisine.label,
+                        nearLabel: primaryLoc || '',
+                        viewerLat:
+                          selectedLocation?.lat ?? user?.latitude,
+                        viewerLng:
+                          selectedLocation?.lng ?? user?.longitude,
+                      });
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.cuisineIconCircle}>
+                      <Image
+                        source={{ uri: cuisine.imageUri }}
+                        style={styles.cuisineIconImage}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.cuisineChipText,
+                        isActive && styles.cuisineChipTextActive,
+                      ]}
+                    >
+                      {shortCuisineLabel(cuisine.label)}
+                    </Text>
+                    {isActive ? (
+                      <View style={styles.cuisineChipUnderline} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
             {cuisineSelected ? (
               <>
-                {featuredForCuisine ? (
-                  <FoodCard
-                    title={featuredCardTitle}
-                    channelName={featuredCardChannelName}
-                    location={featuredCardLocation}
-                    views={featuredCardViews}
-                    distanceLabel={featuredForCuisine.distanceLabel}
-                    rating={featuredForCuisine.rating}
-                    reviewCount={featuredForCuisine.reviewCount}
-                    isSponsored
-                    badgeLabel="Featured"
-                    img={featuredCardImg}
-                    onPress={() => handleFeedItemPress(featuredNavItem)}
-                    onSponsoredOrderPress={() =>
-                      handleSponsoredOrder(featuredNavItem)
-                    }
-                    onSponsoredBookPress={() =>
-                      handleSponsoredBook(featuredNavItem)
-                    }
-                    onSponsoredSubscribePress={() =>
-                      handleSponsoredSubscribe(featuredNavItem)
-                    }
-                    sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                    sponsoredIsSubscribed={!!sponsoredChannelMeta?.isSubscribed}
-                    hideSponsoredSubscribe={
-                      !!user?.id &&
-                      getSponsoredOwnerId(featuredForCuisine) != null &&
-                      String(user.id) ===
-                        String(getSponsoredOwnerId(featuredForCuisine))
-                    }
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitleFlat}>
+                    Restaurants with {selectedCuisine}
+                  </Text>
+                </View>
+                {categoryBrowseLoading && categoryBrowseRows.length === 0 ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#F5A623"
+                    style={{ marginVertical: 16 }}
                   />
                 ) : null}
-                <View style={styles.cuisineSliderRow}>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(-1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-left" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                  <ScrollView
-                    ref={cuisineScrollRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.cuisineChipRow}
-                    onLayout={e => {
-                      cuisineLayoutWidthRef.current =
-                        e.nativeEvent.layout.width || 0;
-                    }}
-                    onContentSizeChange={(w, _h) => {
-                      cuisineContentWidthRef.current = w || 0;
-                    }}
-                    onScroll={e => {
-                      cuisineScrollXRef.current =
-                        e.nativeEvent.contentOffset.x || 0;
-                    }}
-                    scrollEventThrottle={16}
-                  >
-                    {safeChipOptions.map(cuisine => (
-                      <TouchableOpacity
-                        key={cuisine.key}
-                        style={styles.cuisineChip}
-                        onPress={() => {
-                          navigation.navigate('HomeOneCuisineScreen', {
-                            cuisineMode: true,
-                            initialCuisine: cuisine.label,
-                            nearLabel: primaryLoc || '',
-                          });
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.cuisineIconCircle}>
-                          <Image
-                            source={categoryIcon}
-                            style={styles.cuisineIconImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-                        <Text style={styles.cuisineChipText}>
-                          {shortCuisineLabel(cuisine.label)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-right" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                  style={styles.orderNowCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate('OrderNowBrowseScreen', {
-                      initialQuery: searchDebounced || searchQuery || '',
-                      nearLabel: primaryLoc || '',
-                      featuredSnapshot:
-                        featuredForCuisine && featuredOwnerId
-                          ? {
-                              ownerUserId: String(featuredOwnerId),
-                              videoId: String(
-                                featuredVideo?.video?.id ??
-                                  featuredForCuisine?.id ??
-                                  '',
-                              ).trim(),
-                              thumbnailUrl: featuredCardImg,
-                              title: featuredCardTitle,
-                              channelName: featuredCardChannelName,
-                              location: featuredCardLocation,
-                              rating: Number(
-                                featuredForCuisine?.rating ??
-                                  featuredChannelMeta?.averageRating ??
-                                  0,
-                              ),
-                              reviewCount: Number(
-                                featuredForCuisine?.reviewCount ??
-                                  featuredChannelMeta?.reviewCount ??
-                                  0,
-                              ),
-                              totalViews: Number(
-                                featuredVideo?.video?.viewCount ??
-                                  featuredForCuisine?.viewCount ??
-                                  0,
-                              ),
-                            }
-                          : undefined,
-                    })
-                  }
-                >
-                  <View style={styles.orderNowCardLeft}>
-                    <View style={styles.orderNowIconPill}>
-                      <Icon
-                        name="silverware-fork-knife"
-                        size={18}
-                        color="#F5A623"
+                {categoryBrowseRows.length === 0 && !categoryBrowseLoading ? (
+                  <Text style={styles.cuisineEmptyHint}>
+                    No restaurants with “{selectedCuisine}” on the menu nearby
+                    yet.
+                  </Text>
+                ) : (
+                  categoryBrowseRows.map((r, idx) => {
+                    const hasVideo =
+                      r?.mediaType === 'short' || r?.mediaType === 'video';
+                    const viewsLabel =
+                      Number(r?.totalViews) > 0
+                        ? `${new Intl.NumberFormat('en-US').format(r.totalViews)} views`
+                        : Number(r?.orderCount) > 0
+                        ? `${r.orderCount} orders`
+                        : '';
+                    const dishHint =
+                      Number(r?.matchingItemCount) > 0
+                        ? `${r.matchingItemCount} ${selectedCuisine} dish${
+                            r.matchingItemCount === 1 ? '' : 'es'
+                          }`
+                        : r.address || '';
+                    return (
+                      <DiscoveryTrendingCard
+                        key={`cat-browse-${r.id}`}
+                        name={r.name}
+                        subtitle={dishHint}
+                        imageUri={r.mediaThumb}
+                        viewsLabel={viewsLabel}
+                        rating={r.rating}
+                        featured={idx === 0}
+                        showPlayIcon={hasVideo}
+                        onPress={() =>
+                          hasVideo
+                            ? openDiscoveryMedia(navigation, r, {
+                                onFallback: () =>
+                                  openCategoryRestaurant(r, selectedCuisine),
+                              })
+                            : openCategoryRestaurant(r, selectedCuisine)
+                        }
+                        onOrderPress={() =>
+                          openCategoryRestaurant(r, selectedCuisine)
+                        }
                       />
-                    </View>
-                    <View style={styles.orderNowCardTextWrap}>
-                      <Text style={styles.orderNowCardTitle}>Order Now</Text>
-                      <Text style={styles.orderNowCardSub}>
-                        feeling hungry? Order now
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-                {sponsoredForCuisine ? (
-                  <View style={{ marginTop: 12 }}>
-                    <FoodCard
-                      title={sponsoredCardTitle}
-                      channelName={sponsoredCardChannelName}
-                      location={sponsoredCardLocation}
-                      views={sponsoredCardViews}
-                      distanceLabel={sponsoredForCuisine.distanceLabel}
-                      rating={sponsoredForCuisine.rating}
-                      reviewCount={sponsoredForCuisine.reviewCount}
-                      isSponsored
-                      badgeLabel="Sponsored"
-                      img={sponsoredCardImg}
-                      onPress={() => handleFeedItemPress(sponsoredNavItem)}
-                      onSponsoredOrderPress={() =>
-                        handleSponsoredOrder(sponsoredNavItem)
-                      }
-                      onSponsoredBookPress={() =>
-                        handleSponsoredBook(sponsoredNavItem)
-                      }
-                      onSponsoredSubscribePress={() =>
-                        handleSponsoredSubscribe(sponsoredNavItem)
-                      }
-                      sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                      sponsoredIsSubscribed={
-                        !!sponsoredChannelMeta?.isSubscribed
-                      }
-                      hideSponsoredSubscribe={
-                        !!user?.id &&
-                        getSponsoredOwnerId(sponsoredForCuisine) != null &&
-                        String(user.id) ===
-                          String(getSponsoredOwnerId(sponsoredForCuisine))
-                      }
-                    />
-                  </View>
-                ) : null}
-                {shortsPreview.length > 0 ? (
-                  <View style={{ marginTop: 10 }}>
-                    <View style={styles.shortsGrid}>
-                      {shortsPreview.map((item, index) => (
-                        <View
-                          key={`featured-short-${item.id}-${index}`}
-                          style={styles.shortsGridItem}
-                        >
-                          <ShortCard
-                            title={item.title}
-                            img={item.img}
-                            views={item.views}
-                            onPress={() => handleFeedItemPress(item)}
-                            onMorePress={() => openHomeMoreForShort(item)}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
+                    );
+                  })
+                )}
               </>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={styles.orderNowCard}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    navigation.navigate('OrderNowBrowseScreen', {
-                      initialQuery: searchDebounced || searchQuery || '',
-                      nearLabel: primaryLoc || '',
-                      featuredSnapshot:
-                        featuredForCuisine && featuredOwnerId
-                          ? {
-                              ownerUserId: String(featuredOwnerId),
-                              videoId: String(
-                                featuredVideo?.video?.id ??
-                                  featuredForCuisine?.id ??
-                                  '',
-                              ).trim(),
-                              thumbnailUrl: featuredCardImg,
-                              title: featuredCardTitle,
-                              channelName: featuredCardChannelName,
-                              location: featuredCardLocation,
-                              rating: Number(
-                                featuredForCuisine?.rating ??
-                                  featuredChannelMeta?.averageRating ??
-                                  0,
-                              ),
-                              reviewCount: Number(
-                                featuredForCuisine?.reviewCount ??
-                                  featuredChannelMeta?.reviewCount ??
-                                  0,
-                              ),
-                              totalViews: Number(
-                                featuredVideo?.video?.viewCount ??
-                                  featuredForCuisine?.viewCount ??
-                                  0,
-                              ),
-                            }
-                          : undefined,
-                    })
-                  }
-                >
-                  <View style={styles.orderNowCardLeft}>
-                    <View style={styles.orderNowIconPill}>
-                      <Icon
-                        name="silverware-fork-knife"
-                        size={18}
-                        color="#F5A623"
-                      />
-                    </View>
-                    <View style={styles.orderNowCardTextWrap}>
-                      <Text style={styles.orderNowCardTitle}>Order Now</Text>
-                      <Text style={styles.orderNowCardSub}>
-                        feeling hungry? Order now
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.cuisineSliderRow}>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(-1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-left" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                  <ScrollView
-                    ref={cuisineScrollRef}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.cuisineChipRow}
-                    onLayout={e => {
-                      cuisineLayoutWidthRef.current =
-                        e.nativeEvent.layout.width || 0;
-                    }}
-                    onContentSizeChange={(w, _h) => {
-                      cuisineContentWidthRef.current = w || 0;
-                    }}
-                    onScroll={e => {
-                      cuisineScrollXRef.current =
-                        e.nativeEvent.contentOffset.x || 0;
-                    }}
-                    scrollEventThrottle={16}
-                  >
-                    {safeChipOptions.map(cuisine => (
-                      <TouchableOpacity
-                        key={cuisine.key}
-                        style={styles.cuisineChip}
-                        onPress={() => {
-                          navigation.navigate('HomeOneCuisineScreen', {
-                            cuisineMode: true,
-                            initialCuisine: cuisine.label,
-                            nearLabel: primaryLoc || '',
-                          });
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <View style={styles.cuisineIconCircle}>
-                          <Image
-                            source={categoryIcon}
-                            style={styles.cuisineIconImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-                        <Text style={styles.cuisineChipText}>
-                          {shortCuisineLabel(cuisine.label)}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <TouchableOpacity
-                    style={styles.cuisineArrowBtn}
-                    onPress={() => slideCuisineChips(1)}
-                    activeOpacity={0.85}
-                  >
-                    <Icon name="chevron-right" size={20} color="#D88900" />
-                  </TouchableOpacity>
-                </View>
-                {featuredForCuisine ? (
-                  <FoodCard
-                    title={featuredCardTitle}
-                    channelName={featuredCardChannelName}
-                    location={featuredCardLocation}
-                    views={featuredCardViews}
-                    distanceLabel={featuredForCuisine.distanceLabel}
-                    rating={featuredForCuisine.rating}
-                    reviewCount={featuredForCuisine.reviewCount}
-                    isSponsored
-                    badgeLabel="Featured"
-                    img={featuredCardImg}
-                    onPress={() => handleFeedItemPress(featuredNavItem)}
-                    onSponsoredOrderPress={() =>
-                      handleSponsoredOrder(featuredNavItem)
-                    }
-                    onSponsoredBookPress={() =>
-                      handleSponsoredBook(featuredNavItem)
-                    }
-                    onSponsoredSubscribePress={() =>
-                      handleSponsoredSubscribe(featuredNavItem)
-                    }
-                    sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                    sponsoredIsSubscribed={!!sponsoredChannelMeta?.isSubscribed}
-                    hideSponsoredSubscribe={
-                      !!user?.id &&
-                      getSponsoredOwnerId(featuredForCuisine) != null &&
-                      String(user.id) ===
-                        String(getSponsoredOwnerId(featuredForCuisine))
-                    }
-                  />
-                ) : null}
-                {shortsPreview.length > 0 ? (
-                  <View style={{ marginTop: 10 }}>
-                    <View style={styles.shortsGrid}>
-                      {shortsPreview.map((item, index) => (
-                        <View
-                          key={`featured-short-${item.id}-${index}`}
-                          style={styles.shortsGridItem}
-                        >
-                          <ShortCard
-                            title={item.title}
-                            img={item.img}
-                            views={item.views}
-                            onPress={() => handleFeedItemPress(item)}
-                            onMorePress={() => openHomeMoreForShort(item)}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
-                {sponsoredForCuisine ? (
-                  <View style={{ marginTop: 12 }}>
-                    <FoodCard
-                      title={sponsoredCardTitle}
-                      channelName={sponsoredCardChannelName}
-                      location={sponsoredCardLocation}
-                      views={sponsoredCardViews}
-                      distanceLabel={sponsoredForCuisine.distanceLabel}
-                      rating={sponsoredForCuisine.rating}
-                      reviewCount={sponsoredForCuisine.reviewCount}
-                      isSponsored
-                      badgeLabel="Sponsored"
-                      img={sponsoredCardImg}
-                      onPress={() => handleFeedItemPress(sponsoredNavItem)}
-                      onSponsoredOrderPress={() =>
-                        handleSponsoredOrder(sponsoredNavItem)
-                      }
-                      onSponsoredBookPress={() =>
-                        handleSponsoredBook(sponsoredNavItem)
-                      }
-                      onSponsoredSubscribePress={() =>
-                        handleSponsoredSubscribe(sponsoredNavItem)
-                      }
-                      sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                      sponsoredIsSubscribed={
-                        !!sponsoredChannelMeta?.isSubscribed
-                      }
-                      hideSponsoredSubscribe={
-                        !!user?.id &&
-                        getSponsoredOwnerId(sponsoredForCuisine) != null &&
-                        String(user.id) ===
-                          String(getSponsoredOwnerId(sponsoredForCuisine))
-                      }
-                    />
-                  </View>
-                ) : null}
-              </>
-            )}
+            ) : null}
 
+            {featuredForCuisine ? (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitleFlat}>Featured Near You</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      featuredNavItem && handleFeedItemPress(featuredNavItem)
+                    }
+                  >
+                    <Text style={styles.viewMoreText}>View All</Text>
+                  </TouchableOpacity>
+                </View>
+                <FeaturedHeroCard
+                  channelName={featuredCardChannelName}
+                  metaLine={(() => {
+                    const cuisineLabel = cuisineSelected
+                      ? shortCuisineLabel(selectedCuisine)
+                      : shortCuisineLabel(
+                          getItemMenuTagsLower(featuredForCuisine)[0] || 'Food',
+                        );
+                    const vc = Number(
+                      featuredForCuisine?.viewCount ??
+                        featuredVideo?.video?.viewCount ??
+                        0,
+                    );
+                    const r = Number(featuredForCuisine?.rating ?? 0);
+                    const rc = Number(featuredForCuisine?.reviewCount ?? 0);
+                    return `${cuisineLabel} - ${formatCount(
+                      vc,
+                    )} - ★ ${r.toFixed(1)} (${rc})`;
+                  })()}
+                  img={featuredCardImg}
+                  onPress={() => handleFeedItemPress(featuredNavItem)}
+                  onOrderPress={() => handleSponsoredOrder(featuredNavItem)}
+                  onMorePress={() => openHomeMoreForFeedItem(featuredNavItem)}
+                />
+              </>
+            ) : null}
+
+            {shortsCarouselItems.length > 0 ? (
+              <>
+                <Text style={styles.sectionTitleFlat}>Shorts</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  decelerationRate="fast"
+                  snapToInterval={
+                    SHORT_CAROUSEL_CARD_WIDTH + SHORT_CAROUSEL_GAP
+                  }
+                  snapToAlignment="start"
+                  contentContainerStyle={styles.shortsCarouselRow}
+                >
+                  {shortsCarouselItems.map((item, index) => (
+                    <View
+                      key={`home-short-carousel-${item.id}-${index}`}
+                      style={[
+                        styles.shortsCarouselItem,
+                        index < shortsCarouselItems.length - 1 && {
+                          marginRight: SHORT_CAROUSEL_GAP,
+                        },
+                      ]}
+                    >
+                      <ShortCarouselCard
+                        title={item.channelName || item.title}
+                        img={item.img}
+                        views={item.views}
+                        onPress={() => handleFeedItemPress(item)}
+                        onMorePress={() => openHomeMoreForShort(item)}
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            {sponsoredForCuisine ? (
+              <PromoFridayBanner
+                onExplorePress={() => {
+                  if (sponsoredNavItem) handleFeedItemPress(sponsoredNavItem);
+                }}
+                onPlayPress={() => {
+                  if (sponsoredNavItem) handleFeedItemPress(sponsoredNavItem);
+                }}
+              />
+            ) : null}
+
+            {trendingTopVideos.length > 0 ? (
+              <>
+                <View style={styles.trendingSectionHeader}>
+                  <View style={styles.sectionHeaderTextCol}>
+                    <Text style={styles.trendingSectionTitle}>
+                      Trending Near You
+                    </Text>
+                    <Text style={styles.sectionSubtitle}>
+                      Ranked by real views in your area
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.trendingViewAllBtn}
+                    onPress={() =>
+                      navigation.navigate('HomeShortsExploreScreen', {
+                        title: 'Trending Near You',
+                        sort: 'trending',
+                      })
+                    }
+                  >
+                    <Text style={styles.viewMoreText}>View All</Text>
+                  </TouchableOpacity>
+                </View>
+                {trendingTopVideos.map(video => {
+                  const trendingOwnerId = getSponsoredOwnerId(video);
+                  return (
+                    <HomeFeedVideoCard
+                      key={`trending-${video.id}`}
+                      title={video.title}
+                      channelName={video.channelName}
+                      views={video.views}
+                      distanceLabel={video.distanceLabel}
+                      rating={video.rating}
+                      img={video.img}
+                      onPress={() => handleFeedItemPress(video)}
+                      onOrderPress={() => handleSponsoredOrder(video)}
+                      onBookPress={() => handleSponsoredBook(video)}
+                      onSubscribePress={() =>
+                        handleSponsoredSubscribe(video)
+                      }
+                      subscribeBusy={sponsoredSubscribeToggling}
+                      isSubscribed={!!sponsoredChannelMeta?.isSubscribed}
+                      hideSubscribe={
+                        !!user?.id &&
+                        trendingOwnerId != null &&
+                        String(user.id) === String(trendingOwnerId)
+                      }
+                    />
+                  );
+                })}
+              </>
+            ) : null}
+
+            {/* Future: re-enable home feed sections below Trending (Most Ordered, Continue watching, Videos, Shorts grid, etc.)
             {feedLoading ? (
               <View style={styles.feedLoading}>
                 <ActivityIndicator size="large" color="#F5A623" />
@@ -3670,14 +3767,16 @@ const HomeOneScreen = () => {
                       </View>
                     )}
                     {section.type === 'VIDEOS' && section.data.length > 0 && (
-                      <Text style={styles.sectionTitle}>Videos</Text>
+                      <Text style={styles.sectionTitleFlat}>Videos</Text>
                     )}
                     {section.type === 'CONTINUE' && section.data.length > 0 && (
-                      <Text style={styles.sectionTitle}>Continue watching</Text>
+                      <Text style={styles.sectionTitleFlat}>
+                        Continue watching
+                      </Text>
                     )}
                     {section.type === 'SPONSORED' &&
                       section.data.length > 0 && (
-                        <Text style={styles.sectionTitle}>
+                        <Text style={styles.sectionTitleFlat}>
                           Sponsored near you
                         </Text>
                       )}
@@ -3762,32 +3861,23 @@ const HomeOneScreen = () => {
                           sponsoredOwnerId != null &&
                           String(user.id) === String(sponsoredOwnerId);
                         return (
-                          <FoodCard
+                          <HomeFeedVideoCard
                             key={`${item.id}-${item.type}-${sectionIdx}-${index}`}
                             title={item.title}
                             channelName={item.channelName}
-                            location={item.location}
                             views={item.views}
                             distanceLabel={item.distanceLabel}
                             rating={item.rating}
-                            reviewCount={item.reviewCount}
-                            isSponsored={section.type === 'SPONSORED'}
                             img={item.img}
                             onPress={() => handleFeedItemPress(item)}
-                            onSponsoredOrderPress={() =>
-                              handleSponsoredOrder(item)
-                            }
-                            onSponsoredBookPress={() =>
-                              handleSponsoredBook(item)
-                            }
-                            onSponsoredSubscribePress={() =>
+                            onOrderPress={() => handleSponsoredOrder(item)}
+                            onBookPress={() => handleSponsoredBook(item)}
+                            onSubscribePress={() =>
                               handleSponsoredSubscribe(item)
                             }
-                            sponsoredSubscribeBusy={sponsoredSubscribeToggling}
-                            sponsoredIsSubscribed={
-                              !!sponsoredChannelMeta?.isSubscribed
-                            }
-                            hideSponsoredSubscribe={hideSponsoredSubscribe}
+                            subscribeBusy={sponsoredSubscribeToggling}
+                            isSubscribed={!!sponsoredChannelMeta?.isSubscribed}
+                            hideSubscribe={hideSponsoredSubscribe}
                           />
                         );
                       })
@@ -3796,6 +3886,7 @@ const HomeOneScreen = () => {
                 ))}
               </>
             )}
+            */}
           </View>
         </ScrollView>
       </View>
@@ -5067,9 +5158,282 @@ const HomeOneScreen = () => {
 
 // --- SUB-COMPONENT ---
 
+const FeaturedHeroCard = ({
+  channelName,
+  metaLine,
+  img,
+  onPress,
+  onOrderPress,
+  onMorePress,
+}) => (
+  <TouchableOpacity
+    style={styles.featuredHeroCard}
+    onPress={onPress}
+    activeOpacity={0.92}
+  >
+    <Image source={{ uri: img }} style={styles.featuredHeroImage} />
+    <LinearGradient
+      colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.72)']}
+      style={styles.featuredHeroImageGrad}
+    />
+    <View style={styles.featuredHeroBadge}>
+      <Text style={styles.featuredHeroBadgeText}>Featured</Text>
+    </View>
+    {onMorePress ? (
+      <TouchableOpacity
+        style={styles.featuredHeroMore}
+        onPress={e => {
+          e?.stopPropagation?.();
+          onMorePress();
+        }}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Icon name="dots-vertical" size={22} color="#FFF" />
+      </TouchableOpacity>
+    ) : null}
+    <View style={styles.featuredHeroPlayWrap} pointerEvents="none">
+      <Icon
+        name="play-circle-outline"
+        size={54}
+        color="rgba(255,255,255,0.88)"
+      />
+    </View>
+    <View style={styles.featuredHeroFooter}>
+      <View style={styles.featuredHeroFooterText}>
+        <Text style={styles.featuredHeroName} numberOfLines={1}>
+          {channelName}
+        </Text>
+        <Text style={styles.featuredHeroMeta} numberOfLines={1}>
+          {metaLine}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={styles.featuredHeroOrderBtn}
+        activeOpacity={0.88}
+        onPress={e => {
+          e?.stopPropagation?.();
+          onOrderPress?.();
+        }}
+      >
+        <Text style={styles.featuredHeroOrderText}>Order Now</Text>
+        <Icon name="arrow-right" size={16} color="#FFF" />
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+);
+
+const ShortCarouselCard = ({ title, img, views, onPress, onMorePress }) => (
+  <View
+    style={[
+      styles.shortCarouselCard,
+      {
+        width: SHORT_CAROUSEL_CARD_WIDTH,
+        height: SHORT_CAROUSEL_CARD_HEIGHT,
+      },
+    ]}
+  >
+    <TouchableOpacity
+      style={styles.shortCarouselPress}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <Image source={{ uri: img }} style={styles.shortCarouselImage} />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.75)']}
+        style={styles.shortCarouselGrad}
+      />
+      <Text style={styles.shortCarouselTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.shortCarouselViews} numberOfLines={1}>
+        {views}
+      </Text>
+    </TouchableOpacity>
+    {onMorePress ? (
+      <TouchableOpacity
+        style={styles.shortCarouselDots}
+        onPress={onMorePress}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
+        <Icon name="dots-vertical" size={18} color="#FFF" />
+      </TouchableOpacity>
+    ) : null}
+  </View>
+);
+
+/** Video / sponsored feed card (Trending, Videos, Continue, etc.) */
+const HomeFeedVideoCard = ({
+  channelName,
+  title,
+  img,
+  views,
+  distanceLabel,
+  rating,
+  onPress,
+  onOrderPress,
+  onBookPress,
+  onSubscribePress,
+  subscribeBusy,
+  isSubscribed,
+  hideSubscribe,
+}) => {
+  const displayName = String(channelName || title || 'Restaurant').trim();
+  const safeRating = Number.isFinite(Number(rating))
+    ? Number(rating).toFixed(1)
+    : '0.0';
+
+  return (
+    <View style={styles.trendingCard}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.92}
+        style={styles.trendingCardMediaWrap}
+      >
+        <Image source={{ uri: img }} style={styles.trendingCardImage} />
+        <View style={styles.trendingCardPlayWrap} pointerEvents="none">
+          <Icon
+            name="play-circle-outline"
+            size={52}
+            color="rgba(255,255,255,0.9)"
+          />
+        </View>
+      </TouchableOpacity>
+      <View style={styles.trendingCardBody}>
+        <View style={styles.trendingRow1}>
+          <View style={styles.trendingTitleBlock}>
+            <Text style={styles.trendingName} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <View style={styles.trendingRatingRow}>
+              <Icon name="star" size={14} color="#F5A623" />
+              <Text style={styles.trendingRatingText}>{safeRating}</Text>
+            </View>
+          </View>
+          <View style={styles.trendingBtnGroup}>
+            <TouchableOpacity
+              style={styles.trendingOrderBtn}
+              activeOpacity={0.88}
+              onPress={onOrderPress}
+              disabled={!onOrderPress}
+            >
+              <Text style={styles.trendingOrderText}>Order Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.trendingBookBtn}
+              activeOpacity={0.88}
+              onPress={onBookPress}
+              disabled={!onBookPress}
+            >
+              <Text style={styles.trendingBookText}>Book Now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.trendingRow2}>
+          <View style={styles.trendingMetaRow}>
+            <Icon name="map-marker" size={14} color="#F5A623" />
+            <Text style={styles.trendingMetaText}>{distanceLabel || '—'}</Text>
+            <Icon
+              name="eye-outline"
+              size={14}
+              color="#9CA3AF"
+              style={styles.trendingMetaEye}
+            />
+            <Text style={styles.trendingMetaText}>{views || '0 views'}</Text>
+          </View>
+          {!hideSubscribe ? (
+            <TouchableOpacity
+              style={[
+                styles.trendingSubscribeBtn,
+                isSubscribed && styles.trendingSubscribeBtnActive,
+              ]}
+              activeOpacity={0.88}
+              onPress={onSubscribePress}
+              disabled={!onSubscribePress || !!subscribeBusy}
+            >
+              {subscribeBusy ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text
+                  style={[
+                    styles.trendingSubscribeText,
+                    isSubscribed && styles.trendingSubscribeTextActive,
+                  ]}
+                >
+                  {isSubscribed ? 'Subscribed' : 'Subscribe'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <Text style={styles.trendingTagline}>
+          Like what you see? Get it now
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const PromoFridayBanner = ({ onExplorePress, onPlayPress }) => (
+  <View style={styles.promoFridayWrap}>
+    <Image
+      source={spicePromoBg}
+      style={styles.promoFridayBgImage}
+      resizeMode="cover"
+    />
+    <LinearGradient
+      colors={[
+        '#F6B041',
+        '#F69E23',
+        'rgba(246, 158, 35, 0.82)',
+        'rgba(246, 158, 35, 0.35)',
+        'rgba(246, 158, 35, 0)',
+      ]}
+      locations={[0, 0.32, 0.52, 0.68, 1]}
+      start={{ x: 0, y: 0.5 }}
+      end={{ x: 1, y: 0.5 }}
+      style={styles.promoFridayGradientOverlay}
+    />
+    <View style={styles.promoFridayForeground}>
+      <View style={styles.promoFridayContent}>
+        <View style={styles.promoFridayTopRow}>
+          <Image
+            source={logo}
+            style={styles.promoFridayLogo}
+            resizeMode="contain"
+          />
+          <View style={styles.promoFridayExclusivePill}>
+            <Text style={styles.promoFridayExclusiveText}>Exclusive</Text>
+          </View>
+        </View>
+        <Text style={styles.promoFridayTitle}>Spice up your Friday</Text>
+        <Text style={styles.promoFridaySub}>
+          Enjoy Exclusive offers at top spots near you
+        </Text>
+        <TouchableOpacity
+          style={styles.promoFridayCta}
+          activeOpacity={0.75}
+          onPress={onExplorePress}
+        >
+          <Text style={styles.promoFridayCtaText}>Explore Offer</Text>
+          <Icon name="arrow-right" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.promoFridayPlayCol}>
+        <TouchableOpacity
+          style={styles.promoFridayPlay}
+          onPress={onPlayPress}
+          activeOpacity={0.85}
+        >
+          <Icon name="play" size={26} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+);
+
 // Two-per-row short card (HomeVersion-style): image, play overlay, bottom overlay with title + views
-const ShortCard = ({ title, img, views, onPress, onMorePress }) => (
-  <View style={styles.shortCard}>
+const ShortCard = ({ title, img, views, onPress, onMorePress, carousel }) => (
+  <View style={[styles.shortCard, carousel && styles.shortCardCarousel]}>
     <TouchableOpacity
       style={styles.shortCardPress}
       onPress={onPress}
@@ -5097,138 +5461,6 @@ const ShortCard = ({ title, img, views, onPress, onMorePress }) => (
     ) : null}
   </View>
 );
-
-const FoodCard = ({
-  title,
-  location,
-  isSponsored,
-  badgeLabel,
-  img,
-  onPress,
-  views,
-  distanceLabel,
-  channelName,
-  rating,
-  reviewCount,
-  onSponsoredOrderPress,
-  onSponsoredBookPress,
-  onSponsoredSubscribePress,
-  sponsoredSubscribeBusy,
-  sponsoredIsSubscribed,
-  hideSponsoredSubscribe,
-  compact,
-}) => {
-  const displayTitle = String(
-    isSponsored ? channelName || title || '' : title || '',
-  ).trim();
-  const safeTitle = displayTitle || 'Restaurant';
-  const imageSection = (
-    <View style={styles.cardImageContainer}>
-      <Image source={{ uri: img }} style={styles.sponsoredCardImage} />
-      <View style={styles.playIconOverlay}>
-        <Icon name="play-circle" size={50} color="rgba(255,255,255,0.8)" />
-      </View>
-      {badgeLabel ? (
-        <View style={styles.sponsoredTag}>
-          <Text style={styles.sponsoredTagText}>{badgeLabel}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-
-  const infoSection = (
-    <View
-      style={[
-        styles.cardInfo,
-        styles.cardInfoSponsored,
-        compact && styles.cardInfoCompact,
-      ]}
-    >
-      <View style={styles.cardInfoMain}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {safeTitle.length > 30
-              ? `${safeTitle.substring(0, 30)}...`
-              : safeTitle}
-          </Text>
-          <View style={styles.cardInlineRating}>
-            <Icon name="star" size={13} color="#F5A623" />
-            <Text style={styles.sponsoredMetaText}>
-              {Number.isFinite(Number(rating))
-                ? Number(rating).toFixed(1)
-                : '0.0'}{' '}
-              ({Number.isFinite(Number(reviewCount)) ? Number(reviewCount) : 0})
-            </Text>
-          </View>
-        </View>
-        <View style={styles.sponsoredMetaRow}>
-          <Text style={styles.sponsoredMetaText}>{distanceLabel || '—'}</Text>
-          <View style={styles.sponsoredMetaItem}>
-            <Icon name="eye-outline" size={13} color="#777" />
-            <Text style={styles.sponsoredMetaText}>{views || '0 views'}</Text>
-          </View>
-        </View>
-        <Text style={styles.cardPromoLine}>Like what you see? Get it now</Text>
-      </View>
-      {compact ? null : (
-        <View style={styles.sponsoredActions}>
-          <View style={styles.sponsoredTopActions}>
-            <TouchableOpacity
-              style={styles.sponsoredOrderBtn}
-              activeOpacity={0.85}
-              onPress={onSponsoredOrderPress}
-              disabled={!onSponsoredOrderPress}
-            >
-              <Text style={styles.sponsoredOrderText}>Order Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sponsoredBookBtn}
-              activeOpacity={0.85}
-              onPress={onSponsoredBookPress}
-              disabled={!onSponsoredBookPress}
-            >
-              <Text style={styles.sponsoredBookText}>Book Now</Text>
-            </TouchableOpacity>
-          </View>
-          {!hideSponsoredSubscribe ? (
-            <TouchableOpacity
-              style={[
-                styles.sponsoredSubscribeBtn,
-                sponsoredIsSubscribed && styles.sponsoredSubscribeBtnActive,
-              ]}
-              activeOpacity={0.85}
-              onPress={onSponsoredSubscribePress}
-              disabled={!onSponsoredSubscribePress || !!sponsoredSubscribeBusy}
-            >
-              {sponsoredSubscribeBusy ? (
-                <ActivityIndicator size="small" color="#555" />
-              ) : (
-                <Text
-                  style={[
-                    styles.sponsoredSubscribeText,
-                    sponsoredIsSubscribed &&
-                      styles.sponsoredSubscribeTextActive,
-                  ]}
-                >
-                  {sponsoredIsSubscribed ? 'Subscribed' : 'Subscribe'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      )}
-    </View>
-  );
-
-  return (
-    <View style={styles.sponsoredCard}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.9}>
-        {imageSection}
-      </TouchableOpacity>
-      {infoSection}
-    </View>
-  );
-};
 
 const styles = StyleSheet.create({
   // Landing/Feed Styles
@@ -5330,6 +5562,83 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  eatixLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    maxWidth: '78%',
+  },
+  eatixLocationLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+    marginLeft: 5,
+  },
+  eatixLocationText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  eatixLocationChevron: {
+    marginLeft: 2,
+    marginTop: 1,
+  },
+  eatixSearchBlock: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: FEED_HORIZONTAL_PAD,
+    paddingTop: 14,
+    paddingBottom: 16,
+  },
+  eatixSearchHint: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  eatixSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  eatixSearchInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    height: 48,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  eatixSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#111827',
+    paddingVertical: 0,
+  },
+  eatixSearchPlaceholder: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  eatixFilterBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#2D2D2D',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bannerWrapper: { width: '100%', height: 210, position: 'relative' },
   bannerImage: { width: '100%', height: '100%' },
   featuredPlayOverlay: {
@@ -5401,7 +5710,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   innerInput: { flex: 1, marginLeft: 10, fontSize: 15 },
-  feedPadding: { padding: 15, marginTop: 20 },
+  feedPadding: { padding: FEED_HORIZONTAL_PAD, paddingTop: 8 },
   feedHint: {
     textAlign: 'center',
     fontSize: 14,
@@ -5449,10 +5758,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FFF3D7',
   },
+  cuisineScroll: {
+    marginBottom: 6,
+  },
   cuisineChipRow: {
     paddingBottom: 10,
-    paddingHorizontal: 1,
-    gap: 8,
+    paddingRight: 8,
+    gap: 10,
   },
   cuisineSliderRow: {
     flexDirection: 'row',
@@ -5486,12 +5798,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF2D8',
     borderWidth: 1,
     borderColor: '#EBCB8A',
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cuisineIconImage: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   cuisineChipText: {
     color: '#4E4E4E',
@@ -5500,12 +5814,197 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
+  cuisineChipTextActive: {
+    color: '#F5A623',
+    fontWeight: '700',
+  },
+  cuisineChipUnderline: {
+    marginTop: 4,
+    width: 28,
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: '#F5A623',
+  },
+  cuisineEmptyWrap: {
+    marginTop: 24,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+  },
+  cuisineEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111',
+    textAlign: 'center',
+  },
+  cuisineEmptyHint: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  cuisineEmptyBtn: {
+    marginTop: 16,
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  cuisineEmptyBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 12,
     marginTop: 8,
+  },
+  sectionTitleFlat: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 10,
+    marginTop: 14,
+  },
+  featuredHeroCard: {
+    width: '100%',
+    height: FEATURED_HERO_HEIGHT,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#222',
+    marginBottom: 4,
+  },
+  featuredHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  featuredHeroImageGrad: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  featuredHeroBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(33,33,33,0.82)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  featuredHeroBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  featuredHeroMore: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    padding: 4,
+    zIndex: 5,
+  },
+  featuredHeroPlayWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  featuredHeroFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 28,
+  },
+  featuredHeroFooterText: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  featuredHeroName: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  featuredHeroMeta: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  featuredHeroOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    minHeight: 36,
+    borderRadius: 6,
+    gap: 4,
+    overflow: 'hidden',
+  },
+  featuredHeroOrderText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  shortCarouselCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a1a',
+    position: 'relative',
+  },
+  shortCarouselPress: {
+    width: '100%',
+    height: '100%',
+  },
+  shortCarouselImage: {
+    width: '100%',
+    height: '100%',
+  },
+  shortCarouselGrad: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '42%',
+  },
+  shortCarouselTitle: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 22,
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  shortCarouselViews: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 8,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  shortCarouselDots: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 4,
+    padding: 2,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -5532,6 +6031,279 @@ const styles = StyleSheet.create({
   tryNewCard: {
     width: width * 0.46,
     marginRight: 10,
+  },
+  shortsCarouselRow: {
+    paddingBottom: 12,
+    paddingRight: FEED_HORIZONTAL_PAD,
+  },
+  shortsCarouselItem: {},
+  sectionHeaderTextCol: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+    marginBottom: 0,
+    lineHeight: 16,
+  },
+  trendingSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  trendingSectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  trendingViewAllBtn: {
+    paddingTop: 2,
+  },
+  trendingCard: {
+    backgroundColor: '#FEF6E7',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F0E4CC',
+  },
+  trendingCardMediaWrap: {
+    width: '100%',
+    height: TRENDING_CARD_IMAGE_HEIGHT,
+    backgroundColor: '#E5E7EB',
+  },
+  trendingCardImage: {
+    width: '100%',
+    height: '100%',
+  },
+  trendingCardPlayWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  trendingCardBody: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+    backgroundColor: '#FEF6E7',
+  },
+  trendingRow1: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  trendingTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    paddingRight: 8,
+  },
+  trendingName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginRight: 8,
+    flexShrink: 1,
+  },
+  trendingRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trendingRatingText: {
+    marginLeft: 3,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  trendingBtnGroup: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  trendingOrderBtn: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 30,
+    justifyContent: 'center',
+  },
+  trendingOrderText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  trendingBookBtn: {
+    backgroundColor: '#FFF7EA',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 30,
+    justifyContent: 'center',
+    borderLeftWidth: 1,
+    borderLeftColor: '#F5A623',
+  },
+  trendingBookText: {
+    color: '#F5A623',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  trendingRow2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  trendingMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
+    paddingRight: 8,
+  },
+  trendingMetaText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginLeft: 3,
+    marginRight: 10,
+  },
+  trendingMetaEye: {
+    marginLeft: 2,
+  },
+  trendingSubscribeBtn: {
+    backgroundColor: '#FFF8F0',
+    borderWidth: 1,
+    borderColor: '#E8DFD0',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    minWidth: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  trendingSubscribeBtnActive: {
+    backgroundColor: '#EDE8E0',
+    borderColor: '#D5CEC4',
+  },
+  trendingSubscribeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  trendingSubscribeTextActive: {
+    color: '#6B7280',
+  },
+  trendingTagline: {
+    marginTop: 8,
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  cuisineChipActive: {},
+  promoFridayWrap: {
+    marginTop: 4,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    height: 136,
+    backgroundColor: '#F69E23',
+  },
+  promoFridayBgImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  promoFridayGradientOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  promoFridayForeground: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  promoFridayContent: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingLeft: 14,
+    paddingRight: 4,
+    justifyContent: 'center',
+  },
+  promoFridayPlayCol: {
+    width: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingRight: 10,
+  },
+  promoFridayTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  promoFridayLogo: {
+    width: 52,
+    height: 22,
+  },
+  promoFridayExclusivePill: {
+    marginLeft: 8,
+    backgroundColor: 'rgba(246, 176, 65, 0)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  promoFridayExclusiveText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  promoFridayTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 24,
+  },
+  promoFridaySub: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 11,
+    marginTop: 4,
+    lineHeight: 15,
+    maxWidth: '95%',
+  },
+  promoFridayCta: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+    gap: 4,
+  },
+  promoFridayCtaText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.15,
+  },
+  promoFridayPlay: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.32)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shortCard: {
     height: 280,

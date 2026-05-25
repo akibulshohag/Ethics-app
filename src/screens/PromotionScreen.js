@@ -26,9 +26,12 @@ import {
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Video from 'react-native-video';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useSelector, useDispatch } from 'react-redux';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -37,8 +40,9 @@ import {
   tiktokOAuthRedirectUri,
   youtubeOAuthRedirectUri,
 } from '../../config';
-import logo from '../assets/short-logo.png';
-import logoIX from '../assets/short-logo-ix.png';
+import LinearGradient from 'react-native-linear-gradient';
+import eatixLogo from '../assets/logo.png';
+import UserProfileCard from '../components/UserProfileCard';
 
 import {
   getChannelProfile,
@@ -87,6 +91,8 @@ import {
   recordPostShare,
 } from '../services/postService';
 import { getNotificationsByUserId } from '../services/notificationService';
+import { getConversations } from '../services/chatService';
+import { recordRecentChatPartner } from '../services/chatRecentStorage';
 import BusinessVideoCard from '../components/BusinessVideoCard';
 import BusinessVideoTabCard from '../components/BusinessVideoTabCard';
 import CommentsModal from '../components/CommentsModal';
@@ -325,7 +331,55 @@ const SOCIAL_TYPES = [
   { value: 'website', label: 'Website', icon: 'web' },
 ];
 
+const PROMO_SOCIAL_ICON_MAP = {
+  instagram: 'instagram',
+  facebook: 'facebook',
+  x: 'twitter',
+  twitter: 'twitter',
+  youtube: 'youtube',
+  google_email: 'google',
+  google: 'google',
+  website: 'web',
+  tiktok: 'music-note',
+  tripadvisor: 'airplane',
+};
+
+/** Fixed social bar order (Figma restaurant profile) */
+const PROMO_SOCIAL_BAR = [
+  { type: 'instagram', icon: 'instagram' },
+  { type: 'facebook', icon: 'facebook' },
+  { type: 'x', icon: 'twitter' },
+  { type: 'tiktok', icon: 'music-note' },
+  { type: 'tripadvisor', icon: 'airplane' },
+  { type: 'google_email', icon: 'google' },
+  { type: 'website', icon: 'web' },
+];
+
+const renderPromoStarRow = rating => {
+  const r = Math.min(5, Math.max(0, Number(rating) || 0));
+  const filled = Math.round(r);
+  return (
+    <View style={promoStarStyles.row}>
+      {[1, 2, 3, 4, 5].map(i => (
+        <Icon
+          key={`promo-star-${i}`}
+          name={i <= filled ? 'star' : 'star-outline'}
+          size={11}
+          color="#F5A623"
+          style={promoStarStyles.star}
+        />
+      ))}
+    </View>
+  );
+};
+
+const promoStarStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
+  star: { marginHorizontal: 0.5 },
+});
+
 const PromotionScreen = ({ onBack }) => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
@@ -362,6 +416,7 @@ const PromotionScreen = ({ onBack }) => {
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [inboxConversationCount, setInboxConversationCount] = useState(0);
 
   const [activePromoTab, setActivePromoTab] = useState('Gallery');
   const [postsTab, setPostsTab] = useState([]);
@@ -459,7 +514,6 @@ const PromotionScreen = ({ onBack }) => {
     profile?.subscriberCount ?? profile?.followersCount ?? 0,
   );
   const followingCount = formatCountTab(profile?.followingCount ?? 0);
-  const msgCount = formatCountTab(profile?.messageCount ?? 0);
   // Avatar from API profile first (channelAvatar), same as BusinessProfileViewScreen / BusinessProfileCard
   const avatarUri =
     profile?.channelAvatar ||
@@ -477,6 +531,34 @@ const PromotionScreen = ({ onBack }) => {
     profile?.coverUrl ||
     profile?.coverImage ||
     'https://images.unsplash.com/photo-1552566626-52f8b828add9';
+  const profileRating = Number(
+    profile?.averageRating ??
+      profile?.ratingAverage ??
+      profile?.rating ??
+      profile?.ratingAvg ??
+      0,
+  );
+  const profileRatingText = Number.isFinite(profileRating)
+    ? profileRating.toFixed(1)
+    : '0.0';
+  const promoCtaMessage =
+    String(bio || '').trim() ||
+    (isOwnProfile
+      ? 'Tell visitors about you — add a short bio in Edit Profile.'
+      : `Follow ${displayName} for updates, videos, and offers near you.`);
+  const promoSocialUrlByType = useMemo(() => {
+    const links = Array.isArray(profile?.socialLinks)
+      ? profile.socialLinks
+      : isOwnProfile && Array.isArray(currentUser?.socialLinks)
+        ? currentUser.socialLinks
+        : [];
+    return links.reduce((acc, link) => {
+      const type = String(link?.type || '').toLowerCase();
+      const url = String(link?.url || '').trim();
+      if (type && url) acc[type] = url;
+      return acc;
+    }, {});
+  }, [profile?.socialLinks, currentUser?.socialLinks, isOwnProfile]);
 
   const loadProfile = useCallback(async () => {
     if (!userId) return;
@@ -2163,39 +2245,69 @@ const PromotionScreen = ({ onBack }) => {
     thumbnailUri: getThumbnailForItem(it),
   }));
 
-  const handleMessagePress = () => {
-    navigation.navigate('MessageList');
-  };
+  const loadInboxConversationCount = useCallback(async () => {
+    if (!isOwnProfile || !currentUser?.token) {
+      setInboxConversationCount(0);
+      return;
+    }
+    try {
+      const list = await getConversations(
+        currentUser.token,
+        currentUser.id,
+      );
+      setInboxConversationCount(Array.isArray(list) ? list.length : 0);
+    } catch {
+      setInboxConversationCount(0);
+    }
+  }, [isOwnProfile, currentUser?.token]);
 
-  const handleStatMessagePress = useCallback(() => {
+  useFocusEffect(
+    useCallback(() => {
+      loadInboxConversationCount();
+    }, [loadInboxConversationCount]),
+  );
+
+  const profileForCard = useMemo(
+    () => ({
+      ...profile,
+      channelAbout: promoCtaMessage,
+      messageCount: isOwnProfile
+        ? inboxConversationCount
+        : profile?.messageCount ?? 0,
+    }),
+    [profile, promoCtaMessage, isOwnProfile, inboxConversationCount],
+  );
+
+  const handleProfileMessagePress = useCallback(() => {
     if (!currentUser?.id) {
       navigation.navigate('HomeSevenScreen');
       return;
     }
-    if (!userId) return;
     if (isOwnProfile) {
       navigation.navigate('MessageList');
       return;
     }
-    navigation.navigate('Root', {
-      screen: 'Home1',
-      params: {
-        screen: 'ChatScreen',
-        params: {
-          partnerId: userId,
-          partnerName: displayName,
-          partnerAvatar: safeImageUri(
-            profile?.channelAvatar ||
-              profile?.photos?.[0]?.src ||
-              profile?.photos?.[0],
-          ),
-        },
-      },
+    if (!userId) return;
+    const partnerAvatar = safeImageUri(
+      profile?.channelAvatar ||
+        profile?.photos?.[0]?.src ||
+        profile?.photos?.[0],
+    );
+    recordRecentChatPartner({
+      partnerId: userId,
+      partnerName: displayName,
+      partnerAvatar,
+      partnerRole: profile?.role,
+    });
+    navigation.navigate('ChatScreen', {
+      partnerId: userId,
+      partnerName: displayName,
+      partnerAvatar,
     });
   }, [
     currentUser?.id,
-    userId,
     isOwnProfile,
+    userId,
     navigation,
     displayName,
     profile?.channelAvatar,
@@ -2249,211 +2361,121 @@ const PromotionScreen = ({ onBack }) => {
     );
   }
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="#F6B041"
+        translucent
+      />
 
-      {/* Header Bar */}
-      <View style={styles.topNav}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => (onBack ? onBack() : navigation.goBack())}
-        >
-          <Icon
-            name="play"
-            size={12}
-            color="#FFF"
-            style={styles.backIconFlip}
+      <LinearGradient
+        colors={['#F6B041', '#F69E23']}
+        style={[styles.promoTopGradient, { paddingTop: insets.top }]}
+      >
+        <View style={styles.topNav}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => (onBack ? onBack() : navigation.goBack())}
+          >
+            <Icon
+              name="chevron-left"
+              size={18}
+              color="#FFF"
+              style={styles.backIconFlip}
+            />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+          <Image
+            source={eatixLogo}
+            style={styles.promoHeaderLogo}
+            resizeMode="contain"
           />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        {/* <View style={styles.messageContainer}>
-          <Text style={styles.messageLabel}>Message</Text>
-          <Icon name="message-text-outline" size={26} color="#000" />
-        </View> */}
-      </View>
+          <TouchableOpacity
+            style={styles.promoHeaderBell}
+            onPress={handleProfileMessagePress}
+            activeOpacity={0.8}
+          >
+            <Icon name="bell-outline" size={24} color="#1F2937" />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollPadding}
       >
-        {/* Profile Card Section */}
-        <View style={styles.profileWrapper}>
-          <View style={styles.darkHeader}>
-            <View style={styles.brandingRow}>
-              {/* <Text style={styles.eatText}>eat</Text> */}
-              <View style={styles.avatarContainer}>
-                <Image
-                  source={logo}
-                  style={styles.logoImage}
-                  resizeMode="contain"
+        <UserProfileCard
+          profile={profileForCard}
+          loading={profileLoading}
+          canEdit={isOwnProfile}
+          onAvatarPress={isOwnProfile ? handleAvatarPress : undefined}
+          avatarUploading={uploadingAvatar}
+          onEditProfile={isOwnProfile ? openEditProfile : undefined}
+          onCoverPress={isOwnProfile ? handleCoverPress : undefined}
+          coverUploading={uploadingCover}
+          showSubscribe={!isOwnProfile}
+          onSubscribe={
+            !isOwnProfile ? handlePromotionSubscribe : undefined
+          }
+          ctaText={
+            !isOwnProfile && profile?.isSubscribed ? 'Subscribed' : undefined
+          }
+          ctaDisabled={
+            !isOwnProfile &&
+            (profileSubscribeLoading || !!profile?.isSubscribed)
+          }
+          subscribeLoading={profileSubscribeLoading}
+          onMessagePress={handleProfileMessagePress}
+          onPressFollowers={() =>
+            navigation.navigate('FollowersListScreen', {
+              profileId: profile?.id || userId,
+            })
+          }
+          onPressFollowing={() =>
+            navigation.navigate('FollowingListScreen', {
+              profileId: profile?.id || userId,
+            })
+          }
+        />
+
+        <View style={styles.promoSocialRow}>
+          {PROMO_SOCIAL_BAR.map(item => {
+            const url = promoSocialUrlByType[item.type];
+            const linked = !!url;
+            return (
+              <TouchableOpacity
+                key={item.type}
+                style={styles.promoSocialIconBtn}
+                onPress={
+                  linked
+                    ? () => Linking.openURL(url).catch(() => {})
+                    : undefined
+                }
+                disabled={!linked}
+                activeOpacity={linked ? 0.75 : 1}
+              >
+                <Icon
+                  name={item.icon}
+                  size={24}
+                  color={linked ? '#4B5563' : '#C4C4C4'}
                 />
-              </View>
-
-              <View style={styles.brandRow}>
-                <TouchableOpacity
-                  style={styles.avatarBorder}
-                  onPress={handleAvatarPress}
-                  disabled={uploadingAvatar || !isOwnProfile}
-                >
-                  {uploadingAvatar ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#FFF"
-                      style={styles.avatar}
-                    />
-                  ) : (
-                    <Image
-                      source={{
-                        uri: avatarUri
-                          ? safeImageUri(avatarUri)
-                          : `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                              displayName,
-                            )}&background=333&color=fff`,
-                      }}
-                      style={styles.avatarImage}
-                    />
-                  )}
-                  {isOwnProfile ? (
-                    <View style={styles.avatarEditBadge}>
-                      <Icon name="pencil-outline" size={12} color="#666" />
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              </View>
-
-              {/* <Text style={styles.ixText}>ix</Text> */}
-              <View style={styles.headerLogoContainer}>
-                <Image
-                  source={logoIX}
-                  style={styles.logoImageIx}
-                  resizeMode="contain"
-                />
-              </View>
-            </View>
-
-            <Text style={styles.profileName}>{displayName}</Text>
-            <Text style={styles.profileLocation}>{displayLocation || '—'}</Text>
-
-            {isOwnProfile ? (
-              <View style={styles.actionButtonGroup}>
-                <TouchableOpacity
-                  style={styles.editProfileButton}
-                  onPress={openEditProfile}
-                >
-                  <Text style={styles.editProfileText}>Edit Profile</Text>
-                  <Icon name="pencil-box-outline" size={22} color="#333" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconIconButton}>
-                  <Icon name="camera-outline" size={24} color="#333" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.iconIconButton}
-                  onPress={handleMessagePress}
-                >
-                  <Icon name="message-outline" size={24} color="#333" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Bio Section */}
-          <View style={styles.bioBox}>
-            <Text style={styles.bioText}>{bio || 'No description yet.'}</Text>
-            {isOwnProfile ? (
-              <TouchableOpacity onPress={openEditProfile}>
-                <Icon name="square-edit-outline" size={20} color="#999" />
               </TouchableOpacity>
-            ) : null}
-          </View>
+            );
+          })}
         </View>
 
-        <View style={styles.statsContainer}>
-          <View style={styles.profileStatsRow}>
-            <TouchableOpacity
-              style={styles.profileStatItem}
-              activeOpacity={0.8}
-              onPress={() =>
-                navigation.navigate('FollowersListScreen', {
-                  profileId: profile?.id || userId,
-                })
-              }
-            >
-              <Text style={styles.profileStatValue}>{followersCount}</Text>
-              <Text style={styles.profileStatLabel}>Followers</Text>
-            </TouchableOpacity>
-            <View style={styles.profileStatDivider} />
-            <TouchableOpacity
-              style={styles.profileStatItem}
-              activeOpacity={0.8}
-              onPress={() =>
-                navigation.navigate('FollowingListScreen', {
-                  profileId: profile?.id || userId,
-                })
-              }
-            >
-              <Text style={styles.profileStatValue}>{followingCount}</Text>
-              <Text style={styles.profileStatLabel}>Following</Text>
-            </TouchableOpacity>
-            <View style={styles.profileStatDivider} />
-            <TouchableOpacity
-              style={styles.profileStatItem}
-              activeOpacity={0.75}
-              onPress={handleStatMessagePress}
-            >
-              <Text style={styles.profileStatValue}>{msgCount}</Text>
-              <Text style={styles.profileStatLabel}>MSG</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {!isOwnProfile ? (
-          <TouchableOpacity
-            style={[
-              styles.subscribeBtn,
-              profile?.isSubscribed && styles.subscribeBtnSubscribed,
-              (profileSubscribeLoading || profile?.isSubscribed) &&
-                styles.subscribeBtnDisabled,
-            ]}
-            onPress={handlePromotionSubscribe}
-            disabled={profileSubscribeLoading || !!profile?.isSubscribed}
-            activeOpacity={0.85}
-          >
-            {profileSubscribeLoading ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <Text style={styles.subscribeText}>
-                {profile?.isSubscribed ? 'Subscribed' : 'Subscribe'}
-              </Text>
-            )}
-          </TouchableOpacity>
-        ) : null}
-
-        {/* Same tab pattern as Business profile: Posts, Gallery, Video, Notification (no Promotions/Menus) */}
+        {/* Same tab labels as before; bar styled like Figma (underline active) */}
         <View style={styles.promoProfileTabsSection}>
-          <ScrollView
-            ref={promoTabsScrollRef}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.promoTabBarScroll}
-            onLayout={e => {
-              promoTabsViewportWidthRef.current = e.nativeEvent.layout.width;
-            }}
-          >
+          <View style={styles.promoTabBar}>
             {visiblePromoTabs.map(tab => {
               const isGrid = tab === 'Gallery';
               const active = activePromoTab === tab;
               return (
                 <TouchableOpacity
                   key={tab}
-                  onLayout={e => {
-                    promoTabLayoutsRef.current[tab] = {
-                      x: e.nativeEvent.layout.x,
-                      width: e.nativeEvent.layout.width,
-                    };
-                  }}
                   style={[
-                    styles.promoTabPill,
-                    active && styles.promoTabPillActive,
+                    styles.promoTabItem,
+                    active && styles.promoTabItemActive,
                   ]}
                   onPress={() => setActivePromoTab(tab)}
                   activeOpacity={0.85}
@@ -2462,13 +2484,13 @@ const PromotionScreen = ({ onBack }) => {
                     <Icon
                       name="view-grid"
                       size={20}
-                      color={active ? '#FF7F0B' : '#444'}
+                      color={active ? '#F5A623' : '#9CA3AF'}
                     />
                   ) : (
                     <Text
                       style={[
-                        styles.promoTabPillText,
-                        active && styles.promoTabPillTextActive,
+                        styles.promoTabItemText,
+                        active && styles.promoTabItemTextActive,
                       ]}
                     >
                       {tab}
@@ -2477,7 +2499,7 @@ const PromotionScreen = ({ onBack }) => {
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
 
           <View style={styles.promoTabPanel}>
             {activePromoTab === 'Posts' ? (
@@ -4087,116 +4109,189 @@ const PromotionScreen = ({ onBack }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  promoTopGradient: {
+    paddingBottom: 0,
+  },
   topNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
+    minWidth: 72,
   },
-  backIconFlip: { transform: [{ rotate: '180deg' }], marginRight: 4 },
-  backText: { color: '#FFF', fontSize: 13, fontWeight: 'bold' },
+  backIconFlip: { marginRight: 2 },
+  backText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  promoHeaderLogo: {
+    width: 88,
+    height: 28,
+  },
+  promoHeaderBell: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   messageContainer: { flexDirection: 'row', alignItems: 'center' },
   messageLabel: { fontSize: 13, color: '#666', marginRight: 8 },
 
   profileWrapper: {
     marginHorizontal: 16,
-    marginTop: 10,
-    backgroundColor: '#F1F1F1',
-    borderRadius: 32,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  profileHero: {
+    height: 236,
+    position: 'relative',
+    backgroundColor: '#3D4F5F',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
   },
-  darkHeader: {
-    backgroundColor: '#34495E',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingTop: 24,
-    paddingBottom: 20,
-    alignItems: 'center',
+  profileHeroCardFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 110,
   },
-  // brandingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-
-  brandingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
+  profileWhiteSheet: {
+    marginTop: -52,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingTop: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 230, 222, 0.65)',
+    overflow: 'hidden',
+  },
+  profileHeroCover: {
+    ...StyleSheet.absoluteFillObject,
     width: '100%',
-    paddingHorizontal: 12,
+    height: '100%',
+  },
+  profileHeroDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+  },
+  profileHeroBottomGrad: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  profileHeroContent: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 60,
+    paddingHorizontal: 14,
+  },
+  profileAvatarWrap: {
+    position: 'relative',
     marginBottom: 8,
-    gap: 10,
   },
-  eatText: { color: '#FFF', fontSize: 44, fontWeight: 'bold', marginRight: 20 },
-  ixText: { color: '#FFF', fontSize: 44, fontWeight: 'bold', marginLeft: 20 },
-  // avatarContainer: { position: 'relative' },
-  avatarContainer: {
+  profileAvatar: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#2B2B2B',
+  },
+  profileAvatarPlaceholder: {
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#2B2B2B',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerLogoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    borderWidth: 1.5,
-    borderColor: '#FFF',
   },
   avatarEditBadge: {
     position: 'absolute',
-    right: 2,
-    top: 6,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 3,
+    right: -2,
+    top: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 11,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
     elevation: 2,
   },
   profileName: {
-    color: '#FFF',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginTop: 12,
+    color: '#FFFFFF',
+    fontSize: 21,
+    fontWeight: '800',
     textAlign: 'center',
-    paddingHorizontal: 20,
-    width: '100%',
+    letterSpacing: 0.2,
   },
   profileLocation: {
-    color: '#BDC3C7',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 13,
-    lineHeight: 18,
-    marginBottom: 18,
+    fontWeight: '400',
+    marginTop: 2,
+    marginBottom: 10,
     textAlign: 'center',
-    alignSelf: 'stretch',
-    paddingHorizontal: 22,
   },
-  statsContainer: {
+  profileBadgeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    width: '100%',
-    marginTop: 10,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  foodExplorerPill: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  foodExplorerText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  ratingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF9F2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  ratingPillValue: {
+    marginLeft: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1F2937',
   },
   profileStatsRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    backgroundColor: '#E0E0E0', // Light gray background
-    borderRadius: 20,
-    paddingVertical: 15,
-    width: '100%',
-    marginBottom: 15,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 14,
+    paddingBottom: 14,
+    paddingHorizontal: 8,
   },
   profileStatItem: {
     flex: 1,
@@ -4206,17 +4301,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   profileStatValue: {
-    color: '#111',
-    fontSize: 18,
+    color: '#1A1A1A',
+    fontSize: 19,
     fontWeight: '800',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   profileStatLabel: {
-    color: '#666',
-    fontSize: 14,
-    marginTop: 2,
+    color: '#888888',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 3,
   },
-  // Subscribe Button
+  profileCtaSection: {
+    backgroundColor: '#FBF4E8',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F0E8DC',
+  },
+  profileCtaText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#5C5C5C',
+    textAlign: 'center',
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  promoSocialRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 0,
+    marginBottom: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  promoSocialIconBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subscribeBtnWide: {
+    backgroundColor: '#F5A623',
+    width: width * 0.44,
+    minWidth: 140,
+    maxWidth: 200,
+    paddingVertical: 12,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    shadowColor: '#C47A00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   subscribeBtn: {
     backgroundColor: '#F5A623',
     width: width * 0.35,
@@ -4235,12 +4379,17 @@ const styles = StyleSheet.create({
   subscribeBtnDisabled: {
     opacity: 0.9,
   },
-  subscribeText: { color: '#FFF', fontWeight: 'bold', fontSize: 18 },
+  subscribeText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.3,
+  },
   profileStatDivider: {
-    width: StyleSheet.hairlineWidth,
+    width: 1,
     alignSelf: 'stretch',
-    backgroundColor: 'rgba(0,0,0,0.12)',
-    marginVertical: 4,
+    backgroundColor: '#DDDDDD',
+    marginVertical: 2,
   },
 
   actionButtonGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -4566,50 +4715,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   promoProfileTabsSection: {
-    marginHorizontal: 16,
-    marginTop: 8,
+    marginHorizontal: 0,
+    marginTop: 0,
     marginBottom: 8,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#eee',
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
   },
-  promoTabBarScroll: {
+  promoTabBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingRight: 18,
-    paddingVertical: 10,
-    gap: 8,
+    alignItems: 'flex-end',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#ECECEC',
+    paddingHorizontal: 8,
   },
-  promoTabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginRight: 6,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
+  promoTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+    marginBottom: -1,
   },
-  promoTabPillActive: {
-    backgroundColor: '#FFF4EB',
-    borderWidth: 1,
-    borderColor: '#FF7F0B',
+  promoTabItemActive: {
+    borderBottomColor: '#F5A623',
   },
-  promoTabPillText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+  promoTabItemText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#9CA3AF',
   },
-  promoTabPillTextActive: {
-    color: '#FF7F0B',
+  promoTabItemTextActive: {
+    color: '#F5A623',
+    fontWeight: '700',
   },
   promoTabPanel: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingBottom: 16,
-    paddingTop: 8,
+    paddingTop: 10,
     minHeight: 120,
+    backgroundColor: '#FFFFFF',
   },
   promoTabLoading: {
     paddingVertical: 24,

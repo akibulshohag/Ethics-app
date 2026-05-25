@@ -80,7 +80,7 @@ export const FILTER_EFFECTS = [
   {
     id: '9',
     name: 'Fade',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1514525253361-bee8a487409e?w=200&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=200&q=80',
     overlayColor: '#F5E6D3',
     overlayOpacity: 0.2,
     isTrending: true,

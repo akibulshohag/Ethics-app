@@ -1,60 +1,95 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ImageBackground,
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
+import profileCardBg from '../assets/img/bg.png';
 import { safeImageUri } from '../utils/helper';
+import { formatShortProfileLocationLine } from '../utils/locationFormat';
 import { getConversations } from '../services/chatService';
+import UserProfileCard from './UserProfileCard';
 
-const formatCount = n => {
-  if (n == null || n < 0) return '0';
-  if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-  return String(n);
+const CARD_INSET = 12;
+const SHEET_OVERLAP = 88;
+const SHEET_GAP = 12;
+const PROFILE_AVATAR_TOP_GAP = 20;
+/** Rounded top where hero meets orange app header */
+const HERO_TOP_RADIUS = 20;
+const HEADER_ORANGE = '#F6B041';
+const STATS_SECTION_BG = '#FFFFFF';
+const BIO_SECTION_GRADIENT = {
+  colors: ['#F6E0BC', '#FBEACB', '#FFFFFF'],
+  locations: [0, 0.5, 1],
+  start: { x: 0.5, y: 0 },
+  end: { x: 0.5, y: 1 },
 };
+
+const HERO_TO_SHEET_GRADIENT = [
+  'rgba(255,255,255,0)',
+  'rgba(255,255,255,0.18)',
+  'rgba(255,255,255,0.45)',
+];
 
 const DEFAULT_COVER =
   'https://images.unsplash.com/photo-1552566626-52f8b828add9';
 
+const formatCount = n => {
+  const num = Number(n || 0);
+  if (!Number.isFinite(num) || num <= 0) return '0';
+  if (num >= 1000000)
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return String(Math.floor(num));
+};
+
 const BusinessProfileCard = ({
   profile,
   isOwnProfile,
+  isOwnerOrVendor = false,
   onEditProfile,
   onAvatarPress,
   onCoverPress,
-  coverUploading,
+  coverUploading = false,
 }) => {
   const navigation = useNavigation();
-  const token = useSelector(s => s?.app?.user?.token);
+  const currentUser = useSelector(s => s?.app?.user);
+  const token = currentUser?.token;
   const [msgCount, setMsgCount] = useState(0);
   const [msgLoading, setMsgLoading] = useState(false);
-  const coverUri = profile?.coverUrl || profile?.coverImage || DEFAULT_COVER;
-  const channelName =
-    profile?.channelName || profile?.nickname || profile?.name || '—';
-  const channelAvatar = safeImageUri(
-    profile?.channelAvatar,
-    'https://via.placeholder.com/100',
-  );
-  const followerCount = profile?.subscriberCount ?? 0;
-  const followingCount = profile?.followingCount ?? 0;
-  const channelAbout = profile?.channelAbout || '';
 
-  const CoverWrapper = isOwnProfile && onCoverPress ? TouchableOpacity : View;
-  const coverProps =
-    isOwnProfile && onCoverPress
-      ? {
-          onPress: coverUploading ? undefined : onCoverPress,
-          activeOpacity: 0.9,
-        }
-      : {};
+  const displayName =
+    profile?.channelName || profile?.nickname || profile?.name || '—';
+  const subtitle =
+    String(profile?.nickname || profile?.channelName || '').trim() ||
+    formatShortProfileLocationLine(profile?.address) ||
+    '—';
+
+  const avatarUri = safeImageUri(profile?.channelAvatar, '');
+  const coverUri = safeImageUri(
+    profile?.coverUrl || profile?.coverImage,
+    DEFAULT_COVER,
+  );
+
+  const heroSource = useMemo(() => {
+    if (coverUri && coverUri !== DEFAULT_COVER) return { uri: coverUri };
+    return profileCardBg;
+  }, [coverUri]);
+
+  const followerCount =
+    profile?.subscriberCount ?? profile?.followersCount ?? 0;
+  const followingCount = profile?.followingCount ?? 0;
+  const channelAbout =
+    (profile?.channelAbout && String(profile.channelAbout).trim()) ||
+    'No status yet.';
 
   useEffect(() => {
     let mounted = true;
@@ -65,7 +100,7 @@ const BusinessProfileCard = ({
       }
       try {
         if (mounted) setMsgLoading(true);
-        const list = await getConversations(token);
+        const list = await getConversations(token, currentUser?.id);
         if (mounted) setMsgCount(Array.isArray(list) ? list.length : 0);
       } catch {
         if (mounted) setMsgCount(0);
@@ -77,169 +112,201 @@ const BusinessProfileCard = ({
     return () => {
       mounted = false;
     };
-  }, [isOwnProfile, token]);
+  }, [isOwnProfile, token, currentUser?.id]);
+
+  if (!isOwnProfile || !isOwnerOrVendor) {
+    return (
+      <UserProfileCard
+        profile={profile}
+        canEdit={!!isOwnProfile}
+        onAvatarPress={isOwnProfile ? onAvatarPress : undefined}
+        showSubscribe={!isOwnProfile}
+        onPressFollowers={() =>
+          navigation.navigate('FollowersListScreen', {
+            profileId: profile?.id,
+          })
+        }
+        onPressFollowing={() =>
+          navigation.navigate('FollowingListScreen', {
+            profileId: profile?.id,
+          })
+        }
+        onMessagePress={() => navigation.navigate('MessageList')}
+      />
+    );
+  }
 
   return (
-    <View style={styles.cardContainer}>
-      <CoverWrapper style={styles.bgImageWrap} {...coverProps}>
-        <ImageBackground
-          source={{ uri: safeImageUri(coverUri, DEFAULT_COVER) }}
-          style={styles.bgImage}
-          imageStyle={{ borderRadius: 12 }}
-        >
-          {coverUploading && (
-            <View style={styles.coverLoadingOverlay}>
-              <ActivityIndicator size="large" color="#FFF" />
-              <Text style={styles.coverLoadingText}>Updating cover...</Text>
-            </View>
-          )}
-          {isOwnProfile && onCoverPress && !coverUploading && (
-            <View style={styles.coverEditIcon} pointerEvents="none">
-              <Icon
-                name="pencil-circle"
-                size={32}
-                color="rgba(255,255,255,0.95)"
-              />
-            </View>
-          )}
-          <View style={styles.contentOverlay}>
-            <View style={styles.badgeContainer}>
-              <TouchableOpacity
-                style={styles.twoPartBadge}
-                onPress={() => navigation.navigate('OrdersList')}
-                activeOpacity={0.7}
-              >
-                <View style={styles.badgeIconPart}>
-                  <Icon name="clipboard-list-outline" size={16} color="#222" />
-                </View>
-                <View style={styles.badgeTextPart}>
-                  <Text style={styles.badgeText}>Orders</Text>
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.twoPartBadge, { marginTop: 10 }]}
-                onPress={() => navigation.navigate('Earnings')}
-                activeOpacity={0.7}
-              >
-                <View style={styles.badgeIconPart}>
-                  <Icon name="currency-gbp" size={16} color="#222" />
-                </View>
-                <View
-                  style={[styles.badgeTextPart, { backgroundColor: '#FFa31A' }]}
-                >
-                  <Text style={styles.badgeText}>Wallet</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
+    <View style={styles.heroShell}>
+      <View style={styles.root}>
+        <View style={styles.backdrop} pointerEvents="none">
+          <Image
+            source={heroSource}
+            style={styles.backdropImage}
+            resizeMode="cover"
+            blurRadius={Platform.OS === 'ios' ? 16 : 10}
+          />
+          <View style={styles.backdropDim} />
+          <LinearGradient
+            colors={[
+              'rgba(0,0,0,0.05)',
+              'rgba(0,0,0,0.12)',
+              'rgba(0,0,0,0.22)',
+            ]}
+            locations={[0, 0.45, 1]}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <LinearGradient
+            colors={HERO_TO_SHEET_GRADIENT}
+            locations={[0, 0.55, 1]}
+            style={styles.backdropBottomFade}
+          />
+        </View>
 
-            <View style={styles.amberOverlayBox}>
-              <View style={styles.profileHeaderRow}>
-                <View style={styles.avatarContainer}>
-                  <TouchableOpacity
-                    style={styles.avatarCircle}
-                    onPress={
-                      isOwnProfile && onAvatarPress ? onAvatarPress : undefined
-                    }
-                    activeOpacity={isOwnProfile && onAvatarPress ? 0.7 : 1}
-                    disabled={!isOwnProfile || !onAvatarPress}
-                  >
-                    <Image
-                      source={{ uri: channelAvatar }}
-                      style={styles.avatarImage}
-                    />
-                  </TouchableOpacity>
-                  {isOwnProfile && (
-                    <View style={styles.editPencilBadge}>
-                      <Icon name="pencil-outline" size={14} color="#aaa" />
-                    </View>
-                  )}
-                </View>
-                <View style={styles.profileTextGroup}>
-                  <Text style={styles.businessNameHeading} numberOfLines={1}>
-                    {channelName}
-                  </Text>
-                  <View style={styles.verifiedIndicatorRow}>
-                    <Icon name="check-circle-outline" size={15} color="#fff" />
-                    <Text style={styles.verifiedAccountLabel}>
-                      verified account
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.actionButtonsRow}>
-                {isOwnProfile && (
-                  <TouchableOpacity
-                    style={styles.editProfileRectBtn}
-                    onPress={onEditProfile}
-                  >
-                    <Text style={styles.editProfileLabel}>Edit Profile</Text>
-                    <Icon name="square-edit-outline" size={20} color="#111" />
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.squareIconBtn}>
-                  <Icon name="camera-outline" size={24} color="#111" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.squareIconBtn}
-                  onPress={() => navigation.navigate('MessageList')}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="message-text-outline" size={22} color="#111" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.bottomBlock}>
-              <View style={styles.statsOpaqueBar}>
-                <TouchableOpacity
-                  style={styles.statColumn}
-                  onPress={() =>
-                    navigation.navigate('FollowersListScreen', {
-                      profileId: profile?.id,
-                    })
-                  }
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.statValMain}>
-                    {formatCount(followerCount)}
-                  </Text>
-                  <Text style={styles.statLabelMain}>Followers</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.statColumn}
-                  onPress={() =>
-                    navigation.navigate('FollowingListScreen', {
-                      profileId: profile?.id,
-                    })
-                  }
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.statValMain}>
-                    {formatCount(followingCount)}
-                  </Text>
-                  <Text style={styles.statLabelMain}>Following</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.statColumn}
-                  onPress={() => navigation.navigate('MessageList')}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.statValMain}>
-                    {msgLoading ? '…' : formatCount(msgCount)}
-                  </Text>
-                  <Text style={styles.statLabelMain}>MSG</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.statusWhiteBox}>
-                <Text style={styles.statusBodyText} numberOfLines={3}>
-                  {channelAbout.slice(0, 100) || 'No status yet.'}
-                </Text>
-              </View>
-            </View>
+        {coverUploading ? (
+          <View style={styles.coverLoadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color="#FFF" />
+            <Text style={styles.coverLoadingText}>Updating cover...</Text>
           </View>
-        </ImageBackground>
-      </CoverWrapper>
+        ) : null}
+
+        <View style={styles.profileTop}>
+          <TouchableOpacity
+            style={styles.avatarWrap}
+            onPress={onAvatarPress}
+            activeOpacity={0.9}
+            disabled={!onAvatarPress}
+          >
+            <View style={styles.profileAvatar}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+              ) : (
+                <Icon name="account" size={44} color="#F5A623" />
+              )}
+            </View>
+            <View style={styles.avatarEditBadge}>
+              <Icon name="pencil-outline" size={11} color="#666" />
+            </View>
+          </TouchableOpacity>
+
+          <Text style={styles.profileName}>{displayName}</Text>
+          <Text style={styles.profileSubtitle}>{subtitle}</Text>
+
+          <View style={styles.heroActionRow}>
+            <TouchableOpacity
+              style={styles.editProfileBtn}
+              onPress={onEditProfile}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+              <Icon name="pencil-outline" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.heroIconBtn}
+              onPress={onCoverPress}
+              disabled={!onCoverPress || coverUploading}
+              activeOpacity={0.85}
+            >
+              <Icon name="camera-outline" size={22} color="#111" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.heroIconBtn}
+              onPress={() => navigation.navigate('MessageList')}
+              activeOpacity={0.85}
+            >
+              <Icon name="email-outline" size={22} color="#111" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.profileSheetWrap}>
+          <View style={styles.statsSection}>
+            <TouchableOpacity
+              style={styles.profileStatItem}
+              onPress={() =>
+                navigation.navigate('FollowersListScreen', {
+                  profileId: profile?.id,
+                })
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={styles.profileStatValue}>
+                {formatCount(followerCount)}
+              </Text>
+              <Text style={styles.profileStatLabel}>Followers</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileStatItem}
+              onPress={() =>
+                navigation.navigate('FollowingListScreen', {
+                  profileId: profile?.id,
+                })
+              }
+              activeOpacity={0.8}
+            >
+              <Text style={styles.profileStatValue}>
+                {formatCount(followingCount)}
+              </Text>
+              <Text style={styles.profileStatLabel}>Following</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileStatItem}
+              onPress={() => navigation.navigate('MessageList')}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.profileStatValue}>
+                {msgLoading ? '…' : formatCount(msgCount)}
+              </Text>
+              <Text style={styles.profileStatLabel}>MSG</Text>
+            </TouchableOpacity>
+          </View>
+
+          <LinearGradient
+            colors={BIO_SECTION_GRADIENT.colors}
+            locations={BIO_SECTION_GRADIENT.locations}
+            start={BIO_SECTION_GRADIENT.start}
+            end={BIO_SECTION_GRADIENT.end}
+            style={styles.bioSectionWrap}
+          >
+            <View style={styles.bioSection}>
+              <Text style={styles.profileBioText}>{channelAbout}</Text>
+
+              {isOwnerOrVendor ? (
+                <View style={styles.ordersWalletRow}>
+                  <TouchableOpacity
+                    style={styles.splitBadge}
+                    onPress={() => navigation.navigate('OrdersList')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.splitBadgeIconSlot}>
+                      <Icon
+                        name="clipboard-list-outline"
+                        size={18}
+                        color="#222222"
+                      />
+                    </View>
+                    <View style={styles.splitBadgeOrdersLabel}>
+                      <Text style={styles.splitBadgeLabelText}>Orders</Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.splitBadge}
+                    onPress={() => navigation.navigate('Earnings')}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.splitBadgeIconSlot}>
+                      <Icon name="wallet-outline" size={18} color="#222222" />
+                    </View>
+                    <View style={styles.splitBadgeWalletLabel}>
+                      <Text style={styles.splitBadgeLabelText}>Wallet</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </View>
+          </LinearGradient>
+        </View>
+      </View>
     </View>
   );
 };
@@ -247,235 +314,242 @@ const BusinessProfileCard = ({
 export default BusinessProfileCard;
 
 const styles = StyleSheet.create({
-  cardContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    marginHorizontal: 16,
-  },
-  bgImageWrap: { width: '100%' },
-  bgImage: {
+  heroShell: {
     width: '100%',
-    height: 410,
+    backgroundColor: HEADER_ORANGE,
+  },
+  root: {
+    width: '100%',
+    position: 'relative',
+    borderTopLeftRadius: HERO_TOP_RADIUS,
+    borderTopRightRadius: HERO_TOP_RADIUS,
+    overflow: 'hidden',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#8A6B3F',
+  },
+  backdropImage: {
+    width: '100%',
+    height: '100%',
+  },
+  backdropDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(246,176,65,0.10)',
+  },
+  backdropBottomFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '48%',
   },
   coverLoadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 12,
+    zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  coverLoadingText: {
+    color: '#FFF',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  profileTop: {
     alignItems: 'center',
+    paddingTop: PROFILE_AVATAR_TOP_GAP,
+    paddingBottom: SHEET_OVERLAP + 8,
+    paddingHorizontal: 16,
+    zIndex: 1,
   },
-  coverLoadingText: { color: '#FFF', marginTop: 8, fontSize: 14 },
-  coverEditIcon: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
+  avatarWrap: {
+    position: 'relative',
+    marginBottom: 10,
   },
-  coverEditHint: {
-    position: 'absolute',
-    bottom: 12,
-    left: 0,
-    right: 0,
+  profileAvatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 2.5,
+    borderColor: '#FFFFFF',
+    backgroundColor: '#2B2B2B',
     alignItems: 'center',
-  },
-  coverEditHintText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  contentOverlay: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  badgeContainer: {
-    paddingTop: 20,
-    paddingRight: 15,
-    alignItems: 'flex-end',
-  },
-  twoPartBadge: {
-    height: 28,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  badgeIconPart: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 4,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeTextPart: {
-    backgroundColor: '#F39C12',
-    paddingLeft: 5,
-    paddingRight: 8,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 65,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  amberOverlayBox: {
-    backgroundColor: 'rgba(215, 137, 20, 0.85)',
-    borderRadius: 8,
-    padding: 10,
-    marginHorizontal: 16,
-    marginBottom: 5,
-    marginTop: 50,
-  },
-  profileHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    minHeight: 40,
-  },
-  avatarContainer: {
-    position: 'absolute',
-    top: -45,
-    left: 0,
-    zIndex: 10,
-  },
-  avatarCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#222',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
     overflow: 'hidden',
   },
   avatarImage: {
     width: '100%',
     height: '100%',
   },
-  editPencilBadge: {
+  avatarEditBadge: {
     position: 'absolute',
-    top: 4,
-    right: 0,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
+    right: -2,
+    top: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 11,
+    width: 22,
+    height: 22,
     alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-  },
-  profileTextGroup: {
-    marginLeft: 90,
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    elevation: 2,
   },
-  businessNameHeading: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+  profileName: {
+    color: '#FFFFFF',
+    fontSize: 21,
+    fontWeight: '800',
+    textAlign: 'center',
   },
-  verifiedIndicatorRow: {
+  profileSubtitle: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    marginTop: 2,
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  heroActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-  },
-  verifiedAccountLabel: {
-    color: '#fff',
-    fontSize: 12,
-    marginLeft: 6,
-    opacity: 0.95,
-  },
-  faintDotSeparator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    marginLeft: 8,
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
+    width: '100%',
+    maxWidth: 340,
     gap: 8,
   },
-  editProfileRectBtn: {
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 42,
-    borderRadius: 8,
+  editProfileBtn: {
     flex: 1,
-  },
-  editProfileLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111',
-    marginRight: 6,
-  },
-  squareIconBtn: {
-    backgroundColor: '#fff',
-    width: 42,
-    height: 42,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bottomBlock: {
-    marginHorizontal: 16,
-    marginBottom: 10,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  statsOpaqueBar: {
     flexDirection: 'row',
-    backgroundColor: '#E6E6E6',
-    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5A623',
+    borderRadius: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    gap: 6,
+    minHeight: 44,
+  },
+  editProfileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  heroIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileSheetWrap: {
+    marginTop: -SHEET_OVERLAP,
+    marginHorizontal: CARD_INSET,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    overflow: 'hidden',
+    zIndex: 2,
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  statColumn: {
+  statsSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingTop: SHEET_GAP,
+    paddingBottom: SHEET_GAP,
+    paddingHorizontal: SHEET_GAP,
+    backgroundColor: STATS_SECTION_BG,
+  },
+  profileStatItem: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  statValMain: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#222',
+  profileStatValue: {
+    color: '#111111',
+    fontSize: 21,
+    fontWeight: '800',
   },
-  statLabelMain: {
+  profileStatLabel: {
+    color: '#333333',
     fontSize: 12,
-    color: '#444',
-    marginTop: 2,
+    fontWeight: '500',
+    marginTop: 4,
   },
-  statusWhiteBox: {
-    backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+  bioSectionWrap: {
+    width: '100%',
+    backgroundColor: '#F6EBDA',
+    overflow: 'hidden',
   },
-  statusBodyText: {
-    textAlign: 'center',
-    color: '#888',
-    fontSize: 12,
+  bioSection: {
+    paddingHorizontal: SHEET_GAP,
+    paddingTop: SHEET_GAP,
+    paddingBottom: SHEET_GAP,
+    alignItems: 'center',
+  },
+  profileBioText: {
+    fontSize: 13,
     lineHeight: 20,
-    fontWeight: '400',
+    color: '#404040',
+    textAlign: 'center',
+    marginBottom: SHEET_GAP,
+    paddingHorizontal: 4,
+  },
+  ordersWalletRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+    justifyContent: 'center',
+  },
+  /** Figma: icon in white slot, label in colored pill (not inside same fill) */
+  splitBadge: {
+    flex: 1,
+    maxWidth: 158,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: 36,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  splitBadgeIconSlot: {
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  splitBadgeOrdersLabel: {
+    flex: 1,
+    backgroundColor: '#F5A623',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  splitBadgeWalletLabel: {
+    flex: 1,
+    backgroundColor: '#1F2937',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  splitBadgeLabelText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

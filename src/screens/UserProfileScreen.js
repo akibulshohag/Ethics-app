@@ -42,7 +42,7 @@ const DUMMY_VIDEOS = [
     title: 'Bang Bang Chicken Skewers - Quick....',
     duration: '56:44',
     thumbnail:
-      'https://images.unsplash.com/photo-1593696140826-c58bed479fcb?q=80&w=400',
+      'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400',
     channel: 'World of Music',
     promoCode: 'MULEN300FF',
   },
