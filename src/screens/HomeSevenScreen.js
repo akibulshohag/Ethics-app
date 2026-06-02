@@ -18,8 +18,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import { config } from '../../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  login,
+  verifyEmailOtp,
+  isAccountInactiveError,
+  isAccountPendingError,
+} from '../services/authService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,22 +62,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(`${config.apiBaseUrl}/users/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
+      const data = await login(email, password);
 
       // PRESERVED: Complete user data object
       const userData = {
@@ -171,6 +161,31 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
     } catch (error) {
       console.error('Login error:', error);
       const msg = String(error?.message || '');
+
+      if (isAccountInactiveError(msg)) {
+        Alert.alert(
+          'Account Recovery Required',
+          msg.replace(/^ACCOUNT_INACTIVE:\s*/, ''),
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Recover Account',
+              onPress: () => navigation.navigate('ForgotPassword'),
+            },
+          ],
+        );
+        return;
+      }
+
+      if (isAccountPendingError(msg)) {
+        setVerificationMode(true);
+        Alert.alert(
+          'Email Verification Required',
+          'Enter the OTP sent to your email to activate your account.',
+        );
+        return;
+      }
+
       const pendingOrVerification =
         msg.toLowerCase().includes('pending') ||
         msg.toLowerCase().includes('verify');
@@ -178,7 +193,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         setVerificationMode(true);
       }
       setTimeout(() => {
-        Alert.alert('Error', error.message || 'Login failed. Please try again.');
+        Alert.alert('Error', msg || 'Login failed. Please try again.');
       }, 100);
     } finally {
       setLoading(false);
@@ -193,21 +208,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/verify-email-verification-otp`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email.trim(),
-            otp: verificationOtp.trim(),
-          }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'OTP verification failed');
-      }
+      const data = await verifyEmailOtp(email.trim(), verificationOtp);
 
       const userData = {
         id: data.user.id,
@@ -385,16 +386,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                     <Text style={styles.utilityText}>Remember me</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={() => {
-                      try {
-                        navigation.navigate('ForgotPassword');
-                      } catch (_) {
-                        Alert.alert(
-                          'Info',
-                          'Forgot password flow not available.',
-                        );
-                      }
-                    }}
+                    onPress={() => navigation.navigate('ForgotPassword')}
                     disabled={loading}
                   >
                     <Text style={styles.utilityText}>Forgot Password?</Text>

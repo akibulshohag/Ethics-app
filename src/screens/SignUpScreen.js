@@ -14,7 +14,6 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import { config } from '../../config';
 import {
   COLORS,
   FONTS,
@@ -25,6 +24,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from 'react-native-element-dropdown';
 import { getRolesList } from '../services/roleService';
+import {
+  register,
+  verifyEmailOtp,
+  resendEmailVerificationOtp,
+  validatePasswordStrength,
+  SIGNUP_ROLES,
+} from '../services/authService';
 
 const SignUpScreen = () => {
   const navigation = useNavigation();
@@ -45,13 +51,23 @@ const SignUpScreen = () => {
   useEffect(() => {
     getRolesList()
       .then(res => {
-        setRoles(res?.roles || []);
-        if (res?.roles?.length > 0 && !roleId) {
-          const defaultRole = res.roles.find(r => r.name === 'user') || res.roles[0];
+        const signupRoles = (res?.roles || []).filter(r =>
+          SIGNUP_ROLES.includes(String(r.name || '').toLowerCase()),
+        );
+        setRoles(signupRoles);
+        if (signupRoles.length > 0 && !roleId) {
+          const defaultRole =
+            signupRoles.find(r => r.name === 'user') || signupRoles[0];
           setRoleId(defaultRole.id);
         }
       })
-      .catch(() => setRoles([]))
+      .catch(() => {
+        setRoles([]);
+        Alert.alert(
+          'Error',
+          'Unable to load account types. Please check your connection and try again.',
+        );
+      })
       .finally(() => setRolesLoading(false));
   }, []);
 
@@ -70,26 +86,35 @@ const SignUpScreen = () => {
       return;
     }
 
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      Alert.alert('Error', passwordError);
+      return;
+    }
+
+    if (!roleId) {
+      Alert.alert('Error', 'Please select an account type');
+      return;
+    }
+
+    const selectedRole = roles.find(r => r.id === roleId);
+    if (!selectedRole) {
+      Alert.alert('Error', 'Invalid account type selected');
+      return;
+    }
+
+    const isFallbackRoleId = ['user', 'owner', 'vendor'].includes(
+      String(selectedRole.id).toLowerCase(),
+    );
+
     setLoading(true);
     try {
-      // Call register API
-      const response = await fetch(`${config.apiBaseUrl}/users/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-          ...(roleId ? { roleId } : {}),
-        }),
+      const data = await register({
+        email: email.trim(),
+        password: password.trim(),
+        role: selectedRole.name,
+        ...(isFallbackRoleId ? {} : { roleId: selectedRole.id }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
 
       if (data?.requiresEmailVerification) {
         setPendingEmail(email.trim());
@@ -145,18 +170,7 @@ const SignUpScreen = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/verify-email-verification-otp`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: pendingEmail, otp: verificationOtp.trim() }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'OTP verification failed');
-      }
+      const data = await verifyEmailOtp(pendingEmail, verificationOtp);
 
       const userData = {
         id: data.user.id,
@@ -185,18 +199,7 @@ const SignUpScreen = () => {
     if (!pendingEmail) return;
     setLoading(true);
     try {
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/request-email-verification-otp`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: pendingEmail }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to resend OTP');
-      }
+      await resendEmailVerificationOtp(pendingEmail);
       Alert.alert('Success', 'OTP sent again to your email');
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to resend OTP');
@@ -291,15 +294,31 @@ const SignUpScreen = () => {
           {!verificationMode ? (
             <>
               {/* Role Input */}
-              <Text style={styles.inputLabel}>Role</Text>
+              <Text style={styles.inputLabel}>Account Type</Text>
               <View style={styles.inputWrapper}>
                 <Icon name="account-badge" size={20} color="black" />
                 <Dropdown
-                  data={roles.map(r => ({ label: r.name, value: r.id }))}
+                  data={roles.map(r => ({
+                    label:
+                      r.name === 'user'
+                        ? 'User'
+                        : r.name === 'owner'
+                          ? 'Owner'
+                          : r.name === 'vendor'
+                            ? 'Vendor'
+                            : r.name,
+                    value: r.id,
+                  }))}
                   value={roleId}
                   labelField="label"
                   valueField="value"
-                  placeholder={rolesLoading ? 'Loading roles...' : 'Select role'}
+                  placeholder={
+                    rolesLoading
+                      ? 'Loading account types...'
+                      : roles.length
+                        ? 'Select account type'
+                        : 'No account types available'
+                  }
                   onChange={item => setRoleId(item.value)}
                   style={styles.dropdown}
                   placeholderStyle={styles.dropdownPlaceholder}

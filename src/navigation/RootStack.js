@@ -8,6 +8,9 @@ import SecurityScreen from '../screens/SecurityScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import Login from '../screens/LoginScreen';
 import SignUp from '../screens/SignUpScreen';
+import ForgotPassword from '../screens/ForgotPassword';
+import OtpVerification from '../screens/OtpVerification';
+import CreateNewPassword from '../screens/CreateNewPassword';
 import MenuManageScreen from '../screens/MenuManageScreen';
 import ChatScreen from '../screens/ChatScreen';
 import DetailedChatScreen from '../screens/DetailedChatScreen';
@@ -35,6 +38,9 @@ const RootStack = () => {
       <Root.Screen name="Root" component={BottomNaivgation} />
       <Root.Screen name="Login" component={Login} />
       <Root.Screen name="SignUp" component={SignUp} />
+      <Root.Screen name="ForgotPassword" component={ForgotPassword} />
+      <Root.Screen name="OtpVerification" component={OtpVerification} />
+      <Root.Screen name="CreateNewPassword" component={CreateNewPassword} />
       <Root.Screen name="Account" component={AccountScreen} />
       <Root.Screen name="SecurityScreen" component={SecurityScreen} />
       <Root.Screen

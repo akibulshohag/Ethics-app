@@ -29,6 +29,7 @@ import {
 } from '../utils/searchRecentStorage';
 import { matchRestaurantQuery } from '../services/discoveryService';
 import { openDiscoveryMedia } from '../utils/openDiscoveryMedia';
+import { resolveCategoryChipNavigation } from '../constants/menuDiscoveryCategories';
 
 const formatViews = n => {
   const x = Number(n);
@@ -99,16 +100,17 @@ export default function HomeSearchScreen() {
 
   const openCategory = useCallback(
     category => {
+      const nav = resolveCategoryChipNavigation(category);
       navigation.navigate('HomeSearchCategoryScreen', {
-        categoryKey: category.key,
-        categoryLabel: category.label,
+        categoryKey: nav.categoryKey,
+        categoryLabel: nav.categoryLabel,
         nearLabel,
         filters,
         viewerLat: locationOpts.viewerLat,
         viewerLng: locationOpts.viewerLng,
       });
     },
-    [navigation, nearLabel, filters],
+    [navigation, nearLabel, filters, locationOpts],
   );
 
   const openRestaurantOrder = useCallback(
@@ -341,7 +343,7 @@ export default function HomeSearchScreen() {
                     />
                     {cat.icon ? (
                       <View style={styles.categoryIconBadge}>
-                        <Icon name={cat.icon} size={14} color="#FFF" />
+                        <Icon name={cat.icon} size={10} color="#FFF" />
                       </View>
                     ) : null}
                   </View>
@@ -482,18 +484,18 @@ const styles = StyleSheet.create({
   recentText: { fontSize: 14, color: '#374151' },
   categoryRow: {
     flexDirection: 'row',
-    gap: 14,
-    paddingRight: 8,
+    gap: 8,
+    paddingRight: 6,
     paddingBottom: 4,
   },
   categoryTile: {
-    width: 76,
+    width: 68,
     alignItems: 'center',
   },
   categoryIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -502,21 +504,23 @@ const styles = StyleSheet.create({
   categoryIcon: { width: '100%', height: '100%' },
   categoryIconBadge: {
     position: 'absolute',
-    right: 2,
-    bottom: 2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    right: 1,
+    bottom: 1,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: 'rgba(31, 41, 55, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   categoryLabel: {
-    fontSize: 12,
+    fontSize: 9,
     color: '#374151',
     textAlign: 'center',
-    marginTop: 6,
-    fontWeight: '500',
+    marginTop: 4,
+    fontWeight: '600',
+    lineHeight: 11,
+    width: '100%',
   },
   emptyHint: {
     fontSize: 14,

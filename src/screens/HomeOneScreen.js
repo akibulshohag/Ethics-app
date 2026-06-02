@@ -77,12 +77,24 @@ import {
   buildMenuCuisineTags,
   ownerMenuMatchesCuisineFilter,
   resolveDiscoveryCategoryFromFilter,
+  resolveCategoryChipNavigation,
 } from '../constants/menuDiscoveryCategories';
+
+const FEATURED_CUISINE_CHIP_ORDER = [
+  'bangladeshi',
+  'indian',
+  'wok',
+  'biryani',
+  'pizza',
+  'burger',
+  'chinese',
+  'thai',
+];
 import DiscoveryTrendingCard from '../components/DiscoveryTrendingCard';
 import { browseRestaurantsByCategory } from '../services/menuBrowseService';
 import { openDiscoveryMedia } from '../utils/openDiscoveryMedia';
 import spicePromoBg from '../assets/img/spice.png';
-import { safeImageUri } from '../utils/helper';
+import { resolveVideoPosterUri, safeImageUri } from '../utils/helper';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -345,10 +357,11 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
     location: locationDisplay,
     locationLine,
     distanceLabel,
-    img:
-      v.thumbnailUrl ||
-      v.videoUrl ||
+    img: resolveVideoPosterUri(
+      v.thumbnailUrl,
+      v.coverUrl,
       'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
+    ),
     videoUrl: v.videoUrl,
     user: {
       ...(u && typeof u === 'object' ? u : {}),
@@ -437,13 +450,7 @@ const cuisineIconFromKey = key => {
   if (k.includes('chinese') || k.includes('noodle')) return 'noodles';
   return 'silverware-fork-knife';
 };
-const shortCuisineLabel = label => {
-  const text = String(label || '').trim();
-  if (!text) return '';
-  const firstWord = text.split(/\s+/)[0] || text;
-  if (firstWord.length <= 6) return firstWord;
-  return `${firstWord.slice(0, 6)}...`;
-};
+const displayCuisineLabel = label => String(label || '').trim();
 const hasRenderablePromoCard = item => {
   if (!item || typeof item !== 'object') return false;
   const media = String(item.videoUrl || item.img || '').trim();
@@ -607,13 +614,22 @@ const HomeOneScreen = () => {
   homeFeedCacheRef.current = homeFeedCache;
   const displayedCuisineOptions = useMemo(() => {
     if (!Array.isArray(cuisineOptions)) return [];
-    return cuisineOptions
+    const mapped = cuisineOptions
       .map(c => {
-        const label = readCuisineText(c?.label);
-        const key = normalizeCuisine(c?.key || label);
-        if (!isValidCuisineKey(key) || !label || label === '[object Object]') {
+        const rawLabel = readCuisineText(c?.label);
+        const rawKey = normalizeCuisine(c?.key || rawLabel);
+        if (
+          !isValidCuisineKey(rawKey) ||
+          !rawLabel ||
+          rawLabel === '[object Object]'
+        ) {
           return null;
         }
+        const discovery =
+          resolveDiscoveryCategoryFromFilter(rawKey) ||
+          resolveDiscoveryCategoryFromFilter(rawLabel);
+        const key = discovery?.key || rawKey;
+        const label = discovery?.label || rawLabel;
         return {
           ...c,
           key,
@@ -623,6 +639,17 @@ const HomeOneScreen = () => {
         };
       })
       .filter(Boolean);
+
+    return mapped.sort((a, b) => {
+      const ia = FEATURED_CUISINE_CHIP_ORDER.indexOf(a.key);
+      const ib = FEATURED_CUISINE_CHIP_ORDER.indexOf(b.key);
+      if (ia !== -1 || ib !== -1) {
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      }
+      return String(a.label).localeCompare(String(b.label));
+    });
   }, [cuisineOptions]);
 
   useEffect(() => {
@@ -1310,11 +1337,11 @@ const HomeOneScreen = () => {
       }
       const menuCacheSnapshot = {};
       allOwnerIdsForMenus.forEach(oid => {
-        menuCacheSnapshot[oid] = ownerMenuSearchCacheRef.current[String(oid)] || [];
+        menuCacheSnapshot[oid] =
+          ownerMenuSearchCacheRef.current[String(oid)] || [];
       });
-      const discoveryOptions = buildDiscoveryCategoriesFromMenuCaches(
-        menuCacheSnapshot,
-      );
+      const discoveryOptions =
+        buildDiscoveryCategoriesFromMenuCaches(menuCacheSnapshot);
       const discoveryKeys = new Set(discoveryOptions.map(o => o.key));
       const rawCuisineSet = new Set();
       allOwnerIdsForMenus.forEach(oid => {
@@ -2178,8 +2205,9 @@ const HomeOneScreen = () => {
       const location = row?.address || '';
       const discoveryKey =
         route.params?.discoveryCategoryKey || cuisineFilterKey || '';
-      const searchKw =
-        String(categoryLabelForSearch || selectedCuisine || '').trim();
+      const searchKw = String(
+        categoryLabelForSearch || selectedCuisine || '',
+      ).trim();
       if (!user?.token) {
         navigation.navigate('HomeSevenScreen', {
           returnToOrder: true,
@@ -3474,14 +3502,13 @@ const HomeOneScreen = () => {
                     key={cuisine.key}
                     style={styles.cuisineChip}
                     onPress={() => {
+                      const nav = resolveCategoryChipNavigation(cuisine);
                       navigation.navigate('HomeSearchCategoryScreen', {
-                        categoryKey: cuisine.key,
-                        categoryLabel: cuisine.label,
+                        categoryKey: nav.categoryKey,
+                        categoryLabel: nav.categoryLabel,
                         nearLabel: primaryLoc || '',
-                        viewerLat:
-                          selectedLocation?.lat ?? user?.latitude,
-                        viewerLng:
-                          selectedLocation?.lng ?? user?.longitude,
+                        viewerLat: selectedLocation?.lat ?? user?.latitude,
+                        viewerLng: selectedLocation?.lng ?? user?.longitude,
                       });
                     }}
                     activeOpacity={0.85}
@@ -3498,8 +3525,9 @@ const HomeOneScreen = () => {
                         styles.cuisineChipText,
                         isActive && styles.cuisineChipTextActive,
                       ]}
+                      numberOfLines={2}
                     >
-                      {shortCuisineLabel(cuisine.label)}
+                      {displayCuisineLabel(cuisine.label)}
                     </Text>
                     {isActive ? (
                       <View style={styles.cuisineChipUnderline} />
@@ -3534,7 +3562,9 @@ const HomeOneScreen = () => {
                       r?.mediaType === 'short' || r?.mediaType === 'video';
                     const viewsLabel =
                       Number(r?.totalViews) > 0
-                        ? `${new Intl.NumberFormat('en-US').format(r.totalViews)} views`
+                        ? `${new Intl.NumberFormat('en-US').format(
+                            r.totalViews,
+                          )} views`
                         : Number(r?.orderCount) > 0
                         ? `${r.orderCount} orders`
                         : '';
@@ -3588,8 +3618,8 @@ const HomeOneScreen = () => {
                   channelName={featuredCardChannelName}
                   metaLine={(() => {
                     const cuisineLabel = cuisineSelected
-                      ? shortCuisineLabel(selectedCuisine)
-                      : shortCuisineLabel(
+                      ? displayCuisineLabel(selectedCuisine)
+                      : displayCuisineLabel(
                           getItemMenuTagsLower(featuredForCuisine)[0] || 'Food',
                         );
                     const vc = Number(
@@ -3695,9 +3725,7 @@ const HomeOneScreen = () => {
                       onPress={() => handleFeedItemPress(video)}
                       onOrderPress={() => handleSponsoredOrder(video)}
                       onBookPress={() => handleSponsoredBook(video)}
-                      onSubscribePress={() =>
-                        handleSponsoredSubscribe(video)
-                      }
+                      onSubscribePress={() => handleSponsoredSubscribe(video)}
                       subscribeBusy={sponsoredSubscribeToggling}
                       isSubscribed={!!sponsoredChannelMeta?.isSubscribed}
                       hideSubscribe={
@@ -5759,12 +5787,12 @@ const styles = StyleSheet.create({
     color: '#FFF3D7',
   },
   cuisineScroll: {
-    marginBottom: 6,
+    marginBottom: 2,
   },
   cuisineChipRow: {
-    paddingBottom: 10,
-    paddingRight: 8,
-    gap: 10,
+    paddingBottom: 2,
+    paddingRight: 4,
+    gap: 5,
   },
   cuisineSliderRow: {
     flexDirection: 'row',
@@ -5781,20 +5809,19 @@ const styles = StyleSheet.create({
   },
   cuisineChip: {
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 62,
-    marginRight: 4,
+    justifyContent: 'flex-start',
+    width: 64,
+    marginRight: 1,
     backgroundColor: '#FFF',
-    borderRadius: 10,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: '#ECECEC',
-    paddingTop: 6,
-    paddingBottom: 7,
+    paddingTop: 3,
   },
   cuisineIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#FFF2D8',
     borderWidth: 1,
     borderColor: '#EBCB8A',
@@ -5803,24 +5830,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cuisineIconImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   cuisineChipText: {
     color: '#4E4E4E',
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 2,
     textAlign: 'center',
+    lineHeight: 9,
+    width: '100%',
   },
   cuisineChipTextActive: {
     color: '#F5A623',
     fontWeight: '700',
   },
   cuisineChipUnderline: {
-    marginTop: 4,
-    width: 28,
+    marginTop: 1,
+    width: 18,
     height: 2,
     borderRadius: 2,
     backgroundColor: '#F5A623',

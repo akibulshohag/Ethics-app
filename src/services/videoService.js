@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../../config';
+import { ensureVideoThumbnailFields } from '../utils/videoThumbnail';
 
 const API_URL = `${config.apiBaseUrl}/videos`;
 
@@ -22,48 +23,54 @@ export const uploadVideo = async videoData => {
   if (!videoData?.userId) {
     throw new Error('User ID is required. Please log in to upload videos.');
   }
-  if (!videoData?.videoUri || !videoData?.thumbnailUri) {
-    throw new Error('Video and thumbnail are required.');
+  if (!videoData?.videoUri) {
+    throw new Error('Video is required.');
+  }
+  const prepared = await ensureVideoThumbnailFields(videoData);
+  if (!prepared?.thumbnailUri) {
+    throw new Error(
+      'Could not create a preview image from this video. Pick a cover image or try another clip.',
+    );
   }
   const formData = new FormData();
   formData.append('files', {
-    uri: videoData.videoUri,
-    type: videoData.videoType || 'video/mp4',
-    name: videoData.videoName || 'video.mp4',
+    uri: prepared.videoUri,
+    type: prepared.videoType || 'video/mp4',
+    name: prepared.videoName || 'video.mp4',
   });
   formData.append('files', {
-    uri: videoData.thumbnailUri,
-    type: videoData.thumbnailType || 'image/jpeg',
-    name: videoData.thumbnailName || 'thumbnail.jpg',
+    uri: prepared.thumbnailUri,
+    type: prepared.thumbnailType || 'image/jpeg',
+    name: prepared.thumbnailName || 'thumbnail.jpg',
   });
-  formData.append('userId', videoData.userId);
-  formData.append('title', videoData.title);
-  if (videoData.description) {
-    formData.append('description', videoData.description);
+  formData.append('userId', prepared.userId);
+  formData.append('title', prepared.title);
+  if (prepared.description) {
+    formData.append('description', prepared.description);
   }
-  if (videoData.category) {
-    formData.append('category', videoData.category);
+  if (prepared.category) {
+    formData.append('category', prepared.category);
   }
-  if (videoData.tags && videoData.tags.length > 0) {
-    formData.append('tags', JSON.stringify(videoData.tags));
+  if (prepared.tags && prepared.tags.length > 0) {
+    formData.append('tags', JSON.stringify(prepared.tags));
   }
-  if (videoData.visibility) {
-    formData.append('visibility', videoData.visibility);
+  if (prepared.visibility) {
+    formData.append('visibility', prepared.visibility);
   }
-  if (videoData.duration !== undefined && !isNaN(videoData.duration)) {
-    formData.append('duration', String(Math.floor(Number(videoData.duration))));
+  if (prepared.duration !== undefined && !isNaN(prepared.duration)) {
+    formData.append('duration', String(Math.floor(Number(prepared.duration))));
   }
-  if (videoData.width !== undefined && !isNaN(videoData.width) && videoData.width > 0) {
-    formData.append('width', String(Math.floor(Number(videoData.width))));
+  if (prepared.width !== undefined && !isNaN(prepared.width) && prepared.width > 0) {
+    formData.append('width', String(Math.floor(Number(prepared.width))));
   }
-  if (videoData.height !== undefined && !isNaN(videoData.height) && videoData.height > 0) {
-    formData.append('height', String(Math.floor(Number(videoData.height))));
+  if (prepared.height !== undefined && !isNaN(prepared.height) && prepared.height > 0) {
+    formData.append('height', String(Math.floor(Number(prepared.height))));
   }
-  if (videoData.scheduledPublishAt) {
-    formData.append('scheduledPublishAt', String(videoData.scheduledPublishAt));
+  if (prepared.scheduledPublishAt) {
+    formData.append('scheduledPublishAt', String(prepared.scheduledPublishAt));
   }
-  if (videoData.customPlaylistId) {
-    formData.append('customPlaylistId', String(videoData.customPlaylistId));
+  if (prepared.customPlaylistId) {
+    formData.append('customPlaylistId', String(prepared.customPlaylistId));
   }
 
   const headers = getAuthHeaders();

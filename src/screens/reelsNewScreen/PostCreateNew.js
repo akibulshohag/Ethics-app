@@ -15,39 +15,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { createThumbnail } from 'react-native-create-thumbnail';
 import VideoCoverPickerModal from '../../components/VideoCoverPickerModal';
+import { thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
 import { getSocialAccounts } from '../../services/postService';
 
 const { width } = Dimensions.get('window');
-
-async function thumbnailFromVideoFrame(videoUri) {
-  const uri = String(videoUri || '').trim();
-  if (!uri) return null;
-  const stampsMs = [300, 800, 1500, 2500, 4000];
-  for (let i = 0; i < stampsMs.length; i += 1) {
-    try {
-      const shot = await createThumbnail({
-        url: uri,
-        timeStamp: stampsMs[i],
-        format: 'jpeg',
-        cacheName: `reel_upload_thumb_${Date.now()}_${i}`,
-        maxWidth: 1080,
-        maxHeight: 1920,
-      });
-      if (shot?.path) {
-        return {
-          uri: shot.path,
-          type: 'image/jpeg',
-          name: 'video-frame-thumb.jpg',
-        };
-      }
-    } catch {
-      /* try next timestamp */
-    }
-  }
-  return null;
-}
 
 const firstNonEmpty = (...vals) => {
   for (let i = 0; i < vals.length; i += 1) {

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../../config';
+import { ensureVideoThumbnailFields } from '../utils/videoThumbnail';
 
 const API_URL = `${config.apiBaseUrl}/posts`;
 
@@ -141,57 +142,69 @@ export const uploadPost = async (data) => {
   if (!data?.title?.trim()) {
     throw new Error('Title is required.');
   }
-  if (!data?.thumbnailUri) {
-    throw new Error('Thumbnail image is required.');
+  const prepared = await ensureVideoThumbnailFields(data);
+  if (!prepared?.thumbnailUri && !prepared?.videoUri) {
+    throw new Error('Add a video or cover image for this post.');
+  }
+  if (!prepared?.thumbnailUri) {
+    throw new Error(
+      'Could not create a preview from this video. Pick a cover image or try another clip.',
+    );
   }
   const formData = new FormData();
   formData.append('files', {
-    uri: data.thumbnailUri,
-    type: data.thumbnailType || 'image/jpeg',
-    name: data.thumbnailName || 'thumbnail.jpg',
+    uri: prepared.thumbnailUri,
+    type: prepared.thumbnailType || 'image/jpeg',
+    name: prepared.thumbnailName || 'thumbnail.jpg',
   });
-  if (data.videoUri) {
+  if (prepared.videoUri) {
     formData.append('files', {
-      uri: data.videoUri,
-      type: data.videoType || 'video/mp4',
-      name: data.videoName || 'video.mp4',
+      uri: prepared.videoUri,
+      type: prepared.videoType || 'video/mp4',
+      name: prepared.videoName || 'video.mp4',
     });
   }
-  formData.append('userId', data.userId);
-  formData.append('title', data.title.trim());
-  if (data.description?.trim()) {
-    formData.append('description', data.description.trim());
+  formData.append('userId', prepared.userId);
+  formData.append('title', prepared.title.trim());
+  if (prepared.description?.trim()) {
+    formData.append('description', prepared.description.trim());
   }
-  if (data.website?.trim()) {
-    formData.append('website', data.website.trim());
+  if (prepared.website?.trim()) {
+    formData.append('website', prepared.website.trim());
   }
-  if (data.hashtags?.length) {
+  if (prepared.hashtags?.length) {
     formData.append(
       'hashtags',
-      Array.isArray(data.hashtags) ? JSON.stringify(data.hashtags) : String(data.hashtags),
+      Array.isArray(prepared.hashtags)
+        ? JSON.stringify(prepared.hashtags)
+        : String(prepared.hashtags),
     );
   }
-  if (data.duration !== undefined && data.duration != null && !Number.isNaN(Number(data.duration))) {
-    formData.append('duration', String(Math.floor(Number(data.duration))));
+  if (
+    prepared.duration !== undefined &&
+    prepared.duration != null &&
+    !Number.isNaN(Number(prepared.duration))
+  ) {
+    formData.append('duration', String(Math.floor(Number(prepared.duration))));
   }
-  if (data.scheduledPublishAt) {
-    formData.append('scheduledPublishAt', String(data.scheduledPublishAt));
+  if (prepared.scheduledPublishAt) {
+    formData.append('scheduledPublishAt', String(prepared.scheduledPublishAt));
   }
-  const plats = Array.isArray(data.platforms)
-    ? data.platforms
+  const plats = Array.isArray(prepared.platforms)
+    ? prepared.platforms
     : ['facebook', 'instagram', 'tiktok'];
   formData.append('platforms', JSON.stringify(plats));
-  if (data.facebookAccountId) {
-    formData.append('facebookPageId', String(data.facebookAccountId));
+  if (prepared.facebookAccountId) {
+    formData.append('facebookPageId', String(prepared.facebookAccountId));
   }
-  if (data.instagramAccountId) {
-    formData.append('instagramAccountId', String(data.instagramAccountId));
+  if (prepared.instagramAccountId) {
+    formData.append('instagramAccountId', String(prepared.instagramAccountId));
   }
-  if (data.tiktokAccountId) {
-    formData.append('tiktokAccountId', String(data.tiktokAccountId));
+  if (prepared.tiktokAccountId) {
+    formData.append('tiktokAccountId', String(prepared.tiktokAccountId));
   }
-  if (data.youtubeChannelId) {
-    formData.append('youtubeChannelId', String(data.youtubeChannelId));
+  if (prepared.youtubeChannelId) {
+    formData.append('youtubeChannelId', String(prepared.youtubeChannelId));
   }
   const tz = getDeviceTimeZone();
   if (tz) formData.append('deviceTimeZone', tz);

@@ -10,9 +10,9 @@ export const DISCOVERY_MENU_CATEGORIES = [
   },
   {
     key: 'bangladeshi',
-    label: 'Bangladeshi',
+    label: 'Bangla Food',
     icon: 'rice',
-    keywords: ['bangla', 'bangladeshi', 'bengali'],
+    keywords: ['bangla', 'bangladeshi', 'bengali', 'bangla food'],
   },
   {
     key: 'burger',
@@ -47,10 +47,11 @@ export const DISCOVERY_MENU_CATEGORIES = [
   },
   {
     key: 'indian',
-    label: 'Indian',
+    label: 'Indian Food',
     icon: 'silverware-variant',
     keywords: [
       'indian',
+      'indian food',
       'curry',
       'tandoori',
       'masala',
@@ -62,6 +63,21 @@ export const DISCOVERY_MENU_CATEGORIES = [
       'vindaloo',
       'balti',
       'dosa',
+    ],
+  },
+  {
+    key: 'wok',
+    label: 'Wok Food',
+    icon: 'noodles',
+    keywords: [
+      'wok',
+      'wok food',
+      'stir fry',
+      'stir-fry',
+      'stir fried',
+      'wok fried',
+      'wok noodles',
+      'wok rice',
     ],
   },
   {
@@ -79,7 +95,6 @@ export const DISCOVERY_MENU_CATEGORIES = [
       'noodle',
       'dim sum',
       'fried rice',
-      'wok',
       'chow mein',
       'dumpling',
     ],
@@ -167,21 +182,52 @@ const menuItemSearchBlob = item => {
   return normalizeDiscoveryText(parts.filter(Boolean).join(' '));
 };
 
+/** Map UI / menu category names to discovery keys */
+export const DISCOVERY_CATEGORY_ALIASES = {
+  'bangla food': 'bangladeshi',
+  bangla: 'bangladeshi',
+  bengali: 'bangladeshi',
+  'bengali food': 'bangladeshi',
+  bangladeshi: 'bangladeshi',
+  'indian food': 'indian',
+  indian: 'indian',
+  'wok food': 'wok',
+  wok: 'wok',
+};
+
 export const getDiscoveryCategoryByKey = key => {
   const k = normalizeDiscoveryText(key);
-  return DISCOVERY_MENU_CATEGORIES.find(c => c.key === k) || null;
+  const mapped = DISCOVERY_CATEGORY_ALIASES[k] || k;
+  return DISCOVERY_MENU_CATEGORIES.find(c => c.key === mapped) || null;
 };
 
 export const resolveDiscoveryCategoryFromFilter = filterKey => {
   const k = normalizeDiscoveryText(filterKey);
   if (!k) return null;
+  const mappedKey = DISCOVERY_CATEGORY_ALIASES[k] || k;
   return (
-    getDiscoveryCategoryByKey(k) ||
+    getDiscoveryCategoryByKey(mappedKey) ||
     DISCOVERY_MENU_CATEGORIES.find(
       cat => normalizeDiscoveryText(cat.label) === k,
     ) ||
     null
   );
+};
+
+/** Resolve navigation target for a cuisine chip (key may be raw menu category name). */
+export const resolveCategoryChipNavigation = chip => {
+  const label = String(chip?.label || '').trim();
+  const key = String(chip?.key || label).trim();
+  const discovery =
+    resolveDiscoveryCategoryFromFilter(key) ||
+    resolveDiscoveryCategoryFromFilter(label);
+  if (discovery) {
+    return { categoryKey: discovery.key, categoryLabel: discovery.label };
+  }
+  return {
+    categoryKey: key,
+    categoryLabel: label || key,
+  };
 };
 
 export const getDiscoveryKeysForMenuItem = item =>

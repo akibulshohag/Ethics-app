@@ -3,6 +3,7 @@ import { DeviceEventEmitter } from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import { config } from '../../config';
 import { isLocalMediaUri } from '../utils/helper';
+import { thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 
 // Shorts API: POST /v1/shorts/upload (not /videos - this is for shorts)
 const API_URL = `${config.apiBaseUrl}/shorts`;
@@ -116,6 +117,27 @@ export const shortsService = {
   async uploadShort(formData, userId) {
     if (!userId) {
       throw new Error('User ID is required. Please log in to upload shorts.');
+    }
+
+    const parts = parseUploadFormDataParts(formData);
+    if (parts.video?.uri && !parts.thumbnail?.uri) {
+      const generated = await thumbnailFromVideoFrame(parts.video.uri);
+      if (generated?.uri) {
+        const enriched = new FormData();
+        const sourceParts = Array.isArray(formData?._parts) ? formData._parts : [];
+        for (const part of sourceParts) {
+          const key = part?.[0];
+          const value = part?.[1];
+          if (!key) continue;
+          enriched.append(key, value);
+        }
+        enriched.append('files', {
+          uri: generated.uri,
+          type: generated.type || 'image/jpeg',
+          name: generated.name || 'thumb.jpg',
+        });
+        formData = enriched;
+      }
     }
 
     // Prefer direct-to-R2 upload when backend supports it (bypasses Cloudflare upload limits).

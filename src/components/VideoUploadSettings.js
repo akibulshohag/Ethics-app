@@ -27,6 +27,7 @@ import LocationSearchModal from './LocationSearchModal';
 import VideoScheduleModal from './VideoScheduleModal';
 import VideoCoverPickerModal from './VideoCoverPickerModal';
 import { uploadVideo } from '../services/videoService';
+import { thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 import {
   listCustomPlaylists,
   setCustomPlaylistItem,
@@ -43,6 +44,7 @@ const VideoUploadSettings = ({
 }) => {
   const [title, setTitle] = useState('');
   const [selectedThumbnail, setSelectedThumbnail] = useState(null);
+  const [thumbLoading, setThumbLoading] = useState(false);
   const [coverPickerVisible, setCoverPickerVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -81,6 +83,7 @@ const VideoUploadSettings = ({
       setDescription('');
       setHashtags([]);
       setSelectedThumbnail(null);
+      setThumbLoading(false);
       setVisibility('public');
       setUploadProgress(0);
       setScheduledPublishDate(null);
@@ -98,9 +101,20 @@ const VideoUploadSettings = ({
           },
         ],
       );
-    } else if (selectedVideo && visible) {
-      // When modal opens with a video, try to extract thumbnail from video
-      // For now, we'll let user pick thumbnail manually
+    } else if (selectedVideo?.uri && visible) {
+      let cancelled = false;
+      setThumbLoading(true);
+      setSelectedThumbnail(null);
+      thumbnailFromVideoFrame(selectedVideo.uri)
+        .then(thumb => {
+          if (!cancelled && thumb) setSelectedThumbnail(thumb);
+        })
+        .finally(() => {
+          if (!cancelled) setThumbLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
     if (visible && userId) {
       listCustomPlaylists(userId)
@@ -152,8 +166,23 @@ const VideoUploadSettings = ({
       Alert.alert('Error', 'Please select a video first');
       return;
     }
-    if (!selectedThumbnail) {
-      Alert.alert('Error', 'Please select a thumbnail image');
+    let thumb = selectedThumbnail;
+    if (!thumb?.uri) {
+      setThumbLoading(true);
+      try {
+        thumb = await thumbnailFromVideoFrame(selectedVideo.uri);
+      } catch {
+        thumb = null;
+      } finally {
+        setThumbLoading(false);
+      }
+      if (thumb?.uri) setSelectedThumbnail(thumb);
+    }
+    if (!thumb?.uri) {
+      Alert.alert(
+        'Preview unavailable',
+        'Could not generate a cover from this video. Choose a cover image or try another clip.',
+      );
       return;
     }
     if (!title.trim()) {
@@ -184,10 +213,9 @@ const VideoUploadSettings = ({
         videoUri: selectedVideo.uri,
         videoType: selectedVideo.type || 'video/mp4',
         videoName: selectedVideo.fileName || `video_${Date.now()}.mp4`,
-        thumbnailUri: selectedThumbnail.uri,
-        thumbnailType: selectedThumbnail.type || 'image/jpeg',
-        thumbnailName:
-          selectedThumbnail.fileName || `thumbnail_${Date.now()}.jpg`,
+        thumbnailUri: thumb.uri,
+        thumbnailType: thumb.type || 'image/jpeg',
+        thumbnailName: thumb.fileName || thumb.name || `thumbnail_${Date.now()}.jpg`,
         userId: userId,
         title: title.trim(),
         description: description.trim() || undefined,
@@ -371,16 +399,24 @@ const VideoUploadSettings = ({
         >
           {/* Cover Image Section */}
           <View style={styles.coverContainer}>
-            {selectedThumbnail ? (
+            {thumbLoading ? (
+              <View style={[styles.coverImage, styles.coverLoading]}>
+                <ActivityIndicator size="large" color="#F5A623" />
+                <Text style={styles.coverLoadingText}>Creating preview…</Text>
+              </View>
+            ) : selectedThumbnail ? (
               <Image
                 source={{ uri: selectedThumbnail.uri }}
                 style={styles.coverImage}
               />
             ) : selectedVideo ? (
-              <Image
-                source={{ uri: selectedVideo.uri }}
-                style={styles.coverImage}
-              />
+              <View style={[styles.coverImage, styles.coverLoading]}>
+                <MaterialCommunityIcons
+                  name="movie-open-play-outline"
+                  size={48}
+                  color="#ccc"
+                />
+              </View>
             ) : (
               <View style={styles.coverPlaceholder}>
                 <MaterialCommunityIcons
@@ -389,7 +425,7 @@ const VideoUploadSettings = ({
                   color="#ccc"
                 />
                 <Text style={styles.coverPlaceholderText}>
-                  No thumbnail selected
+                  Preview will be created from your video
                 </Text>
               </View>
             )}
@@ -490,8 +526,8 @@ const VideoUploadSettings = ({
             style={[
               styles.uploadButton,
               (!selectedVideo ||
-                !selectedThumbnail ||
                 !title.trim() ||
+                thumbLoading ||
                 uploading ||
                 !userId) &&
                 styles.uploadButtonDisabled,
@@ -499,8 +535,8 @@ const VideoUploadSettings = ({
             onPress={handleUpload}
             disabled={
               !selectedVideo ||
-              !selectedThumbnail ||
               !title.trim() ||
+              thumbLoading ||
               uploading ||
               !userId
             }
@@ -692,6 +728,17 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  coverLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#F3F4F6',
+  },
+  coverLoadingText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '600',
   },
   coverOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -28,6 +28,10 @@ import {
 import { matchRestaurantQuery } from '../services/discoveryService';
 import { openDiscoveryMedia } from '../utils/openDiscoveryMedia';
 import { safeImageUri } from '../utils/helper';
+import {
+  resolveCategoryChipNavigation,
+  resolveDiscoveryCategoryFromFilter,
+} from '../constants/menuDiscoveryCategories';
 import logo from '../assets/logo.png';
 
 const FEED_HORIZONTAL_PAD = 15;
@@ -45,13 +49,6 @@ const formatOrders = n => {
   const x = Number(n);
   if (!Number.isFinite(x) || x <= 0) return '';
   return `${x} order${x === 1 ? '' : 's'}`;
-};
-
-const shortLabel = label => {
-  const text = String(label || '').trim();
-  if (!text) return '';
-  const first = text.split(/\s+/)[0] || text;
-  return first.length <= 7 ? first : `${first.slice(0, 6)}...`;
 };
 
 const rowHasVideo = row =>
@@ -142,10 +139,20 @@ export default function HomeSearchCategoryScreen() {
   const route = useRoute();
   const user = useSelector(state => state.app?.user);
 
-  const categoryKey = String(route.params?.categoryKey || '').trim();
-  const categoryLabel =
-    String(route.params?.categoryLabel || categoryKey || 'Menu').trim() ||
-    'Menu';
+  const resolvedCategory = useMemo(() => {
+    const nav = resolveCategoryChipNavigation({
+      key: route.params?.categoryKey,
+      label: route.params?.categoryLabel,
+    });
+    const discovery = resolveDiscoveryCategoryFromFilter(nav.categoryKey);
+    return {
+      categoryKey: discovery?.key || nav.categoryKey,
+      categoryLabel: discovery?.label || nav.categoryLabel,
+    };
+  }, [route.params?.categoryKey, route.params?.categoryLabel]);
+
+  const categoryKey = resolvedCategory.categoryKey;
+  const categoryLabel = resolvedCategory.categoryLabel;
   const nearLabel = String(route.params?.nearLabel || '').trim();
 
   const primaryLoc = useMemo(() => {
@@ -294,9 +301,10 @@ export default function HomeSearchCategoryScreen() {
 
   const switchCategory = useCallback(
     cat => {
+      const nav = resolveCategoryChipNavigation(cat);
       navigation.replace('HomeSearchCategoryScreen', {
-        categoryKey: cat.key,
-        categoryLabel: cat.label,
+        categoryKey: nav.categoryKey,
+        categoryLabel: nav.categoryLabel,
         nearLabel,
         viewerLat: locationOpts.viewerLat,
         viewerLng: locationOpts.viewerLng,
@@ -493,9 +501,9 @@ export default function HomeSearchCategoryScreen() {
                       styles.categoryLabel,
                       active && styles.categoryLabelActive,
                     ]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
-                    {shortLabel(cat.label)}
+                    {cat.label}
                   </Text>
                   {active ? <View style={styles.categoryUnderline} /> : null}
                 </TouchableOpacity>
@@ -675,38 +683,41 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: FEED_HORIZONTAL_PAD, paddingBottom: 32 },
   title: { fontSize: 22, fontWeight: '700', color: '#111', marginTop: 4 },
   subtitle: { fontSize: 14, color: '#6B7280', marginTop: 4, marginBottom: 8 },
-  categoryScroll: { marginBottom: 12, marginHorizontal: -4 },
-  categoryRow: { gap: 10, paddingRight: 8, paddingVertical: 4 },
+  categoryScroll: { marginBottom: 8, marginHorizontal: -4 },
+  categoryRow: { gap: 6, paddingRight: 6, paddingVertical: 2 },
   categoryChip: {
     alignItems: 'center',
     width: 68,
-    paddingTop: 6,
-    paddingBottom: 8,
-    borderRadius: 10,
+    paddingTop: 4,
+    paddingBottom: 5,
+    paddingHorizontal: 3,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#ECECEC',
     backgroundColor: '#FFF',
   },
   categoryChipActive: { borderColor: '#F5A623' },
   categoryIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#F3F4F6',
   },
   categoryIcon: { width: '100%', height: '100%' },
   categoryLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     color: '#4E4E4E',
-    marginTop: 4,
+    marginTop: 3,
     textAlign: 'center',
+    lineHeight: 11,
+    width: '100%',
   },
   categoryLabelActive: { color: '#F5A623', fontWeight: '700' },
   categoryUnderline: {
-    marginTop: 4,
-    width: 24,
+    marginTop: 2,
+    width: 20,
     height: 2,
     borderRadius: 2,
     backgroundColor: '#F5A623',

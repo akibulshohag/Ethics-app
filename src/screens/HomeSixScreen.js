@@ -20,8 +20,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import { config } from '../../config';
 import { getRolesList } from '../services/roleService';
+import {
+  register,
+  verifyEmailOtp,
+  resendEmailVerificationOtp,
+  validatePasswordStrength,
+} from '../services/authService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -84,27 +89,28 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
       return;
     }
 
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      Alert.alert('Error', passwordError);
+      return;
+    }
+
+    const roleName = ROLE_MAP[userType];
+    if (!roleName) {
+      Alert.alert('Error', 'Please select an account type');
+      return;
+    }
+
     const roleId = getRoleIdForUserType();
 
     setLoading(true);
     try {
-      const response = await fetch(`${config.apiBaseUrl}/users/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-          ...(roleId ? { roleId } : {}),
-        }),
+      const data = await register({
+        email: email.trim(),
+        password: password.trim(),
+        role: roleName,
+        ...(roleId ? { roleId } : {}),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
 
       if (data?.requiresEmailVerification) {
         setPendingEmail(email.trim());
@@ -159,21 +165,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
     }
     setLoading(true);
     try {
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/verify-email-verification-otp`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: pendingEmail,
-            otp: verificationOtp.trim(),
-          }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'OTP verification failed');
-      }
+      const data = await verifyEmailOtp(pendingEmail, verificationOtp);
 
       const userData = {
         id: data.user.id,
@@ -203,18 +195,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
     if (!pendingEmail) return;
     setLoading(true);
     try {
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/request-email-verification-otp`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: pendingEmail }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to resend OTP');
-      }
+      await resendEmailVerificationOtp(pendingEmail);
       Alert.alert('Success', 'OTP sent again to your email');
     } catch (error) {
       Alert.alert('Error', error.message || 'Failed to resend OTP');

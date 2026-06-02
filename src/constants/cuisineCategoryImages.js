@@ -43,6 +43,8 @@ const BY_KEYWORD = [
   ['chicken', px(2097090)],
   ['rice', px(958545)],
   ['chinese', px(1893556)],
+  ['wok', px(1893556)],
+  ['wok food', px(1893556)],
   ['noodle', px(1893556)],
   ['thai', px(70497)],
   ['mexican', px(2092500)],
