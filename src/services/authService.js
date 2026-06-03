@@ -46,6 +46,13 @@ export const login = (email, password) =>
     password: password.trim(),
   });
 
+export const socialLogin = ({ provider, idToken, accessToken }) =>
+  postJson('/users/social-login', {
+    provider: String(provider || '').trim().toLowerCase(),
+    ...(idToken ? { idToken: String(idToken) } : {}),
+    ...(accessToken ? { accessToken: String(accessToken) } : {}),
+  });
+
 export const register = ({ email, password, roleId, role }) =>
   postJson('/users/register', {
     email: normalizeEmail(email),

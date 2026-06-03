@@ -25,6 +25,12 @@ import {
   isAccountInactiveError,
   isAccountPendingError,
 } from '../services/authService';
+import {
+  loginWithFacebook,
+  loginWithGoogle,
+  normalizeSocialAuthError,
+} from '../services/socialAuthService';
+import { config } from '../../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -267,6 +273,46 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
     }
   };
 
+  const handleSocialLogin = async provider => {
+    setLoading(true);
+    try {
+      const data =
+        provider === 'facebook'
+          ? await loginWithFacebook()
+          : await loginWithGoogle();
+
+      const userData = {
+        id: data.user.id,
+        name: data.user.name,
+        email: data.user.email,
+        phone: data.user.phone,
+        nickname: data.user.nickname,
+        gender: data.user.gender,
+        role: data.user.role,
+        roleId: data.user.roleId,
+        address: data.user.address,
+        latitude: data.user.latitude,
+        longitude: data.user.longitude,
+        pin: data.user.pin,
+        photos: data.user.photos ?? [],
+        channelAbout: data.user.channelAbout,
+        socialLinks: data.user.socialLinks,
+        savedLastLocation: data.user.savedLastLocation,
+        rememberMe,
+        token: data.token,
+      };
+      dispatch(appSetUser(userData));
+      navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
+    } catch (error) {
+      const msg = normalizeSocialAuthError(error);
+      if (msg !== 'Sign-in cancelled') {
+        Alert.alert('Social Login Failed', msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.screenRoot}>
       <StatusBar
@@ -429,13 +475,19 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                   <View style={styles.socialPill}>
                     <TouchableOpacity
                       style={styles.socialIcon}
+                      onPress={() => handleSocialLogin('facebook')}
                       disabled={loading}
+                      activeOpacity={0.75}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                       <Icon name="facebook" size={32} color="#1877F2" />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.socialIcon}
+                      onPress={() => handleSocialLogin('google')}
                       disabled={loading}
+                      activeOpacity={0.75}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                       <Icon name="google" size={32} color="#EA4335" />
                     </TouchableOpacity>
@@ -615,7 +667,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  socialIcon: { marginHorizontal: 12 },
+  socialIcon: {
+    marginHorizontal: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
 
 export default HomeSevenScreen;

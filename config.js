@@ -47,7 +47,12 @@ export const config = {
    * URL is built in the app when the connect API fails (e.g. missing server env).
    * Matches Savasaachi / add the same id + FACEBOOK_APP_SECRET on eatixapi for callbacks.
    */
-  facebookAppId: '925009370085316',
+  facebookAppId: '1714809253015158',
+  /**
+   * Facebook "Client token" from Meta App dashboard (NOT app secret).
+   * Android native SDK requires this to initialize on startup.
+   */
+  facebookClientToken: '17658cbb4f5031595adeb84c3f084ab5',
   /**
    * Must match server `FACEBOOK_ENABLE_INSTAGRAM_LOGIN`. Set true when Meta OAuth works.
    */
@@ -64,7 +69,8 @@ export const config = {
    * Same as backend `GOOGLE_CLIENT_ID` (Web client). Optional fallback to build
    * YouTube OAuth URL locally when `/social-auth/youtube/connect` fails.
    */
-  googleClientId: '',
+  googleClientId:
+    '366684605140-q98fauu8rmqjkdhs0turqgljtpsccve3.apps.googleusercontent.com',
 };
 
 /**
