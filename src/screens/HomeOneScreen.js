@@ -50,7 +50,7 @@ import {
   getCoordsFromPlaceId,
   getFallbackCoordsForUKArea,
 } from '../utils/geolocation';
-import { appSetUser } from '../redux/actions/appSlice';
+import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
 import { getFeatured } from '../services/featuredService';
 import { getSponsored } from '../services/sponsoredService';
 import {
@@ -69,7 +69,16 @@ import {
   subscribeToChannel,
   unsubscribeFromChannel,
 } from '../services/channelService';
-import { saveLastLocationToBackend } from '../services/userLocationService';
+import {
+  saveLastLocationToBackend,
+  persistBrowseLocation,
+  normalizeBrowseLocation,
+  resolveUserBrowseLocation,
+  browseLocationFromUserProfile,
+} from '../services/userLocationService';
+import { browseAreaLabel, UK_DEFAULT_RADIUS_KM, extractUkPostcodeFromText } from '../utils/ukPostcode';
+import MapLocationPicker from '../components/MapLocationPicker';
+import RestaurantBookingModal from '../components/RestaurantBookingModal';
 import logo from '../assets/logo.png';
 import { cuisineImageUriFromKey } from '../constants/cuisineCategoryImages';
 import {
@@ -112,6 +121,7 @@ import { getMenuByUserId } from '../services/menuService';
 import {
   buildShortLocationFromUser,
   formatShortProfileLocationLine,
+  formatCityCountryPostcodeLine,
   abbrevCountryLabel,
 } from '../utils/locationFormat';
 import {
@@ -393,8 +403,30 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
     creatorLatitude: olat ?? undefined,
     creatorLongitude: olng ?? undefined,
     creatorSocialLinks: Array.isArray(u.socialLinks) ? u.socialLinks : [],
+    scheduledPublishAt: v.scheduledPublishAt ?? undefined,
+    scheduleAt: v.scheduleAt ?? undefined,
+    scheduleDate: v.scheduleDate ?? undefined,
+    scheduledAt: v.scheduledAt ?? undefined,
+    publishAt: v.publishAt ?? undefined,
+    publishedAt: v.publishedAt ?? undefined,
+    isScheduled: isFutureScheduledMedia(v),
   };
 };
+
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduleDate ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
+};
+
+const onlyPublishedNow = item => !isFutureScheduledMedia(item);
 
 const LOCATION_KEY = 'USER_LOCATION_SELECTION';
 const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -504,10 +536,15 @@ const HomeOneScreen = () => {
     useState(false);
   const locationDebounceRef = useRef(null);
   const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [bookingTarget, setBookingTarget] = useState(null);
   const [galleryImages, setGalleryImages] = useState([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryError, setGalleryError] = useState(null);
+  const [locationMapVisible, setLocationMapVisible] = useState(false);
   const [addressText, setAddressText] = useState('');
+  const [browsePostcode, setBrowsePostcode] = useState('');
+  const [homeLocationOverride, setHomeLocationOverride] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
@@ -523,8 +560,17 @@ const HomeOneScreen = () => {
   const [featuredChannelMeta, setFeaturedChannelMeta] = useState(null);
   /** Same source as restaurant detail: GET channel-profile (sponsored list omits rating + subscribe). */
   const [sponsoredChannelMeta, setSponsoredChannelMeta] = useState(null);
-  const [sponsoredSubscribeToggling, setSponsoredSubscribeToggling] =
-    useState(false);
+  /** Per channel owner — detail / sponsored banner */
+  const [channelSubscribeByOwnerId, setChannelSubscribeByOwnerId] = useState(
+    {},
+  );
+  /** Per trending video card — same channel can appear on multiple cards */
+  const [trendingSubscribeByVideoId, setTrendingSubscribeByVideoId] =
+    useState({});
+  const [subscribeTogglingVideoId, setSubscribeTogglingVideoId] =
+    useState(null);
+  /** Owners the user toggled on Trending — skip bulk hydrate for their cards */
+  const subscribeTouchedOwnersRef = useRef(new Set());
   const [selectedCuisine, setSelectedCuisine] = useState('');
   const [cuisineOptions, setCuisineOptions] = useState([]);
   const [feedVideos, setFeedVideos] = useState([]);
@@ -548,6 +594,7 @@ const HomeOneScreen = () => {
   const route = useRoute();
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
   const authUserId = useMemo(
     () =>
       user?.id ?? user?.userId ?? user?._id ?? user?.uid ?? user?.sub ?? null,
@@ -609,6 +656,105 @@ const HomeOneScreen = () => {
       user?.longitude,
     ],
   );
+
+  const headerLocationLabel = useMemo(() => {
+    if (homeLocationOverride) return homeLocationOverride;
+
+    const profileAddr = String(user?.address || '').trim();
+    if (profileAddr) {
+      const fromProfile = formatCityCountryPostcodeLine({
+        address: profileAddr,
+        postcode:
+          user?.postcode || extractUkPostcodeFromText(profileAddr) || '',
+      });
+      if (fromProfile && fromProfile !== 'Set your area') return fromProfile;
+    }
+
+    const sessionAddr = String(addressText || '').trim();
+    const browseAddr = String(browseLocation?.addressText || '').trim();
+    const addr = sessionAddr || browseAddr;
+    const pc = String(
+      browsePostcode ||
+        browseLocation?.postcode ||
+        extractUkPostcodeFromText(addr) ||
+        '',
+    ).trim();
+    const formatted = formatCityCountryPostcodeLine({
+      addressText: addr,
+      postcode: pc,
+    });
+    if (formatted && formatted !== 'Set your area') return formatted;
+    return (
+      browseAreaLabel({
+        postcode: pc,
+        addressText: addr,
+        areaLabel: browseLocation?.areaLabel || '',
+      }) || 'Set your area'
+    );
+  }, [
+    homeLocationOverride,
+    addressText,
+    browsePostcode,
+    browseLocation?.addressText,
+    browseLocation?.postcode,
+    browseLocation?.areaLabel,
+    user?.address,
+    user?.postcode,
+  ]);
+
+  useEffect(() => {
+    setHomeLocationOverride(null);
+  }, [user?.address, user?.postcode]);
+
+  useEffect(() => {
+    if (!user?.address?.trim()) return;
+    const sessionAddr = String(addressText || '').trim();
+    if (sessionAddr && sessionAddr !== user.address) return;
+
+    const lat = Number(user.latitude);
+    const lng = Number(user.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const pc =
+      String(user.postcode || '').trim() ||
+      extractUkPostcodeFromText(user.address) ||
+      '';
+    const label = formatCityCountryPostcodeLine({
+      address: user.address,
+      postcode: pc,
+    });
+    const currentLabel = formatCityCountryPostcodeLine({
+      addressText: browseLocation?.addressText || addressText,
+      postcode: browseLocation?.postcode || browsePostcode,
+      areaLabel: browseLocation?.areaLabel,
+    });
+    if (label && label === currentLabel) return;
+
+    setAddressText(user.address);
+    if (pc) setBrowsePostcode(pc);
+    setSelectedLocation({ lat, lng });
+    dispatch(
+      setBrowseLocation({
+        lat,
+        lng,
+        postcode: pc,
+        addressText: user.address,
+        areaLabel: label,
+      }),
+    );
+  }, [
+    user?.address,
+    user?.postcode,
+    user?.latitude,
+    user?.longitude,
+    addressText,
+    browsePostcode,
+    browseLocation?.addressText,
+    browseLocation?.postcode,
+    browseLocation?.areaLabel,
+    dispatch,
+  ]);
+
   const homeFeedCache = useSelector(state => state.homeFeed);
   const homeFeedCacheRef = useRef(homeFeedCache);
   homeFeedCacheRef.current = homeFeedCache;
@@ -668,10 +814,17 @@ const HomeOneScreen = () => {
         mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? s.mediaUrl,
         visibility: updated?.visibility ?? s.visibility,
         commentSetting: updated?.commentSetting ?? s.commentSetting,
+        scheduledPublishAt:
+          updated?.scheduledPublishAt ?? s.scheduledPublishAt,
+        scheduleAt: updated?.scheduleAt ?? s.scheduleAt,
+        scheduleDate: updated?.scheduleDate ?? s.scheduleDate,
+        scheduledAt: updated?.scheduledAt ?? s.scheduledAt,
         publishedAt: updated?.publishedAt ?? s.publishedAt,
       });
       setFeedShorts(prev =>
-        prev.map(s => (String(s?.id) === sid ? mergeShort(s) : s)),
+        prev
+          .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
+          .filter(onlyPublishedNow),
       );
       setSelectedItem(prev => {
         if (String(prev?.id) !== sid) return prev;
@@ -694,29 +847,35 @@ const HomeOneScreen = () => {
     String(videoChannelOwnerId) === String(user.id);
   const showSubscribeBtn = !!videoChannelOwnerId && !isOwnChannelVideo;
 
-  const saveLocationSelection = useCallback(async (coords, label) => {
-    try {
-      const uid = userRef.current?.id || null;
-      await AsyncStorage.setItem(
-        LOCATION_KEY,
-        JSON.stringify({
-          userId: uid,
-          coords,
-          addressText: label || '',
-          savedAt: Date.now(),
-        }),
-      );
-      if (uid && coords?.lat != null && coords?.lng != null) {
-        saveLastLocationToBackend({
+  const saveLocationSelection = useCallback(
+    async (coords, label, postcode = '') => {
+      const pc = String(postcode || browsePostcode || '').trim();
+      const areaLabel = formatCityCountryPostcodeLine({
+        addressText: label || '',
+        postcode: pc,
+      });
+      setHomeLocationOverride(areaLabel);
+      dispatch(
+        setBrowseLocation({
           lat: coords.lat,
           lng: coords.lng,
+          postcode: pc,
           addressText: label || '',
-        }).catch(() => {});
-      }
-    } catch (e) {
-      // ignore storage errors
-    }
-  }, []);
+          areaLabel,
+        }),
+      );
+      if (pc) setBrowsePostcode(pc);
+      await persistBrowseLocation({
+        userId: userRef.current?.id,
+        lat: coords.lat,
+        lng: coords.lng,
+        postcode: pc,
+        addressText: label || '',
+        areaLabel,
+      });
+    },
+    [dispatch, browsePostcode],
+  );
 
   // Debounced address suggestions in the location modal
   useEffect(() => {
@@ -950,9 +1109,18 @@ const HomeOneScreen = () => {
       if (params.selectedLocation != null) {
         setSelectedLocation(params.selectedLocation);
         if (params.addressText != null) setAddressText(params.addressText);
+        if (params.postcode != null) setBrowsePostcode(params.postcode);
+        const loc = normalizeBrowseLocation({
+          lat: params.selectedLocation.lat,
+          lng: params.selectedLocation.lng,
+          postcode: params.postcode,
+          addressText: params.addressText,
+        });
+        if (loc) dispatch(setBrowseLocation(loc));
         navigation.setParams({
           selectedLocation: undefined,
           addressText: undefined,
+          postcode: undefined,
         });
         return stopPlaybackOnBlur;
       }
@@ -961,6 +1129,26 @@ const HomeOneScreen = () => {
         let cancelled = false;
         const restoreLocation = async () => {
           try {
+            const u = userRef.current;
+            const profileLoc = browseLocationFromUserProfile(u);
+            if (profileLoc && !cancelled) {
+              setSelectedLocation({ lat: profileLoc.lat, lng: profileLoc.lng });
+              setAddressText(profileLoc.addressText || '');
+              setBrowsePostcode(profileLoc.postcode || '');
+              dispatch(setBrowseLocation(profileLoc));
+              await persistBrowseLocation({
+                userId: u?.id,
+                lat: profileLoc.lat,
+                lng: profileLoc.lng,
+                postcode: profileLoc.postcode || '',
+                addressText: profileLoc.addressText || '',
+                areaLabel: profileLoc.areaLabel || '',
+              });
+              loadFeaturedAndFeed();
+              loadContinueWatching();
+              return;
+            }
+
             const raw = await AsyncStorage.getItem(LOCATION_KEY);
             if (!raw) {
               if (!cancelled) setLocationModalVisible(true);
@@ -982,27 +1170,51 @@ const HomeOneScreen = () => {
               if (cancelled) return;
               setSelectedLocation(saved.coords);
               setAddressText(saved.addressText || '');
-              loadFeaturedAndFeed();
-              loadContinueWatching();
-            } else if (
-              userRef.current?.latitude != null &&
-              userRef.current?.longitude != null
-            ) {
-              if (cancelled) return;
-              setSelectedLocation({
-                lat: Number(userRef.current.latitude),
-                lng: Number(userRef.current.longitude),
-              });
-              const u = userRef.current;
-              setAddressText(
-                (u?.address && String(u.address).trim()) ||
-                  [u?.city, u?.country].filter(Boolean).join(', ') ||
-                  '',
+              setBrowsePostcode(saved.postcode || '');
+              dispatch(
+                setBrowseLocation(
+                  normalizeBrowseLocation({
+                    lat: saved.coords.lat,
+                    lng: saved.coords.lng,
+                    postcode: saved.postcode,
+                    addressText: saved.addressText,
+                    areaLabel: saved.areaLabel,
+                  }) || {
+                    lat: saved.coords.lat,
+                    lng: saved.coords.lng,
+                    postcode: saved.postcode || '',
+                    addressText: saved.addressText || '',
+                    areaLabel: saved.areaLabel || '',
+                  },
+                ),
               );
               loadFeaturedAndFeed();
               loadContinueWatching();
-            } else if (!cancelled) {
-              setLocationModalVisible(true);
+            } else {
+              const profileLoc = await resolveUserBrowseLocation(
+                userRef.current,
+              );
+              if (profileLoc && !cancelled) {
+                setSelectedLocation({
+                  lat: profileLoc.lat,
+                  lng: profileLoc.lng,
+                });
+                setAddressText(profileLoc.addressText || '');
+                setBrowsePostcode(profileLoc.postcode || '');
+                dispatch(setBrowseLocation(profileLoc));
+                await persistBrowseLocation({
+                  userId: userRef.current?.id,
+                  lat: profileLoc.lat,
+                  lng: profileLoc.lng,
+                  postcode: profileLoc.postcode || '',
+                  addressText: profileLoc.addressText || '',
+                  areaLabel: profileLoc.areaLabel || '',
+                });
+                loadFeaturedAndFeed();
+                loadContinueWatching();
+              } else if (!cancelled) {
+                setLocationModalVisible(true);
+              }
             }
           } catch (e) {
             if (!cancelled) setLocationModalVisible(true);
@@ -1042,9 +1254,17 @@ const HomeOneScreen = () => {
     }
     let cancelled = false;
     setCategoryBrowseLoading(true);
+    const voCat = resolveViewerLocationOpts(selectedLocation, user);
     browseRestaurantsByCategory({
       category: cuisineFilterKey,
       limit: 30,
+      ...(voCat
+        ? {
+            nearbyLat: voCat.viewerLat,
+            nearbyLng: voCat.viewerLng,
+            radiusKm: UK_DEFAULT_RADIUS_KM,
+          }
+        : {}),
     })
       .then(res => {
         if (cancelled) return;
@@ -1061,7 +1281,7 @@ const HomeOneScreen = () => {
     return () => {
       cancelled = true;
     };
-  }, [isCuisineFilterScreen, cuisineFilterKey]);
+  }, [isCuisineFilterScreen, cuisineFilterKey, selectedLocation, user]);
 
   const loadFeaturedAndFeed = useCallback(async () => {
     const voBrowse = resolveViewerLocationOpts(selectedLocation, user);
@@ -1080,12 +1300,32 @@ const HomeOneScreen = () => {
       isHomeFeedCacheFresh(cached.fetchedAt, cached.cacheKey, feedCacheKey);
 
     if (!searchTermEarly && hasHomeCacheData) {
-      setFeaturedVideo(cached.featuredVideo);
-      setSponsoredVideo(cached.sponsoredVideo);
-      setFeedVideos(cached.feedVideos || []);
-      setFeedShorts(cached.feedShorts || []);
-      setPopularShorts(cached.popularShorts || []);
-      setNewShorts(cached.newShorts || []);
+      const cachedFeedVideos = (cached.feedVideos || []).filter(
+        onlyPublishedNow,
+      );
+      const cachedFeedShorts = (cached.feedShorts || []).filter(
+        onlyPublishedNow,
+      );
+      const cachedPopularShorts = (cached.popularShorts || []).filter(
+        onlyPublishedNow,
+      );
+      const cachedNewShorts = (cached.newShorts || []).filter(
+        onlyPublishedNow,
+      );
+      setFeaturedVideo(
+        cached.featuredVideo && !isFutureScheduledMedia(cached.featuredVideo)
+          ? cached.featuredVideo
+          : null,
+      );
+      setSponsoredVideo(
+        cached.sponsoredVideo && !isFutureScheduledMedia(cached.sponsoredVideo)
+          ? cached.sponsoredVideo
+          : null,
+      );
+      setFeedVideos(cachedFeedVideos);
+      setFeedShorts(cachedFeedShorts);
+      setPopularShorts(cachedPopularShorts);
+      setNewShorts(cachedNewShorts);
       setMostOrderedRestaurants(cached.mostOrderedRestaurants || []);
       setCuisineOptions(cached.cuisineOptions || []);
       setFeedLoading(false);
@@ -1093,6 +1333,7 @@ const HomeOneScreen = () => {
         fetchDiscoveryData({
           currentUserId: user?.id || null,
           cacheKey: feedCacheKey,
+          locationOpts: voBrowse,
           force: false,
         }),
       );
@@ -1116,7 +1357,7 @@ const HomeOneScreen = () => {
       ...baseParams,
       nearbyLat: lat,
       nearbyLng: lng,
-      radiusKm: 50,
+      radiusKm: UK_DEFAULT_RADIUS_KM,
       excludeSponsored: true,
       excludeFeatured: true,
     };
@@ -1125,7 +1366,7 @@ const HomeOneScreen = () => {
       viewerUserId: user?.id,
       nearbyLat: lat,
       nearbyLng: lng,
-      radiusKm: 50,
+      radiusKm: UK_DEFAULT_RADIUS_KM,
     };
 
     try {
@@ -1154,7 +1395,13 @@ const HomeOneScreen = () => {
           page: 1,
           limit: 16,
         }),
-        getTopRestaurantsByOrders({ page: 1, limit: 100 }).catch(() => ({
+        getTopRestaurantsByOrders({
+          page: 1,
+          limit: 100,
+          nearbyLat: lat,
+          nearbyLng: lng,
+          radiusKm: UK_DEFAULT_RADIUS_KM,
+        }).catch(() => ({
           restaurants: [],
         })),
       ]);
@@ -1167,8 +1414,16 @@ const HomeOneScreen = () => {
         sponsoredRes?.sponsored,
         voBrowse,
       );
-      setFeaturedVideo(pickedFeatured);
-      setSponsoredVideo(pickedSponsored);
+      setFeaturedVideo(
+        pickedFeatured && !isFutureScheduledMedia(pickedFeatured)
+          ? pickedFeatured
+          : null,
+      );
+      setSponsoredVideo(
+        pickedSponsored && !isFutureScheduledMedia(pickedSponsored)
+          ? pickedSponsored
+          : null,
+      );
       const vo = { viewerLat: lat, viewerLng: lng };
       const mappedVideos = (videosRes?.videos || []).map(v =>
         mapToDisplayItem(v, 'video', vo),
@@ -1415,12 +1670,16 @@ const HomeOneScreen = () => {
           _menuSearchKeyword: q,
         };
       };
-      const mappedVideosWithMenu = mappedVideos.map(withMenuSearchMeta);
-      const mappedShortsWithMenu = mappedShorts.map(withMenuSearchMeta);
+      const mappedVideosWithMenu = mappedVideos
+        .filter(onlyPublishedNow)
+        .map(withMenuSearchMeta);
+      const mappedShortsWithMenu = mappedShorts
+        .filter(onlyPublishedNow)
+        .map(withMenuSearchMeta);
       const mappedPopularShortsWithMenu =
-        mappedPopularShorts.map(withMenuSearchMeta);
+        mappedPopularShorts.filter(onlyPublishedNow).map(withMenuSearchMeta);
       const mappedNewestShortsWithMenu =
-        mappedNewestShorts.map(withMenuSearchMeta);
+        mappedNewestShorts.filter(onlyPublishedNow).map(withMenuSearchMeta);
       const matchesSearch = item => {
         if (!q) return true;
         const haystack = [
@@ -1508,6 +1767,7 @@ const HomeOneScreen = () => {
         fetchDiscoveryData({
           currentUserId: user?.id || null,
           cacheKey: feedCacheKey,
+          locationOpts: voBrowse,
           force: false,
         }),
       );
@@ -2173,6 +2433,121 @@ const HomeOneScreen = () => {
     );
   }, []);
 
+  const openBookingForItem = useCallback(
+    item => {
+      const ownerId = getSponsoredOwnerId(item);
+      if (!ownerId) return;
+      if (!isAuthenticated || !actorUserId) {
+        navigation.navigate('HomeSevenScreen');
+        return;
+      }
+      const owner =
+        item?._campaignOwnerUser ||
+        (item?.user && typeof item.user === 'object' ? item.user : null) ||
+        {};
+      setBookingTarget({
+        ownerId,
+        ownerName:
+          owner?.nickname ||
+          owner?.name ||
+          item?.channelName ||
+          item?.title ||
+          'Restaurant',
+        address:
+          owner?.address || item?.creatorAddress || item?.location || '',
+      });
+      setBookingModalVisible(true);
+    },
+    [actorUserId, getSponsoredOwnerId, isAuthenticated, navigation],
+  );
+
+  const patchSingleFeedVideoSubscribe = useCallback((videoId, isSubscribed) => {
+    const vid = String(videoId || '');
+    if (!vid) return;
+    setFeedVideos(prev =>
+      (prev || []).map(entry =>
+        String(entry?.id) === vid
+          ? {
+              ...entry,
+              user: {
+                ...(entry.user && typeof entry.user === 'object'
+                  ? entry.user
+                  : {}),
+                isSubscribed,
+              },
+            }
+          : entry,
+      ),
+    );
+  }, []);
+
+  const getTrendingCardSubscribed = useCallback(
+    video => {
+      const vid = String(video?.id ?? '');
+      if (
+        vid &&
+        Object.prototype.hasOwnProperty.call(trendingSubscribeByVideoId, vid)
+      ) {
+        return !!trendingSubscribeByVideoId[vid];
+      }
+      if (typeof video?.user?.isSubscribed === 'boolean') {
+        return video.user.isSubscribed;
+      }
+      return false;
+    },
+    [trendingSubscribeByVideoId],
+  );
+
+  const trendingTopVideosForHydrate = useMemo(() => {
+    const itemViewCount = item => Number(item?.viewCount ?? 0);
+    return [...(feedVideos || [])]
+      .sort((a, b) => itemViewCount(b) - itemViewCount(a))
+      .slice(0, 3);
+  }, [feedVideos]);
+
+  useEffect(() => {
+    if (!user?.id || trendingTopVideosForHydrate.length === 0) return;
+    const byOwner = new Map();
+    for (const v of trendingTopVideosForHydrate) {
+      const oid = getSponsoredOwnerId(v);
+      if (oid == null || String(oid).trim() === '') continue;
+      const key = String(oid);
+      if (!byOwner.has(key)) byOwner.set(key, []);
+      byOwner.get(key).push(v);
+    }
+    if (byOwner.size === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const [ownerKey, videos] of byOwner) {
+        if (subscribeTouchedOwnersRef.current.has(ownerKey)) continue;
+        try {
+          const p = await getChannelProfile(ownerKey, user.id);
+          if (cancelled) return;
+          const sub = !!p?.isSubscribed;
+          setChannelSubscribeByOwnerId(prev => ({
+            ...prev,
+            [ownerKey]: sub,
+          }));
+          setTrendingSubscribeByVideoId(prev => {
+            const next = { ...prev };
+            for (const v of videos) {
+              const vid = String(v.id);
+              if (!Object.prototype.hasOwnProperty.call(prev, vid)) {
+                next[vid] = sub;
+              }
+            }
+            return next;
+          });
+        } catch (_) {
+          /* keep card defaults */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trendingTopVideosForHydrate, user?.id, getSponsoredOwnerId]);
+
   const handleSponsoredOrder = useCallback(
     item => {
       const ownerId = getSponsoredOwnerId(item);
@@ -2234,21 +2609,9 @@ const HomeOneScreen = () => {
 
   const handleSponsoredBook = useCallback(
     item => {
-      const ownerId = getSponsoredOwnerId(item);
-      if (!ownerId) return;
-      const targetRole = String(
-        item?.creatorRole || item?.user?.role || '',
-      ).toLowerCase();
-      if (targetRole === 'user') {
-        navigation.navigate('PromotionScreen', { userId: ownerId });
-      } else {
-        navigation.navigate('BusinessProfileViewScreen', {
-          userId: ownerId,
-          focusVideoTab: true,
-        });
-      }
+      openBookingForItem(item);
     },
-    [navigation, getSponsoredOwnerId],
+    [openBookingForItem],
   );
 
   const handleSponsoredSubscribe = useCallback(
@@ -2260,34 +2623,62 @@ const HomeOneScreen = () => {
         return;
       }
       if (String(ownerId) === String(actorUserId)) return;
-      setSponsoredSubscribeToggling(true);
-      const wasSubscribed = !!sponsoredChannelMeta?.isSubscribed;
+      const videoKey = String(item?.id ?? '');
+      if (!videoKey) return;
+      if (subscribeTogglingVideoId === videoKey) return;
+      const ownerKey = String(ownerId);
+      const wasSubscribed = getTrendingCardSubscribed(item);
+      setSubscribeTogglingVideoId(videoKey);
       try {
         if (wasSubscribed) {
           await unsubscribeFromChannel(actorUserId, ownerId);
         } else {
           await subscribeToChannel(actorUserId, ownerId);
         }
-        setSponsoredChannelMeta(prev => ({
-          rating: prev?.rating ?? 0,
-          reviewCount: prev?.reviewCount ?? 0,
-          isSubscribed: !wasSubscribed,
+        const nextSubscribed = !wasSubscribed;
+        subscribeTouchedOwnersRef.current.add(ownerKey);
+        setTrendingSubscribeByVideoId(prev => ({
+          ...prev,
+          [videoKey]: nextSubscribed,
         }));
+        setChannelSubscribeByOwnerId(prev => ({
+          ...prev,
+          [ownerKey]: nextSubscribed,
+        }));
+        patchSingleFeedVideoSubscribe(item.id, nextSubscribed);
+        if (
+          sponsoredVideo &&
+          String(
+            sponsoredVideo?.user?.id ??
+              sponsoredVideo?.video?.userId ??
+              sponsoredVideo?.video?.user?.id ??
+              '',
+          ) === ownerKey
+        ) {
+          setSponsoredChannelMeta(prev =>
+            prev
+              ? { ...prev, isSubscribed: nextSubscribed }
+              : { rating: 0, reviewCount: 0, isSubscribed: nextSubscribed },
+          );
+        }
       } catch (e) {
         Alert.alert(
           'Subscribe',
           e?.message || 'Could not update subscription.',
         );
       } finally {
-        setSponsoredSubscribeToggling(false);
+        setSubscribeTogglingVideoId(null);
       }
     },
     [
       isAuthenticated,
       actorUserId,
-      sponsoredChannelMeta?.isSubscribed,
+      subscribeTogglingVideoId,
+      getTrendingCardSubscribed,
+      patchSingleFeedVideoSubscribe,
       navigation,
       getSponsoredOwnerId,
+      sponsoredVideo,
     ],
   );
 
@@ -2542,37 +2933,60 @@ const HomeOneScreen = () => {
     setResSaveVisible(true);
   }, [navigation, user?.id]);
 
-  const openHomeMoreForShort = useCallback(item => {
-    if (!item?.id) return;
-    setHomeMoreTarget({
-      contentType: 'short',
-      contentId: item.id,
-      videoUrl: item.videoUrl,
-      title:
-        item.title || (item.description || 'Short').substring(0, 80) || 'Short',
-      channelName:
-        item.user?.nickname || item.user?.name || item.channelName || '',
-    });
-    setHomeMoreVisible(true);
-  }, []);
+  const openHomeMoreForShort = useCallback(
+    item => {
+      if (!item?.id) return;
+      const ownerId = item?.userId ?? item?.user?.id ?? null;
+      const canEdit =
+        !!actorUserId && !!ownerId && String(ownerId) === String(actorUserId);
+      setHomeMoreTarget({
+        contentType: 'short',
+        contentId: item.id,
+        videoUrl: item.videoUrl,
+        title:
+          item.title ||
+          (item.description || 'Short').substring(0, 80) ||
+          'Short',
+        channelName:
+          item.user?.nickname || item.user?.name || item.channelName || '',
+        ownerId,
+        canEdit,
+        sourceItem: item,
+      });
+      setHomeMoreVisible(true);
+    },
+    [actorUserId],
+  );
 
-  const openHomeMoreForFeedItem = useCallback(item => {
-    if (!item?.id) return;
-    const isShort = String(item.type || '').toLowerCase() === 'short';
-    setHomeMoreTarget({
-      contentType: isShort ? 'short' : 'video',
-      contentId: item.id,
-      videoUrl: item.videoUrl,
-      title:
-        item.title ||
-        item.channelName ||
-        (item.description || '').substring(0, 80) ||
-        'Video',
-      channelName:
-        item.channelName || item.user?.nickname || item.user?.name || '',
-    });
-    setHomeMoreVisible(true);
-  }, []);
+  const openHomeMoreForFeedItem = useCallback(
+    item => {
+      if (!item?.id) return;
+      const isShort = String(item.type || '').toLowerCase() === 'short';
+      const ownerId = item?.userId ?? item?.user?.id ?? null;
+      const canEdit =
+        isShort &&
+        !!actorUserId &&
+        !!ownerId &&
+        String(ownerId) === String(actorUserId);
+      setHomeMoreTarget({
+        contentType: isShort ? 'short' : 'video',
+        contentId: item.id,
+        videoUrl: item.videoUrl,
+        title:
+          item.title ||
+          item.channelName ||
+          (item.description || '').substring(0, 80) ||
+          'Video',
+        channelName:
+          item.channelName || item.user?.nickname || item.user?.name || '',
+        ownerId,
+        canEdit,
+        sourceItem: item,
+      });
+      setHomeMoreVisible(true);
+    },
+    [actorUserId],
+  );
 
   const openHomeMoreFromSelected = useCallback(() => {
     if (!selectedItem?.id) return;
@@ -2587,9 +3001,17 @@ const HomeOneScreen = () => {
         selectedItem?.user?.nickname ||
         selectedItem?.user?.name ||
         '',
+      ownerId: selectedItem?.userId ?? selectedItem?.user?.id ?? null,
+      canEdit:
+        isShort &&
+        !!actorUserId &&
+        !!(selectedItem?.userId ?? selectedItem?.user?.id) &&
+        String(selectedItem?.userId ?? selectedItem?.user?.id) ===
+          String(actorUserId),
+      sourceItem: selectedItem,
     });
     setHomeMoreVisible(true);
-  }, [selectedItem]);
+  }, [actorUserId, selectedItem]);
 
   const closeHomeMore = useCallback(() => {
     setHomeMoreVisible(false);
@@ -2683,6 +3105,146 @@ const HomeOneScreen = () => {
       "We'll try to show you less content like this.",
     );
   }, []);
+
+  const onMoreEditShort = useCallback(async () => {
+    const t = homeMoreTarget;
+    if (!t?.contentId || t.contentType !== 'short') return;
+    if (!requireLogin()) return;
+    if (!t.canEdit) return;
+
+    let sourceShort = t.sourceItem || {
+      id: t.contentId,
+      title: t.title,
+      videoUrl: t.videoUrl,
+      userId: t.ownerId,
+    };
+
+    try {
+      const detailRes = await shortsService.getShortById(
+        t.contentId,
+        actorUserId,
+        String(user?.role || '').toLowerCase() || undefined,
+      );
+      const resolved =
+        detailRes?.short && typeof detailRes.short === 'object'
+          ? detailRes.short
+          : detailRes?.data && typeof detailRes.data === 'object'
+          ? detailRes.data
+          : detailRes;
+      if (resolved && typeof resolved === 'object') {
+        sourceShort = { ...sourceShort, ...resolved };
+      }
+    } catch (_) {
+      // The edit flow can still open with the home card data if detail fetch fails.
+    }
+
+    const pubAtRaw =
+      sourceShort?.publishedAt ||
+      sourceShort?.publishAt ||
+      sourceShort?.postedAt ||
+      null;
+    const schedAtRaw =
+      sourceShort?.scheduledPublishAt ||
+      sourceShort?.scheduleAt ||
+      sourceShort?.scheduleDate ||
+      sourceShort?.scheduledAt ||
+      null;
+    const pubAt = pubAtRaw ? new Date(pubAtRaw) : null;
+    const schedAt = schedAtRaw ? new Date(schedAtRaw) : null;
+    const cand =
+      schedAt && Number.isFinite(schedAt.getTime())
+        ? schedAt
+        : pubAt && Number.isFinite(pubAt.getTime())
+        ? pubAt
+        : null;
+    const isFuture =
+      cand &&
+      Number.isFinite(cand.getTime()) &&
+      cand.getTime() > Date.now() + 60_000;
+    const visibilityLabel =
+      String(sourceShort?.visibility || '').toLowerCase() === 'private'
+        ? 'Private'
+        : 'Public';
+    const commentsLabel =
+      String(sourceShort?.commentSetting || '').toLowerCase() === 'disable'
+        ? 'Disable comments'
+        : String(sourceShort?.commentSetting || '').toLowerCase() === 'hold'
+        ? 'Hold potentially inappropriate comments'
+        : 'Allow all comments';
+    const durationNum = Number(sourceShort?.duration);
+    const inferredPlatforms = Array.isArray(sourceShort?.platforms)
+      ? sourceShort.platforms
+      : Array.isArray(sourceShort?.selectedPlatforms)
+      ? sourceShort.selectedPlatforms
+      : [
+          sourceShort?.facebookPageId ? 'facebook' : null,
+          sourceShort?.instagramAccountId ? 'instagram' : null,
+          sourceShort?.tiktokAccountId ? 'tiktok' : null,
+          sourceShort?.youtubeChannelId ? 'youtube' : null,
+        ].filter(Boolean);
+
+    navigation.navigate('PostCreateNew', {
+      isEdit: true,
+      shortId: String(sourceShort?.id || t.contentId),
+      short: sourceShort,
+      editDraft: {
+        source: 'short-edit',
+        shortId: String(sourceShort?.id || t.contentId),
+        caption: String(
+          sourceShort?.desc ||
+            sourceShort?.description ||
+            sourceShort?.title ||
+            '',
+        ).trim(),
+        title: String(
+          sourceShort?.title ||
+            sourceShort?.desc ||
+            sourceShort?.description ||
+            '',
+        ).trim(),
+        video: {
+          uri: String(
+            sourceShort?.videoUrl || sourceShort?.mediaUrl || t.videoUrl || '',
+          ).trim(),
+          type: 'video/mp4',
+          name: `short-${sourceShort?.id || t.contentId}.mp4`,
+          durationSec:
+            Number.isFinite(durationNum) && durationNum > 0 ? durationNum : 15,
+        },
+        thumbnail: {
+          uri: String(
+            sourceShort?.thumbnailUrl ||
+              sourceShort?.thumbnail ||
+              sourceShort?.coverUrl ||
+              sourceShort?.img ||
+              '',
+          ).trim(),
+          type: 'image/jpeg',
+          name: `short-cover-${sourceShort?.id || t.contentId}.jpg`,
+        },
+        platforms: inferredPlatforms,
+        scheduledPublishAt:
+          sourceShort?.scheduledPublishAt ||
+          sourceShort?.scheduleAt ||
+          (isFuture && cand ? cand.toISOString() : null),
+        edits: {
+          visibility: visibilityLabel,
+          comments: commentsLabel,
+          madeForKids:
+            typeof sourceShort?.madeForKids === 'boolean'
+              ? Boolean(sourceShort.madeForKids)
+              : null,
+          ageRestricted:
+            typeof sourceShort?.ageRestricted === 'boolean'
+              ? Boolean(sourceShort.ageRestricted)
+              : null,
+          scheduledPublishAt: isFuture && cand ? cand.toISOString() : null,
+          hadFutureSchedule: !!isFuture,
+          platforms: inferredPlatforms,
+        },
+      },
+    });
+  }, [actorUserId, homeMoreTarget, navigation, requireLogin, user?.role]);
 
   const onMoreOpenReport = useCallback(() => {
     if (!requireLogin()) return;
@@ -2944,9 +3506,13 @@ const HomeOneScreen = () => {
 
   const renderResults = () => {
     const addr = (addressText && String(addressText).trim()) || '';
-    const areaShort = addr ? addr.split(',')[0].trim() : '';
+    const pc =
+      (browsePostcode && String(browsePostcode).trim()) ||
+      (browseLocation?.postcode && String(browseLocation.postcode).trim()) ||
+      '';
+    const primaryLoc = headerLocationLabel;
+    const areaShort = primaryLoc.split(',')[0].trim();
     const areaForTitle = areaShort || 'your area';
-    const primaryLoc = areaShort || addr || 'Set your address';
     const secondaryLoc = addr || primaryLoc;
     const cuisineKey = normalizeCuisine(selectedCuisine);
     const cuisineSelected = isCuisineFilterScreen && !!cuisineKey;
@@ -3449,8 +4015,14 @@ const HomeOneScreen = () => {
                   navigation.navigate('HomeSearchScreen', {
                     nearLabel: primaryLoc || '',
                     autoFocus: true,
-                    viewerLat: selectedLocation?.lat ?? user?.latitude,
-                    viewerLng: selectedLocation?.lng ?? user?.longitude,
+                    viewerLat:
+                      selectedLocation?.lat ??
+                      browseLocation?.lat ??
+                      user?.latitude,
+                    viewerLng:
+                      selectedLocation?.lng ??
+                      browseLocation?.lng ??
+                      user?.longitude,
                   })
                 }
               >
@@ -3465,8 +4037,14 @@ const HomeOneScreen = () => {
                 onPress={() =>
                   navigation.navigate('HomeSearchScreen', {
                     nearLabel: primaryLoc || '',
-                    viewerLat: selectedLocation?.lat ?? user?.latitude,
-                    viewerLng: selectedLocation?.lng ?? user?.longitude,
+                    viewerLat:
+                      selectedLocation?.lat ??
+                      browseLocation?.lat ??
+                      user?.latitude,
+                    viewerLng:
+                      selectedLocation?.lng ??
+                      browseLocation?.lng ??
+                      user?.longitude,
                   })
                 }
               >
@@ -3713,6 +4291,7 @@ const HomeOneScreen = () => {
                 </View>
                 {trendingTopVideos.map(video => {
                   const trendingOwnerId = getSponsoredOwnerId(video);
+                  const trendingVideoKey = String(video?.id ?? '');
                   return (
                     <HomeFeedVideoCard
                       key={`trending-${video.id}`}
@@ -3726,8 +4305,11 @@ const HomeOneScreen = () => {
                       onOrderPress={() => handleSponsoredOrder(video)}
                       onBookPress={() => handleSponsoredBook(video)}
                       onSubscribePress={() => handleSponsoredSubscribe(video)}
-                      subscribeBusy={sponsoredSubscribeToggling}
-                      isSubscribed={!!sponsoredChannelMeta?.isSubscribed}
+                      subscribeBusy={
+                        !!trendingVideoKey &&
+                        subscribeTogglingVideoId === trendingVideoKey
+                      }
+                      isSubscribed={getTrendingCardSubscribed(video)}
                       hideSubscribe={
                         !!user?.id &&
                         trendingOwnerId != null &&
@@ -3903,8 +4485,11 @@ const HomeOneScreen = () => {
                             onSubscribePress={() =>
                               handleSponsoredSubscribe(item)
                             }
-                            subscribeBusy={sponsoredSubscribeToggling}
-                            isSubscribed={!!sponsoredChannelMeta?.isSubscribed}
+                            subscribeBusy={
+                              !!item?.id &&
+                              subscribeTogglingVideoId === String(item.id)
+                            }
+                            isSubscribed={getTrendingCardSubscribed(item)}
                             hideSubscribe={hideSponsoredSubscribe}
                           />
                         );
@@ -4671,6 +5256,7 @@ const HomeOneScreen = () => {
               <View style={styles.resBookGalleryRow}>
                 <TouchableOpacity
                   style={[styles.resRowBtn, styles.resRowBtnPrimary]}
+                  onPress={() => openBookingForItem(selectedItem)}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.resRowBtnTextLight}>Book Now</Text>
@@ -4845,6 +5431,17 @@ const HomeOneScreen = () => {
         onShare={onMoreShare}
         onNotInterested={onMoreNotInterested}
         onReport={onMoreOpenReport}
+        onEdit={onMoreEditShort}
+        showEdit={!!homeMoreTarget?.canEdit}
+      />
+
+      <RestaurantBookingModal
+        visible={bookingModalVisible}
+        onClose={() => setBookingModalVisible(false)}
+        ownerId={bookingTarget?.ownerId}
+        ownerName={bookingTarget?.ownerName}
+        currentUser={user}
+        defaultAddress={user?.address || addressText || bookingTarget?.address || ''}
       />
 
       <ReportContentModal
@@ -5104,8 +5701,32 @@ const HomeOneScreen = () => {
             )}
             <View style={styles.locationModalButtons}>
               <TouchableOpacity
-                style={styles.locationUseMyBtn}
+                style={styles.locationActionBtn}
                 disabled={locationModalLoading}
+                onPress={() => {
+                  setLocationModalVisible(false);
+                  setLocationMapVisible(true);
+                }}
+                activeOpacity={0.85}
+              >
+                <Icon
+                  name="map-marker-radius"
+                  size={16}
+                  color="#FFF"
+                  style={styles.locationActionIcon}
+                />
+                <Text
+                  style={styles.locationActionText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Map & postcode
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.locationActionBtn}
+                disabled={locationModalLoading}
+                activeOpacity={0.85}
                 onPress={() => {
                   setLocationModalLoading(true);
                   getCurrentPositionSafe(
@@ -5158,11 +5779,15 @@ const HomeOneScreen = () => {
                   <>
                     <Icon
                       name="crosshairs-gps"
-                      size={20}
+                      size={16}
                       color="#FFF"
-                      style={{ marginRight: 6 }}
+                      style={styles.locationActionIcon}
                     />
-                    <Text style={styles.locationUseMyText}>
+                    <Text
+                      style={styles.locationActionText}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
                       Use my location
                     </Text>
                   </>
@@ -5173,6 +5798,7 @@ const HomeOneScreen = () => {
                 onPress={() => {
                   if (!locationModalLoading) setLocationModalVisible(false);
                 }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.locationCancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -5180,6 +5806,29 @@ const HomeOneScreen = () => {
           </View>
         </View>
       </Modal>
+      <MapLocationPicker
+        visible={locationMapVisible}
+        onClose={() => setLocationMapVisible(false)}
+        title="Deliver to"
+        initialLat={selectedLocation?.lat}
+        initialLng={selectedLocation?.lng}
+        initialPostcode={browsePostcode}
+        initialAddress={addressText}
+        onConfirm={async browse => {
+          const coords = { lat: browse.lat, lng: browse.lng };
+          setSelectedLocation(coords);
+          setAddressText(browse.addressText || browse.areaLabel);
+          setBrowsePostcode(browse.postcode || '');
+          setLocationInput(browse.addressText || browse.postcode || '');
+          await saveLocationSelection(
+            coords,
+            browse.addressText || browse.areaLabel,
+            browse.postcode,
+          );
+          loadFeaturedAndFeed();
+          loadContinueWatching();
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -7122,33 +7771,39 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   locationModalButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginTop: 4,
   },
-  locationUseMyBtn: {
+  locationActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5A623',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 10,
+    minHeight: 42,
+    width: '100%',
+    marginBottom: 8,
   },
-  locationUseMyText: {
+  locationActionIcon: {
+    marginRight: 6,
+  },
+  locationActionText: {
     color: '#FFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
   locationCancelBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 2,
   },
   locationCancelText: {
     color: '#6B7280',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
   },
   galleryGridContent: {

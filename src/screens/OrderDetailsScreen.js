@@ -23,6 +23,7 @@ import {
   getRestaurantOrderById,
   updateRestaurantOrderStatus,
 } from '../services/orderService';
+import { getChannelProfile } from '../services/channelService';
 import { safeImageUri } from '../utils/helper';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
@@ -112,19 +113,62 @@ export default function OrderDetailsScreen() {
   useEffect(() => {
     if (orderParam) {
       setOrder(orderParam);
-      return;
     }
     if (!orderId || !user?.token) {
       setLoading(false);
       return;
     }
     let cancelled = false;
+    setLoading(true);
     getRestaurantOrderById(user.token, orderId)
-      .then(data => {
-        if (!cancelled) setOrder(data);
+      .then(async data => {
+        if (cancelled || !data) return;
+        let nextOrder = data;
+        const ownerDeliveryTime = String(data?.owner?.deliveryTime || '').trim();
+        const ownerId = data?.ownerId || data?.owner?.id;
+        if (!ownerDeliveryTime && ownerId) {
+          const fromCurrentUser =
+            ownerId === user?.id
+              ? String(user?.deliveryTime || '').trim()
+              : '';
+          if (fromCurrentUser) {
+            nextOrder = {
+              ...data,
+              owner: {
+                ...data.owner,
+                deliveryTime: fromCurrentUser,
+                deliveryAreaKm:
+                  data.owner?.deliveryAreaKm ?? user?.deliveryAreaKm ?? null,
+              },
+            };
+          } else {
+            try {
+              const profile = await getChannelProfile(ownerId, user?.id);
+              const profileDeliveryTime = String(
+                profile?.deliveryTime || '',
+              ).trim();
+              if (profileDeliveryTime) {
+                nextOrder = {
+                  ...data,
+                  owner: {
+                    ...data.owner,
+                    deliveryTime: profileDeliveryTime,
+                    deliveryAreaKm:
+                      data.owner?.deliveryAreaKm ??
+                      profile?.deliveryAreaKm ??
+                      null,
+                  },
+                };
+              }
+            } catch {
+              // keep order without delivery time enrichment
+            }
+          }
+        }
+        setOrder(nextOrder);
       })
       .catch(() => {
-        if (!cancelled) setOrder(null);
+        if (!cancelled && !orderParam) setOrder(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -132,7 +176,13 @@ export default function OrderDetailsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [orderId, orderParam, user?.token]);
+  }, [
+    orderId,
+    user?.token,
+    user?.id,
+    user?.deliveryTime,
+    user?.deliveryAreaKm,
+  ]);
 
   const handleCall = () => {
     const phone = order?.user?.phone || order?.user?.phoneNumber || '';
@@ -225,7 +275,11 @@ export default function OrderDetailsScreen() {
   }
 
   const customerName = order.user?.name || order.user?.email || 'Customer';
-  const phone = order.user?.phone || order.user?.phoneNumber || '';
+  const phone =
+    order.customerPhone ||
+    order.user?.phone ||
+    order.user?.phoneNumber ||
+    '';
   const avatarUri = safeImageUri(
     order.user?.photos?.[0],
     'https://i.pravatar.cc/150?u=user',
@@ -267,7 +321,13 @@ export default function OrderDetailsScreen() {
   };
 
   const items = order.items || [];
-  const totalAmount = Number(order.totalAmount || 0);
+  const itemsSubtotal = items.reduce((sum, item) => {
+    const q = Number(item?.quantity || 0);
+    const unit = Number(item?.unitPrice || 0);
+    return sum + q * unit;
+  }, 0);
+  const taxCharge = Number(order?.taxCharge || 0);
+  const totalAmount = Number(order.totalAmount || itemsSubtotal + taxCharge);
   const currency = '£';
   const displayOrderId = order.id ? `#${String(order.id)}` : '—';
   const orderStatus = String(order?.status || '').toLowerCase();
@@ -279,14 +339,24 @@ export default function OrderDetailsScreen() {
     : [rawDeliveryAddress, ''];
   const deliveryAddressText = String(deliveryAddressRaw || '').trim();
   const restaurantNoteText = String(noteRaw || '').trim();
-  const deliveryTimeRaw =
-    order?.deliveryTime ||
-    order?.estimatedDeliveryTime ||
-    order?.deliveryAt ||
-    order?.scheduledAt ||
-    order?.updatedAt ||
-    order?.createdAt;
-  const deliveryTimeText = formatDate(deliveryTimeRaw);
+  const ownerDeliveryTimeLabel = String(
+    order?.owner?.deliveryTime ||
+      (order?.ownerId === user?.id || order?.owner?.id === user?.id
+        ? user?.deliveryTime
+        : '') ||
+      '',
+  ).trim();
+  const ownerDeliveryAreaKmRaw =
+    order?.owner?.deliveryAreaKm ??
+    (order?.ownerId === user?.id || order?.owner?.id === user?.id
+      ? user?.deliveryAreaKm
+      : null);
+  const ownerDeliveryAreaKm =
+    ownerDeliveryAreaKmRaw != null &&
+    Number.isFinite(Number(ownerDeliveryAreaKmRaw))
+      ? Number(ownerDeliveryAreaKmRaw)
+      : null;
+  const orderPlacedText = formatDate(order?.createdAt);
 
   const buildInvoiceHtml = () => {
     const invoiceDate = formatDate(order?.createdAt);
@@ -370,6 +440,11 @@ export default function OrderDetailsScreen() {
             </table>
 
             <div class="total">Grand Total: £ ${totalAmount.toFixed(2)}</div>
+            ${
+              taxCharge > 0
+                ? `<div style="margin-top:8px;color:#555;">Includes taxes & charges: £ ${taxCharge.toFixed(2)}</div>`
+                : ''
+            }
           </body>
         </html>
       `;
@@ -564,7 +639,29 @@ export default function OrderDetailsScreen() {
             </Text>
             <View style={styles.timeRow}>
               <Icon name="truck-delivery-outline" size={20} color="#1A1C1E" />
-              <Text style={styles.timeText}>{deliveryTimeText}</Text>
+              <Text style={styles.timeText}>
+                {ownerDeliveryTimeLabel || 'Not set by restaurant'}
+              </Text>
+            </View>
+            {ownerDeliveryAreaKm != null ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 12 }]}>
+                  Delivery Area
+                </Text>
+                <View style={styles.timeRow}>
+                  <Icon name="map-marker-radius" size={20} color="#1A1C1E" />
+                  <Text style={styles.timeText}>
+                    Within {ownerDeliveryAreaKm} km of restaurant
+                  </Text>
+                </View>
+              </>
+            ) : null}
+            <Text style={[styles.sectionLabel, { marginTop: 12 }]}>
+              Order placed
+            </Text>
+            <View style={styles.timeRow}>
+              <Icon name="calendar-clock" size={20} color="#1A1C1E" />
+              <Text style={styles.timeText}>{orderPlacedText}</Text>
             </View>
           </View>
         </View>
@@ -603,9 +700,20 @@ export default function OrderDetailsScreen() {
           <View style={styles.billingRow}>
             <Text style={styles.billingLabel}>Sub Total</Text>
             <Text style={styles.billingValue}>
-              {currency} {totalAmount.toFixed(2)}
+              {currency} {itemsSubtotal.toFixed(2)}
             </Text>
           </View>
+          {taxCharge > 0 ? (
+            <>
+              <View style={styles.billingDivider} />
+              <View style={styles.billingRow}>
+                <Text style={styles.billingLabel}>Taxes & charges</Text>
+                <Text style={styles.billingValue}>
+                  {currency} {taxCharge.toFixed(2)}
+                </Text>
+              </View>
+            </>
+          ) : null}
           <View style={styles.billingDivider} />
           <View style={styles.billingRow}>
             <Text style={styles.billingLabel}>Total</Text>

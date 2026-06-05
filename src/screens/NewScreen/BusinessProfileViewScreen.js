@@ -50,20 +50,27 @@ import {
   recordPostShare,
 } from '../../services/postService';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { facebookOAuthRedirectUri } from '../../../config';
+import { facebookOAuthRedirectUri, tiktokOAuthRedirectUri, youtubeOAuthRedirectUri } from '../../../config';
 import {
   getChannelProfile,
   updateChannelProfile,
   uploadProfilePhoto,
   uploadCoverImage,
+  subscribeToChannel,
+  unsubscribeFromChannel,
   getGallery,
   getFacebookConnectUrl,
   getSocialAccounts,
+  getTikTokConnectUrl,
+  connectYouTubeAccount,
+  getYouTubeConnectUrl,
+  getInstagramLinkStatus,
   uploadGallery,
   deleteGalleryPhoto,
   toggleGalleryPhotoLike,
   toggleGalleryPhotoDislike,
   recordGalleryPhotoShare,
+  getDeliveryAreaUsers,
 } from '../../services/channelService';
 import {
   pickProfileAvatarCrop,
@@ -90,7 +97,8 @@ import {
   deleteMenuItem,
   deleteMenuFile,
 } from '../../services/menuService';
-import { appSetUser } from '../../redux/actions/appSlice';
+import { persistBrowseLocation } from '../../services/userLocationService';
+import { appSetUser, setBrowseLocation } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
 import { buildPostShareMessage } from '../../utils/contentLinks';
 import {
@@ -103,6 +111,10 @@ import {
   reverseGeocode,
   getFallbackCoordsForUKArea,
 } from '../../utils/geolocation';
+import MapLocationPicker from '../../components/MapLocationPicker';
+import { normalizeUkPostcode, extractUkPostcodeFromText } from '../../utils/ukPostcode';
+import { formatDistanceKm } from '../../utils/geoDistance';
+import { formatCityCountryPostcodeLine } from '../../utils/locationFormat';
 import CreatePromotionModal from '../../components/CreatePromotionModal';
 import Video from 'react-native-video';
 import { getSocialIcon } from '../../constants/socialLinks';
@@ -124,6 +136,32 @@ const BUSINESS_SOCIAL_BAR = [
   { type: 'website', icon: 'web' },
 ];
 
+const SOCIAL_TYPES = [
+  { value: 'instagram', label: 'Instagram', icon: 'instagram' },
+  { value: 'facebook', label: 'Facebook', icon: 'facebook' },
+  { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
+  { value: 'youtube', label: 'YouTube', icon: 'youtube' },
+  { value: 'tiktok', label: 'TikTok', icon: 'music-note' },
+  { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
+  { value: 'website', label: 'Website', icon: 'web' },
+];
+
+const getSavedSocialLinkUrl = (editSocialLinks, profile, currentUser, type) => {
+  const key = String(type || '').toLowerCase();
+  const fromEdit = (editSocialLinks || []).find(
+    l => String(l?.type || '').toLowerCase() === key,
+  )?.url;
+  if (String(fromEdit || '').trim()) return String(fromEdit).trim();
+  const raw = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
+  const links = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+    ? [raw]
+    : [];
+  const match = links.find(l => String(l?.type || '').toLowerCase() === key);
+  return String(match?.url || '').trim();
+};
+
 const formatCount = n => {
   if (n == null || n < 0) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
@@ -143,6 +181,18 @@ const formatTimeAgo = dateStr => {
   if (diffMonths > 0) return `${diffMonths}mo ago`;
   if (diffDays > 0) return `${diffDays}d ago`;
   return 'Recently';
+};
+
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
 };
 
 const mapPostToCard = (post, user) => {
@@ -447,20 +497,37 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [commentsModalPostId, setCommentsModalPostId] = useState(null);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSubscribeLoading, setProfileSubscribeLoading] = useState(false);
   const [editProfileVisible, setEditProfileVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editChannelAbout, setEditChannelAbout] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editPostcode, setEditPostcode] = useState('');
   const [editLatitude, setEditLatitude] = useState(null);
   const [editLongitude, setEditLongitude] = useState(null);
+  const [locationMapVisible, setLocationMapVisible] = useState(false);
   const [editSocialLinks, setEditSocialLinks] = useState([]);
   const [facebookPages, setFacebookPages] = useState([]);
   const [facebookConnecting, setFacebookConnecting] = useState(false);
   const [facebookConnectUrl, setFacebookConnectUrl] = useState('');
+  const [tiktokAccounts, setTiktokAccounts] = useState([]);
+  const [tiktokConnecting, setTiktokConnecting] = useState(false);
+  const [tiktokConnectUrl, setTiktokConnectUrl] = useState('');
+  const [youtubeAccounts, setYoutubeAccounts] = useState([]);
+  const [youtubeConnecting, setYoutubeConnecting] = useState(false);
+  const [youtubeConnectUrl, setYoutubeConnectUrl] = useState('');
+  const [instagramLinkStatus, setInstagramLinkStatus] = useState(null);
+  const [instagramChecking, setInstagramChecking] = useState(false);
   const [editOpeningHours, setEditOpeningHours] = useState(
     DEFAULT_OPENING_HOURS,
   );
+  const [editDeliveryTime, setEditDeliveryTime] = useState('');
+  const [editDeliveryAreaKm, setEditDeliveryAreaKm] = useState('');
+  const [editTaxCharge0To10Km, setEditTaxCharge0To10Km] = useState('');
+  const [editTaxCharge11To20Km, setEditTaxCharge11To20Km] = useState('');
+  const [editTaxCharge21To30Km, setEditTaxCharge21To30Km] = useState('');
+  const [savingDeliverySettings, setSavingDeliverySettings] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -478,6 +545,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [ownerVideosLoading, setOwnerVideosLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [areaUsers, setAreaUsers] = useState([]);
+  const [areaUsersLoading, setAreaUsersLoading] = useState(false);
+  const [areaUsersMeta, setAreaUsersMeta] = useState({
+    radiusKm: null,
+    ownerAddress: '',
+    message: '',
+    total: 0,
+  });
+  const [notificationsModalVisible, setNotificationsModalVisible] =
+    useState(false);
   const [promotions, setPromotions] = useState([]);
   const [promotionsLoading, setPromotionsLoading] = useState(false);
   const [promotionsRefreshing, setPromotionsRefreshing] = useState(false);
@@ -539,7 +616,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!layout || !viewportWidth || !tabsScrollRef.current?.scrollTo) return;
 
     const centeredX = layout.x - (viewportWidth - layout.width) / 2;
-    tabsScrollRef.current.scrollTo({ x: Math.max(0, centeredX), animated: true });
+    tabsScrollRef.current.scrollTo({
+      x: Math.max(0, centeredX),
+      animated: true,
+    });
   }, []);
 
   const loadPosts = useCallback(
@@ -553,12 +633,22 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       try {
         const [postRes, shortRes] = await Promise.all([
           getPostsByUser(profileUserId, 1, 50, currentUser?.id),
-          shortsService.getUserShorts(profileUserId, 1, 50),
+          shortsService.getUserShorts(profileUserId, 1, 50, currentUser?.id),
         ]);
-        const postItems = (postRes?.posts || []).map(p => mapPostToCard(p, p.user));
-        const shortItems = (shortRes?.shorts || []).map(s =>
-          mapShortToPostCard(s, s.user, profileUserId),
+        const postItems = (postRes?.posts || []).map(p =>
+          mapPostToCard(p, p.user),
         );
+        const postMediaUrls = new Set(
+          postItems
+            .map(p => String(p?.mediaUrl || '').trim())
+            .filter(Boolean),
+        );
+        const shortItems = (shortRes?.shorts || [])
+          .map(s => mapShortToPostCard(s, s.user, profileUserId))
+          .filter(s => {
+            const url = String(s?.mediaUrl || s?.videoUrl || '').trim();
+            return url && !postMediaUrls.has(url);
+          });
         const merged = [...postItems, ...shortItems].sort(
           (a, b) => (b?.sortTime || 0) - (a?.sortTime || 0),
         );
@@ -573,44 +663,116 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     [profileUserId, currentUser?.id],
   );
 
-  const openShortFromPostsTab = useCallback(
-    item => {
-      const sid = String(item?.shortId || item?.id || '').trim();
-      if (!sid) return;
+  const buildProfileMediaFeed = useCallback(() => {
+    const fromOwner = buildOwnerScopedShortsFeed(ownerVideos, profileUserId);
+    const seenIds = new Set(fromOwner.map(v => String(v.id)));
+    const seenUrls = new Set(
+      fromOwner.map(v => String(v.videoUrl || '').trim()).filter(Boolean),
+    );
+    const fromPosts = (posts || [])
+      .filter(p => {
+        const st = String(p?.sourceType || '').toLowerCase();
+        const mt = String(p?.mediaType || '').toLowerCase();
+        const url = String(p?.mediaUrl || p?.videoUrl || '').trim();
+        if (!url) return false;
+        const id = String(p?.shortId || p?.id || '');
+        if (id && seenIds.has(id)) return false;
+        if (seenUrls.has(url)) return false;
+        return (
+          st === 'short' ||
+          mt === 'short' ||
+          mt === 'video' ||
+          /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(url)
+        );
+      })
+      .map(p => ({
+        id: p.shortId || p.id,
+        userId: p.userId || profileUserId,
+        videoUrl: String(p.mediaUrl || p.videoUrl || '').trim(),
+        thumbnailUrl: p.thumbnail,
+        _type:
+          String(p?.sourceType || p?.mediaType || '').toLowerCase() === 'short'
+            ? 'short'
+            : 'video',
+        title: p.title,
+        publishedAt: p.publishedAt,
+        sortTime: p.sortTime,
+      }));
+    return [...fromOwner, ...fromPosts].sort((a, b) => {
+      const ta =
+        a.sortTime ||
+        new Date(a.publishedAt || a.createdAt || 0).getTime() ||
+        0;
+      const tb =
+        b.sortTime ||
+        new Date(b.publishedAt || b.createdAt || 0).getTime() ||
+        0;
+      return tb - ta;
+    });
+  }, [ownerVideos, posts, profileUserId]);
+
+  const openOwnerMediaPlayer = useCallback(
+    (mediaId, { rawItem, videoUrl, mediaType = 'video' } = {}) => {
+      const mid = String(mediaId || rawItem?.id || rawItem?.shortId || '').trim();
+      const url = String(
+        videoUrl || rawItem?.videoUrl || rawItem?.mediaUrl || '',
+      ).trim();
+      if (!mid || !url) return;
       const fallbackName =
         profile?.nickname || profile?.channelName || profile?.name || 'User';
+      const isShort =
+        String(mediaType || rawItem?.sourceType || rawItem?._type || '')
+          .toLowerCase()
+          .includes('short') ||
+        String(rawItem?.mediaType || '').toLowerCase() === 'short';
       const initialShortItem = {
-        ...item,
-        id: sid,
-        type: 'short',
-        userId: item?.userId || profileUserId,
-        videoUrl: item?.videoUrl || item?.mediaUrl,
-        user: item?.user || {
+        ...(rawItem && typeof rawItem === 'object' ? rawItem : {}),
+        id: mid,
+        type: isShort ? 'short' : 'video',
+        _type: isShort ? 'short' : 'video',
+        userId: rawItem?.userId || profileUserId,
+        videoUrl: url,
+        user: rawItem?.user || {
           id: profileUserId,
           nickname: fallbackName,
           name: profile?.name || fallbackName,
         },
       };
-      const scopedShortsFeed = (posts || [])
-        .filter(p => String(p?.sourceType || '').toLowerCase() === 'short')
-        .map(p => ({
-          id: p.shortId || p.id,
-          userId: p.userId || profileUserId,
-          videoUrl: String(p.videoUrl || p.mediaUrl || '').trim(),
-          thumbnailUrl: p.thumbnail,
-          _type: 'short',
-          type: 'short',
-          title: p.title,
-        }))
-        .filter(v => v.id && v.videoUrl);
+      const scopedShortsFeed = buildProfileMediaFeed();
+      const feed =
+        scopedShortsFeed.length > 0
+          ? scopedShortsFeed
+          : [
+              {
+                id: mid,
+                userId: profileUserId,
+                videoUrl: url,
+                _type: isShort ? 'short' : 'video',
+              },
+            ];
       navigateToScopedShortsPlayer(navigation, {
-        shortId: sid,
+        shortId: mid,
         initialShortItem,
         shortsFeedMode: 'owner',
-        scopedShortsFeed,
+        scopedShortsFeed: feed,
+        returnTo: 'business_profile',
+        returnUserId: profileUserId,
       });
     },
-    [navigation, posts, profileUserId, profile],
+    [navigation, profileUserId, profile, buildProfileMediaFeed],
+  );
+
+  const openShortFromPostsTab = useCallback(
+    item => {
+      const sid = String(item?.shortId || item?.id || '').trim();
+      if (!sid) return;
+      openOwnerMediaPlayer(sid, {
+        rawItem: item,
+        videoUrl: item?.videoUrl || item?.mediaUrl,
+        mediaType: 'short',
+      });
+    },
+    [openOwnerMediaPlayer],
   );
 
   useEffect(() => {
@@ -637,8 +799,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     setOwnerVideosLoading(true);
     try {
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(profileUserId, 1, 50),
-        shortsService.getUserShorts(profileUserId, 1, 50),
+        getUserVideos(profileUserId, 1, 50, currentUser?.id),
+        shortsService.getUserShorts(profileUserId, 1, 50, currentUser?.id),
       ]);
       const videos = (vRes?.videos ?? []).map(v => ({
         ...v,
@@ -707,7 +869,25 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   }, []);
 
   const combinedGalleryFeed = useMemo(() => {
-    const postItems = (posts || []).map(p => {
+    const ownerIds = new Set(
+      (ownerVideos || []).map(v => String(v?.id || '')).filter(Boolean),
+    );
+    const ownerMediaUrls = new Set(
+      (ownerVideos || [])
+        .map(v => String(v?.videoUrl || '').trim())
+        .filter(Boolean),
+    );
+    const postItems = (posts || [])
+      .filter(p => {
+        const st = String(p?.sourceType || '').toLowerCase();
+        if (st === 'short') return false;
+        const media = String(p?.mediaUrl || '').trim();
+        if (media && ownerMediaUrls.has(media)) return false;
+        const pid = String(p?.id || '');
+        if (pid && ownerIds.has(pid)) return false;
+        return true;
+      })
+      .map(p => {
       const media = String(p?.mediaUrl || '').trim();
       const mt = String(p?.mediaType || '').toLowerCase();
       const isVideo =
@@ -725,6 +905,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           p?.thumbnail || p.mediaUrl,
           'https://via.placeholder.com/600',
         ),
+        isScheduled: isFutureScheduledMedia(p),
         createdAt: p.sortTime || Date.now(),
       };
     });
@@ -742,6 +923,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       ),
       type: v?._type || '',
       isShort: v?._type === 'short',
+      isScheduled: isFutureScheduledMedia(v),
       createdAt:
         new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
     }));
@@ -762,10 +944,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       isLiked: g.isLiked ?? false,
       isDisliked: g.isDisliked ?? false,
     }));
-    return [...postItems, ...videoItems, ...galleryItems].sort(
-      (a, b) => b.createdAt - a.createdAt,
-    );
-  }, [posts, ownerVideos, galleryPhotos]);
+    return [...postItems, ...videoItems, ...galleryItems]
+      .filter(item => isOwnProfile || !item.isScheduled)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [posts, ownerVideos, galleryPhotos, isOwnProfile]);
 
   const patchGalleryPhoto = useCallback((photoId, updater) => {
     setGalleryPhotos(prev =>
@@ -837,6 +1019,42 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   const currentRole = (currentUser?.role || '').toLowerCase();
   const isOwnerOrVendor = currentRole === 'owner' || currentRole === 'vendor';
+
+  const loadAreaUsers = useCallback(async () => {
+    if (!profileUserId || !isOwnProfile || !isOwnerOrVendor) {
+      setAreaUsers([]);
+      return;
+    }
+    setAreaUsersLoading(true);
+    try {
+      const data = await getDeliveryAreaUsers(profileUserId, 1, 100);
+      setAreaUsers(Array.isArray(data?.items) ? data.items : []);
+      setAreaUsersMeta({
+        radiusKm: data?.radiusKm ?? null,
+        ownerAddress: data?.ownerAddress ?? profile?.address ?? '',
+        message: data?.message ?? '',
+        total: data?.total ?? 0,
+      });
+    } catch (error) {
+      setAreaUsers([]);
+      const rawMsg =
+        error?.message ??
+        (typeof error === 'string' ? error : 'Could not load area users');
+      setAreaUsersMeta(prev => ({
+        ...prev,
+        message: String(rawMsg),
+      }));
+    } finally {
+      setAreaUsersLoading(false);
+    }
+  }, [profileUserId, isOwnProfile, isOwnerOrVendor, profile?.address]);
+
+  const handleNotificationBellPress = useCallback(() => {
+    if (!isOwnProfile || !isOwnerOrVendor) return;
+    setNotificationsModalVisible(true);
+    loadNotifications();
+  }, [isOwnProfile, isOwnerOrVendor, loadNotifications]);
+
   const loadNearbyPromotionsCross = useCallback(
     async (refresh = false) => {
       if (!isOwnProfile || !currentUser?.id || !isOwnerOrVendor) {
@@ -888,6 +1106,23 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   useEffect(() => {
     if (activeTab === 'Notification' && profileUserId) loadNotifications();
   }, [activeTab, profileUserId, loadNotifications]);
+
+  useEffect(() => {
+    if (
+      activeTab === 'Area Users' &&
+      profileUserId &&
+      isOwnProfile &&
+      isOwnerOrVendor
+    ) {
+      loadAreaUsers();
+    }
+  }, [
+    activeTab,
+    profileUserId,
+    isOwnProfile,
+    isOwnerOrVendor,
+    loadAreaUsers,
+  ]);
 
   useEffect(() => {
     if (activeTab === 'Promotions' && profileUserId) {
@@ -1019,51 +1254,152 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     loadProfile();
   }, [loadProfile]);
 
+  useEffect(() => {
+    if (!profile || !isOwnProfile) return;
+    setEditDeliveryTime(String(profile.deliveryTime || ''));
+    setEditDeliveryAreaKm(
+      profile.deliveryAreaKm != null &&
+        Number.isFinite(Number(profile.deliveryAreaKm))
+        ? String(profile.deliveryAreaKm)
+        : '',
+    );
+    setEditTaxCharge0To10Km(
+      profile.taxCharge0To10Km != null &&
+        Number.isFinite(Number(profile.taxCharge0To10Km))
+        ? String(profile.taxCharge0To10Km)
+        : '',
+    );
+    setEditTaxCharge11To20Km(
+      profile.taxCharge11To20Km != null &&
+        Number.isFinite(Number(profile.taxCharge11To20Km))
+        ? String(profile.taxCharge11To20Km)
+        : '',
+    );
+    setEditTaxCharge21To30Km(
+      profile.taxCharge21To30Km != null &&
+        Number.isFinite(Number(profile.taxCharge21To30Km))
+        ? String(profile.taxCharge21To30Km)
+        : '',
+    );
+  }, [profile, isOwnProfile]);
+
+  const parseOptionalTaxCharge = raw => {
+    const text = String(raw || '').trim();
+    if (!text) return { value: undefined, invalid: false };
+    const n = Number(text);
+    if (!Number.isFinite(n) || n < 0) return { value: null, invalid: true };
+    return { value: n, invalid: false };
+  };
+
+  const saveDeliverySettings = async () => {
+    if (!profileUserId || profileUserId !== currentUser?.id) return;
+    const areaRaw = String(editDeliveryAreaKm || '').trim();
+    const deliveryAreaKm = areaRaw ? Number(areaRaw) : undefined;
+    if (areaRaw && (!Number.isFinite(deliveryAreaKm) || deliveryAreaKm <= 0)) {
+      Alert.alert('Invalid area', 'Enter delivery area in km (e.g. 15).');
+      return;
+    }
+    const tier0 = parseOptionalTaxCharge(editTaxCharge0To10Km);
+    const tier1 = parseOptionalTaxCharge(editTaxCharge11To20Km);
+    const tier2 = parseOptionalTaxCharge(editTaxCharge21To30Km);
+    if (tier0.invalid || tier1.invalid || tier2.invalid) {
+      Alert.alert(
+        'Invalid tax/charge',
+        'Enter valid amounts for distance tiers (0 or greater).',
+      );
+      return;
+    }
+    setSavingDeliverySettings(true);
+    try {
+      await updateChannelProfile(profileUserId, {
+        deliveryTime: editDeliveryTime.trim() || undefined,
+        deliveryAreaKm,
+        taxCharge0To10Km: tier0.value,
+        taxCharge11To20Km: tier1.value,
+        taxCharge21To30Km: tier2.value,
+      });
+      await loadProfile();
+      if (currentUser?.id === profileUserId) {
+        dispatch(
+          appSetUser({
+            ...currentUser,
+            deliveryTime: editDeliveryTime.trim() || currentUser.deliveryTime,
+            deliveryAreaKm:
+              deliveryAreaKm != null
+                ? deliveryAreaKm
+                : currentUser.deliveryAreaKm,
+            taxCharge0To10Km:
+              tier0.value != null ? tier0.value : currentUser.taxCharge0To10Km,
+            taxCharge11To20Km:
+              tier1.value != null ? tier1.value : currentUser.taxCharge11To20Km,
+            taxCharge21To30Km:
+              tier2.value != null ? tier2.value : currentUser.taxCharge21To30Km,
+          }),
+        );
+      }
+      Alert.alert('Saved', 'Delivery settings updated.');
+      if (activeTab === 'Area Users') loadAreaUsers();
+    } catch (e) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.message ||
+        'Failed to save delivery settings';
+      Alert.alert('Error', Array.isArray(msg) ? msg.join(', ') : String(msg));
+    } finally {
+      setSavingDeliverySettings(false);
+    }
+  };
+
+  const handleProfileSubscribe = useCallback(async () => {
+    if (!currentUser?.id || !profileUserId || isOwnProfile || !profile) return;
+    setProfileSubscribeLoading(true);
+    try {
+      if (profile.isSubscribed) {
+        await unsubscribeFromChannel(currentUser.id, profileUserId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: false,
+                subscriberCount: Math.max(0, (prev.subscriberCount ?? 0) - 1),
+              }
+            : prev,
+        );
+      } else {
+        await subscribeToChannel(currentUser.id, profileUserId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: true,
+                subscriberCount: (prev.subscriberCount ?? 0) + 1,
+              }
+            : prev,
+        );
+      }
+    } catch (_) {
+      loadProfile();
+    } finally {
+      setProfileSubscribeLoading(false);
+    }
+  }, [
+    currentUser?.id,
+    profileUserId,
+    isOwnProfile,
+    profile,
+    loadProfile,
+  ]);
+
   const openVideoDetails = useCallback(
     item => {
       if (!item?.id) return;
-      const itemType = String(item.type || item._type || '').toLowerCase();
-      if (itemType === 'short') {
-        const sid = String(item.id);
-        const fallbackName =
-          profile?.nickname ||
-          profile?.channelName ||
-          profile?.name ||
-          'User';
-        const initialShortItem = {
-          ...item,
-          id: sid,
-          type: 'short',
-          userId: item?.userId || profileUserId,
-          videoUrl: item?.videoUrl || item?.video_url,
-          user: item?.user || {
-            id: profileUserId,
-            nickname: fallbackName,
-            name: profile?.name || fallbackName,
-          },
-        };
-        const scopedShortsFeed = buildOwnerScopedShortsFeed(
-          ownerVideos,
-          profileUserId,
-        );
-        navigateToScopedShortsPlayer(navigation, {
-          shortId: sid,
-          initialShortItem,
-          shortsFeedMode: 'owner',
-          scopedShortsFeed,
-        });
-        return;
-      }
-      // Open video details via Root stack (BusinessProfileViewScreen is a Tab screen)
-      try {
-        navigation?.getParent()?.navigate('VideoDetailsScreen', {
-          videoId: item.id,
-        });
-      } catch (_) {
-        navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
-      }
+      openOwnerMediaPlayer(item.id, {
+        rawItem: item,
+        videoUrl: item?.videoUrl || item?.video_url,
+        mediaType: item?._type || item?.type || 'video',
+      });
     },
-    [navigation, profileUserId, profile, ownerVideos],
+    [openOwnerMediaPlayer],
   );
 
   const openEditProfile = () => {
@@ -1080,21 +1416,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     );
     setEditPhone(currentUser?.phone ?? profile?.phone ?? '');
     setEditAddress(profile?.address ?? currentUser?.address ?? '');
-    setEditLatitude(null);
-    setEditLongitude(null);
+    setEditPostcode(profile?.postcode ?? currentUser?.postcode ?? '');
+    setEditLatitude(profile?.latitude ?? currentUser?.latitude ?? null);
+    setEditLongitude(profile?.longitude ?? currentUser?.longitude ?? null);
     const links = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
     const linkMap = Array.isArray(links)
       ? links.reduce((acc, l) => ({ ...acc, [l.type]: l.url || '' }), {})
       : {};
     setEditSocialLinks(
-      [
-        { value: 'instagram', label: 'Instagram' },
-        { value: 'facebook', label: 'Facebook' },
-        { value: 'x', label: 'X (Twitter)' },
-        { value: 'youtube', label: 'YouTube' },
-        { value: 'google_email', label: 'Google / Email' },
-        { value: 'website', label: 'Website' },
-      ].map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
+      SOCIAL_TYPES.map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
     );
     const oh = profile?.openingHours ?? currentUser?.openingHours;
     setEditOpeningHours(
@@ -1107,7 +1437,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         : DEFAULT_OPENING_HOURS,
     );
     setFacebookConnectUrl('');
+    setTiktokConnectUrl('');
+    setYoutubeConnectUrl('');
     loadFacebookPages();
+    loadInstagramLinkStatus();
     setEditProfileVisible(true);
   };
 
@@ -1115,19 +1448,97 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!profileUserId) return;
     try {
       const rows = await getSocialAccounts(profileUserId);
-      const pages = (Array.isArray(rows) ? rows : []).filter(
-        r => String(r?.platform || '').toLowerCase() === 'facebook',
+      const list = Array.isArray(rows) ? rows : [];
+      setFacebookPages(
+        list.filter(
+          r => String(r?.platform || '').toLowerCase() === 'facebook',
+        ),
       );
-      setFacebookPages(pages);
+      setTiktokAccounts(
+        list.filter(r => String(r?.platform || '').toLowerCase() === 'tiktok'),
+      );
+      setYoutubeAccounts(
+        list.filter(r => String(r?.platform || '').toLowerCase() === 'youtube'),
+      );
     } catch {
       setFacebookPages([]);
+      setTiktokAccounts([]);
+      setYoutubeAccounts([]);
     }
   }, [profileUserId]);
 
+  const loadInstagramLinkStatus = useCallback(async (sync = true) => {
+    if (!profileUserId) return;
+    setInstagramChecking(true);
+    try {
+      const res = await getInstagramLinkStatus(profileUserId, sync);
+      setInstagramLinkStatus(res);
+      return res;
+    } catch {
+      setInstagramLinkStatus(null);
+      return null;
+    } finally {
+      setInstagramChecking(false);
+    }
+  }, [profileUserId]);
+
+  const handleVerifyInstagram = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || profileUserId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('Instagram', 'Sign in to connect Instagram.');
+      return;
+    }
+    const hasFbPages = (facebookPages || []).length > 0;
+    if (!hasFbPages) {
+      setInstagramChecking(true);
+      try {
+        const res = await getFacebookConnectUrl(connectUserId, {
+          forInstagram: true,
+        });
+        const url = String(res?.url || '').trim();
+        if (!url) {
+          Alert.alert('Instagram', 'Could not get connect link.');
+          return;
+        }
+        setFacebookConnectUrl(url);
+        await Linking.openURL(url);
+        Alert.alert(
+          'Instagram',
+          'Sign in with Facebook and choose the Page linked to your Instagram Business account. When finished, return here and tap Check Instagram link.',
+        );
+      } catch (e) {
+        Alert.alert(
+          'Instagram',
+          e?.message ||
+            'Could not start Instagram connect. Check FACEBOOK_APP_ID on the server.',
+        );
+      } finally {
+        setInstagramChecking(false);
+      }
+      return;
+    }
+    const res = await loadInstagramLinkStatus(true);
+    const linked = (res?.pages || []).some(row => row.instagramLinked);
+    const stored = (res?.instagramAccounts || []).length > 0;
+    if (linked || stored) {
+      await loadFacebookPages();
+      Alert.alert('Instagram', 'Instagram connected successfully.');
+      return;
+    }
+    Alert.alert(
+      'Instagram',
+      'No Instagram Business account linked to your Facebook Page yet. Link them in Meta Business Suite, then tap Check Instagram link again.',
+    );
+  }, [
+    profileUserId,
+    currentUser?.id,
+    facebookPages,
+    loadInstagramLinkStatus,
+    loadFacebookPages,
+  ]);
+
   const handleVerifyFacebook = useCallback(async () => {
-    const connectUserId = String(
-      currentUser?.id || profileUserId || '',
-    ).trim();
+    const connectUserId = String(currentUser?.id || profileUserId || '').trim();
     if (!connectUserId) {
       Alert.alert('Facebook', 'Sign in to verify Facebook.');
       return;
@@ -1163,6 +1574,105 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     Alert.alert(
       'Copied',
       'Paste this into Meta → Facebook Login → Valid OAuth Redirect URIs.',
+    );
+  }, []);
+
+  const handleVerifyTiktok = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || profileUserId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('TikTok', 'Sign in to verify TikTok.');
+      return;
+    }
+    setTiktokConnecting(true);
+    try {
+      const res = await getTikTokConnectUrl(connectUserId);
+      const url = String(res?.url || '').trim();
+      if (!url) {
+        Alert.alert('TikTok', 'Could not get connect link.');
+        return;
+      }
+      setTiktokConnectUrl(url);
+    } catch (e) {
+      Alert.alert(
+        'TikTok',
+        e?.message ||
+          'Set TIKTOK_CLIENT_KEY on the server (and tiktokClientKey in config.js as fallback), then add the redirect URI in TikTok Developer Portal.',
+      );
+    } finally {
+      setTiktokConnecting(false);
+    }
+  }, [profileUserId, currentUser?.id]);
+
+  const handleCopyTiktokUrl = useCallback(() => {
+    if (!tiktokConnectUrl) return;
+    Clipboard.setString(tiktokConnectUrl);
+    Alert.alert('Copied', 'TikTok verify link copied.');
+  }, [tiktokConnectUrl]);
+
+  const handleCopyTiktokRedirectUri = useCallback(() => {
+    Clipboard.setString(tiktokOAuthRedirectUri());
+    Alert.alert(
+      'Copied',
+      'Add this redirect URI in TikTok for Developers → your app → Login Kit / URL properties.',
+    );
+  }, []);
+
+  const handleVerifyYoutube = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || profileUserId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('YouTube', 'Sign in to verify YouTube.');
+      return;
+    }
+    setYoutubeConnecting(true);
+    try {
+      await connectYouTubeAccount(connectUserId);
+      await loadFacebookPages();
+      Alert.alert('YouTube', 'YouTube channel connected successfully.');
+    } catch (e) {
+      Alert.alert(
+        'YouTube',
+        e?.message ||
+          'Could not connect YouTube. Add your Gmail as a Google OAuth test user, or use the browser link below.',
+      );
+    } finally {
+      setYoutubeConnecting(false);
+    }
+  }, [profileUserId, currentUser?.id, loadFacebookPages]);
+
+  const handleOpenYoutubeBrowserLink = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || profileUserId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('YouTube', 'Sign in to verify YouTube.');
+      return;
+    }
+    setYoutubeConnecting(true);
+    try {
+      const res = await getYouTubeConnectUrl(connectUserId, 'verify');
+      const url = String(res?.url || '').trim();
+      if (!url) {
+        Alert.alert('YouTube', 'Could not get connect link.');
+        return;
+      }
+      setYoutubeConnectUrl(url);
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('YouTube', e?.message || 'Could not open YouTube connect link.');
+    } finally {
+      setYoutubeConnecting(false);
+    }
+  }, [profileUserId, currentUser?.id]);
+
+  const handleCopyYoutubeUrl = useCallback(() => {
+    if (!youtubeConnectUrl) return;
+    Clipboard.setString(youtubeConnectUrl);
+    Alert.alert('Copied', 'YouTube verify link copied.');
+  }, [youtubeConnectUrl]);
+
+  const handleCopyYoutubeRedirectUri = useCallback(() => {
+    Clipboard.setString(youtubeOAuthRedirectUri());
+    Alert.alert(
+      'Copied',
+      'Add this exact redirect URI in Google Cloud Console → Credentials → OAuth 2.0 Web client.',
     );
   }, []);
 
@@ -1225,6 +1735,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   const saveProfile = async () => {
     if (!profileUserId || profileUserId !== currentUser?.id) return;
+    if (isOwnerOrVendor) {
+      const hasPin =
+        editLatitude != null &&
+        editLongitude != null &&
+        Number.isFinite(editLatitude) &&
+        Number.isFinite(editLongitude);
+      if (!hasPin) {
+        Alert.alert(
+          'Location required',
+          'Set your shop location on the map so nearby customers can find your videos and menu.',
+        );
+        return;
+      }
+    }
     setSavingProfile(true);
     try {
       const socialLinks = editSocialLinks
@@ -1235,6 +1759,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         .filter(l => l.url);
       const nameValue = editName.trim() || undefined;
       const addressStr = editAddress.trim() || undefined;
+      let postcodeStr = editPostcode.trim()
+        ? normalizeUkPostcode(editPostcode)
+        : undefined;
+      if (!postcodeStr && addressStr) {
+        postcodeStr = extractUkPostcodeFromText(addressStr) || undefined;
+      }
       let latitude = undefined;
       let longitude = undefined;
       if (
@@ -1273,6 +1803,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         channelAbout: editChannelAbout.trim() || undefined,
         phone: editPhone.trim() || undefined,
         address: addressStr,
+        postcode: postcodeStr,
         ...(latitude != null && { latitude }),
         ...(longitude != null && { longitude }),
         socialLinks: socialLinks.length ? socialLinks : undefined,
@@ -1296,6 +1827,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
             phone: editPhone.trim() || currentUser.phone,
             address: addressStr || currentUser.address,
+            postcode: postcodeStr || currentUser.postcode,
             ...(latitude != null && { latitude }),
             ...(longitude != null && { longitude }),
             socialLinks: socialLinks.length
@@ -1306,10 +1838,43 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             }),
           }),
         );
+        if (
+          latitude != null &&
+          longitude != null &&
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude)
+        ) {
+          const areaLabel = formatCityCountryPostcodeLine({
+            address: addressStr,
+            postcode: postcodeStr,
+          });
+          dispatch(
+            setBrowseLocation({
+              lat: latitude,
+              lng: longitude,
+              postcode: postcodeStr || '',
+              addressText: addressStr || '',
+              areaLabel,
+            }),
+          );
+          persistBrowseLocation({
+            userId: profileUserId,
+            lat: latitude,
+            lng: longitude,
+            postcode: postcodeStr || '',
+            addressText: addressStr || '',
+            areaLabel,
+          }).catch(() => {});
+        }
       }
       setEditProfileVisible(false);
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Failed to update profile');
+      const msg =
+        e?.response?.data?.message ||
+        e?.message ||
+        'Failed to update profile';
+      const detail = Array.isArray(msg) ? msg.join(', ') : String(msg);
+      Alert.alert('Error', detail);
     } finally {
       setSavingProfile(false);
     }
@@ -1327,14 +1892,37 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     );
   };
 
-  const SOCIAL_TYPES = [
-    { value: 'instagram', label: 'Instagram', icon: 'instagram' },
-    { value: 'facebook', label: 'Facebook', icon: 'facebook' },
-    { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
-    { value: 'youtube', label: 'YouTube', icon: 'youtube' },
-    { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
-    { value: 'website', label: 'Website', icon: 'web' },
-  ];
+  const showFacebookVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(
+        editSocialLinks,
+        profile,
+        currentUser,
+        'facebook',
+      ),
+    [editSocialLinks, profile, currentUser],
+  );
+  const showInstagramVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(
+        editSocialLinks,
+        profile,
+        currentUser,
+        'instagram',
+      ) ||
+      showFacebookVerify,
+    [editSocialLinks, profile, currentUser, showFacebookVerify],
+  );
+  const showTiktokVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(editSocialLinks, profile, currentUser, 'tiktok'),
+    [editSocialLinks, profile, currentUser],
+  );
+  const showYoutubeVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(editSocialLinks, profile, currentUser, 'youtube'),
+    [editSocialLinks, profile, currentUser],
+  );
 
   const updatePostInList = useCallback((postId, updater) => {
     setPosts(prev =>
@@ -1442,7 +2030,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!postMediaPreviewPostId) return null;
     return (
       posts.find(
-        p => String(p?.postId || p?.id || '') === String(postMediaPreviewPostId),
+        p =>
+          String(p?.postId || p?.id || '') === String(postMediaPreviewPostId),
       ) || null
     );
   }, [posts, postMediaPreviewPostId]);
@@ -1589,10 +2178,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         ge && String(ge.id) === String(pid)
           ? {
               ...ge,
-              commentCount: Math.max(
-                0,
-                Number(ge.commentCount ?? 0) + delta,
-              ),
+              commentCount: Math.max(0, Number(ge.commentCount ?? 0) + delta),
             }
           : ge,
       );
@@ -1600,16 +2186,17 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         it && String(it.originId) === String(pid)
           ? {
               ...it,
-              commentCount: Math.max(
-                0,
-                Number(it.commentCount ?? 0) + delta,
-              ),
+              commentCount: Math.max(0, Number(it.commentCount ?? 0) + delta),
             }
           : it,
       );
       syncBPGalleryEngageFromServer(pid);
     },
-    [commentsModalGalleryPhotoId, patchGalleryPhoto, syncBPGalleryEngageFromServer],
+    [
+      commentsModalGalleryPhotoId,
+      patchGalleryPhoto,
+      syncBPGalleryEngageFromServer,
+    ],
   );
 
   const openBPGalleryComments = useCallback(() => {
@@ -1626,10 +2213,24 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       if (!item?.mediaUrl && !item?.thumbnail) return;
       const sourceType = String(item?.sourceType || '').toLowerCase();
       if (sourceType === 'post') {
-        const post = posts.find(
-          p => String(p.id) === String(item.originId),
-        );
-        if (post) openPostMediaPreview(post);
+        const post = posts.find(p => String(p.id) === String(item.originId));
+        if (!post) return;
+        const st = String(post?.sourceType || post?.mediaType || '').toLowerCase();
+        const media = String(post?.mediaUrl || post?.videoUrl || '').trim();
+        const isVideoPost =
+          st === 'short' ||
+          st === 'video' ||
+          String(post?.mediaType || '').toLowerCase() === 'video' ||
+          /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(media);
+        if (isVideoPost && media) {
+          openOwnerMediaPlayer(post.shortId || post.id, {
+            rawItem: post,
+            videoUrl: media,
+            mediaType: st === 'short' ? 'short' : 'video',
+          });
+          return;
+        }
+        openPostMediaPreview(post);
         return;
       }
       if (sourceType === 'video') {
@@ -1638,58 +2239,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           item?.isShort || rawType === 'short' || rawType === 'shorts';
         const targetId = item?.originId ?? item?.id;
         if (!targetId) return;
-        if (isShort) {
-          const sid = String(targetId);
-          const raw = (ownerVideos || []).find(
-            v =>
-              String(v.id) === sid &&
-              (v._type === 'short' ||
-                String(v._type || '').toLowerCase() === 'short'),
-          );
-          const fallbackName =
-            profile?.nickname ||
-            profile?.channelName ||
-            profile?.name ||
-            'User';
-          const initialShortItem = raw
-            ? {
-                ...raw,
-                id: sid,
-                type: 'short',
-                userId: raw.userId || profileUserId,
-                videoUrl: raw.videoUrl || String(item?.mediaUrl || '').trim(),
-                user: {
-                  id: profileUserId,
-                  nickname: fallbackName,
-                  name: profile?.name || fallbackName,
-                },
-              }
-            : {
-                id: sid,
-                type: 'short',
-                videoUrl: String(item?.mediaUrl || '').trim(),
-                userId: profileUserId,
-                user: {
-                  id: profileUserId,
-                  nickname: fallbackName,
-                  name: profile?.name || fallbackName,
-                },
-              };
-          const scopedShortsFeed = buildOwnerScopedShortsFeed(
-            ownerVideos,
-            profileUserId,
-          );
-          navigateToScopedShortsPlayer(navigation, {
-            shortId: sid,
-            initialShortItem,
-            shortsFeedMode: 'owner',
-            scopedShortsFeed,
-          });
-          return;
-        }
-        setGalleryVideoModal({
-          contentId: String(targetId),
-          kind: 'video',
+        const raw = (ownerVideos || []).find(
+          v => String(v.id) === String(targetId),
+        );
+        openOwnerMediaPlayer(String(targetId), {
+          rawItem: raw || item,
+          videoUrl: raw?.videoUrl || item?.mediaUrl,
+          mediaType: isShort ? 'short' : 'video',
         });
         return;
       }
@@ -1707,17 +2263,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               if (fresh) raw = fresh;
             } catch (_) {}
           }
-          const base =
-            raw || {
-              id: pid,
-              src: item?.mediaUrl,
-              likeCount: item?.likeCount ?? 0,
-              dislikeCount: item?.dislikeCount ?? 0,
-              commentCount: item?.commentCount ?? 0,
-              shareCount: item?.shareCount ?? 0,
-              isLiked: item?.isLiked ?? false,
-              isDisliked: item?.isDisliked ?? false,
-            };
+          const base = raw || {
+            id: pid,
+            src: item?.mediaUrl,
+            likeCount: item?.likeCount ?? 0,
+            dislikeCount: item?.dislikeCount ?? 0,
+            commentCount: item?.commentCount ?? 0,
+            shareCount: item?.shareCount ?? 0,
+            isLiked: item?.isLiked ?? false,
+            isDisliked: item?.isDisliked ?? false,
+          };
           setGalleryEngagePhoto(base);
           setGalleryPreviewItem({
             ...item,
@@ -1736,11 +2291,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       posts,
       galleryPhotos,
       openPostMediaPreview,
+      openOwnerMediaPlayer,
       profileUserId,
       currentUser?.id,
       ownerVideos,
-      profile,
-      navigation,
     ],
   );
 
@@ -1927,7 +2481,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       setItemEditDescription(String(item.description || '').trim());
       setItemEditThumbnailUri(String(item.imageUrl || '').trim());
       setItemEditVideoUri('');
-      setItemEditCategoryId(String(item.categoryId || item.category?.id || '').trim());
+      setItemEditCategoryId(
+        String(item.categoryId || item.category?.id || '').trim(),
+      );
       setItemEditAllergens(normalizeAllergens(item.allergens));
       setItemEditAllergenIconUrls(normalizeAllergens(item.allergenIconUrls));
     } else if (kind === 'promotion') {
@@ -2161,6 +2717,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         onAvatarPress={handleAvatarPress}
         onCoverPress={handleCoverPress}
         coverUploading={uploadingCover}
+        onSubscribe={
+          !isOwnProfile && currentUser?.id ? handleProfileSubscribe : undefined
+        }
+        subscribeLoading={profileSubscribeLoading}
       />
 
       {isOwnProfile && isOwnerOrVendor ? (
@@ -2246,6 +2806,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 'Video',
                 'Photos',
                 'Notification',
+                'Area Users',
+                'Settings',
               ]
             : BASE_TABS
           ).map(tab => {
@@ -2261,7 +2823,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 ]}
                 onLayout={e => {
                   const l = e?.nativeEvent?.layout;
-                  if (l) tabLayoutsRef.current[tab] = { x: l.x, width: l.width };
+                  if (l)
+                    tabLayoutsRef.current[tab] = { x: l.x, width: l.width };
                 }}
                 onPress={() => {
                   setActiveTab(tab);
@@ -2345,6 +2908,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             ? promotionSubTab === 'other'
               ? 'Other Promotions'
               : 'My Promotions'
+            : activeTab === 'Settings'
+            ? 'Delivery Settings'
+            : activeTab === 'Area Users'
+            ? 'Area Users'
             : activeTab}
         </Text>
         {activeTab === 'Menus' && isOwnProfile && isOwnerOrVendor ? (
@@ -2393,6 +2960,29 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <View style={styles.plusPlaceholder} />
         )}
       </View>
+      {activeTab === 'Area Users' && isOwnProfile && isOwnerOrVendor ? (
+        <View style={styles.areaUsersSummary}>
+          <Text style={styles.areaUsersSummaryText}>
+            {areaUsersMeta.radiusKm != null
+              ? `Logged-in customers within ${areaUsersMeta.radiusKm} km of your restaurant`
+              : 'Set delivery area (km) in Settings to list nearby customers'}
+          </Text>
+          {areaUsersMeta.ownerAddress ? (
+            <Text style={styles.areaUsersSummarySub} numberOfLines={2}>
+              Your restaurant: {areaUsersMeta.ownerAddress}
+            </Text>
+          ) : null}
+          {areaUsersMeta.message ? (
+            <Text style={styles.areaUsersSummaryHint}>{areaUsersMeta.message}</Text>
+          ) : null}
+          {!areaUsersLoading && areaUsersMeta.radiusKm != null ? (
+            <Text style={styles.areaUsersSummaryCount}>
+              {areaUsersMeta.total} user
+              {areaUsersMeta.total === 1 ? '' : 's'} in your delivery area
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 
@@ -2502,10 +3092,84 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         return ownerVideos;
       case 'Notification':
         return notifications;
+      case 'Area Users':
+        return areaUsers.map(u => ({
+          ...u,
+          id: u.id,
+        }));
+      case 'Settings':
+        return [];
       default:
         return [];
     }
   };
+
+  const renderAreaUserRow = item => {
+    const avatarUri = item.avatar
+      ? safeImageUri(item.avatar)
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          item.name || 'User',
+        )}&background=111&color=fff`;
+    const locationLine = [item.address, item.postcode].filter(Boolean).join(' · ');
+    return (
+      <TouchableOpacity
+        style={styles.areaUserRow}
+        onPress={() =>
+          navigation?.navigate('UserViewsScreen', { userId: item.id })
+        }
+        activeOpacity={0.85}
+      >
+        <Image source={{ uri: avatarUri }} style={styles.areaUserAvatar} />
+        <View style={styles.areaUserBody}>
+          <Text style={styles.areaUserName} numberOfLines={1}>
+            {item.name}
+          </Text>
+          {locationLine ? (
+            <Text style={styles.areaUserAddress} numberOfLines={2}>
+              {locationLine}
+            </Text>
+          ) : (
+            <Text style={styles.areaUserAddressMuted}>No saved address</Text>
+          )}
+          <Text style={styles.areaUserDistance}>
+            {formatDistanceKm(item.distanceKm)} from your restaurant
+          </Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={22} color="#999" />
+      </TouchableOpacity>
+    );
+  };
+
+  const renderNotificationRow = item => (
+    <View style={styles.notificationRow}>
+      <MaterialCommunityIcons
+        name={
+          item.type === 'order'
+            ? 'cart'
+            : item.type === 'restaurant_booking'
+            ? 'calendar-account'
+            : item.type === 'content'
+            ? 'video'
+            : 'bell'
+        }
+        size={22}
+        color="#666"
+        style={styles.notificationIcon}
+      />
+      <View style={styles.notificationBody}>
+        <Text style={styles.notificationMessage} numberOfLines={2}>
+          {item.message}
+        </Text>
+        <Text style={styles.notificationMeta}>
+          {item.type || 'general'} •{' '}
+          {item.createdAt
+            ? new Date(item.createdAt).toLocaleDateString()
+            : ''}
+        </Text>
+      </View>
+      {item.status === 'unread' ? <View style={styles.unreadDot} /> : null}
+    </View>
+  );
 
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Posts') {
@@ -2513,6 +3177,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         String(item?.sourceType || '').toLowerCase() === 'short' ||
         String(item?.mediaType || '').toLowerCase() === 'short';
       const postId = item.postId || item.id;
+      const isVideoPost =
+        !isShortItem &&
+        (String(item?.mediaType || '').toLowerCase() === 'video' ||
+          /\.(mp4|mov|m4v|webm|mkv)(\?|$)/i.test(
+            String(item?.mediaUrl || ''),
+          ));
       // Posts API does not return user.photos; use profile (channel) avatar first so owner photo shows
       const profileAvatarUri =
         profile?.channelAvatar && String(profile.channelAvatar).trim()
@@ -2541,9 +3211,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             channelAvatar: postOwnerAvatar || item.channelAvatar,
           }}
           postId={postId}
-          onPress={() =>
-            isShortItem ? openShortFromPostsTab(item) : openPostMediaPreview(item)
-          }
+          onPress={() => {
+            if (isShortItem) openShortFromPostsTab(item);
+            else if (isVideoPost) {
+              openOwnerMediaPlayer(postId, {
+                rawItem: item,
+                videoUrl: item.mediaUrl,
+                mediaType: 'video',
+              });
+            } else openPostMediaPreview(item);
+          }}
           onLike={
             isShortItem
               ? undefined
@@ -2567,7 +3244,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           }
           onShare={isShortItem ? undefined : () => handlePostShare(postId)}
           onMenuPress={
-            isShortItem || !isOwnProfile ? undefined : () => openPostActions(item)
+            isShortItem || !isOwnProfile
+              ? undefined
+              : () => openPostActions(item)
           }
           hideMenuButton={isShortItem || !isOwnProfile}
         />
@@ -2713,6 +3392,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               <MaterialCommunityIcons name="play" size={14} color="#fff" />
             </View>
           ) : null}
+          {isOwnProfile && item.isScheduled ? (
+            <View style={styles.galleryScheduledBadge}>
+              <MaterialCommunityIcons
+                name="clock-outline"
+                size={11}
+                color="#fff"
+              />
+              <Text style={styles.galleryScheduledBadgeText}>Scheduled</Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
       );
     }
@@ -2757,17 +3446,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             }}
             onPress={() => {
               if (!item?.id || !profileUserId) return;
-              const isShort =
-                item._type === 'short' ||
-                String(item.type || '').toLowerCase() === 'short';
-              if (isShort) {
-                openVideoDetails(item);
-                return;
-              }
-              setGalleryVideoModal({
-                contentId: String(item.id),
-                kind: 'video',
-              });
+              openVideoDetails(item);
             }}
           />
           {isOwnProfile && item.id ? (
@@ -2786,34 +3465,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       );
     }
     if (activeTab === 'Notification') {
-      return (
-        <View style={styles.notificationRow}>
-          <MaterialCommunityIcons
-            name={
-              item.type === 'order'
-                ? 'cart'
-                : item.type === 'content'
-                ? 'video'
-                : 'bell'
-            }
-            size={22}
-            color="#666"
-            style={styles.notificationIcon}
-          />
-          <View style={styles.notificationBody}>
-            <Text style={styles.notificationMessage} numberOfLines={2}>
-              {item.message}
-            </Text>
-            <Text style={styles.notificationMeta}>
-              {item.type || 'general'} •{' '}
-              {item.createdAt
-                ? new Date(item.createdAt).toLocaleDateString()
-                : ''}
-            </Text>
-          </View>
-          {item.status === 'unread' ? <View style={styles.unreadDot} /> : null}
-        </View>
-      );
+      return renderNotificationRow(item);
+    }
+    if (activeTab === 'Area Users') {
+      return renderAreaUserRow(item);
     }
     return null;
   };
@@ -2849,7 +3504,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           />
           <TouchableOpacity
             style={styles.promoHeaderBell}
-            onPress={() => navigation.navigate('MessageList')}
+            onPress={handleNotificationBellPress}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons
@@ -2874,7 +3529,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.loadingText}>Loading gallery...</Text>
         </View>
       ) : null}
-      {activeTab === 'Photos' && galleryLoading && galleryPhotos.length === 0 ? (
+      {activeTab === 'Photos' &&
+      galleryLoading &&
+      galleryPhotos.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading gallery...</Text>
@@ -2894,6 +3551,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
           <Text style={styles.loadingText}>Loading notifications...</Text>
+        </View>
+      ) : null}
+      {activeTab === 'Area Users' &&
+      areaUsersLoading &&
+      areaUsers.length === 0 ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color="#FF7F0B" />
+          <Text style={styles.loadingText}>Loading area users...</Text>
         </View>
       ) : null}
       {activeTab === 'Promotions' &&
@@ -2932,9 +3597,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         ListHeaderComponent={renderHeader}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        numColumns={
-          activeTab === 'Gallery' || activeTab === 'Photos' ? 3 : 1
-        }
+        numColumns={activeTab === 'Gallery' || activeTab === 'Photos' ? 3 : 1}
         columnWrapperStyle={
           activeTab === 'Gallery' || activeTab === 'Photos'
             ? styles.gridColumnWrapper
@@ -2950,9 +3613,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             />
           ) : activeTab === 'Gallery' ? (
             <RefreshControl
-              refreshing={
-                galleryLoading || postsLoading || ownerVideosLoading
-              }
+              refreshing={galleryLoading || postsLoading || ownerVideosLoading}
               onRefresh={() => {
                 loadGallery();
                 loadPosts(true);
@@ -2982,6 +3643,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
+          ) : activeTab === 'Area Users' ? (
+            <RefreshControl
+              refreshing={areaUsersLoading}
+              onRefresh={loadAreaUsers}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
           ) : activeTab === 'Promotions' && profileUserId ? (
             <RefreshControl
               refreshing={
@@ -3006,7 +3674,136 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             />
           ) : undefined
         }
+        ListEmptyComponent={
+          activeTab === 'Settings' && isOwnProfile && isOwnerOrVendor ? (
+            <View style={styles.settingsPanel}>
+              <Text style={styles.settingsHint}>
+                Set how long delivery usually takes, how far you deliver from
+                your shop location on the map, and tax/charges by distance.
+              </Text>
+              <Text style={styles.editLabel}>Delivery Time</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editDeliveryTime}
+                onChangeText={setEditDeliveryTime}
+                placeholder='e.g. 30-45 minutes'
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.editLabel}>Delivery Area (KM)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editDeliveryAreaKm}
+                onChangeText={setEditDeliveryAreaKm}
+                placeholder="e.g. 15"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.editLabel}>Tax & charges — 0-10 km (£)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editTaxCharge0To10Km}
+                onChangeText={setEditTaxCharge0To10Km}
+                placeholder="e.g. 2.50"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.editLabel}>Tax & charges — 11-20 km (£)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editTaxCharge11To20Km}
+                onChangeText={setEditTaxCharge11To20Km}
+                placeholder="e.g. 4.00"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.editLabel}>Tax & charges — 21-30 km (£)</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editTaxCharge21To30Km}
+                onChangeText={setEditTaxCharge21To30Km}
+                placeholder="e.g. 6.00"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.editSaveBtn,
+                  styles.settingsSaveBtn,
+                  savingDeliverySettings && styles.editSaveBtnDisabled,
+                ]}
+                onPress={saveDeliverySettings}
+                disabled={savingDeliverySettings}
+              >
+                {savingDeliverySettings ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.editSaveBtnText}>Save settings</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : activeTab === 'Area Users' &&
+            isOwnProfile &&
+            isOwnerOrVendor &&
+            !areaUsersLoading &&
+            areaUsers.length === 0 ? (
+            <Text style={styles.areaUsersEmpty}>
+              {areaUsersMeta.message ||
+                'No logged-in customers with a saved location in your delivery area yet.'}
+            </Text>
+          ) : null
+        }
       />
+      <Modal
+        visible={notificationsModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNotificationsModalVisible(false)}
+      >
+        <View style={styles.editModalOverlay}>
+          <TouchableOpacity
+            style={styles.editModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setNotificationsModalVisible(false)}
+          />
+          <View style={styles.notificationsModalBox}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Notifications</Text>
+              <TouchableOpacity
+                onPress={() => setNotificationsModalVisible(false)}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            {notificationsLoading && notifications.length === 0 ? (
+              <View style={styles.notificationsModalLoading}>
+                <ActivityIndicator size="small" color="#FF7F0B" />
+                <Text style={styles.notificationsModalLoadingText}>
+                  Loading notifications...
+                </Text>
+              </View>
+            ) : notifications.length === 0 ? (
+              <Text style={styles.notificationsModalEmpty}>
+                No notifications yet.
+              </Text>
+            ) : (
+              <FlatList
+                data={notifications}
+                keyExtractor={(item, index) => item.id || `notif-${index}`}
+                renderItem={({ item }) => renderNotificationRow(item)}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={notificationsLoading}
+                    onRefresh={loadNotifications}
+                    colors={['#FF7F0B']}
+                    tintColor="#FF7F0B"
+                  />
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
       <CommentsModal
         visible={!!commentsModalPostId}
         onClose={() => setCommentsModalPostId(null)}
@@ -3029,8 +3826,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           commentsModalGalleryPhotoId
             ? Number(
                 galleryPhotos.find(
-                  g =>
-                    String(g.id) === String(commentsModalGalleryPhotoId),
+                  g => String(g.id) === String(commentsModalGalleryPhotoId),
                 )?.commentCount ?? 0,
               )
             : undefined
@@ -3425,7 +4221,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     style={styles.postEditMediaBtn}
                     onPress={pickItemVideo}
                   >
-                    <Text style={styles.postEditMediaBtnText}>Change Video</Text>
+                    <Text style={styles.postEditMediaBtnText}>
+                      Change Video
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -3682,21 +4480,53 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
               />
+              <Text style={styles.editLabel}>UK Postcode</Text>
+              <TextInput
+                style={styles.editInput}
+                value={editPostcode}
+                onChangeText={setEditPostcode}
+                placeholder="e.g. SW1A 1AA"
+                placeholderTextColor="#999"
+                autoCapitalize="characters"
+              />
               <Text style={styles.editLabel}>Address</Text>
-              <View style={styles.editAddressRow}>
-                <TextInput
-                  style={[styles.editInput, styles.editAddressInput]}
-                  value={editAddress}
-                  onChangeText={v => {
-                    setEditAddress(v);
-                    setEditLatitude(null);
-                    setEditLongitude(null);
-                  }}
-                  placeholder="Address or use location below"
-                  placeholderTextColor="#999"
-                />
+              <TextInput
+                style={[styles.editInput, styles.editAddressInput]}
+                value={editAddress}
+                onChangeText={v => {
+                  setEditAddress(v);
+                  setEditLatitude(null);
+                  setEditLongitude(null);
+                }}
+                placeholder="Street, city, postcode"
+                placeholderTextColor="#999"
+                numberOfLines={1}
+              />
+              {editAddress.trim() ? (
+                <Text style={styles.editLocationPreview}>
+                  {formatCityCountryPostcodeLine({
+                    address: editAddress,
+                    postcode: editPostcode,
+                  })}
+                </Text>
+              ) : null}
+              <View style={styles.editAddressActions}>
                 <TouchableOpacity
-                  style={styles.useLocationBtn}
+                  style={[
+                    styles.editAddressActionBtn,
+                    styles.editAddressActionBtnFirst,
+                  ]}
+                  onPress={() => setLocationMapVisible(true)}
+                  accessibilityLabel="Pick on map"
+                >
+                  <MaterialCommunityIcons name="map" size={20} color="#fff" />
+                  <Text style={styles.editAddressActionText} numberOfLines={1}>
+                    Pick on map
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editAddressActionBtn}
+                  accessibilityLabel="Use my location"
                   onPress={async () => {
                     getCurrentPositionSafe(
                       async position => {
@@ -3707,8 +4537,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                           lng == null ||
                           !Number.isFinite(lat) ||
                           !Number.isFinite(lng)
-                        )
+                        ) {
                           return;
+                        }
                         const addr = await reverseGeocode(lat, lng);
                         setEditAddress(
                           addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
@@ -3726,10 +4557,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 >
                   <MaterialCommunityIcons
                     name="crosshairs-gps"
-                    size={22}
+                    size={20}
                     color="#fff"
                   />
-                  <Text style={styles.useLocationBtnText}>Use my location</Text>
+                  <Text style={styles.editAddressActionText} numberOfLines={1}>
+                    Use my location
+                  </Text>
                 </TouchableOpacity>
               </View>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
@@ -3768,82 +4601,358 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   </View>
                 ))}
               </View>
-              <Text style={[styles.editLabel, { marginTop: 16 }]}>
-                Facebook page verification
-              </Text>
-              <Text style={styles.facebookMetaHint}>
-                If Facebook shows &quot;URL Blocked&quot;: Meta Developer Console →
-                your app → Facebook Login → Settings → turn on Client OAuth Login
-                and Web OAuth Login → add this redirect URI (exact match):
-              </Text>
-              <View style={styles.facebookRedirectRow}>
-                <Text selectable style={styles.facebookRedirectUriText}>
-                  {facebookOAuthRedirectUri()}
-                </Text>
-                <TouchableOpacity
-                  style={styles.facebookRedirectCopyBtn}
-                  onPress={handleCopyFacebookRedirectUri}
-                >
-                  <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.facebookCard}>
-                <View style={styles.facebookActionsRow}>
-                  <TouchableOpacity
-                    style={styles.facebookActionBtn}
-                    onPress={handleVerifyFacebook}
-                    disabled={facebookConnecting}
-                  >
-                    <Text style={styles.facebookActionBtnText}>
-                      {facebookConnecting ? 'Opening...' : 'Verify Facebook'}
+              {showFacebookVerify ? (
+                <>
+                  <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                    Facebook page verification
+                  </Text>
+                  <Text style={styles.facebookMetaHint}>
+                    If Facebook shows &quot;URL Blocked&quot;: Meta Developer
+                    Console → your app → Facebook Login → Settings → turn on Client
+                    OAuth Login and Web OAuth Login → add this redirect URI (exact
+                    match):
+                  </Text>
+                  <View style={styles.facebookRedirectRow}>
+                    <Text selectable style={styles.facebookRedirectUriText}>
+                      {facebookOAuthRedirectUri()}
                     </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.facebookActionBtn, styles.facebookRefreshBtn]}
-                    onPress={loadFacebookPages}
-                  >
-                    <Text style={styles.facebookActionBtnText}>
-                      Refresh pages
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                {facebookConnectUrl ? (
-                  <View style={styles.facebookUrlBox}>
-                    <Text selectable style={styles.facebookUrlText}>
-                      {facebookConnectUrl}
-                    </Text>
-                    <View style={styles.facebookUrlActions}>
+                    <TouchableOpacity
+                      style={styles.facebookRedirectCopyBtn}
+                      onPress={handleCopyFacebookRedirectUri}
+                    >
+                      <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.facebookCard}>
+                    <View style={styles.facebookActionsRow}>
                       <TouchableOpacity
-                        style={styles.facebookMiniBtn}
-                        onPress={() => Linking.openURL(facebookConnectUrl)}
+                        style={styles.facebookActionBtn}
+                        onPress={handleVerifyFacebook}
+                        disabled={facebookConnecting}
                       >
-                        <Text style={styles.facebookMiniBtnText}>Open</Text>
+                        <Text style={styles.facebookActionBtnText}>
+                          {facebookConnecting ? 'Opening...' : 'Verify Facebook'}
+                        </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={styles.facebookMiniBtn}
-                        onPress={handleCopyFacebookUrl}
+                        style={[
+                          styles.facebookActionBtn,
+                          styles.facebookRefreshBtn,
+                        ]}
+                        onPress={loadFacebookPages}
                       >
-                        <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                        <Text style={styles.facebookActionBtnText}>
+                          Refresh pages
+                        </Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
-                ) : null}
-                {(facebookPages || []).length > 0 ? (
-                  <View style={styles.facebookPagesWrap}>
-                    {facebookPages.map(p => (
-                      <View key={p?.id || p?.accountId} style={styles.facebookPageChip}>
-                        <Text style={styles.facebookPageChipText} numberOfLines={1}>
-                          {p?.accountName || p?.accountId}
+                    {facebookConnectUrl ? (
+                      <View style={styles.facebookUrlBox}>
+                        <Text selectable style={styles.facebookUrlText}>
+                          {facebookConnectUrl}
                         </Text>
+                        <View style={styles.facebookUrlActions}>
+                          <TouchableOpacity
+                            style={styles.facebookMiniBtn}
+                            onPress={() => Linking.openURL(facebookConnectUrl)}
+                          >
+                            <Text style={styles.facebookMiniBtnText}>Open</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.facebookMiniBtn}
+                            onPress={handleCopyFacebookUrl}
+                          >
+                            <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    ))}
+                    ) : null}
+                    {(facebookPages || []).length > 0 ? (
+                      <View style={styles.facebookPagesWrap}>
+                        {facebookPages.map(p => (
+                          <View
+                            key={p?.id || p?.accountId}
+                            style={styles.facebookPageChip}
+                          >
+                            <Text
+                              style={styles.facebookPageChipText}
+                              numberOfLines={1}
+                            >
+                              {p?.accountName || p?.accountId}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.facebookHelpText}>
+                        No Facebook pages connected yet.
+                      </Text>
+                    )}
                   </View>
-                ) : (
-                  <Text style={styles.facebookHelpText}>
-                    No Facebook pages connected yet.
+                </>
+              ) : null}
+
+              {showInstagramVerify ? (
+                <>
+                  <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                    Instagram (via Facebook Page)
                   </Text>
-                )}
-              </View>
+                  <Text style={styles.facebookMetaHint}>
+                    Instagram connects through your Facebook Page (Meta requirement). Tap
+                    Verify Instagram to sign in — Facebook Page connection is not required
+                    first. Link Instagram Business to your Page in Meta Business Suite if
+                    needed.
+                  </Text>
+                  <View style={styles.facebookCard}>
+                    <View style={styles.facebookActionsRow}>
+                      <TouchableOpacity
+                        style={styles.facebookActionBtn}
+                        onPress={handleVerifyInstagram}
+                        disabled={instagramChecking}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          {instagramChecking ? 'Loading...' : 'Verify Instagram'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.facebookActionBtn,
+                          styles.facebookRefreshBtn,
+                        ]}
+                        onPress={() => loadInstagramLinkStatus(true)}
+                        disabled={instagramChecking}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          Check Instagram link
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {instagramLinkStatus?.pages?.length > 0 ? (
+                      <View style={styles.facebookPagesWrap}>
+                        {instagramLinkStatus.pages.map((row, idx) => (
+                          <View
+                            key={row.pageId || String(idx)}
+                            style={styles.facebookPageChip}
+                          >
+                            <Text style={styles.facebookPageChipText} numberOfLines={3}>
+                              {row.pageName || row.pageId}
+                              {row.instagramLinked
+                                ? ` → @${row.instagramUsername || 'linked'}`
+                                : row.error
+                                  ? ` — ${row.error}`
+                                  : ' — no Instagram Business linked'}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.facebookHelpText}>
+                        Tap Verify Instagram to connect — no Facebook verify step needed first.
+                      </Text>
+                    )}
+                    {instagramLinkStatus?.instagramAccounts?.length > 0 ? (
+                      <Text style={[styles.facebookHelpText, { marginTop: 8 }]}>
+                        Auto-post token stored:{' '}
+                        {instagramLinkStatus.instagramAccounts
+                          .map(a => `@${a.accountName || a.accountId}`)
+                          .join(', ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                </>
+              ) : null}
+
+              {showTiktokVerify ? (
+                <>
+                  <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                    TikTok verification
+                  </Text>
+                  <Text style={styles.facebookMetaHint}>
+                    TikTok for Developers → your app → Login Kit → add this redirect URI (exact
+                    match). Enable scopes: user.info.basic, user.info.profile, video.publish.
+                  </Text>
+                  <View style={styles.facebookRedirectRow}>
+                    <Text selectable style={styles.facebookRedirectUriText}>
+                      {tiktokOAuthRedirectUri()}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.facebookRedirectCopyBtn}
+                      onPress={handleCopyTiktokRedirectUri}
+                    >
+                      <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.facebookCard}>
+                    <View style={styles.facebookActionsRow}>
+                      <TouchableOpacity
+                        style={styles.facebookActionBtn}
+                        onPress={handleVerifyTiktok}
+                        disabled={tiktokConnecting}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          {tiktokConnecting ? 'Loading...' : 'Verify TikTok'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.facebookActionBtn,
+                          styles.facebookRefreshBtn,
+                        ]}
+                        onPress={loadFacebookPages}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          Refresh accounts
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {tiktokConnectUrl ? (
+                      <View style={styles.facebookUrlBox}>
+                        <Text selectable style={styles.facebookUrlText}>
+                          {tiktokConnectUrl}
+                        </Text>
+                        <View style={styles.facebookUrlActions}>
+                          <TouchableOpacity
+                            style={styles.facebookMiniBtn}
+                            onPress={() => Linking.openURL(tiktokConnectUrl)}
+                          >
+                            <Text style={styles.facebookMiniBtnText}>Open</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.facebookMiniBtn}
+                            onPress={handleCopyTiktokUrl}
+                          >
+                            <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+                    {(tiktokAccounts || []).length > 0 ? (
+                      <View style={styles.facebookPagesWrap}>
+                        {tiktokAccounts.map(p => (
+                          <View
+                            key={p?.id || p?.accountId}
+                            style={styles.facebookPageChip}
+                          >
+                            <Text
+                              style={styles.facebookPageChipText}
+                              numberOfLines={1}
+                            >
+                              {p?.accountName || p?.accountId}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.facebookHelpText}>
+                        No TikTok accounts connected yet.
+                      </Text>
+                    )}
+                  </View>
+                </>
+              ) : null}
+
+              {showYoutubeVerify ? (
+                <>
+                  <Text style={[styles.editLabel, { marginTop: 16 }]}>
+                    YouTube verification
+                  </Text>
+                  <Text style={styles.facebookMetaHint}>
+                    Verify uses Google Sign-In with youtube.readonly only. If Google shows
+                    "Access blocked", add the user Gmail under Google Cloud Console → OAuth
+                    consent screen → Test users (app is in Testing mode). Redirect URI for
+                    browser fallback:
+                  </Text>
+                  <View style={styles.facebookRedirectRow}>
+                    <Text selectable style={styles.facebookRedirectUriText}>
+                      {youtubeOAuthRedirectUri()}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.facebookRedirectCopyBtn}
+                      onPress={handleCopyYoutubeRedirectUri}
+                    >
+                      <Text style={styles.facebookRedirectCopyBtnText}>Copy</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.facebookCard}>
+                    <View style={styles.facebookActionsRow}>
+                      <TouchableOpacity
+                        style={styles.facebookActionBtn}
+                        onPress={handleVerifyYoutube}
+                        disabled={youtubeConnecting}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          {youtubeConnecting ? 'Loading...' : 'Verify YouTube'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.facebookActionBtn,
+                          styles.facebookRefreshBtn,
+                        ]}
+                        onPress={handleOpenYoutubeBrowserLink}
+                        disabled={youtubeConnecting}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          Browser link
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.facebookActionBtn,
+                          styles.facebookRefreshBtn,
+                        ]}
+                        onPress={loadFacebookPages}
+                      >
+                        <Text style={styles.facebookActionBtnText}>
+                          Refresh accounts
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    {youtubeConnectUrl ? (
+                      <View style={styles.facebookUrlBox}>
+                        <Text selectable style={styles.facebookUrlText}>
+                          {youtubeConnectUrl}
+                        </Text>
+                        <View style={styles.facebookUrlActions}>
+                          <TouchableOpacity
+                            style={styles.facebookMiniBtn}
+                            onPress={() => Linking.openURL(youtubeConnectUrl)}
+                          >
+                            <Text style={styles.facebookMiniBtnText}>Open</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.facebookMiniBtn}
+                            onPress={handleCopyYoutubeUrl}
+                          >
+                            <Text style={styles.facebookMiniBtnText}>Copy URL</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+                    {(youtubeAccounts || []).length > 0 ? (
+                      <View style={styles.facebookPagesWrap}>
+                        {youtubeAccounts.map(p => (
+                          <View
+                            key={p?.id || p?.accountId}
+                            style={styles.facebookPageChip}
+                          >
+                            <Text
+                              style={styles.facebookPageChipText}
+                              numberOfLines={1}
+                            >
+                              {p?.accountName || p?.accountId}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.facebookHelpText}>
+                        No YouTube channels connected yet.
+                      </Text>
+                    )}
+                  </View>
+                </>
+              ) : null}
 
               {currentRole === 'owner' ? (
                 <>
@@ -3909,6 +5018,23 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </KeyboardAvoidingView>
       </Modal>
 
+      <MapLocationPicker
+        visible={locationMapVisible}
+        onClose={() => setLocationMapVisible(false)}
+        title="Shop location"
+        initialLat={editLatitude}
+        initialLng={editLongitude}
+        initialPostcode={editPostcode}
+        initialAddress={editAddress}
+        requirePostcode={isOwnerOrVendor}
+        onConfirm={browse => {
+          setEditLatitude(browse.lat);
+          setEditLongitude(browse.lng);
+          setEditPostcode(browse.postcode || editPostcode);
+          setEditAddress(browse.addressText || browse.areaLabel || editAddress);
+        }}
+      />
+
       {/* Profile gallery photo — full screen */}
       <Modal
         visible={galleryPreviewVisible}
@@ -3944,102 +5070,100 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               />
             ) : null}
           </View>
-            <View style={styles.bpIgEngageCard}>
-              <Text style={styles.previewMetaType}>Photo</Text>
-              <Text style={styles.bpGalleryEngageMetaSub}>
-                {galleryPreviewItem?.subtitle || 'Recently'}
-              </Text>
-              <View style={styles.bpGalleryEngageRow}>
-                <TouchableOpacity
-                  style={styles.bpGalleryEngageCell}
-                  onPress={handleBPGalleryLike}
-                >
-                  <MaterialCommunityIcons
-                    name={
-                      (galleryEngagePhoto?.isLiked ??
-                        galleryPreviewItem?.isLiked)
-                        ? 'thumb-up'
-                        : 'thumb-up-outline'
-                    }
-                    size={18}
-                    color={
-                      galleryEngagePhoto?.isLiked ??
-                      galleryPreviewItem?.isLiked
-                        ? '#FF7F0B'
-                        : '#333'
-                    }
-                  />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCount(
-                      galleryEngagePhoto?.likeCount ??
-                        galleryPreviewItem?.likeCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.bpGalleryEngageCell}
-                  onPress={handleBPGalleryDislike}
-                >
-                  <MaterialCommunityIcons
-                    name={
-                      (galleryEngagePhoto?.isDisliked ??
-                        galleryPreviewItem?.isDisliked)
-                        ? 'thumb-down'
-                        : 'thumb-down-outline'
-                    }
-                    size={18}
-                    color={
-                      galleryEngagePhoto?.isDisliked ??
-                      galleryPreviewItem?.isDisliked
-                        ? '#FF7F0B'
-                        : '#333'
-                    }
-                  />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCount(
-                      galleryEngagePhoto?.dislikeCount ??
-                        galleryPreviewItem?.dislikeCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.bpGalleryEngageCell}
-                  onPress={openBPGalleryComments}
-                >
-                  <MaterialCommunityIcons
-                    name="comment-text-outline"
-                    size={18}
-                    color="#333"
-                  />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCount(
-                      galleryEngagePhoto?.commentCount ??
-                        galleryPreviewItem?.commentCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.bpGalleryEngageCell}
-                  onPress={handleBPGalleryShare}
-                >
-                  <MaterialCommunityIcons
-                    name="share-outline"
-                    size={18}
-                    color="#333"
-                  />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
-                    {formatCount(
-                      galleryEngagePhoto?.shareCount ??
-                        galleryPreviewItem?.shareCount ??
-                        0,
-                    )}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.bpIgEngageCard}>
+            <Text style={styles.previewMetaType}>Photo</Text>
+            <Text style={styles.bpGalleryEngageMetaSub}>
+              {galleryPreviewItem?.subtitle || 'Recently'}
+            </Text>
+            <View style={styles.bpGalleryEngageRow}>
+              <TouchableOpacity
+                style={styles.bpGalleryEngageCell}
+                onPress={handleBPGalleryLike}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    galleryEngagePhoto?.isLiked ?? galleryPreviewItem?.isLiked
+                      ? 'thumb-up'
+                      : 'thumb-up-outline'
+                  }
+                  size={18}
+                  color={
+                    galleryEngagePhoto?.isLiked ?? galleryPreviewItem?.isLiked
+                      ? '#FF7F0B'
+                      : '#333'
+                  }
+                />
+                <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  {formatCount(
+                    galleryEngagePhoto?.likeCount ??
+                      galleryPreviewItem?.likeCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bpGalleryEngageCell}
+                onPress={handleBPGalleryDislike}
+              >
+                <MaterialCommunityIcons
+                  name={
+                    galleryEngagePhoto?.isDisliked ??
+                    galleryPreviewItem?.isDisliked
+                      ? 'thumb-down'
+                      : 'thumb-down-outline'
+                  }
+                  size={18}
+                  color={
+                    galleryEngagePhoto?.isDisliked ??
+                    galleryPreviewItem?.isDisliked
+                      ? '#FF7F0B'
+                      : '#333'
+                  }
+                />
+                <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  {formatCount(
+                    galleryEngagePhoto?.dislikeCount ??
+                      galleryPreviewItem?.dislikeCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bpGalleryEngageCell}
+                onPress={openBPGalleryComments}
+              >
+                <MaterialCommunityIcons
+                  name="comment-text-outline"
+                  size={18}
+                  color="#333"
+                />
+                <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  {formatCount(
+                    galleryEngagePhoto?.commentCount ??
+                      galleryPreviewItem?.commentCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bpGalleryEngageCell}
+                onPress={handleBPGalleryShare}
+              >
+                <MaterialCommunityIcons
+                  name="share-outline"
+                  size={18}
+                  color="#333"
+                />
+                <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  {formatCount(
+                    galleryEngagePhoto?.shareCount ??
+                      galleryPreviewItem?.shareCount ??
+                      0,
+                  )}
+                </Text>
+              </TouchableOpacity>
             </View>
+          </View>
         </SafeAreaView>
       </Modal>
 
@@ -4088,11 +5212,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={styles.bpGalleryEngageCell}
                   onPress={() =>
-                    handlePostLike(postMediaPreviewPost?.postId || postMediaPreviewPost?.id)
+                    handlePostLike(
+                      postMediaPreviewPost?.postId || postMediaPreviewPost?.id,
+                    )
                   }
                 >
-                  <MaterialCommunityIcons name="thumb-up-outline" size={18} color="#333" />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  <MaterialCommunityIcons
+                    name="thumb-up-outline"
+                    size={18}
+                    color="#333"
+                  />
+                  <Text
+                    style={styles.bpGalleryEngageCellLabel}
+                    numberOfLines={1}
+                  >
                     {postMediaPreviewPost?.likes ??
                       formatCount(postMediaPreviewPost?.likeCount ?? 0)}
                   </Text>
@@ -4110,7 +5243,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     size={18}
                     color="#333"
                   />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  <Text
+                    style={styles.bpGalleryEngageCellLabel}
+                    numberOfLines={1}
+                  >
                     {postMediaPreviewPost?.dislikes ??
                       formatCount(postMediaPreviewPost?.dislikeCount ?? 0)}
                   </Text>
@@ -4128,7 +5264,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     size={18}
                     color="#333"
                   />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  <Text
+                    style={styles.bpGalleryEngageCellLabel}
+                    numberOfLines={1}
+                  >
                     {postMediaPreviewPost?.comments ??
                       formatCount(postMediaPreviewPost?.commentCount ?? 0)}
                   </Text>
@@ -4136,11 +5275,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 <TouchableOpacity
                   style={styles.bpGalleryEngageCell}
                   onPress={() =>
-                    handlePostShare(postMediaPreviewPost?.postId || postMediaPreviewPost?.id)
+                    handlePostShare(
+                      postMediaPreviewPost?.postId || postMediaPreviewPost?.id,
+                    )
                   }
                 >
-                  <MaterialCommunityIcons name="share-outline" size={18} color="#333" />
-                  <Text style={styles.bpGalleryEngageCellLabel} numberOfLines={1}>
+                  <MaterialCommunityIcons
+                    name="share-outline"
+                    size={18}
+                    color="#333"
+                  />
+                  <Text
+                    style={styles.bpGalleryEngageCellLabel}
+                    numberOfLines={1}
+                  >
                     {postMediaPreviewPost?.shares ??
                       formatCount(postMediaPreviewPost?.shareCount ?? 0)}
                   </Text>
@@ -4548,6 +5696,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  galleryScheduledBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FF7F0B',
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  galleryScheduledBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
   gridImage: {
     width: '100%',
     height: '100%',
@@ -4584,6 +5749,114 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#FF7F0B',
     marginLeft: 8,
+  },
+  areaUsersSummary: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFBF5',
+    borderWidth: 1,
+    borderColor: '#F0E6D2',
+  },
+  areaUsersSummaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    lineHeight: 20,
+  },
+  areaUsersSummarySub: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 17,
+  },
+  areaUsersSummaryHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#B45309',
+    lineHeight: 17,
+  },
+  areaUsersSummaryCount: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF7F0B',
+  },
+  areaUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  areaUserAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#eee',
+    marginRight: 12,
+  },
+  areaUserBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  areaUserName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#222',
+  },
+  areaUserAddress: {
+    marginTop: 2,
+    fontSize: 13,
+    color: '#555',
+    lineHeight: 18,
+  },
+  areaUserAddressMuted: {
+    marginTop: 2,
+    fontSize: 13,
+    color: '#999',
+  },
+  areaUserDistance: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#FF7F0B',
+    fontWeight: '600',
+  },
+  areaUsersEmpty: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    lineHeight: 20,
+  },
+  notificationsModalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '75%',
+    paddingBottom: 16,
+  },
+  notificationsModalLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  notificationsModalLoadingText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  notificationsModalEmpty: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#888',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
   },
   editModalOverlay: {
     flex: 1,
@@ -4639,27 +5912,54 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
-  editAddressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   editAddressInput: {
-    flex: 1,
+    width: '100%',
+    marginBottom: 10,
   },
-  useLocationBtn: {
+  editLocationPreview: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  editAddressActions: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 4,
+  },
+  editAddressActionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
     backgroundColor: '#FF7F0B',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
     borderRadius: 10,
   },
-  useLocationBtnText: {
+  editAddressActionBtnFirst: {
+    marginRight: 8,
+  },
+  editAddressActionText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
+    marginLeft: 6,
+    flexShrink: 1,
+  },
+  settingsPanel: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  settingsHint: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  settingsSaveBtn: {
+    marginHorizontal: 0,
+    marginTop: 20,
   },
   editSaveBtn: {
     marginHorizontal: 16,
@@ -4669,12 +5969,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
-  editSaveBtnDisabled: {
-    opacity: 0.7,
+  editSaveBtnDisabled: { opacity: 0.7 },
+  editSaveBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  useLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
-  editSaveBtnText: {
+  useLocationBtnText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   socialLinksCard: {

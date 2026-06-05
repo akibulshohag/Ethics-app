@@ -200,12 +200,11 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     width: '100%',
-    height: 60,
-    backgroundColor: COLORS.gray900,
-    borderRadius: BORDER_RADIUS.xxxl,
+    height: 52,
+    backgroundColor: '#2B1A00',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
   },
   verifyButtonText: {
     color: COLORS.white,

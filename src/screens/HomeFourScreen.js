@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,17 +17,34 @@ import {
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import Toast from 'react-native-toast-message';
+import { appSetUser } from '../redux/actions/appSlice';
 import { createRestaurantOrder } from '../services/orderService';
 import { getPromotionsByUser } from '../services/promotionService';
+import { getChannelProfile } from '../services/channelService';
+import MapLocationPicker from '../components/MapLocationPicker';
+import { distanceKmBetween, formatDistanceKm, resolveTaxChargeForDistanceKm } from '../utils/geoDistance';
+import { config } from '../../config';
+import {
+  getCurrentPositionSafe,
+  reverseGeocode,
+} from '../utils/geolocation';
+import { browseAreaLabel, normalizeUkPostcode } from '../utils/ukPostcode';
+import {
+  formatUkPhoneDisplay,
+  normalizeUkPhone,
+  validUkPhoneNumber,
+} from '../utils/ukPhone';
 
 const ORDER_NOTE_MARKER = '||NOTE||';
 
 const HomeFourScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const route = useRoute();
+  const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user) || {};
+  const browseLocation = useSelector(state => state.app?.browseLocation);
   const { ownerId, items: paramItems = [], ownerName } = route.params || {};
   const returnToKey = route.params?.returnToKey;
   const initialItems = Array.isArray(paramItems) ? paramItems : [];
@@ -44,6 +61,28 @@ const HomeFourScreen = ({ onBack }) => {
   const [appliedPromotion, setAppliedPromotion] = useState(null);
   const [promoApplyError, setPromoApplyError] = useState('');
   const [applyingPromo, setApplyingPromo] = useState(false);
+  const [contactPhone, setContactPhone] = useState(String(user?.phone || '').trim());
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [deliveryCoords, setDeliveryCoords] = useState(() => {
+    const lat = Number(user?.latitude);
+    const lng = Number(user?.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+    if (browseLocation?.lat != null && browseLocation?.lng != null) {
+      return { lat: Number(browseLocation.lat), lng: Number(browseLocation.lng) };
+    }
+    return null;
+  });
+  const [deliveryPostcode, setDeliveryPostcode] = useState(
+    String(user?.postcode || browseLocation?.postcode || '').trim(),
+  );
+  const [saveAddressToProfile, setSaveAddressToProfile] = useState(true);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [ownerProfile, setOwnerProfile] = useState(null);
+  const [ownerProfileLoading, setOwnerProfileLoading] = useState(false);
 
   const syncAndBackToMenu = useCallback(() => {
     const syncParams = {
@@ -89,12 +128,7 @@ const HomeFourScreen = ({ onBack }) => {
       ? Number(appliedPromotion.promoAmount)
       : 0;
   const discountAmount = promoPercent > 0 ? (subtotal * promoPercent) / 100 : 0;
-  const total = Math.max(0, subtotal - discountAmount);
-  // const currency = items[0]?.currency || '£';
   const currency = '£';
-  const displayTotal = total.toFixed(2);
-  const displaySubtotal = subtotal.toFixed(2);
-  const displayDiscount = discountAmount.toFixed(2);
 
   const handleApplyPromo = async () => {
     const code = (promoCodeInput || '').trim();
@@ -153,12 +187,211 @@ const HomeFourScreen = ({ onBack }) => {
     setPromoApplyError('');
   };
   const restaurantName = ownerName || 'Restaurant';
-  const defaultDeliveryAddress = String(user?.address || '').trim();
+  const profileAddress = String(user?.address || '').trim();
+  const browseAddress = String(browseLocation?.addressText || '').trim();
+  const browseFallback =
+    browseAddress ||
+    (browseLocation?.areaLabel && browseLocation?.postcode
+      ? `${browseLocation.areaLabel}, ${browseLocation.postcode}`
+      : String(browseLocation?.areaLabel || '').trim());
+  const defaultDeliveryAddress = profileAddress || browseFallback;
   const selectedDeliveryAddress =
     String(customDeliveryAddress || '').trim() || defaultDeliveryAddress;
   const hasDeliveryAddress = String(selectedDeliveryAddress || '').trim().length > 0;
-  const deliveryAddress = selectedDeliveryAddress || 'Add address';
-  const userPhone = user?.phone || user?.pin || '—';
+  const addressSourceLabel = customDeliveryAddress
+    ? 'Address for this order'
+    : profileAddress
+      ? 'Your saved address'
+      : browseFallback
+        ? 'From your location'
+        : 'Delivery address';
+  const displayPostcode =
+    deliveryPostcode ||
+    String(user?.postcode || browseLocation?.postcode || '').trim();
+
+  useEffect(() => {
+    if (!customDeliveryAddress && !profileAddress && browseFallback) {
+      setCustomDeliveryAddress(browseFallback);
+      if (
+        browseLocation?.lat != null &&
+        browseLocation?.lng != null &&
+        Number.isFinite(Number(browseLocation.lat)) &&
+        Number.isFinite(Number(browseLocation.lng))
+      ) {
+        setDeliveryCoords({
+          lat: Number(browseLocation.lat),
+          lng: Number(browseLocation.lng),
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once from browse/home location
+  }, []);
+
+  useEffect(() => {
+    if (!ownerId) {
+      setOwnerProfile(null);
+      return;
+    }
+    let cancelled = false;
+    setOwnerProfileLoading(true);
+    getChannelProfile(ownerId, user?.id)
+      .then(data => {
+        if (!cancelled) setOwnerProfile(data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setOwnerProfile(null);
+      })
+      .finally(() => {
+        if (!cancelled) setOwnerProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId, user?.id]);
+
+  const ownerDeliveryTime = String(ownerProfile?.deliveryTime || '').trim();
+  const ownerDeliveryAreaKm =
+    ownerProfile?.deliveryAreaKm != null &&
+    Number.isFinite(Number(ownerProfile.deliveryAreaKm)) &&
+    Number(ownerProfile.deliveryAreaKm) > 0
+      ? Number(ownerProfile.deliveryAreaKm)
+      : null;
+  const customerLatLng = useMemo(() => {
+    if (deliveryCoords?.lat != null && deliveryCoords?.lng != null) {
+      return { lat: deliveryCoords.lat, lng: deliveryCoords.lng };
+    }
+    const lat = Number(user?.latitude);
+    const lng = Number(user?.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+    if (browseLocation?.lat != null && browseLocation?.lng != null) {
+      return {
+        lat: Number(browseLocation.lat),
+        lng: Number(browseLocation.lng),
+      };
+    }
+    return null;
+  }, [deliveryCoords, user?.latitude, user?.longitude, browseLocation]);
+  const distanceToRestaurantKm = useMemo(() => {
+    if (
+      ownerProfile?.latitude == null ||
+      ownerProfile?.longitude == null ||
+      !customerLatLng
+    ) {
+      return null;
+    }
+    return distanceKmBetween(
+      ownerProfile.latitude,
+      ownerProfile.longitude,
+      customerLatLng.lat,
+      customerLatLng.lng,
+    );
+  }, [ownerProfile, customerLatLng]);
+  const isOutsideDeliveryArea =
+    ownerDeliveryAreaKm != null &&
+    distanceToRestaurantKm != null &&
+    distanceToRestaurantKm > ownerDeliveryAreaKm;
+  const taxChargeAmount = useMemo(
+    () => resolveTaxChargeForDistanceKm(distanceToRestaurantKm, ownerProfile),
+    [distanceToRestaurantKm, ownerProfile],
+  );
+  const itemsNetAmount = Math.max(0, subtotal - discountAmount);
+  const total = itemsNetAmount + taxChargeAmount;
+  const displayTotal = total.toFixed(2);
+  const displaySubtotal = subtotal.toFixed(2);
+  const displayItemsNet = itemsNetAmount.toFixed(2);
+  const displayDiscount = discountAmount.toFixed(2);
+  const displayTaxCharge =
+    distanceToRestaurantKm != null ? taxChargeAmount.toFixed(2) : null;
+
+  const applyDeliveryLocation = useCallback(
+    (lat, lng, addressText, postcode = '') => {
+      const addr = String(addressText || '').trim();
+      if (!addr) return false;
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        setDeliveryCoords({ lat, lng });
+      }
+      const pc = normalizeUkPostcode(postcode) || String(postcode || '').trim();
+      if (pc) setDeliveryPostcode(pc);
+      if (isAddressEditing) {
+        setAddressDraft(addr);
+      } else {
+        setCustomDeliveryAddress(addr);
+      }
+      return true;
+    },
+    [isAddressEditing],
+  );
+
+  const handleUseMyLocation = useCallback(() => {
+    setGpsLoading(true);
+    getCurrentPositionSafe(
+      async pos => {
+        try {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const addr = await reverseGeocode(lat, lng);
+          if (!addr) {
+            Alert.alert(
+              'Location',
+              'Got GPS position but could not resolve a street address. Try Pick on map.',
+            );
+            return;
+          }
+          const pcMatch = addr.match(/([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})/i);
+          const pc = pcMatch ? normalizeUkPostcode(pcMatch[1]) : '';
+          if (applyDeliveryLocation(lat, lng, addr, pc)) {
+            if (!isAddressEditing) setIsAddressEditing(false);
+            Toast.show({
+              type: 'success',
+              text1: 'Location applied',
+              text2: addr.split(',')[0] || addr,
+            });
+          }
+        } finally {
+          setGpsLoading(false);
+        }
+      },
+      err => {
+        setGpsLoading(false);
+        Alert.alert('Location', err || 'Could not get your location.');
+      },
+      { enableHighAccuracy: true, timeout: 20000 },
+    );
+  }, [applyDeliveryLocation, isAddressEditing]);
+
+  const handleMapLocationConfirm = useCallback(
+    browse => {
+      const addr =
+        String(browse?.addressText || '').trim() ||
+        browseAreaLabel({
+          postcode: browse?.postcode,
+          addressText: browse?.addressText,
+          areaLabel: browse?.areaLabel,
+        });
+      applyDeliveryLocation(
+        browse?.lat,
+        browse?.lng,
+        addr,
+        browse?.postcode || '',
+      );
+      setMapPickerVisible(false);
+      Toast.show({ type: 'success', text1: 'Delivery address updated' });
+    },
+    [applyDeliveryLocation],
+  );
+  const normalizedPhone = useMemo(
+    () => normalizeUkPhone(contactPhone),
+    [contactPhone],
+  );
+  const hasValidPhone = validUkPhoneNumber(contactPhone);
+  const phoneError =
+    phoneTouched && contactPhone.trim() && !hasValidPhone
+      ? 'Enter a valid UK phone number (e.g. 07xxx xxxxxx)'
+      : phoneTouched && !contactPhone.trim()
+        ? 'Phone number is required for delivery contact'
+        : '';
   const userName = user?.name || user?.nickname || '—';
 
   const startEditAddress = () => {
@@ -171,14 +404,55 @@ const HomeFourScreen = ({ onBack }) => {
     setIsAddressEditing(false);
   };
 
-  const saveCustomAddress = () => {
+  const saveCustomAddress = async () => {
     const next = String(addressDraft || '').trim();
     if (!next) {
-      Alert.alert('Address required', 'Please enter a valid address.');
+      Alert.alert('Address required', 'Please enter a valid delivery address.');
       return;
     }
     setCustomDeliveryAddress(next);
     setIsAddressEditing(false);
+
+    if (saveAddressToProfile && user?.token && user?.id) {
+      setSavingAddress(true);
+      try {
+        const body = {
+          address: next,
+          postcode: displayPostcode
+            ? normalizeUkPostcode(displayPostcode) || displayPostcode
+            : undefined,
+        };
+        if (deliveryCoords?.lat != null && deliveryCoords?.lng != null) {
+          body.latitude = deliveryCoords.lat;
+          body.longitude = deliveryCoords.lng;
+        }
+        const res = await fetch(`${config.apiBaseUrl}/users/${user.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${user.token}`,
+          },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const u = data.userUpdate || {};
+          dispatch(
+            appSetUser({
+              ...user,
+              address: u.address ?? next,
+              postcode: u.postcode ?? body.postcode ?? user.postcode,
+              latitude: u.latitude ?? body.latitude ?? user.latitude,
+              longitude: u.longitude ?? body.longitude ?? user.longitude,
+            }),
+          );
+        }
+      } catch (_) {
+        // Order can still use custom address locally
+      } finally {
+        setSavingAddress(false);
+      }
+    }
   };
 
   const useDefaultAddress = () => {
@@ -200,9 +474,34 @@ const HomeFourScreen = ({ onBack }) => {
       );
       return;
     }
+    const phone = normalizeUkPhone(contactPhone);
+    if (!phone || !validUkPhoneNumber(phone)) {
+      setPhoneTouched(true);
+      Alert.alert(
+        'Contact phone required',
+        'Enter a valid UK mobile or landline number so the restaurant can reach you about your order.',
+      );
+      return;
+    }
     if (!ownerId || items.length === 0) {
       Alert.alert('No items', 'Add items from the menu to place an order.');
       return;
+    }
+    if (ownerDeliveryAreaKm != null) {
+      if (!customerLatLng) {
+        Alert.alert(
+          'Delivery location required',
+          'Use My location or Pick on map so we can check you are within this restaurant delivery area.',
+        );
+        return;
+      }
+      if (isOutsideDeliveryArea) {
+        Alert.alert(
+          'Outside delivery area',
+          `${restaurantName} only delivers within ${ownerDeliveryAreaKm} km. Your location is about ${distanceToRestaurantKm.toFixed(1)} km away.`,
+        );
+        return;
+      }
     }
     setPlacing(true);
     try {
@@ -218,14 +517,21 @@ const HomeFourScreen = ({ onBack }) => {
           quantity: i.quantity || 1,
         })),
         deliveryAddress: deliveryAddressPayload,
+        customerPhone: phone,
+        ...(customerLatLng && {
+          customerLatitude: customerLatLng.lat,
+          customerLongitude: customerLatLng.lng,
+        }),
         ...(appliedPromotion?.promoCode && {
           promoCode: appliedPromotion.promoCode,
           promotionId: appliedPromotion.id,
         }),
       });
+      dispatch(appSetUser({ ...user, phone }));
       Toast.show({ type: 'success', text1: 'Order placed successfully' });
       navigation.navigate('HomeFiveScreen');
     } catch (e) {
+      console.warn('[HomeFour] place order failed:', e?.message, e);
       Alert.alert('Error', e?.message || 'Failed to place order.');
     } finally {
       setPlacing(false);
@@ -256,67 +562,42 @@ const HomeFourScreen = ({ onBack }) => {
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
         <Text style={styles.deliveryTitle}>Delivery at home</Text>
-        <Text style={styles.deliverySub} numberOfLines={2}>
-          {deliveryAddress}
-        </Text>
-        <View style={styles.addressMetaRow}>
-          <Text style={styles.addressMetaLabel}>
-            {customDeliveryAddress ? 'Custom' : 'Default'} Address:{' '}
-            {selectedDeliveryAddress || 'Not set'}
-          </Text>
-          <TouchableOpacity onPress={startEditAddress} activeOpacity={0.8}>
-            <Text style={styles.addressEditText}>Edit</Text>
-          </TouchableOpacity>
-        </View>
-        {customDeliveryAddress ? (
-          <TouchableOpacity
-            onPress={useDefaultAddress}
-            activeOpacity={0.8}
-            style={styles.useDefaultBtn}
-          >
-            <Text style={styles.useDefaultText}>Use default address</Text>
-          </TouchableOpacity>
-        ) : null}
-        {!hasDeliveryAddress && user?.token ? (
-          <View style={styles.addressWarningBanner}>
-            <Icon name="alert-circle-outline" size={20} color="#C62828" />
-            <Text style={styles.addressWarningText}>
-              Enter a delivery address before placing your order. Tap Edit or
-              update your profile address.
-            </Text>
+
+        {(ownerDeliveryTime || ownerDeliveryAreaKm != null || ownerProfileLoading) && (
+          <View style={styles.deliveryInfoCard}>
+            {ownerProfileLoading ? (
+              <ActivityIndicator size="small" color="#F5A623" />
+            ) : (
+              <>
+                {ownerDeliveryTime ? (
+                  <View style={styles.deliveryInfoRow}>
+                    <Icon name="clock-outline" size={18} color="#666" />
+                    <Text style={styles.deliveryInfoText}>
+                      Delivery time: {ownerDeliveryTime}
+                    </Text>
+                  </View>
+                ) : null}
+                {ownerDeliveryAreaKm != null ? (
+                  <View style={styles.deliveryInfoRow}>
+                    <Icon name="map-marker-radius" size={18} color="#666" />
+                    <Text style={styles.deliveryInfoText}>
+                      Delivers within {ownerDeliveryAreaKm} km
+                      {distanceToRestaurantKm != null
+                        ? ` · You are ${formatDistanceKm(distanceToRestaurantKm)} away`
+                        : ''}
+                    </Text>
+                  </View>
+                ) : null}
+                {isOutsideDeliveryArea ? (
+                  <Text style={styles.deliveryAreaWarning}>
+                    Your delivery location is outside this restaurant area. Change
+                    your address or pick a closer location to order.
+                  </Text>
+                ) : null}
+              </>
+            )}
           </View>
-        ) : null}
-        {isAddressEditing ? (
-          <View style={styles.customAddressCard}>
-            <Text style={styles.customAddressTitle}>
-              Custom address for this order
-            </Text>
-            <TextInput
-              style={styles.customAddressInput}
-              placeholder="Enter delivery address"
-              placeholderTextColor="#999"
-              multiline
-              value={addressDraft}
-              onChangeText={setAddressDraft}
-            />
-            <View style={styles.customAddressActions}>
-              <TouchableOpacity
-                onPress={cancelEditAddress}
-                style={styles.addressCancelBtn}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.addressCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={saveCustomAddress}
-                style={styles.addressSaveBtn}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.addressSaveText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
+        )}
 
         <View style={styles.itemsCard}>
           {hasItems ? (
@@ -452,14 +733,203 @@ const HomeFourScreen = ({ onBack }) => {
           <Icon name="chevron-right" size={24} color="#1A1A1A" />
         </View>
 
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Icon name="phone-outline" size={24} color="#1A1A1A" />
-            <Text style={styles.infoText}>
-              {userName}, {userPhone}
-            </Text>
+        <View style={styles.deliveryAddressCard}>
+          <View style={styles.deliveryAddressHeader}>
+            <View style={styles.deliveryAddressHeaderLeft}>
+              <Icon name="home-map-marker" size={22} color="#F5A623" />
+              <Text style={styles.deliveryAddressTitle}>Delivery address</Text>
+            </View>
+            {!isAddressEditing ? (
+              <TouchableOpacity onPress={startEditAddress} activeOpacity={0.8}>
+                <Text style={styles.addressEditText}>Edit</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
-          <Icon name="chevron-right" size={24} color="#1A1A1A" />
+          <Text style={styles.deliveryAddressSub}>
+            {addressSourceLabel}. Required so your order can be delivered.
+          </Text>
+
+          {!isAddressEditing ? (
+            <>
+              <Text style={styles.deliveryAddressValue} numberOfLines={4}>
+                {hasDeliveryAddress
+                  ? selectedDeliveryAddress
+                  : 'No address yet — use My location or Edit'}
+              </Text>
+              {displayPostcode ? (
+                <Text style={styles.deliveryPostcodeText}>
+                  Postcode: {displayPostcode}
+                </Text>
+              ) : null}
+              <View style={styles.locationActionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.locationActionBtn,
+                    gpsLoading && styles.locationActionBtnDisabled,
+                  ]}
+                  onPress={handleUseMyLocation}
+                  disabled={gpsLoading}
+                  activeOpacity={0.85}
+                >
+                  {gpsLoading ? (
+                    <ActivityIndicator size="small" color="#1A1A1A" />
+                  ) : (
+                    <Icon name="crosshairs-gps" size={18} color="#1A1A1A" />
+                  )}
+                  <Text style={styles.locationActionText}>My location</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.locationActionBtn}
+                  onPress={() => setMapPickerVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Icon name="map-marker-radius" size={18} color="#1A1A1A" />
+                  <Text style={styles.locationActionText}>Pick on map</Text>
+                </TouchableOpacity>
+              </View>
+              {customDeliveryAddress && profileAddress ? (
+                <TouchableOpacity
+                  onPress={useDefaultAddress}
+                  activeOpacity={0.8}
+                  style={styles.useDefaultBtn}
+                >
+                  <Text style={styles.useDefaultText}>
+                    Use saved profile address
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={styles.customAddressInput}
+                placeholder="House number, street, city, postcode"
+                placeholderTextColor="#999"
+                multiline
+                value={addressDraft}
+                onChangeText={setAddressDraft}
+              />
+              <View style={styles.locationActionRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.locationActionBtn,
+                    gpsLoading && styles.locationActionBtnDisabled,
+                  ]}
+                  onPress={handleUseMyLocation}
+                  disabled={gpsLoading}
+                  activeOpacity={0.85}
+                >
+                  {gpsLoading ? (
+                    <ActivityIndicator size="small" color="#1A1A1A" />
+                  ) : (
+                    <Icon name="crosshairs-gps" size={18} color="#1A1A1A" />
+                  )}
+                  <Text style={styles.locationActionText}>My location</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.locationActionBtn}
+                  onPress={() => setMapPickerVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Icon name="map-marker-radius" size={18} color="#1A1A1A" />
+                  <Text style={styles.locationActionText}>Pick on map</Text>
+                </TouchableOpacity>
+              </View>
+              {user?.token ? (
+                <TouchableOpacity
+                  style={styles.saveProfileRow}
+                  onPress={() => setSaveAddressToProfile(v => !v)}
+                  activeOpacity={0.8}
+                >
+                  <Icon
+                    name={
+                      saveAddressToProfile
+                        ? 'checkbox-marked'
+                        : 'checkbox-blank-outline'
+                    }
+                    size={22}
+                    color="#F5A623"
+                  />
+                  <Text style={styles.saveProfileText}>
+                    Save as my default address
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+              <View style={styles.customAddressActions}>
+                <TouchableOpacity
+                  onPress={cancelEditAddress}
+                  style={styles.addressCancelBtn}
+                  activeOpacity={0.8}
+                  disabled={savingAddress}
+                >
+                  <Text style={styles.addressCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={saveCustomAddress}
+                  style={styles.addressSaveBtn}
+                  activeOpacity={0.8}
+                  disabled={savingAddress}
+                >
+                  {savingAddress ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Text style={styles.addressSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {!hasDeliveryAddress && user?.token ? (
+            <View style={styles.addressWarningBanner}>
+              <Icon name="alert-circle-outline" size={20} color="#C62828" />
+              <Text style={styles.addressWarningText}>
+                Add your delivery address with My location, Pick on map, or
+                Edit before placing your order.
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.contactCard}>
+          <Text style={styles.contactTitle}>Contact details</Text>
+          <Text style={styles.contactSub}>
+            Required so the restaurant can reach you about delivery.
+          </Text>
+          <Text style={styles.contactLabel}>Name</Text>
+          <Text style={styles.contactValue}>{userName}</Text>
+          <Text style={styles.contactLabel}>Mobile number</Text>
+          <TextInput
+            style={[
+              styles.phoneInput,
+              phoneError ? styles.phoneInputError : null,
+            ]}
+            placeholder="07xxx xxxxxx"
+            placeholderTextColor="#999"
+            keyboardType="phone-pad"
+            value={contactPhone}
+            onChangeText={v => {
+              setContactPhone(v);
+              if (!phoneTouched) setPhoneTouched(true);
+            }}
+            onBlur={() => setPhoneTouched(true)}
+          />
+          {hasValidPhone && normalizedPhone ? (
+            <Text style={styles.phoneHint}>
+              {formatUkPhoneDisplay(normalizedPhone)}
+            </Text>
+          ) : null}
+          {phoneError ? (
+            <Text style={styles.phoneErrorText}>{phoneError}</Text>
+          ) : null}
+          {!hasValidPhone && user?.token ? (
+            <View style={styles.phoneWarningBanner}>
+              <Icon name="alert-circle-outline" size={18} color="#C62828" />
+              <Text style={styles.phoneWarningText}>
+                Add a valid UK phone number before placing your order.
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.billSection}>
@@ -493,10 +963,38 @@ const HomeFourScreen = ({ onBack }) => {
               </Text>
             </View>
           ) : null}
+          {appliedPromotion && discountAmount > 0 ? (
+            <View style={styles.billRow}>
+              <Text style={styles.billLabel}>Items after promo</Text>
+              <Text style={styles.billValue}>
+                {currency} {displayItemsNet}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.billRow}>
             <Text style={styles.billLabel}>taxes and charges</Text>
-            <Text style={styles.billValue}>—</Text>
+            <Text style={styles.billValue}>
+              {displayTaxCharge != null
+                ? `${currency} ${displayTaxCharge}`
+                : '—'}
+            </Text>
           </View>
+          {distanceToRestaurantKm != null && taxChargeAmount > 0 ? (
+            <Text style={styles.billHint}>
+              Based on {formatDistanceKm(distanceToRestaurantKm)} from restaurant
+            </Text>
+          ) : null}
+          <View style={styles.billTotalDivider} />
+          <View style={styles.billRow}>
+            <Text style={styles.billTotalLabel}>Total</Text>
+            <Text style={styles.billTotalValue}>
+              {currency} {displayTotal}
+            </Text>
+          </View>
+          <Text style={styles.billFormulaHint}>
+            Items {appliedPromotion && discountAmount > 0 ? 'after promo' : 'bill'}
+            {displayTaxCharge != null ? ' + taxes & charges' : ''}
+          </Text>
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -516,7 +1014,9 @@ const HomeFourScreen = ({ onBack }) => {
             styles.placeOrderBtn,
             (!hasItems ||
               !ownerId ||
-              (!!user?.token && !hasDeliveryAddress)) &&
+              (!!user?.token && !hasDeliveryAddress) ||
+              (!!user?.token && !hasValidPhone) ||
+              isOutsideDeliveryArea) &&
               styles.placeOrderBtnDisabled,
           ]}
           onPress={handlePlaceOrder}
@@ -524,7 +1024,9 @@ const HomeFourScreen = ({ onBack }) => {
             placing ||
             !hasItems ||
             !ownerId ||
-            (!!user?.token && !hasDeliveryAddress)
+            (!!user?.token && !hasDeliveryAddress) ||
+            (!!user?.token && !hasValidPhone) ||
+            isOutsideDeliveryArea
           }
         >
           <View>
@@ -540,6 +1042,18 @@ const HomeFourScreen = ({ onBack }) => {
           )}
         </TouchableOpacity>
       </View>
+
+      <MapLocationPicker
+        visible={mapPickerVisible}
+        onClose={() => setMapPickerVisible(false)}
+        onConfirm={handleMapLocationConfirm}
+        initialLat={deliveryCoords?.lat ?? browseLocation?.lat ?? user?.latitude}
+        initialLng={deliveryCoords?.lng ?? browseLocation?.lng ?? user?.longitude}
+        initialPostcode={displayPostcode}
+        initialAddress={addressDraft || selectedDeliveryAddress}
+        title="Delivery address"
+        requirePostcode={false}
+      />
     </SafeAreaView>
   );
 };
@@ -572,32 +1086,113 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     marginTop: 15,
   },
-  deliverySub: { fontSize: 13, color: '#777', marginTop: 4, marginBottom: 20 },
-  addressMetaRow: {
-    marginTop: -10,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  deliveryInfoCard: {
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0E6D2',
+    backgroundColor: '#FFFBF5',
   },
-  addressMetaLabel: { flex: 1, fontSize: 12, color: '#98A2B3', marginRight: 8 },
-  addressEditText: { color: '#F5A623', fontWeight: '700', fontSize: 13 },
-  useDefaultBtn: { alignSelf: 'flex-start', marginBottom: 12 },
-  useDefaultText: { color: '#667085', fontSize: 12, fontWeight: '600' },
-  customAddressCard: {
+  deliveryInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  deliveryInfoText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: '#444',
+    lineHeight: 18,
+  },
+  deliveryAreaWarning: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#B45309',
+    lineHeight: 17,
+  },
+  deliverySub: { fontSize: 13, color: '#777', marginTop: 4, marginBottom: 12 },
+  deliveryAddressCard: {
     borderWidth: 1,
     borderColor: '#EEE',
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    padding: 14,
+    marginBottom: 20,
     backgroundColor: '#FAFAFA',
   },
-  customAddressTitle: {
+  deliveryAddressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  deliveryAddressHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deliveryAddressTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginLeft: 6,
+  },
+  deliveryAddressSub: {
+    fontSize: 12,
+    color: '#667085',
+    marginTop: 6,
+    marginBottom: 10,
+    lineHeight: 17,
+  },
+  deliveryAddressValue: {
+    fontSize: 15,
+    color: '#1A1A1A',
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  deliveryPostcodeText: {
     fontSize: 13,
-    color: '#344054',
-    fontWeight: '600',
+    color: '#667085',
+    marginTop: 6,
+  },
+  locationActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  locationActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    backgroundColor: '#FFF',
+    marginRight: 10,
     marginBottom: 8,
   },
+  locationActionBtnDisabled: { opacity: 0.6 },
+  locationActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginLeft: 6,
+  },
+  saveProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  saveProfileText: {
+    fontSize: 13,
+    color: '#344054',
+    flex: 1,
+    marginLeft: 8,
+  },
+  addressEditText: { color: '#F5A623', fontWeight: '700', fontSize: 13 },
+  useDefaultBtn: { alignSelf: 'flex-start', marginTop: 10 },
+  useDefaultText: { color: '#667085', fontSize: 12, fontWeight: '600' },
   customAddressInput: {
     minHeight: 70,
     borderWidth: 1,
@@ -624,6 +1219,90 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   addressSaveText: { color: '#FFF', fontWeight: '700' },
+  addressWarningBanner: {
+    marginTop: 12,
+    marginBottom: 0,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#FFEBEE',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  addressWarningText: {
+    flex: 1,
+    marginLeft: 8,
+    color: '#C62828',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  contactCard: {
+    borderWidth: 1,
+    borderColor: '#EEE',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    backgroundColor: '#FAFAFA',
+  },
+  contactTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  contactSub: {
+    fontSize: 12,
+    color: '#667085',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  contactLabel: {
+    fontSize: 12,
+    color: '#98A2B3',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  contactValue: {
+    fontSize: 15,
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  phoneInput: {
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#1A1A1A',
+    backgroundColor: '#FFF',
+  },
+  phoneInputError: {
+    borderColor: '#E53935',
+  },
+  phoneHint: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#667085',
+  },
+  phoneErrorText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#C62828',
+  },
+  phoneWarningBanner: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#FFEBEE',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  phoneWarningText: {
+    flex: 1,
+    marginLeft: 8,
+    color: '#C62828',
+    fontSize: 12,
+    lineHeight: 17,
+  },
   itemsCard: {
     backgroundColor: '#F2F6F8',
     borderRadius: 15,
@@ -746,6 +1425,22 @@ const styles = StyleSheet.create({
   },
   billLabel: { color: '#777', fontSize: 14 },
   billValue: { color: '#777', fontSize: 14 },
+  billHint: { color: '#999', fontSize: 12, marginTop: 4, paddingLeft: 40 },
+  billTotalDivider: {
+    height: 1,
+    backgroundColor: '#E8E8E8',
+    marginLeft: 40,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  billTotalLabel: { color: '#1A1A1A', fontSize: 16, fontWeight: '700' },
+  billTotalValue: { color: '#1A1A1A', fontSize: 16, fontWeight: '700' },
+  billFormulaHint: {
+    color: '#999',
+    fontSize: 12,
+    paddingLeft: 40,
+    marginTop: 4,
+  },
   bottomSpacer: { height: 120 },
   footer: {
     position: 'absolute',

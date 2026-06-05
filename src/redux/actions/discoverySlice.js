@@ -9,9 +9,9 @@ import { isDiscoveryCacheFresh } from '../../utils/discoveryCacheKey';
 
 export const fetchDiscoveryData = createAsyncThunk(
   'discovery/fetch',
-  async ({ currentUserId, cacheKey }, { signal }) => {
+  async ({ currentUserId, cacheKey, locationOpts }, { signal }) => {
     const [rows, apiPopular] = await Promise.all([
-      loadDiscoveryRestaurants({ currentUserId, limit: 40 }),
+      loadDiscoveryRestaurants({ currentUserId, limit: 40, locationOpts }),
       fetchPopularMenuItemsFromApi(10),
     ]);
     if (signal.aborted) {

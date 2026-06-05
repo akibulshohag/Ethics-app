@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useState, useRef, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {useSelector} from 'react-redux';
 import {getUserSubscription} from '../services/subscriptionService';
 import SoundsModal from '../components/SoundsModal';
@@ -92,6 +93,32 @@ const CreateShortsScreen = ({navigation, route}) => {
       void stopShortsBackdrop();
     };
   }, []);
+
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+      return () => {
+        setIsScreenFocused(false);
+        backdropLoopCleanupRef.current?.();
+        backdropLoopCleanupRef.current = null;
+        void stopShortsBackdrop();
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    if (!addDetailsVisible) return;
+    backdropLoopCleanupRef.current?.();
+    backdropLoopCleanupRef.current = null;
+    void stopShortsBackdrop();
+  }, [addDetailsVisible]);
+
+  const shouldPlayPreviewVideo =
+    isScreenFocused &&
+    !addDetailsVisible &&
+    Boolean(pickedVideo?.uri);
 
   const stopRecording = () => {
     if (!isRecordingRef.current) return;
@@ -536,7 +563,7 @@ const CreateShortsScreen = ({navigation, route}) => {
         </CameraShortsView>
       ) : (
         <View style={styles.background}>
-          {pickedVideo?.uri ? (
+          {shouldPlayPreviewVideo ? (
             <Video
               source={{uri: pickedVideo.uri}}
               style={StyleSheet.absoluteFillObject}
@@ -546,7 +573,11 @@ const CreateShortsScreen = ({navigation, route}) => {
               muted={false}
               rate={speedFactor}
               ignoreSilentSwitch="ignore"
+              playInBackground={false}
+              playWhenInactive={false}
             />
+          ) : pickedVideo?.uri ? (
+            <View style={[StyleSheet.absoluteFillObject, styles.previewStopped]} />
           ) : (
             <ImageBackground
               source={{
@@ -770,6 +801,9 @@ const styles = StyleSheet.create({
   },
   background: {
     flex: 1,
+  },
+  previewStopped: {
+    backgroundColor: '#000',
   },
   filterOverlay: {
     ...StyleSheet.absoluteFillObject,

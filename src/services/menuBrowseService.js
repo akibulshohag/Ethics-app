@@ -10,6 +10,9 @@ export async function browseRestaurantsByCategory({
   category,
   page = 1,
   limit = 20,
+  nearbyLat,
+  nearbyLng,
+  radiusKm,
 } = {}) {
   const cat = String(category || '').trim();
   if (!cat) {
@@ -20,6 +23,9 @@ export async function browseRestaurantsByCategory({
     page: String(page),
     limit: String(limit),
   });
+  if (nearbyLat != null) q.set('nearbyLat', String(nearbyLat));
+  if (nearbyLng != null) q.set('nearbyLng', String(nearbyLng));
+  if (radiusKm != null) q.set('radiusKm', String(radiusKm));
   const res = await fetch(`${API_URL}/browse?${q.toString()}`);
   if (!res.ok) {
     throw new Error('Failed to load category restaurants');

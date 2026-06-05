@@ -161,6 +161,7 @@ const normalizeShort = s => {
     userId: s.user?.id ?? s.userId,
     userObj: {
       ...userObj,
+      id: userObj?.id ?? s.userId ?? s.user?.id,
       avatar,
       address: userObj?.address || s?.address || undefined,
       role: roleRaw,

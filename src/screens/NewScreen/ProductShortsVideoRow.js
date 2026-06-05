@@ -632,7 +632,7 @@ function ProductShortsVideoRow({
                 <Text style={styles.orderNowText}>Order Now</Text>
               </TouchableOpacity>
             ) : String(item?.creatorRole || item?.userObj?.role || '')
-                .toLowerCase() === 'owner' ? (
+                .toLowerCase() === 'owner' && !isOwnShort ? (
               <TouchableOpacity
                 style={styles.orderNowBtnFooter}
                 onPress={() => onOrderNowPress?.(item)}

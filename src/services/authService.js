@@ -12,14 +12,30 @@ export const getErrorMessage = (data, fallback = 'Request failed') => {
 const normalizeEmail = email => String(email || '').trim().toLowerCase();
 
 const postJson = async (path, body) => {
-  const response = await fetch(`${config.apiBaseUrl}${path}`, {
+  const url = `${config.apiBaseUrl}${path}`;
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  const data = await response.json().catch(() => ({}));
+  const raw = await response.text().catch(() => '');
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = { message: raw };
+  }
   if (!response.ok) {
-    throw new Error(getErrorMessage(data, 'Request failed'));
+    const msg = getErrorMessage(data, raw || 'Request failed');
+    if (
+      response.status === 404 &&
+      String(path).includes('social-login')
+    ) {
+      throw new Error(
+        'The API server needs an update. On the server run: cd /var/www/eatix-backend && git pull && ./deploy-api-update.sh — then try Google/Facebook login again.',
+      );
+    }
+    throw new Error(msg);
   }
   return data;
 };

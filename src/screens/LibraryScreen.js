@@ -352,8 +352,8 @@ const LibraryScreen = ({ navigation }) => {
     if (!currentUser?.id) return;
     try {
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(currentUser.id, 1, 50),
-        shortsService.getUserShorts(currentUser.id, 1, 50),
+        getUserVideos(currentUser.id, 1, 50, currentUser.id),
+        shortsService.getUserShorts(currentUser.id, 1, 50, currentUser.id),
       ]);
       const vList = Array.isArray(vRes.videos) ? vRes.videos : vRes?.data || [];
       const sList = Array.isArray(sRes.shorts) ? sRes.shorts : sRes?.data || [];

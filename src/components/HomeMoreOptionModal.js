@@ -10,6 +10,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const ROWS = [
+  { key: 'edit', label: 'Edit', icon: 'pencil-outline', ownerOnly: true },
   { key: 'playlist', label: 'Save to Playlist', icon: 'playlist-plus' },
   { key: 'watchLater', label: 'Save to Watch Later', icon: 'clock-outline' },
   { key: 'download', label: 'Download Video', icon: 'download-outline' },
@@ -27,6 +28,8 @@ const HomeMoreOptionModal = ({
   onShare,
   onNotInterested,
   onReport,
+  onEdit,
+  showEdit = false,
 }) => {
   const run = key => {
     if (key === 'report') {
@@ -41,9 +44,12 @@ const HomeMoreOptionModal = ({
       download: onDownload,
       share: onShare,
       notInterested: onNotInterested,
+      edit: onEdit,
     };
     setTimeout(() => map[key]?.(), 0);
   };
+
+  const visibleRows = ROWS.filter(row => !row.ownerOnly || showEdit);
 
   return (
     <Modal
@@ -59,7 +65,7 @@ const HomeMoreOptionModal = ({
               <View style={styles.handle} />
               <Text style={styles.title}>More Option</Text>
               <View style={styles.divider} />
-              {ROWS.map(row => (
+              {visibleRows.map(row => (
                 <TouchableOpacity
                   key={row.key}
                   style={styles.row}

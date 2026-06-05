@@ -52,6 +52,7 @@ export function useDiscoveryData(locationOpts, options = {}) {
         fetchDiscoveryData({
           currentUserId: user?.id || null,
           cacheKey,
+          locationOpts,
           force: shouldForce,
         }),
       );

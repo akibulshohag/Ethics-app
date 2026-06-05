@@ -17,28 +17,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
-import { appSetUser } from '../redux/actions/appSlice';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
+import {
+  resolvePostLoginBrowseLocation,
+  homeRouteForBrowseLocation,
+  persistBrowseLocation,
+} from '../services/userLocationService';
 import {
   login,
-  verifyEmailOtp,
+  // Future: verifyEmailOtp,
   isAccountInactiveError,
-  isAccountPendingError,
 } from '../services/authService';
 import {
   loginWithFacebook,
   loginWithGoogle,
   normalizeSocialAuthError,
 } from '../services/socialAuthService';
-import { config } from '../../config';
-
 const { width, height } = Dimensions.get('window');
 
 /** Full-screen login backdrop */
 const LOGIN_SCREEN_YELLOW = '#F5A623';
-
-const LOCATION_KEY = 'USER_LOCATION_SELECTION';
-const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const navigation = useNavigation();
@@ -54,10 +52,34 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [verificationMode, setVerificationMode] = useState(false);
-  const [verificationOtp, setVerificationOtp] = useState('');
+  // Future: email verification on login for pending accounts
+  // const [verificationMode, setVerificationMode] = useState(false);
+  // const [verificationOtp, setVerificationOtp] = useState('');
 
   // PRESERVED: Original handleLogin functionality
+  const navigateAfterLogin = async userData => {
+    const browseLoc = await resolvePostLoginBrowseLocation(userData);
+    if (browseLoc) {
+      dispatch(setBrowseLocation(browseLoc));
+      await persistBrowseLocation({
+        userId: userData?.id,
+        lat: browseLoc.lat,
+        lng: browseLoc.lng,
+        postcode: browseLoc.postcode || '',
+        addressText: browseLoc.addressText || '',
+        areaLabel: browseLoc.areaLabel || '',
+      });
+    }
+    const targetRoute = homeRouteForBrowseLocation(browseLoc);
+    setTimeout(() => {
+      try {
+        navigation.reset({ index: 0, routes: [targetRoute] });
+      } catch (_) {
+        navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
+      }
+    }, 0);
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       setTimeout(() => {
@@ -81,6 +103,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         role: data.user.role,
         roleId: data.user.roleId,
         address: data.user.address,
+        postcode: data.user.postcode,
         latitude: data.user.latitude,
         longitude: data.user.longitude,
         pin: data.user.pin,
@@ -93,77 +116,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       };
 
       dispatch(appSetUser(userData));
-
-      try {
-        let targetRoute = { name: 'HomeOneScreen' };
-        const backendLoc = data.user?.savedLastLocation;
-        const hasBackendLoc =
-          backendLoc &&
-          typeof backendLoc === 'object' &&
-          backendLoc.lat != null &&
-          backendLoc.lng != null &&
-          Number.isFinite(Number(backendLoc.lat)) &&
-          Number.isFinite(Number(backendLoc.lng));
-
-        if (hasBackendLoc) {
-          targetRoute = {
-            name: 'HomeOneScreen',
-            params: {
-              selectedLocation: {
-                lat: Number(backendLoc.lat),
-                lng: Number(backendLoc.lng),
-              },
-              addressText: backendLoc.addressText || '',
-            },
-          };
-        } else {
-          try {
-            const raw = await AsyncStorage.getItem(LOCATION_KEY);
-            if (raw && typeof raw === 'string') {
-              const saved = JSON.parse(raw);
-              if (saved && typeof saved === 'object') {
-                const coords =
-                  saved.coords && typeof saved.coords === 'object'
-                    ? saved.coords
-                    : { lat: saved.lat, lng: saved.lng };
-                const lat = coords?.lat != null ? Number(coords.lat) : null;
-                const lng = coords?.lng != null ? Number(coords.lng) : null;
-                const sameUser =
-                  saved.userId == null || saved.userId === userData.id;
-                const savedAt =
-                  saved.savedAt != null ? Number(saved.savedAt) : null;
-                const fresh =
-                  savedAt == null || Date.now() - savedAt <= LOCATION_TTL_MS;
-                const hasCoords =
-                  lat != null &&
-                  lng != null &&
-                  Number.isFinite(lat) &&
-                  Number.isFinite(lng);
-                if (sameUser && fresh && hasCoords) {
-                  targetRoute = {
-                    name: 'HomeOneScreen',
-                    params: {
-                      selectedLocation: { lat, lng },
-                      addressText: saved.addressText || '',
-                    },
-                  };
-                }
-              }
-            }
-          } catch (e) {}
-        }
-
-        setTimeout(() => {
-          try {
-            navigation.reset({
-              index: 0,
-              routes: [targetRoute],
-            });
-          } catch (navErr) {
-            navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
-          }
-        }, 0);
-      } catch (_) {}
+      await navigateAfterLogin(userData);
     } catch (error) {
       console.error('Login error:', error);
       const msg = String(error?.message || '');
@@ -183,21 +136,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         return;
       }
 
-      if (isAccountPendingError(msg)) {
-        setVerificationMode(true);
-        Alert.alert(
-          'Email Verification Required',
-          'Enter the OTP sent to your email to activate your account.',
-        );
-        return;
-      }
-
-      const pendingOrVerification =
-        msg.toLowerCase().includes('pending') ||
-        msg.toLowerCase().includes('verify');
-      if (pendingOrVerification) {
-        setVerificationMode(true);
-      }
       setTimeout(() => {
         Alert.alert('Error', msg || 'Login failed. Please try again.');
       }, 100);
@@ -206,72 +144,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
     }
   };
 
-  const handleVerifyPendingAccount = async () => {
-    if (!email.trim() || !verificationOtp.trim()) {
-      Alert.alert('Error', 'Please enter email and OTP');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await verifyEmailOtp(email.trim(), verificationOtp);
-
-      const userData = {
-        id: data.user.id,
-        name: data.user.name,
-        email: data.user.email,
-        phone: data.user.phone,
-        nickname: data.user.nickname,
-        gender: data.user.gender,
-        role: data.user.role,
-        roleId: data.user.roleId,
-        address: data.user.address,
-        latitude: data.user.latitude,
-        longitude: data.user.longitude,
-        pin: data.user.pin,
-        photos: data.user.photos ?? [],
-        channelAbout: data.user.channelAbout,
-        socialLinks: data.user.socialLinks,
-        savedLastLocation: data.user.savedLastLocation,
-        rememberMe: rememberMe,
-        token: data.token,
-      };
-      dispatch(appSetUser(userData));
-      navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
-    } catch (error) {
-      Alert.alert('Error', error.message || 'OTP verification failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendOtpForPendingAccount = async () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter email first');
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/request-email-verification-otp`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim() }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to send OTP');
-      }
-      setVerificationMode(true);
-      Alert.alert('Success', 'OTP sent to your email');
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Future: handleVerifyPendingAccount / handleResendOtpForPendingAccount
 
   const handleSocialLogin = async provider => {
     setLoading(true);
@@ -291,6 +164,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         role: data.user.role,
         roleId: data.user.roleId,
         address: data.user.address,
+        postcode: data.user.postcode,
         latitude: data.user.latitude,
         longitude: data.user.longitude,
         pin: data.user.pin,
@@ -302,7 +176,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         token: data.token,
       };
       dispatch(appSetUser(userData));
-      navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
+      await navigateAfterLogin(userData);
     } catch (error) {
       const msg = normalizeSocialAuthError(error);
       if (msg !== 'Sign-in cancelled') {
@@ -394,26 +268,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                   </TouchableOpacity>
                 </View>
 
-                {verificationMode ? (
-                  <View style={styles.inputWrapper}>
-                    <Icon
-                      name="shield-check-outline"
-                      size={22}
-                      color="#7A4B00"
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      placeholder="Enter OTP"
-                      placeholderTextColor="#8E6230"
-                      style={styles.input}
-                      value={verificationOtp}
-                      onChangeText={setVerificationOtp}
-                      keyboardType="number-pad"
-                      editable={!loading}
-                    />
-                  </View>
-                ) : null}
-
                 <View style={styles.utilityRow}>
                   <TouchableOpacity
                     style={styles.checkboxContainer}
@@ -441,33 +295,26 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
                 <TouchableOpacity
                   style={styles.actionBtnLogin}
-                  onPress={verificationMode ? handleVerifyPendingAccount : handleLogin}
+                  onPress={handleLogin}
                   disabled={loading}
                 >
                   {loading ? (
                     <ActivityIndicator color="#FFF" size="small" />
                   ) : (
-                    <Text style={styles.btnText}>
-                      {verificationMode ? 'Verify OTP' : 'Login'}
-                    </Text>
+                    <Text style={styles.btnText}>Login</Text>
                   )}
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.actionBtnSignUp}
-                  onPress={
-                    verificationMode
-                      ? handleResendOtpForPendingAccount
-                      : () =>
-                          onSignUp
-                            ? onSignUp()
-                            : navigation.navigate('HomeSixScreen')
+                  onPress={() =>
+                    onSignUp
+                      ? onSignUp()
+                      : navigation.navigate('HomeSixScreen')
                   }
                   disabled={loading}
                 >
-                  <Text style={styles.signUpText}>
-                    {verificationMode ? 'Resend OTP' : 'Sign Up'}
-                  </Text>
+                  <Text style={styles.signUpText}>Sign Up</Text>
                 </TouchableOpacity>
 
                 <View style={styles.socialContainer}>

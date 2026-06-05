@@ -17,7 +17,6 @@ import { appSetUser } from '../redux/actions/appSlice';
 import {
   login,
   isAccountInactiveError,
-  isAccountPendingError,
 } from '../services/authService';
 import {
   COLORS,
@@ -73,7 +72,7 @@ const LoginScreen = () => {
     } catch (error) {
       const message = error.message || 'Login failed. Please try again.';
 
-      if (isAccountInactiveError(message) || isAccountPendingError(message)) {
+      if (isAccountInactiveError(message)) {
         Alert.alert('Account Recovery Required', message.replace(/^ACCOUNT_[A-Z]+:\s*/, ''), [
           { text: 'Cancel', style: 'cancel' },
           {

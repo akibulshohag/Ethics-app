@@ -1,8 +1,15 @@
 import {createNavigationContainerRef} from '@react-navigation/native';
 
 export function validPhoneNumber(phone) {
-  const regex = /(^(\+8801|8801|008801|01))(\d){9}$/;
-  return regex.test(phone);
+  const p = String(phone || '').replace(/[\s\-().]/g, '');
+  if (!p) return false;
+  let n = p;
+  if (n.startsWith('+44')) n = `0${n.slice(3)}`;
+  else if (n.startsWith('0044')) n = `0${n.slice(4)}`;
+  else if (n.startsWith('44') && n.length >= 12) n = `0${n.slice(2)}`;
+  if (/^07\d{9}$/.test(n)) return true;
+  if (/^0[1-9]\d{8,9}$/.test(n)) return true;
+  return false;
 }
 
 export function validEmail(email) {

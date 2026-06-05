@@ -294,7 +294,7 @@ const VideoItem = ({
   const isOwnShort = !!(
     currentUser?.id &&
     ownerId &&
-    currentUser.id === ownerId
+    String(currentUser.id) === String(ownerId)
   );
   const showFollowPlus = !!ownerId && !isOwnShort && !isSubscribed;
   const ownerAvatarFallbackUri = `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -774,7 +774,7 @@ const VideoItem = ({
             >
               <Text style={styles.resOrderText}>Order Now</Text>
             </TouchableOpacity>
-          ) : item.creatorRole === 'owner' ? (
+          ) : item.creatorRole === 'owner' && !isOwnShort ? (
             <TouchableOpacity
               style={[styles.resOrderBtn, styles.resOrderBtnFooter]}
               onPress={() => {
@@ -904,10 +904,31 @@ const ShortsVideoScreen = ({ navigation }) => {
   const route = useRoute();
   const initialShortId = route.params?.initialShortId ?? route.params?.shortId;
   const initialShortItem = route.params?.initialShortItem || null;
+  const playerSessionId = route.params?.playerSessionId;
   /** When 'owner' + scopedShortsFeed, vertical feed is only that channel's shorts (profile / promotion / user view). */
   const shortsFeedMode = route.params?.shortsFeedMode;
   const scopedShortsFeedParam = route.params?.scopedShortsFeed;
+  const returnTo = route.params?.returnTo;
+  const returnUserId = route.params?.returnUserId;
   const user = useSelector(state => state?.app?.user);
+
+  const handleShortsBack = useCallback(() => {
+    if (navigation.canGoBack?.()) {
+      navigation.goBack();
+      return;
+    }
+    if (returnTo === 'user_views' && returnUserId) {
+      navigation.navigate('UserViewsScreen', { userId: returnUserId });
+      return;
+    }
+    if (returnTo === 'business_profile' && returnUserId) {
+      navigation.navigate('BusinessProfileViewScreen', {
+        userId: returnUserId,
+      });
+      return;
+    }
+    navigation.goBack();
+  }, [navigation, returnTo, returnUserId]);
   const insets = useSafeAreaInsets();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -916,7 +937,65 @@ const ShortsVideoScreen = ({ navigation }) => {
   /** Bumps each time we focus with a deep-linked short so record effect re-runs (same id reopen from Promotion). */
   const [deepLinkVisitSeq, setDeepLinkVisitSeq] = useState(0);
   const hasAppliedInitialShort = useRef(false);
+  const listRef = useRef(null);
   const [commentsVisible, setCommentsVisible] = useState(false);
+
+  const putInitialShortFirst = useCallback((mapped, targetId, seedItem) => {
+    const list = Array.isArray(mapped) ? mapped : [];
+    const tid = String(targetId || '').trim();
+    const seedUrl = String(seedItem?.videoUrl || seedItem?.mediaUrl || '').trim();
+    if (list.length === 0) return list;
+    if (!tid && !seedUrl) return list;
+
+    let idx = tid
+      ? list.findIndex(v => String(v.id) === tid)
+      : -1;
+    if (idx < 0 && seedUrl) {
+      idx = list.findIndex(
+        v => String(v?.videoUrl || v?.mediaUrl || '').trim() === seedUrl,
+      );
+    }
+    if (idx > 0) {
+      const clicked = list[idx];
+      const patchedClicked =
+        seedItem && String(seedItem.id) === String(clicked.id)
+          ? mapShortToItem({
+              ...seedItem,
+              ...clicked,
+              user: {
+                ...(seedItem?.user && typeof seedItem.user === 'object'
+                  ? seedItem.user
+                  : {}),
+                ...(clicked?.user && typeof clicked.user === 'object'
+                  ? clicked.user
+                  : {}),
+              },
+              id: clicked.id,
+            })
+          : clicked;
+      return [patchedClicked, ...list.filter((_, i) => i !== idx)];
+    }
+    if (idx === 0 && seedItem && String(seedItem.id) === String(list[0]?.id)) {
+      const patched = mapShortToItem({
+        ...seedItem,
+        ...list[0],
+        user: {
+          ...(seedItem?.user && typeof seedItem.user === 'object'
+            ? seedItem.user
+            : {}),
+          ...(list[0]?.user && typeof list[0].user === 'object'
+            ? list[0].user
+            : {}),
+        },
+        id: list[0].id,
+      });
+      return [patched, ...list.slice(1)];
+    }
+    if (idx < 0 && seedItem?.videoUrl) {
+      return [mapShortToItem(seedItem), ...list];
+    }
+    return list;
+  }, []);
 
   const applyViewIncrement = useCallback(shortId => {
     if (!shortId) return;
@@ -1161,7 +1240,17 @@ const ShortsVideoScreen = ({ navigation }) => {
           setVideos(MOCK_VIDEOS);
         } else {
           const enriched = await enrichShortsWithProfile(filtered);
-          setVideos(enriched.map(mapShortToItem));
+          let mapped = enriched.map(mapShortToItem);
+          if (initialShortId) {
+            mapped = putInitialShortFirst(
+              mapped,
+              initialShortId,
+              initialShortItem,
+            );
+          }
+          setVideos(mapped);
+          setActiveVideoIndex(0);
+          hasAppliedInitialShort.current = true;
         }
       } else {
         const res = await shortsService.getShorts({
@@ -1175,7 +1264,17 @@ const ShortsVideoScreen = ({ navigation }) => {
             s => s.videoUrl && String(s.videoUrl).trim(),
           );
           const enriched = await enrichShortsWithProfile(filtered);
-          setVideos(enriched.map(mapShortToItem));
+          let mapped = enriched.map(mapShortToItem);
+          if (initialShortId) {
+            mapped = putInitialShortFirst(
+              mapped,
+              initialShortId,
+              initialShortItem,
+            );
+          }
+          setVideos(mapped);
+          setActiveVideoIndex(0);
+          hasAppliedInitialShort.current = !!initialShortId;
         } else {
           setVideos(MOCK_VIDEOS);
         }
@@ -1187,6 +1286,9 @@ const ShortsVideoScreen = ({ navigation }) => {
     }
   }, [
     enrichShortsWithProfile,
+    initialShortId,
+    initialShortItem,
+    putInitialShortFirst,
     shortsFeedMode,
     scopedShortsFeedParam,
     user?.id,
@@ -1195,13 +1297,19 @@ const ShortsVideoScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadShorts();
-  }, [loadShorts]);
+  }, [loadShorts, playerSessionId]);
 
-  // When opened from Home with a specific short, put that short first (only reset when id changes — not when initialShortItem identity changes)
   useEffect(() => {
     if (!initialShortId) return;
     hasAppliedInitialShort.current = false;
-  }, [initialShortId, shortsFeedMode, scopedShortsFeedParam]);
+    setActiveVideoIndex(0);
+  }, [initialShortId, playerSessionId, shortsFeedMode, scopedShortsFeedParam]);
+
+  useEffect(() => {
+    if (loading || !initialShortId) return;
+    listRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+    setActiveVideoIndex(0);
+  }, [loading, initialShortId, playerSessionId, videos.length]);
 
   useEffect(() => {
     if (
@@ -1265,7 +1373,7 @@ const ShortsVideoScreen = ({ navigation }) => {
       }
       hasAppliedInitialShort.current = true;
     }
-  }, [loading, videos, initialShortId, initialShortItem]);
+  }, [loading, videos, initialShortId, initialShortItem, playerSessionId]);
 
   const handleLike = async (item, opts = {}) => {
     if (!user?.id) {
@@ -1936,6 +2044,8 @@ const ShortsVideoScreen = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
+          key={`shorts-feed-${playerSessionId || initialShortId || 'default'}`}
           data={displayVideos}
           renderItem={({ item, index }) => (
             <VideoItem
@@ -1952,7 +2062,7 @@ const ShortsVideoScreen = ({ navigation }) => {
               }
               index={index}
               screenHeight={screenHeight}
-              onBack={() => navigation.goBack()}
+              onBack={handleShortsBack}
               onOpenComments={() => {
                 if (!user?.id) {
                   navigateToHomeScreen('HomeSevenScreen');

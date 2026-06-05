@@ -230,16 +230,28 @@ const CreateReelScreen = () => {
     };
   }, [user?.id]);
 
-  const onNext = () => {
+  const onNext = async () => {
     if (!canGoNext) {
       Alert.alert('Video required', 'Please upload a reel video before continuing.');
       return;
+    }
+    let thumb = thumbnailAsset;
+    if (videoAsset?.uri && !String(thumb?.uri || '').trim()) {
+      setThumbLoading(true);
+      try {
+        thumb = await thumbnailFromVideoFrame(videoAsset.uri);
+        if (thumb) setThumbnailAsset(thumb);
+      } catch (_) {
+        // PostScheduleNew will retry before upload
+      } finally {
+        setThumbLoading(false);
+      }
     }
     navigation.navigate('PostEditNew', {
       draft: {
         ...(incomingSeed && typeof incomingSeed === 'object' ? incomingSeed : {}),
         video: videoAsset,
-        thumbnail: thumbnailAsset || undefined,
+        thumbnail: thumb || undefined,
       },
     });
   };

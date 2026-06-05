@@ -3,6 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import LandingScreen from '../screens/LandingScreen';
 import HomeOneScreen from '../screens/HomeOneScreen';
 import ProductShortsVideo from '../screens/NewScreen/ProductShortsVideo';
+import ShortsVideoScreen from '../screens/ShortsVideoScreen';
 import HomeThreeScreen from '../screens/HomeThreeScreen';
 import HomeFourScreen from '../screens/HomeFourScreen';
 import HomeFiveScreen from '../screens/HomeFiveScreen';
@@ -40,6 +41,10 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="ProductShortsVideo"
         component={ProductShortsVideo}
+      />
+      <HomeOneStack.Screen
+        name="ShortsVideoScreen"
+        component={ShortsVideoScreen}
       />
       <HomeOneStack.Screen
         name="HomeThreeScreen"

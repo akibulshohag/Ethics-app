@@ -15,6 +15,7 @@ import {
   Alert,
   Linking,
   Pressable,
+  RefreshControl,
 } from 'react-native';
 import {
   SafeAreaView,
@@ -60,6 +61,7 @@ import { shortsService } from '../../services/shortsService';
 import CommentsModal from '../../components/CommentsModal';
 import SaveModal from '../../components/SaveModal';
 import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
+import RestaurantBookingModal from '../../components/RestaurantBookingModal';
 import { getSocialIcon } from '../../constants/socialLinks';
 import { listCustomPlaylists } from '../../services/playlistService';
 import {
@@ -72,6 +74,8 @@ import {
   navigateToScopedShortsPlayer,
 } from '../../utils/navigateToScopedShortsPlayer';
 import { recordRecentChatPartner } from '../../services/chatRecentStorage';
+import { getMenuByUserId } from '../../services/menuService';
+import { getNotificationsByUserId } from '../../services/notificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -127,6 +131,18 @@ const timeAgo = dateStr => {
   if (diffMonths > 0) return `${diffMonths}mo ago`;
   if (diffDays > 0) return `${diffDays}d ago`;
   return 'Recently';
+};
+
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
 };
 
 const mapVideoToCard = (v, profile) => {
@@ -278,6 +294,10 @@ const UserViewsScreen = ({ navigation }) => {
   const route = useRoute();
   const currentUser = useSelector(state => state.app?.user);
   const profileUserId = route.params?.userId || currentUser?.id || null;
+  const isOwnProfile =
+    !!currentUser?.id &&
+    !!profileUserId &&
+    String(profileUserId) === String(currentUser.id);
 
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState(null);
@@ -312,6 +332,14 @@ const UserViewsScreen = ({ navigation }) => {
   const [galleryEngagePhoto, setGalleryEngagePhoto] = useState(null);
   const [commentsModalGalleryPhotoId, setCommentsModalGalleryPhotoId] =
     useState(null);
+  const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [menuItems, setMenuItems] = useState([]);
+  const [menuCategories, setMenuCategories] = useState([]);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsModalVisible, setNotificationsModalVisible] =
+    useState(false);
 
   const [postCommentsVisible, setPostCommentsVisible] = useState(false);
   const [activePostId, setActivePostId] = useState(null);
@@ -389,7 +417,28 @@ const UserViewsScreen = ({ navigation }) => {
   }, [rawPosts, profile]);
 
   const instagramFeedItems = useMemo(() => {
-    const postItems = (rawPosts || []).map(p => {
+    const ownerIds = new Set(
+      (rawVideos || []).map(v => String(v?.id || '')).filter(Boolean),
+    );
+    const ownerMediaUrls = new Set(
+      (rawVideos || [])
+        .map(v => String(v?.videoUrl || v?.mediaUrl || '').trim())
+        .filter(Boolean),
+    );
+
+    const postItems = (rawPosts || [])
+      .filter(p => {
+        const st = String(p?.sourceType || '').toLowerCase();
+        if (st === 'short') return false;
+        const media = String(
+          p?.mediaUrl || p?.videoUrl || p?.thumbnailUrl || '',
+        ).trim();
+        if (media && ownerMediaUrls.has(media)) return false;
+        const pid = String(p?.id || p?.shortId || p?.postId || '');
+        if (pid && ownerIds.has(pid)) return false;
+        return true;
+      })
+      .map(p => {
       const media = String(p?.mediaUrl || p?.thumbnailUrl || '').trim();
       const mt = String(p?.mediaType || '').toLowerCase();
       const isVideo =
@@ -407,6 +456,7 @@ const UserViewsScreen = ({ navigation }) => {
           p?.thumbnailUrl || p?.mediaUrl,
           'https://via.placeholder.com/600',
         ),
+        isScheduled: isFutureScheduledMedia(p),
         createdAt:
           new Date(p?.publishedAt || p?.createdAt || 0).getTime() || Date.now(),
       };
@@ -425,7 +475,11 @@ const UserViewsScreen = ({ navigation }) => {
         'https://via.placeholder.com/600',
       ),
       type: v?.type || v?._type || v?.contentType || '',
-      isShort: v?.type === 'short' || Boolean(v?.isShort),
+      isShort:
+        v?.type === 'short' ||
+        String(v?._type || '').toLowerCase() === 'short' ||
+        Boolean(v?.isShort),
+      isScheduled: isFutureScheduledMedia(v),
       createdAt:
         new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
     }));
@@ -448,10 +502,10 @@ const UserViewsScreen = ({ navigation }) => {
       isDisliked: g.isDisliked ?? false,
     }));
 
-    return [...postItems, ...videoItems, ...galleryItems].sort(
-      (a, b) => b.createdAt - a.createdAt,
-    );
-  }, [rawPosts, rawVideos, galleryPhotos]);
+    return [...postItems, ...videoItems, ...galleryItems]
+      .filter(item => isOwnProfile || !item.isScheduled)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [rawPosts, rawVideos, galleryPhotos, isOwnProfile]);
 
   const requireLogin = () => {
     if (!currentUser?.id) {
@@ -1177,6 +1231,26 @@ const UserViewsScreen = ({ navigation }) => {
     }
   };
 
+  const loadNotifications = useCallback(async () => {
+    if (!currentUser?.id) return;
+    setNotificationsLoading(true);
+    try {
+      const data = await getNotificationsByUserId(currentUser.id);
+      setNotifications(Array.isArray(data) ? data : data?.notifications ?? []);
+    } catch (_) {
+      setNotifications([]);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [currentUser?.id]);
+
+  const handleNotificationBellPress = useCallback(() => {
+    if (requireLogin()) return;
+    if (!currentUser?.id) return;
+    setNotificationsModalVisible(true);
+    loadNotifications();
+  }, [currentUser?.id, loadNotifications]);
+
   const handleProfileMessagePress = useCallback(() => {
     if (requireLogin()) return;
     if (!profileUserId || !currentUser?.id) return;
@@ -1205,60 +1279,74 @@ const UserViewsScreen = ({ navigation }) => {
     });
   }, [profileUserId, currentUser?.id, navigation, profile]);
 
-  const handleChannelOrderNow = useCallback(() => {
-    if (!profileUserId) return;
-    const ownerName =
-      profile?.channelName || profile?.nickname || profile?.name || '';
-    const location = profile?.address || '';
-    const goOrderFlow = (screen, params) => {
-      navigation.navigate('Root', {
-        screen: 'Home1',
-        params: { screen, params },
+  const handleChannelOrderNow = useCallback(
+    (menuItem = null) => {
+      if (!profileUserId) return;
+      const ownerName =
+        profile?.channelName || profile?.nickname || profile?.name || '';
+      const location = profile?.address || '';
+      const goOrderFlow = (screen, params) => {
+        navigation.navigate('Root', {
+          screen: 'Home1',
+          params: { screen, params },
+        });
+      };
+      if (!currentUser?.token) {
+        goOrderFlow('HomeSevenScreen', {
+          returnToOrder: true,
+          ownerUserId: profileUserId,
+        });
+        return;
+      }
+      const menuItemId = menuItem?.id ? String(menuItem.id) : '';
+      goOrderFlow('HomeThreeScreen', {
+        ownerId: profileUserId,
+        ownerName,
+        title: ownerName,
+        location,
+        ...(menuItemId ? { preselectedMenuItemId: menuItemId } : {}),
       });
-    };
-    if (!currentUser?.token) {
-      goOrderFlow('HomeSevenScreen', {
-        returnToOrder: true,
-        ownerUserId: profileUserId,
-      });
-      return;
-    }
-    goOrderFlow('HomeThreeScreen', {
-      ownerId: profileUserId,
-      ownerName,
-      title: ownerName,
-      location,
-    });
-  }, [profileUserId, profile, currentUser?.token, navigation]);
+    },
+    [profileUserId, profile, currentUser?.token, navigation],
+  );
 
   const handleChannelBookNow = useCallback(() => {
     if (!profileUserId) return;
-    const ownerName =
-      profile?.channelName || profile?.nickname || profile?.name || '';
-    const goFlow = (screen, params) => {
-      navigation.navigate('Root', {
-        screen: 'Home1',
-        params: { screen, params },
-      });
-    };
     if (!currentUser?.token) {
-      goFlow('HomeSevenScreen', {
-        returnToBook: true,
-        ownerUserId: profileUserId,
-      });
+      navigation.navigate('HomeSevenScreen');
       return;
     }
-    goFlow('HomeSevenScreen', {
-      ownerUserId: profileUserId,
-      ownerName,
-      title: ownerName,
-      location: profile?.address || '',
-    });
-  }, [profileUserId, profile, currentUser?.token, navigation]);
+    setBookingModalVisible(true);
+  }, [profileUserId, currentUser?.token, navigation]);
 
   const profileRole = String(profile?.role || '').toLowerCase();
   const isViewingBusinessProfile =
     profileRole === 'owner' || profileRole === 'vendor';
+  const isOwnerProfile = profileRole === 'owner';
+
+  const visibleTabs = useMemo(() => {
+    if (!isOwnerProfile) return TABS;
+    const tabs = [...TABS];
+    const photosIdx = tabs.indexOf('Photos');
+    if (photosIdx >= 0) tabs.splice(photosIdx + 1, 0, 'Menu');
+    else tabs.push('Menu');
+    return tabs;
+  }, [isOwnerProfile]);
+
+  const loadMenu = useCallback(async () => {
+    if (!profileUserId) return;
+    setMenuLoading(true);
+    try {
+      const res = await getMenuByUserId(profileUserId);
+      setMenuItems(res?.menu ?? []);
+      setMenuCategories(res?.categories ?? []);
+    } catch (_) {
+      setMenuItems([]);
+      setMenuCategories([]);
+    } finally {
+      setMenuLoading(false);
+    }
+  }, [profileUserId]);
 
   /** Followers / Following lists live on Home1 stack (same as BusinessProfileCard) */
   const handlePressFollowers = useCallback(() => {
@@ -1353,6 +1441,8 @@ const UserViewsScreen = ({ navigation }) => {
         initialShortItem,
         shortsFeedMode: 'owner',
         scopedShortsFeed,
+        returnTo: 'user_views',
+        returnUserId: profileUserId,
       });
     },
     [navigation, rawVideos, profileUserId, profile, currentUser],
@@ -1363,8 +1453,8 @@ const UserViewsScreen = ({ navigation }) => {
     setVideosLoading(true);
     try {
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(profileUserId, 1, 100),
-        shortsService.getUserShorts(profileUserId, 1, 100),
+        getUserVideos(profileUserId, 1, 100, currentUser?.id),
+        shortsService.getUserShorts(profileUserId, 1, 100, currentUser?.id),
       ]);
       const videos = (vRes?.videos ?? []).map(v => ({ ...v, type: 'video' }));
       const shorts = (sRes?.shorts ?? []).map(s => ({ ...s, type: 'short' }));
@@ -1374,7 +1464,7 @@ const UserViewsScreen = ({ navigation }) => {
     } finally {
       setVideosLoading(false);
     }
-  }, [profileUserId]);
+  }, [profileUserId, currentUser?.id]);
 
   const loadPosts = useCallback(async () => {
     if (!profileUserId) return;
@@ -1382,7 +1472,7 @@ const UserViewsScreen = ({ navigation }) => {
     try {
       const [postRes, shortRes] = await Promise.all([
         getPostsByUser(profileUserId, 1, 50, currentUser?.id),
-        shortsService.getUserShorts(profileUserId, 1, 50),
+        shortsService.getUserShorts(profileUserId, 1, 50, currentUser?.id),
       ]);
       const postRows = (postRes?.posts || []).map(p => ({
         ...p,
@@ -1440,6 +1530,8 @@ const UserViewsScreen = ({ navigation }) => {
         initialShortItem,
         shortsFeedMode: 'owner',
         scopedShortsFeed,
+        returnTo: 'user_views',
+        returnUserId: profileUserId,
       });
     },
     [navigation, posts, profileUserId, profile],
@@ -1578,7 +1670,12 @@ const UserViewsScreen = ({ navigation }) => {
       loadGallery();
       loadVideos();
     }
-  }, [activeTab, profileUserId, loadPosts, loadGallery, loadVideos]);
+    if (activeTab === 'Menu') loadMenu();
+  }, [activeTab, profileUserId, loadPosts, loadGallery, loadVideos, loadMenu]);
+
+  useEffect(() => {
+    if (activeTab === 'Menu' && !isOwnerProfile) setActiveTab('Gallery');
+  }, [activeTab, isOwnerProfile]);
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
@@ -1603,10 +1700,14 @@ const UserViewsScreen = ({ navigation }) => {
           });
         }}
         onOrderNowPress={
-          isViewingBusinessProfile ? handleChannelOrderNow : undefined
+          isViewingBusinessProfile && !isOwnProfile
+            ? handleChannelOrderNow
+            : undefined
         }
         onBookNowPress={
-          isViewingBusinessProfile ? handleChannelBookNow : undefined
+          isViewingBusinessProfile && !isOwnProfile
+            ? handleChannelBookNow
+            : undefined
         }
       />
 
@@ -1686,7 +1787,7 @@ const UserViewsScreen = ({ navigation }) => {
       ) : null}
 
       <View style={styles.tabsContainer}>
-        {TABS.map(tab => {
+        {visibleTabs.map(tab => {
           const isGrid = tab === 'Gallery';
           const isActive = activeTab === tab;
           return (
@@ -1717,6 +1818,7 @@ const UserViewsScreen = ({ navigation }) => {
           );
         })}
       </View>
+
     </View>
   );
 
@@ -1740,10 +1842,99 @@ const UserViewsScreen = ({ navigation }) => {
         return instagramFeedItems;
       case 'Playlists':
         return playlistsLoading ? [] : channelPlaylists;
+      case 'Menu': {
+        const result = [];
+        (menuCategories || []).forEach(cat => {
+          const items = menuItems.filter(
+            m => (m.categoryId || m.category?.id) === cat.id,
+          );
+          if (items.length > 0) {
+            result.push({
+              type: 'menuSection',
+              id: `section-${cat.id}`,
+              title: cat.name,
+            });
+            items.forEach(m =>
+              result.push({
+                type: 'menu',
+                id: m.id,
+                itemName: m.itemName,
+                price: m.price,
+                imageUrl: m.imageUrl,
+                description: m.description,
+              }),
+            );
+          }
+        });
+        const uncategorized = menuItems.filter(
+          m => !m.categoryId && !m.category?.id,
+        );
+        if (uncategorized.length > 0) {
+          result.push({
+            type: 'menuSection',
+            id: 'section-uncategorized',
+            title: 'Menu',
+          });
+          uncategorized.forEach(m =>
+            result.push({
+              type: 'menu',
+              id: m.id,
+              itemName: m.itemName,
+              price: m.price,
+              imageUrl: m.imageUrl,
+              description: m.description,
+            }),
+          );
+        }
+        if (result.length === 0 && menuItems.length > 0) {
+          menuItems.forEach(m =>
+            result.push({
+              type: 'menu',
+              id: m.id,
+              itemName: m.itemName,
+              price: m.price,
+              imageUrl: m.imageUrl,
+              description: m.description,
+            }),
+          );
+        }
+        return result;
+      }
       default:
         return [];
     }
   };
+
+  const renderNotificationRow = item => (
+    <View style={styles.notificationRow}>
+      <MaterialCommunityIcons
+        name={
+          item.type === 'order'
+            ? 'cart'
+            : item.type === 'restaurant_booking'
+            ? 'calendar-account'
+            : item.type === 'content'
+            ? 'video'
+            : 'bell'
+        }
+        size={22}
+        color="#666"
+        style={styles.notificationIcon}
+      />
+      <View style={styles.notificationBody}>
+        <Text style={styles.notificationMessage} numberOfLines={2}>
+          {item.message}
+        </Text>
+        <Text style={styles.notificationMeta}>
+          {item.type || 'general'} •{' '}
+          {item.createdAt
+            ? new Date(item.createdAt).toLocaleDateString()
+            : ''}
+        </Text>
+      </View>
+      {item.status === 'unread' ? <View style={styles.unreadDot} /> : null}
+    </View>
+  );
 
   const renderContentItem = ({ item }) => {
     if (activeTab === 'Home') {
@@ -1905,6 +2096,56 @@ const UserViewsScreen = ({ navigation }) => {
         </View>
       );
     }
+    if (activeTab === 'Menu') {
+      if (item.type === 'menuSection') {
+        return (
+          <View style={styles.menuSectionHeader}>
+            <Text style={styles.menuSectionHeaderText} numberOfLines={1}>
+              {item.title}
+            </Text>
+          </View>
+        );
+      }
+      return (
+        <View style={styles.menuRowItem}>
+          {item.imageUrl ? (
+            <Image
+              source={{ uri: safeImageUri(item.imageUrl) }}
+              style={styles.menuRowImage}
+            />
+          ) : (
+            <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
+              <MaterialCommunityIcons name="food" size={24} color="#999" />
+            </View>
+          )}
+          <View style={styles.menuRowBody}>
+            <Text style={styles.menuRowName} numberOfLines={1}>
+              {item.itemName}
+            </Text>
+            <Text style={styles.menuRowPrice}>
+              {item.price != null ? `£${Number(item.price).toFixed(2)}` : '—'}
+            </Text>
+            {item.description ? (
+              <Text style={styles.menuRowDescription} numberOfLines={2}>
+                {item.description}
+              </Text>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            style={styles.menuRowCartBtn}
+            onPress={() => handleChannelOrderNow(item)}
+            activeOpacity={0.85}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialCommunityIcons
+              name="shopping-outline"
+              size={22}
+              color="#222"
+            />
+          </TouchableOpacity>
+        </View>
+      );
+    }
     if (activeTab === 'Posts')
       {
         const isShortItem =
@@ -1943,6 +2184,16 @@ const UserViewsScreen = ({ navigation }) => {
           {item.mediaType === 'video' ? (
             <View style={styles.instaVideoBadge}>
               <MaterialCommunityIcons name="play" size={14} color="#fff" />
+            </View>
+          ) : null}
+          {isOwnProfile && item.isScheduled ? (
+            <View style={styles.galleryScheduledBadge}>
+              <MaterialCommunityIcons
+                name="clock-outline"
+                size={11}
+                color="#fff"
+              />
+              <Text style={styles.galleryScheduledBadgeText}>Scheduled</Text>
             </View>
           ) : null}
         </TouchableOpacity>
@@ -2052,7 +2303,7 @@ const UserViewsScreen = ({ navigation }) => {
           />
           <TouchableOpacity
             style={styles.promoHeaderBell}
-            onPress={handleProfileMessagePress}
+            onPress={handleNotificationBellPress}
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons
@@ -2109,12 +2360,20 @@ const UserViewsScreen = ({ navigation }) => {
             (activeTab === 'Photos' && galleryLoading) ||
             (activeTab === 'Instagram' &&
               (postsLoading || videosLoading || galleryLoading)) ||
-            (activeTab === 'Playlists' && playlistsLoading);
+            (activeTab === 'Playlists' && playlistsLoading) ||
+            (activeTab === 'Menu' && menuLoading);
           if (loading) {
             return (
               <View style={styles.loadingWrap}>
                 <ActivityIndicator size="large" color="#FFAD33" />
                 <Text style={styles.loadingText}>Loading...</Text>
+              </View>
+            );
+          }
+          if (activeTab === 'Menu') {
+            return (
+              <View style={styles.loadingWrap}>
+                <Text style={styles.loadingText}>No menu items yet.</Text>
               </View>
             );
           }
@@ -2132,6 +2391,58 @@ const UserViewsScreen = ({ navigation }) => {
           );
         }}
       />
+
+      <Modal
+        visible={notificationsModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNotificationsModalVisible(false)}
+      >
+        <View style={styles.editModalOverlay}>
+          <TouchableOpacity
+            style={styles.editModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setNotificationsModalVisible(false)}
+          />
+          <View style={styles.notificationsModalBox}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Notifications</Text>
+              <TouchableOpacity
+                onPress={() => setNotificationsModalVisible(false)}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            {notificationsLoading && notifications.length === 0 ? (
+              <View style={styles.notificationsModalLoading}>
+                <ActivityIndicator size="small" color="#FF7F0B" />
+                <Text style={styles.notificationsModalLoadingText}>
+                  Loading notifications...
+                </Text>
+              </View>
+            ) : notifications.length === 0 ? (
+              <Text style={styles.notificationsModalEmpty}>
+                No notifications yet.
+              </Text>
+            ) : (
+              <FlatList
+                data={notifications}
+                keyExtractor={(item, index) => item.id || `notif-${index}`}
+                renderItem={({ item }) => renderNotificationRow(item)}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={notificationsLoading}
+                    onRefresh={loadNotifications}
+                    colors={['#FF7F0B']}
+                    tintColor="#FF7F0B"
+                  />
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Gallery image preview modal */}
       <Modal
@@ -2329,6 +2640,15 @@ const UserViewsScreen = ({ navigation }) => {
         onCommentDeleted={(_top, count) =>
           handleGalleryCommentAdded(null, -(count || 1))
         }
+      />
+
+      <RestaurantBookingModal
+        visible={bookingModalVisible}
+        onClose={() => setBookingModalVisible(false)}
+        ownerId={profileUserId}
+        ownerName={profile?.channelName || profile?.nickname || profile?.name}
+        currentUser={currentUser}
+        defaultAddress={currentUser?.address || ''}
       />
 
       <GalleryVideoDetailModal
@@ -3284,6 +3604,139 @@ const styles = StyleSheet.create({
     color: '#F5A623',
     fontWeight: '700',
   },
+  menuSectionHeader: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#f5f5f5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8e8e8',
+  },
+  menuSectionHeaderText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+  },
+  menuRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  menuRowImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+  },
+  menuRowImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuRowBody: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  menuRowName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#212121',
+  },
+  menuRowPrice: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  menuRowDescription: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+  menuRowCartBtn: {
+    marginLeft: 8,
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  notificationIcon: {
+    marginRight: 12,
+  },
+  notificationBody: {
+    flex: 1,
+  },
+  notificationMessage: {
+    fontSize: 14,
+    color: '#333',
+  },
+  notificationMeta: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF7F0B',
+    marginLeft: 8,
+  },
+  notificationsModalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '75%',
+    paddingBottom: 16,
+  },
+  notificationsModalLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  notificationsModalLoadingText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  notificationsModalEmpty: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#888',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  editModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  editModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  editModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
   gridColumnWrapper: {
     justifyContent: 'flex-start',
     paddingHorizontal: 16,
@@ -3293,6 +3746,7 @@ const styles = StyleSheet.create({
     width: (width - 32 - 16) / 3, // Full width minus horizontal padding (16*2) minus inner gaps (8*2)
     aspectRatio: 0.8, // Slightly taller than square exactly as done before
     marginBottom: 8,
+    position: 'relative',
   },
   instaGridImageContainer: {
     width: (width - 32 - 16) / 3,
@@ -3301,6 +3755,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#F5F5F5',
+    position: 'relative',
   },
   gridImage: {
     width: '100%',
@@ -3310,7 +3765,7 @@ const styles = StyleSheet.create({
   },
   instaVideoBadge: {
     position: 'absolute',
-    top: 6,
+    bottom: 6,
     right: 6,
     width: 22,
     height: 22,
@@ -3318,6 +3773,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  galleryScheduledBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FF7F0B',
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  galleryScheduledBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   loadingWrap: { paddingVertical: 30, alignItems: 'center' },
   loadingText: { marginTop: 10, color: '#666' },

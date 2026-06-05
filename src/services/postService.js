@@ -15,6 +15,27 @@ const getAuthHeaders = () => {
   return {};
 };
 
+const isFutureScheduledPost = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduleDate ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
+};
+
+const filterPublicScheduledPosts = data => {
+  if (!data || !Array.isArray(data.posts)) return data;
+  return {
+    ...data,
+    posts: data.posts.filter(post => !isFutureScheduledPost(post)),
+  };
+};
+
 /** IANA zone e.g. Asia/Dhaka — sent with upload for server logs / metadata. */
 const getDeviceTimeZone = () => {
   try {
@@ -41,7 +62,7 @@ export const getPosts = async (params = {}) => {
       params,
       headers: getAuthHeaders(),
     });
-    return response.data;
+    return filterPublicScheduledPosts(response.data);
   } catch (error) {
     console.error('Error fetching posts:', error);
     throw error;
@@ -59,7 +80,7 @@ export const getNearbyPosts = async (latitude, longitude, params = {}) => {
       params: { latitude, longitude, radiusKm, page, limit, viewerRole },
       headers: getAuthHeaders(),
     });
-    return response.data;
+    return filterPublicScheduledPosts(response.data);
   } catch (error) {
     console.error('Error fetching nearby posts:', error);
     throw error;

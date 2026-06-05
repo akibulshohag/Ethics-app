@@ -32,6 +32,7 @@ import {
   resolveCategoryChipNavigation,
   resolveDiscoveryCategoryFromFilter,
 } from '../constants/menuDiscoveryCategories';
+import { UK_DEFAULT_RADIUS_KM } from '../utils/ukPostcode';
 import logo from '../assets/logo.png';
 
 const FEED_HORIZONTAL_PAD = 15;
@@ -138,6 +139,7 @@ export default function HomeSearchCategoryScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const user = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
 
   const resolvedCategory = useMemo(() => {
     const nav = resolveCategoryChipNavigation({
@@ -163,18 +165,30 @@ export default function HomeSearchCategoryScreen() {
     return areaShort || addr || 'Set your address';
   }, [nearLabel, user?.address, user?.location]);
 
-  const locationOpts = useMemo(
-    () => ({
-      viewerLat: route.params?.viewerLat ?? user?.latitude,
-      viewerLng: route.params?.viewerLng ?? user?.longitude,
-    }),
-    [
-      route.params?.viewerLat,
-      route.params?.viewerLng,
-      user?.latitude,
-      user?.longitude,
-    ],
-  );
+  const locationOpts = useMemo(() => {
+    const lat =
+      route.params?.viewerLat ??
+      browseLocation?.lat ??
+      user?.latitude;
+    const lng =
+      route.params?.viewerLng ??
+      browseLocation?.lng ??
+      user?.longitude;
+    if (lat == null || lng == null) return undefined;
+    const viewerLat = Number(lat);
+    const viewerLng = Number(lng);
+    if (!Number.isFinite(viewerLat) || !Number.isFinite(viewerLng)) {
+      return undefined;
+    }
+    return { viewerLat, viewerLng };
+  }, [
+    route.params?.viewerLat,
+    route.params?.viewerLng,
+    browseLocation?.lat,
+    browseLocation?.lng,
+    user?.latitude,
+    user?.longitude,
+  ]);
 
   const { restaurants: cachedRestaurants, categories, loading: cacheLoading } =
     useDiscoveryData(locationOpts);
@@ -207,6 +221,13 @@ export default function HomeSearchCategoryScreen() {
     browseRestaurantsByCategory({
       category: categoryKey || categoryLabel,
       limit: 100,
+      ...(locationOpts
+        ? {
+            nearbyLat: locationOpts.viewerLat,
+            nearbyLng: locationOpts.viewerLng,
+            radiusKm: UK_DEFAULT_RADIUS_KM,
+          }
+        : {}),
     })
       .then(res => {
         if (cancelled) return;
@@ -221,7 +242,7 @@ export default function HomeSearchCategoryScreen() {
     return () => {
       cancelled = true;
     };
-  }, [categoryKey, categoryLabel]);
+  }, [categoryKey, categoryLabel, locationOpts]);
 
   const fallbackRows = useMemo(() => {
     return sortRestaurants(

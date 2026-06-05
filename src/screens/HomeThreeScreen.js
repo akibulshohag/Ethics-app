@@ -109,7 +109,11 @@ const HomeThreeScreen = ({ onBack }) => {
   );
   const singleMenuItem = route.params?.singleMenuItem;
   const promotionMenuItems = route.params?.promotionMenuItems;
+  const preselectedMenuItemId = String(
+    route.params?.preselectedMenuItemId || '',
+  ).trim();
   const searchInitAppliedRef = useRef(false);
+  const preselectedInitAppliedRef = useRef(false);
 
   useEffect(() => {
     const sort = route.params?.discoverySort;
@@ -428,6 +432,19 @@ const HomeThreeScreen = ({ onBack }) => {
     searchMatchedMenuItems,
   ]);
 
+  const preselectedMenuItems = useMemo(() => {
+    if (!preselectedMenuItemId || !menuItems.length) return [];
+    const item = menuItems.find(
+      m => String(m.id) === preselectedMenuItemId,
+    );
+    return item ? [item] : [];
+  }, [preselectedMenuItemId, menuItems]);
+
+  const orderMoreFromPreselect = useMemo(() => {
+    if (!preselectedMenuItemId) return [];
+    return menuItems.filter(m => String(m.id) !== preselectedMenuItemId);
+  }, [preselectedMenuItemId, menuItems]);
+
   useEffect(() => {
     if (
       !ownerId ||
@@ -448,6 +465,25 @@ const HomeThreeScreen = ({ onBack }) => {
     });
     // Keep full menu visible for "Order More"; do not force a single category.
   }, [ownerId, menuItems, searchKeywordLower, discoveryCategoryKey, menuItemMatchesSearchKeyword]);
+
+  useEffect(() => {
+    if (
+      !preselectedMenuItemId ||
+      !menuItems.length ||
+      preselectedInitAppliedRef.current
+    )
+      return;
+    const exists = menuItems.some(
+      m => String(m.id) === preselectedMenuItemId,
+    );
+    if (!exists) return;
+    preselectedInitAppliedRef.current = true;
+    setSelectedItems(prev => {
+      const hasSelected = Object.values(prev || {}).some(v => Number(v) > 0);
+      if (hasSelected) return prev;
+      return { [preselectedMenuItemId]: 1 };
+    });
+  }, [preselectedMenuItemId, menuItems]);
 
   const filterActiveCount = useMemo(() => {
     let n = 0;
@@ -936,8 +972,21 @@ const HomeThreeScreen = ({ onBack }) => {
             {(searchKeywordLower || discoveryCategoryKey) &&
             orderMoreMenuItems.length > 0 ? (
               <>
-                <Text style={styles.subSectionHeading}>Order More</Text>
+                <Text style={styles.sectionHeading}>Order More</Text>
                 {orderMoreMenuItems.map(renderMenuItemCard)}
+              </>
+            ) : preselectedMenuItemId && preselectedMenuItems.length > 0 ? (
+              <>
+                {preselectedMenuItems.map(renderMenuItemCard)}
+                {orderMoreFromPreselect.length > 0 ? (
+                  <>
+                    <View style={styles.sectionDividerWrap}>
+                      <View style={styles.sectionDividerLine} />
+                    </View>
+                    <Text style={styles.sectionHeading}>Order More</Text>
+                    {orderMoreFromPreselect.map(renderMenuItemCard)}
+                  </>
+                ) : null}
               </>
             ) : !searchKeywordLower && !discoveryCategoryKey ? (
               filteredMenuForDisplay.map(renderMenuItemCard)

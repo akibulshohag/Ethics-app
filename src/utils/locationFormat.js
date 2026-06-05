@@ -1,3 +1,91 @@
+const isUkPostcodePart = p =>
+  /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(
+    String(p || '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
+
+const isUkCountryWord = p => {
+  const t = String(p || '').trim();
+  return (
+    /^united kingdom$/i.test(t) ||
+    /^uk$/i.test(t) ||
+    /^(england|scotland|wales|northern ireland)$/i.test(t)
+  );
+};
+
+const normalizePostcodeDisplay = raw => {
+  const s = String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+  if (!s) return '';
+  const compact = s.replace(/\s+/g, '');
+  if (compact.length <= 4) return compact;
+  return `${compact.slice(0, -3)} ${compact.slice(-3)}`;
+};
+
+/**
+ * Compact browse / profile line: "Warrington, United Kingdom, WA4 6LG"
+ * (town/city + country + postcode — no street).
+ */
+export const formatCityCountryPostcodeLine = ({
+  address,
+  addressText,
+  postcode,
+  areaLabel,
+} = {}) => {
+  const full = String(address || addressText || '').trim();
+  const parts = full
+    .split(',')
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  let finalPc = normalizePostcodeDisplay(postcode);
+  if (!finalPc) {
+    const pcPart = parts.find(isUkPostcodePart);
+    if (pcPart) finalPc = normalizePostcodeDisplay(pcPart);
+  }
+
+  const partsNoPc = parts.filter(p => !isUkPostcodePart(p));
+  let city = '';
+  let country = 'United Kingdom';
+
+  const countryIdx = partsNoPc.findIndex(isUkCountryWord);
+  if (countryIdx >= 0) {
+    country = 'United Kingdom';
+    if (countryIdx > 0) city = partsNoPc[countryIdx - 1];
+  } else if (partsNoPc.length >= 2) {
+    const last = partsNoPc[partsNoPc.length - 1];
+    if (isUkCountryWord(last)) {
+      country = 'United Kingdom';
+      city = partsNoPc[partsNoPc.length - 2] || '';
+    } else if (!/^\d/.test(last)) {
+      country = last;
+      city = partsNoPc[partsNoPc.length - 2] || partsNoPc[0] || '';
+    }
+  } else if (partsNoPc.length === 1 && !isUkCountryWord(partsNoPc[0])) {
+    city = partsNoPc[0];
+  }
+
+  if (!city && full) {
+    const short = formatShortProfileLocationLine(full);
+    if (short) city = short.split(',')[0].trim();
+  }
+
+  if (!city && areaLabel) {
+    city = String(areaLabel).split(',')[0].trim();
+  }
+
+  if (!city && !finalPc) {
+    const label = String(areaLabel || '').trim();
+    return label || 'Set your area';
+  }
+
+  const base = city ? `${city}, ${country}` : country;
+  return finalPc ? `${base}, ${finalPc}` : base;
+};
+
 /** Short country label for UI (e.g. United Kingdom → UK). */
 export const abbrevCountryLabel = country => {
   if (!country || typeof country !== 'string') return '';

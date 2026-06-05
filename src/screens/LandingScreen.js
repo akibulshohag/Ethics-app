@@ -11,78 +11,84 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
-  getCurrentPositionSafe,
-  reverseGeocode,
   geocodeAddress,
+  geocodeUkPostcode,
   getPlaceSuggestions,
   getCoordsFromPlaceId,
   getFallbackCoordsForUKArea,
 } from '../utils/geolocation';
-import { saveLastLocationToBackend } from '../services/userLocationService';
+import {
+  browseAreaLabel,
+  normalizeUkPostcode,
+  UK_POPULAR_AREAS,
+} from '../utils/ukPostcode';
+import { persistBrowseLocation, LOCATION_STORAGE_KEY } from '../services/userLocationService';
+import { setBrowseLocation } from '../redux/actions/appSlice';
+import MapLocationPicker from '../components/MapLocationPicker';
 import logo from '../assets/logo.png';
 
-const LOCATION_KEY = 'USER_LOCATION_SELECTION';
-const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const LandingScreen = () => {
   const navigation = useNavigation();
+  const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
   const [addressText, setAddressText] = useState('');
+  const [postcodeInput, setPostcodeInput] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [mapVisible, setMapVisible] = useState(false);
   const debounceTimerRef = useRef(null);
 
-  // If we have a recent saved location for this user (or guest), skip Landing and go straight to HomeOne.
-  // Different user on same device must select location (saved.userId !== current user).
   useEffect(() => {
     let cancelled = false;
     const checkSavedLocation = async () => {
       try {
-        const raw = await AsyncStorage.getItem(LOCATION_KEY);
+        const raw = await AsyncStorage.getItem(LOCATION_STORAGE_KEY);
         if (!raw) return;
         const saved = JSON.parse(raw);
-        if (!saved || typeof saved !== 'object') return;
-        const coords = saved.coords && typeof saved.coords === 'object'
-          ? saved.coords
-          : { lat: saved.lat, lng: saved.lng };
+        const coords = saved.coords || { lat: saved.lat, lng: saved.lng };
         const lat = coords?.lat != null ? Number(coords.lat) : null;
         const lng = coords?.lng != null ? Number(coords.lng) : null;
-        const hasCoords = lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng);
-        if (!hasCoords) return;
-        const savedAt = saved.savedAt != null ? Number(saved.savedAt) : null;
-        const fresh = savedAt == null || (Date.now() - savedAt <= LOCATION_TTL_MS);
-        if (!fresh) return;
-        // Only use saved location if same user (or guest: no userId in saved, or no one logged in)
+        if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+        const fresh =
+          saved.savedAt == null || Date.now() - saved.savedAt <= LOCATION_TTL_MS;
         const sameUser =
-          saved.userId == null ||
-          user?.id == null ||
-          String(saved.userId) === String(user.id);
-        if (!sameUser) return;
-        if (cancelled) return;
+          saved.userId == null || user?.id == null || String(saved.userId) === String(user.id);
+        if (!fresh || !sameUser || cancelled) return;
+
+        const browse = {
+          lat,
+          lng,
+          postcode: saved.postcode || '',
+          addressText: saved.addressText || '',
+          areaLabel: saved.areaLabel || browseAreaLabel(saved),
+        };
+        dispatch(setBrowseLocation(browse));
         navigation.replace('HomeOneScreen', {
           selectedLocation: { lat, lng },
-          addressText: saved.addressText || '',
+          addressText: browse.addressText,
+          postcode: browse.postcode,
         });
-      } catch (e) {
-        // ignore storage errors and show Landing normally
-      }
+      } catch (_) {}
     };
     checkSavedLocation();
     return () => {
       cancelled = true;
     };
-  }, [navigation, user?.id]);
+  }, [navigation, user?.id, dispatch]);
 
   useEffect(() => {
     const trimmed = addressText.trim();
     if (!trimmed) {
       setAddressSuggestions([]);
-      setSuggestionsLoading(false);
       return;
     }
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -91,38 +97,36 @@ const LandingScreen = () => {
       const list = await getPlaceSuggestions(trimmed, { region: 'uk' });
       setAddressSuggestions(list || []);
       setSuggestionsLoading(false);
-      debounceTimerRef.current = null;
     }, 280);
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
   }, [addressText]);
 
-  const goToResults = async (selectedLocation, addressLabel) => {
-    try {
-      await AsyncStorage.setItem(
-        LOCATION_KEY,
-        JSON.stringify({
-          userId: user?.id || null,
-          coords: selectedLocation,
-          addressText: addressLabel || addressText,
-          savedAt: Date.now(),
-        }),
-      );
-      if (user?.id && selectedLocation?.lat != null && selectedLocation?.lng != null) {
-        saveLastLocationToBackend({
-          lat: selectedLocation.lat,
-          lng: selectedLocation.lng,
-          addressText: addressLabel || addressText || '',
-        }).catch(() => {});
-      }
-    } catch (e) {
-      // non-blocking; still navigate even if storage fails
-    }
-    navigation.replace('HomeOneScreen', {
-      selectedLocation,
-      addressText: addressLabel || addressText,
+  const goToResults = async browse => {
+    const { lat, lng, postcode, addressText: addr, areaLabel } = browse;
+    dispatch(setBrowseLocation({ lat, lng, postcode, addressText: addr, areaLabel }));
+    await persistBrowseLocation({
+      userId: user?.id,
+      lat,
+      lng,
+      postcode,
+      addressText: addr,
+      areaLabel,
     });
+    navigation.replace('HomeOneScreen', {
+      selectedLocation: { lat, lng },
+      addressText: addr,
+      postcode,
+    });
+  };
+
+  const resolveCoordsFromText = async (text, placeId) => {
+    let coords = placeId ? await getCoordsFromPlaceId(placeId) : null;
+    if (!coords) coords = await geocodeAddress(text);
+    if (!coords) coords = await geocodeAddress(`${text}, United Kingdom`);
+    if (!coords) coords = getFallbackCoordsForUKArea(text);
+    return coords;
   };
 
   const handleSelectSuggestion = async (description, placeId) => {
@@ -130,214 +134,207 @@ const LandingScreen = () => {
     setAddressSuggestions([]);
     setLocationLoading(true);
     try {
-      let coords = placeId ? await getCoordsFromPlaceId(placeId) : null;
-      if (!coords) coords = await geocodeAddress(description);
-      if (!coords) coords = await geocodeAddress(description + ', United Kingdom');
-      if (!coords) coords = getFallbackCoordsForUKArea(description);
-      if (coords) {
-        await goToResults(coords, description);
-      } else {
-        Alert.alert(
-          'Address',
-          'Could not get location for this address. Try "Use my location".',
-        );
+      const coords = await resolveCoordsFromText(description, placeId);
+      if (!coords) {
+        Alert.alert('Address', 'Could not get location. Try map or postcode.');
+        return;
       }
-    } catch (_) {
-      const fallback = getFallbackCoordsForUKArea(description);
-      if (fallback) {
-        goToResults(fallback, description);
-      } else {
-        Alert.alert('Address', 'Something went wrong. Try "Use my location".');
-      }
+      const pc = normalizeUkPostcode(description) || normalizeUkPostcode(postcodeInput) || '';
+      await goToResults({
+        lat: coords.lat,
+        lng: coords.lng,
+        postcode: pc,
+        addressText: description,
+        areaLabel: browseAreaLabel({ postcode: pc, addressText: description }),
+      });
+    } finally {
+      setLocationLoading(false);
     }
-    setLocationLoading(false);
   };
 
-  const handleAddressSubmit = async () => {
-    const trimmed = addressText.trim();
-    if (trimmed) {
-      setLocationLoading(true);
-      try {
-        let coords = await geocodeAddress(trimmed);
-        if (!coords) {
-          const parts = trimmed.split(',').map(p => p.trim()).filter(Boolean);
-          if (parts.length >= 2) coords = await geocodeAddress(parts.slice(-2).join(', '));
-          if (!coords && parts.length >= 1) coords = await geocodeAddress(parts[parts.length - 1]);
-        }
-        if (!coords) coords = await geocodeAddress(trimmed + ', United Kingdom');
-        if (!coords) coords = getFallbackCoordsForUKArea(trimmed);
-        if (coords) {
-          await goToResults(coords, trimmed);
-        } else {
-          Alert.alert(
-            'Address',
-            'Could not find that address. Try "Use my location" or check the address.',
-          );
-        }
-      } catch (_) {
-        const fallback = getFallbackCoordsForUKArea(trimmed);
-        if (fallback) {
-          goToResults(fallback, trimmed);
-        } else {
-          Alert.alert('Address', 'Could not find that address.');
-        }
-      }
-      setLocationLoading(false);
+  const handlePostcodeSearch = async () => {
+    const pc = normalizeUkPostcode(postcodeInput);
+    if (!pc) {
+      Alert.alert('Postcode', 'Enter a valid UK postcode (e.g. WD5 0AB).');
       return;
     }
-    useMyLocation();
+    setLocationLoading(true);
+    try {
+      let coords = await geocodeUkPostcode(pc);
+      if (!coords) coords = await geocodeAddress(pc);
+      if (!coords) coords = await geocodeAddress(`${pc}, United Kingdom`);
+      if (!coords) {
+        Alert.alert('Not found', `Could not locate ${pc}. Open map to pin.`);
+        return;
+      }
+      await goToResults({
+        lat: coords.lat,
+        lng: coords.lng,
+        postcode: pc,
+        addressText: `${pc}, United Kingdom`,
+        areaLabel: pc,
+      });
+    } finally {
+      setLocationLoading(false);
+    }
   };
 
-  const useMyLocation = () => {
+  const handlePopularArea = async area => {
+    setAddressText(area);
     setLocationLoading(true);
-    setAddressSuggestions([]);
-    getCurrentPositionSafe(
-      async pos => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const coords = { lat, lng };
-        const addr = await reverseGeocode(lat, lng);
-        setAddressText(addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        await goToResults(coords, addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        setLocationLoading(false);
-      },
-      err => {
-        setLocationLoading(false);
-        Alert.alert('Location', err || 'Could not get location.');
-      },
-    );
+    try {
+      const coords = await resolveCoordsFromText(`${area}, United Kingdom`, '');
+      if (!coords) {
+        Alert.alert('Area', 'Could not locate that area.');
+        return;
+      }
+      await goToResults({
+        lat: coords.lat,
+        lng: coords.lng,
+        postcode: normalizeUkPostcode(area) || '',
+        addressText: area,
+        areaLabel: area.split(',')[0].trim(),
+      });
+    } finally {
+      setLocationLoading(false);
+    }
   };
 
   return (
     <View style={styles.landingContainer}>
       <View style={styles.centerContent}>
-        <View style={[styles.logoContainer, { marginBottom: 20 }]}>
-          <Image
-            source={logo}
-            style={{ width: 200, height: 50 }}
-            resizeMode="contain"
-          />
-        </View>
+        <Image source={logo} style={{ width: 200, height: 50, marginBottom: 16 }} resizeMode="contain" />
+
+        <Text style={styles.sectionLabel}>Enter UK postcode</Text>
         <View style={styles.landingSearchBox}>
-          <Icon name="magnify" size={22} color="#999" style={styles.landingSearchIcon} />
+          <Icon name="map-marker" size={22} color="#999" style={{ marginRight: 8 }} />
           <TextInput
             style={styles.landingSearchInput}
-            placeholder="Search address (UK / England)"
+            placeholder="e.g. WD5 0AB"
             placeholderTextColor="#999"
-            value={addressText}
-            onChangeText={setAddressText}
-            onSubmitEditing={handleAddressSubmit}
-            returnKeyType="search"
+            value={postcodeInput}
+            onChangeText={setPostcodeInput}
+            autoCapitalize="characters"
+            onSubmitEditing={handlePostcodeSearch}
             editable={!locationLoading}
           />
-          <TouchableOpacity
-            onPress={locationLoading ? undefined : handleAddressSubmit}
-            style={styles.landingMapIcon}
-            disabled={locationLoading}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity onPress={handlePostcodeSearch} disabled={locationLoading}>
             {locationLoading ? (
               <ActivityIndicator size="small" color="#F5A623" />
             ) : (
-              <Icon name="map-marker-radius" size={26} color="#F5A623" />
+              <Icon name="arrow-right-circle" size={28} color="#F5A623" />
             )}
           </TouchableOpacity>
         </View>
+
+        <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Or search area / address</Text>
+        <View style={styles.landingSearchBox}>
+          <Icon name="magnify" size={22} color="#999" style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.landingSearchInput}
+            placeholder="Area, street, city"
+            placeholderTextColor="#999"
+            value={addressText}
+            onChangeText={setAddressText}
+            editable={!locationLoading}
+          />
+        </View>
+
         {addressText.trim().length > 0 && (
           <View style={styles.suggestionsContainer}>
             {suggestionsLoading ? (
-              <View style={styles.suggestionItem}>
-                <ActivityIndicator size="small" color="#F5A623" />
-                <Text style={styles.suggestionText}>Searching areas...</Text>
-              </View>
-            ) : addressSuggestions.length > 0 ? (
-              <ScrollView
-                style={styles.suggestionsScroll}
-                keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled
-              >
-                {addressSuggestions.slice(0, 8).map((item, idx) => (
+              <ActivityIndicator color="#F5A623" style={{ padding: 12 }} />
+            ) : (
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 160 }}>
+                {addressSuggestions.slice(0, 6).map((item, idx) => (
                   <TouchableOpacity
-                    key={item.place_id ? item.place_id : `fb-${idx}-${item.description}`}
+                    key={item.place_id || `s-${idx}`}
                     style={styles.suggestionItem}
                     onPress={() => handleSelectSuggestion(item.description, item.place_id)}
-                    activeOpacity={0.7}
                   >
-                    <Icon name="map-marker-outline" size={18} color="#666" />
                     <Text style={styles.suggestionText} numberOfLines={2}>
                       {item.description}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            ) : (
-              <View style={styles.suggestionItem}>
-                <Icon name="map-marker-outline" size={18} color="#999" />
-                <Text style={styles.suggestionHint}>
-                  No areas found. Type full address (e.g. Abbots Langley, London) or tap the location icon.
-                </Text>
-              </View>
             )}
           </View>
         )}
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
+          {UK_POPULAR_AREAS.map(area => (
+            <TouchableOpacity
+              key={area}
+              style={styles.chip}
+              onPress={() => handlePopularArea(area)}
+            >
+              <Text style={styles.chipText}>{area}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <TouchableOpacity style={styles.mapBtn} onPress={() => setMapVisible(true)}>
+          <Icon name="map" size={20} color="#FFF" />
+          <Text style={styles.mapBtnText}>Pick on map / Use GPS</Text>
+        </TouchableOpacity>
+
         <Text style={styles.slogan}>See it, Love it, order it</Text>
       </View>
+
+      <MapLocationPicker
+        visible={mapVisible}
+        onClose={() => setMapVisible(false)}
+        title="Deliver to"
+        onConfirm={browse => goToResults(browse)}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   landingContainer: { flex: 1, backgroundColor: '#F5A623' },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  logoContainer: {},
+  centerContent: { flex: 1, paddingHorizontal: 24, paddingTop: 48 },
+  sectionLabel: { color: '#FFF', fontSize: 13, fontWeight: '600', marginBottom: 8 },
   landingSearchBox: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    width: '100%',
-    height: 55,
+    height: 52,
     borderRadius: 10,
     alignItems: 'center',
     paddingHorizontal: 12,
-    elevation: 5,
-    overflow: 'hidden',
   },
-  landingSearchIcon: { marginRight: 8 },
-  landingSearchInput: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 16,
-    color: '#333',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-  },
-  landingMapIcon: { padding: 8, marginLeft: 4 },
+  landingSearchInput: { flex: 1, fontSize: 16, color: '#333' },
   suggestionsContainer: {
-    width: '100%',
-    marginTop: 8,
     backgroundColor: '#FFF',
     borderRadius: 10,
-    maxHeight: 220,
-    elevation: 4,
+    marginTop: 8,
     overflow: 'hidden',
   },
-  suggestionItem: {
+  suggestionItem: { padding: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#eee' },
+  suggestionText: { fontSize: 15, color: '#333' },
+  chipsScroll: { marginTop: 14, maxHeight: 44 },
+  chip: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  chipText: { fontSize: 13, color: '#333', fontWeight: '500' },
+  mapBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#eee',
-    gap: 10,
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+    borderRadius: 10,
   },
-  suggestionText: { flex: 1, fontSize: 15, color: '#333' },
-  suggestionHint: { flex: 1, fontSize: 14, color: '#666' },
-  suggestionsScroll: { maxHeight: 260 },
-  slogan: { color: '#FFF', marginTop: 20, fontSize: 14, fontWeight: '500' },
+  mapBtnText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
+  slogan: { color: '#FFF', marginTop: 24, fontSize: 14, textAlign: 'center' },
 });
 
 export default LandingScreen;

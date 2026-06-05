@@ -16,7 +16,9 @@ import { getFilterOverlayStyle } from '../../constants/filterEffects';
 import { computeOverlayPositionStyle } from '../../constants/overlayTextAnchor';
 import SoundsModal from '../../components/SoundsModal';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const PREVIEW_REEL_HEIGHT = Math.min(width * 1.08, height * 0.52, 440);
+const PREVIEW_REEL_WIDTH = Math.round((PREVIEW_REEL_HEIGHT * 9) / 16);
 
 function LegacyPreviewOverlayText({ draft, videoW, videoH, s }) {
   const [box, setBox] = React.useState({ w: 0, h: 0 });
@@ -573,14 +575,30 @@ const styles = StyleSheet.create({
   stepLabel: { fontSize: 10, marginTop: 4, color: '#AAA' },
   activeLabel: { color: '#F5A623', fontWeight: 'bold' },
 
-  previewContainer: { flex: 1.2 },
+  previewContainer: {
+    flex: 1.55,
+    backgroundColor: '#111',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 12,
+  },
   mainVideo: {
-    width: '100%',
-    height: '100%',
+    width: PREVIEW_REEL_WIDTH,
+    height: PREVIEW_REEL_HEIGHT,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playOverlay: { backgroundColor: 'transparent' },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   pauseCircle: {
     width: 60,
     height: 60,
@@ -678,9 +696,10 @@ const styles = StyleSheet.create({
   },
 
   infoSection: {
-    flex: 0.8,
+    flex: 0.65,
     backgroundColor: '#222',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     justifyContent: 'center',
   },
   socialRow: { flexDirection: 'row', marginBottom: 15 },

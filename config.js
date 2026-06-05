@@ -1,4 +1,10 @@
 import { Platform } from 'react-native';
+import {
+  EATIX_GOOGLE_WEB_CLIENT_ID,
+  getFirebaseProjectNumber,
+  googleServicesHasOAuthClients,
+  resolveGoogleWebClientId,
+} from './googleAuthConfig';
 
 export const APP_NAME = 'Ethics';
 export const TEL_NUMBER = '018********';
@@ -41,7 +47,7 @@ export const selectServer = 'production';
 
 export const config = {
   ...checkConfig(selectServer),
-  googleMapsApiKey: 'AIzaSyCfj7v8t-uZ7J60AcQxkrqzWDAEhZCGbLU',
+  googleMapsApiKey: 'AIzaSyDdAoHeCNbd81rqwMApCne-bB5qYVwCaqk',
   /**
    * Same as backend `FACEBOOK_APP_ID` (public Meta app id). If set, the OAuth
    * URL is built in the app when the connect API fails (e.g. missing server env).
@@ -53,6 +59,12 @@ export const config = {
    * Android native SDK requires this to initialize on startup.
    */
   facebookClientToken: '17658cbb4f5031595adeb84c3f084ab5',
+  /**
+   * Required for Facebook Login for Business (Meta app eatix-update).
+   * Meta → Facebook Login for Business → Configurations → Create configuration
+   * (permissions: public_profile + pages_show_list) → paste Configuration ID here.
+   */
+  facebookLoginConfigId: '1544203097136826',
   /**
    * Must match server `FACEBOOK_ENABLE_INSTAGRAM_LOGIN`. Set true when Meta OAuth works.
    */
@@ -66,11 +78,12 @@ export const config = {
   /** Same as backend `TIKTOK_CLIENT_KEY` — optional fallback to build TikTok login URL locally. */
   tiktokClientKey: '',
   /**
-   * Same as backend `GOOGLE_CLIENT_ID` (Web client). Optional fallback to build
-   * YouTube OAuth URL locally when `/social-auth/youtube/connect` fails.
+   * Google Sign-In Web client ID — read from android/app/google-services.json when present.
+   * Firebase project: eatix-17d2a (236298500212). If empty, finish Firebase setup below.
    */
-  googleClientId:
-    '366684605140-q98fauu8rmqjkdhs0turqgljtpsccve3.apps.googleusercontent.com',
+  googleClientId: resolveGoogleWebClientId() || EATIX_GOOGLE_WEB_CLIENT_ID,
+  firebaseProjectNumber: getFirebaseProjectNumber(),
+  googleServicesOAuthReady: googleServicesHasOAuthClients(),
 };
 
 /**

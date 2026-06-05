@@ -19,6 +19,10 @@ import {
   getRestaurantOrders,
   updateRestaurantOrderStatus,
 } from '../services/orderService';
+import {
+  getRestaurantBookings,
+  updateRestaurantBookingStatus,
+} from '../services/bookingService';
 import OrderListScreen from './OrderListScreen';
 
 /** Shown in tab bar only; pending orders use top-left "Live Order" control. */
@@ -64,6 +68,19 @@ function statusColor(status) {
   }
 }
 
+function formatBookingDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString([], {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function LiveOrdersScreen() {
   const navigation = useNavigation();
   const user = useSelector(s => s?.app?.user);
@@ -100,12 +117,17 @@ export default function LiveOrdersScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       try {
-        const scopeParam = orderScope === 'own' ? 'customer' : 'owner';
-        const res = await getRestaurantOrders(user.token, {
-          limit: 100,
-          scope: scopeParam,
-        });
-        const all = res?.orders || [];
+        const isBookingScope = orderScope === 'booking';
+        const res = isBookingScope
+          ? await getRestaurantBookings(user.token, {
+              limit: 100,
+              scope: 'owner',
+            })
+          : await getRestaurantOrders(user.token, {
+              limit: 100,
+              scope: 'owner',
+            });
+        const all = isBookingScope ? res?.bookings || [] : res?.orders || [];
         const filtered = all.filter(o => {
           const s = String(o?.status || '').toLowerCase();
           if (activeTab === 'Pending') {
@@ -193,6 +215,110 @@ export default function LiveOrdersScreen() {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const updateBooking = async (booking, status) => {
+    setUpdatingId(booking.id);
+    try {
+      await updateRestaurantBookingStatus(user.token, booking.id, status);
+      setOrders(prev =>
+        status === 'cancelled' || status === 'completed'
+          ? prev.filter(o => o.id !== booking.id)
+          : prev.map(o => (o.id === booking.id ? { ...o, status } : o)),
+      );
+      if (status === 'confirmed') setActiveTab('In Progress');
+      if (status === 'completed') setActiveTab('Complete');
+      if (status === 'cancelled') setActiveTab('Rejected');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to update booking');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const renderBookingCard = booking => {
+    const isUpdating = updatingId === booking.id;
+    const bookingStatus = String(booking.status || '').toLowerCase();
+    const isPending = bookingStatus === 'pending';
+    const isInProgress = bookingStatus === 'confirmed';
+    return (
+      <View key={booking.id} style={styles.orderCard}>
+        <View style={styles.cardHeader}>
+          <View style={styles.userInfo}>
+            <View style={styles.userIconBg}>
+              <Icon name="calendar-account-outline" size={20} color="#FDB022" />
+            </View>
+            <Text style={styles.userName} numberOfLines={1}>
+              {booking.customerName || booking.user?.name || 'Customer'}
+            </Text>
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: statusColor(booking.status) },
+              ]}
+            >
+              <Text style={styles.statusBadgeText}>
+                {statusToLabel(booking.status)}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.detailsContainer}>
+          <Text style={styles.detailLabel}>
+            Booking ID : <Text style={styles.detailValue}>#{booking.id}</Text>
+          </Text>
+          <Text style={styles.detailLabel}>
+            Date :{' '}
+            <Text style={styles.detailValue}>
+              {formatBookingDate(booking.bookingDate)}
+            </Text>
+          </Text>
+          <Text style={styles.detailLabel}>
+            Persons : <Text style={styles.detailValue}>{booking.persons}</Text>
+          </Text>
+          <Text style={styles.detailLabel}>
+            Phone : <Text style={styles.detailValue}>{booking.customerPhone}</Text>
+          </Text>
+          <Text style={styles.itemsText} numberOfLines={3}>
+            Address: {booking.customerAddress}
+          </Text>
+        </View>
+
+        <View style={styles.buttonRow}>
+          {isPending ? (
+            <>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectBtn]}
+                onPress={() => updateBooking(booking, 'cancelled')}
+                disabled={isUpdating}
+              >
+                <Text style={styles.btnText}>Reject</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptBtn]}
+                onPress={() => updateBooking(booking, 'confirmed')}
+                disabled={isUpdating}
+              >
+                {isUpdating ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.btnText}>Accept</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : isInProgress ? (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.completeBtn]}
+              onPress={() => updateBooking(booking, 'completed')}
+              disabled={isUpdating}
+            >
+              <Text style={styles.btnText}>Complete</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+    );
   };
 
   if (!user?.token) {
@@ -290,10 +416,30 @@ export default function LiveOrdersScreen() {
                 Own Orders
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.orderModePill,
+                orderScope === 'booking' && styles.orderModePillActive,
+              ]}
+              onPress={() => {
+                setOrderScope('booking');
+                setActiveTab('Pending');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.orderModeText,
+                  orderScope === 'booking' && styles.orderModeTextActive,
+                ]}
+              >
+                Booking
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
-        {orderScope === 'user' ? (
+        {orderScope === 'user' || orderScope === 'booking' ? (
           <View style={styles.tabBarRow}>
             {TAB_ITEMS.map(tab => (
               <TouchableOpacity
@@ -345,17 +491,28 @@ export default function LiveOrdersScreen() {
             <View style={styles.centered}>
               <Text style={styles.emptyText}>
                 {activeTab === 'Pending'
-                  ? 'No pending orders'
+                  ? orderScope === 'booking'
+                    ? 'No pending bookings'
+                    : 'No pending orders'
                   : activeTab === 'In Progress'
-                  ? 'No orders in progress'
+                  ? orderScope === 'booking'
+                    ? 'No accepted bookings'
+                    : 'No orders in progress'
                   : activeTab === 'Complete'
-                  ? 'No completed orders yet'
+                  ? orderScope === 'booking'
+                    ? 'No completed bookings yet'
+                    : 'No completed orders yet'
                   : activeTab === 'Rejected'
-                  ? 'No rejected orders'
+                  ? orderScope === 'booking'
+                    ? 'No rejected bookings'
+                    : 'No rejected orders'
                   : 'No orders in this tab'}
               </Text>
             </View>
           ) : (
+            orderScope === 'booking' ? (
+              orders.map(renderBookingCard)
+            ) : (
             orders.map(order => {
               const customerName =
                 orderScope === 'own'
@@ -490,6 +647,7 @@ export default function LiveOrdersScreen() {
                 </View>
               );
             })
+            )
           )}
         </ScrollView>
       )}

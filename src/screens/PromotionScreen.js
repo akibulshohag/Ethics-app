@@ -50,6 +50,7 @@ import {
   uploadProfilePhoto,
   uploadCoverImage,
   subscribeToChannel,
+  unsubscribeFromChannel,
   getGallery,
   uploadGallery,
   deleteGalleryPhoto,
@@ -59,6 +60,7 @@ import {
   getFacebookConnectUrl,
   getSocialAccounts,
   getTikTokConnectUrl,
+  connectYouTubeAccount,
   getYouTubeConnectUrl,
   getInstagramLinkStatus,
 } from '../services/channelService';
@@ -74,7 +76,12 @@ import {
 import { shortsService } from '../services/shortsService';
 import { getWatchLater } from '../services/playlistService';
 import { getNearbyPromotions } from '../services/promotionService';
-import { appSetUser } from '../redux/actions/appSlice';
+import {
+  persistBrowseLocation,
+  resolvePromoViewerCoords,
+  PROMO_NEARBY_RADIUS_KM,
+} from '../services/userLocationService';
+import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
 import { safeImageUri, isLocalMediaUri } from '../utils/helper';
 import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 import {
@@ -100,7 +107,16 @@ import GalleryVideoDetailModal from '../components/GalleryVideoDetailModal';
 import {
   abbrevCountryLabel,
   formatShortProfileLocationLine,
+  formatCityCountryPostcodeLine,
 } from '../utils/locationFormat';
+import MapLocationPicker from '../components/MapLocationPicker';
+import {
+  geocodeAddress,
+  getCurrentPositionSafe,
+  reverseGeocode,
+  getFallbackCoordsForUKArea,
+} from '../utils/geolocation';
+import { normalizeUkPostcode, extractUkPostcodeFromText } from '../utils/ukPostcode';
 
 const { width } = Dimensions.get('window');
 
@@ -162,10 +178,6 @@ const VideoSection = ({
   </View>
 );
 
-/** Same defaults as AllPromotionsScreen so home preview matches “see all” list. */
-const PROMO_UK_LAT = 51.5074;
-const PROMO_UK_LNG = -0.1278;
-const PROMO_RADIUS_KM = 500;
 const PROMO_FETCH_LIMIT = 80;
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -212,6 +224,18 @@ const formatTimeAgoTab = dateStr => {
   if (diffMonths > 0) return `${diffMonths}mo ago`;
   if (diffDays > 0) return `${diffDays}d ago`;
   return 'Recently';
+};
+
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
 };
 
 const mapPostToCardTab = (post, user) => {
@@ -327,9 +351,26 @@ const SOCIAL_TYPES = [
   { value: 'facebook', label: 'Facebook', icon: 'facebook' },
   { value: 'x', label: 'X (Twitter)', icon: 'twitter' },
   { value: 'youtube', label: 'YouTube', icon: 'youtube' },
+  { value: 'tiktok', label: 'TikTok', icon: 'music-note' },
   { value: 'google_email', label: 'Google / Email', icon: 'email-outline' },
   { value: 'website', label: 'Website', icon: 'web' },
 ];
+
+const getSavedSocialLinkUrl = (editSocialLinks, profile, currentUser, type) => {
+  const key = String(type || '').toLowerCase();
+  const fromEdit = (editSocialLinks || []).find(
+    l => String(l?.type || '').toLowerCase() === key,
+  )?.url;
+  if (String(fromEdit || '').trim()) return String(fromEdit).trim();
+  const raw = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
+  const links = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+    ? [raw]
+    : [];
+  const match = links.find(l => String(l?.type || '').toLowerCase() === key);
+  return String(match?.url || '').trim();
+};
 
 const PROMO_SOCIAL_ICON_MAP = {
   instagram: 'instagram',
@@ -384,6 +425,7 @@ const PromotionScreen = ({ onBack }) => {
   const route = useRoute();
   const dispatch = useDispatch();
   const currentUser = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
 
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -401,6 +443,10 @@ const PromotionScreen = ({ onBack }) => {
   const [editChannelAbout, setEditChannelAbout] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
+  const [editPostcode, setEditPostcode] = useState('');
+  const [editLatitude, setEditLatitude] = useState(null);
+  const [editLongitude, setEditLongitude] = useState(null);
+  const [locationMapVisible, setLocationMapVisible] = useState(false);
   const [editSocialLinks, setEditSocialLinks] = useState([]);
   const [facebookPages, setFacebookPages] = useState([]);
   const [facebookConnecting, setFacebookConnecting] = useState(false);
@@ -428,6 +474,8 @@ const PromotionScreen = ({ onBack }) => {
   const [galleryTabUploading, setGalleryTabUploading] = useState(false);
   const [notifTab, setNotifTab] = useState([]);
   const [notifTabLoading, setNotifTabLoading] = useState(false);
+  const [notificationsModalVisible, setNotificationsModalVisible] =
+    useState(false);
   const [commentsModalPostId, setCommentsModalPostId] = useState(null);
   const [commentsModalGalleryPhotoId, setCommentsModalGalleryPhotoId] =
     useState(null);
@@ -489,6 +537,10 @@ const PromotionScreen = ({ onBack }) => {
     'User';
   const rawAddressLine =
     profile?.address || (isOwnProfile ? currentUser?.address : '') || '';
+  const profilePostcode =
+    profile?.postcode ||
+    (isOwnProfile ? currentUser?.postcode : '') ||
+    '';
   const cityField =
     (profile?.city && String(profile.city).trim()) ||
     (profile?.town && String(profile.town).trim()) ||
@@ -500,7 +552,13 @@ const PromotionScreen = ({ onBack }) => {
       : '') ||
     '';
   let displayLocation = '';
-  if (cityField && countryField) {
+  const compactLocation = formatCityCountryPostcodeLine({
+    address: rawAddressLine,
+    postcode: profilePostcode,
+  });
+  if (compactLocation && compactLocation !== 'Set your area') {
+    displayLocation = compactLocation;
+  } else if (cityField && countryField) {
     displayLocation = `${cityField}, ${abbrevCountryLabel(countryField)}`;
   } else {
     displayLocation =
@@ -591,8 +649,8 @@ const PromotionScreen = ({ onBack }) => {
     setMyVideosLoading(true);
     try {
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(userId, 1, 100),
-        shortsService.getUserShorts(userId, 1, 100),
+        getUserVideos(userId, 1, 100, currentUser?.id),
+        shortsService.getUserShorts(userId, 1, 100, currentUser?.id),
       ]);
       const videos = (vRes?.videos ?? []).map(v => ({
         ...v,
@@ -667,23 +725,19 @@ const PromotionScreen = ({ onBack }) => {
   }, [myVideos]);
 
   const loadNearbyPromotions = useCallback(async () => {
-    const lat = Number(
-      currentUser?.latitude ?? profile?.latitude ?? PROMO_UK_LAT,
-    );
-    const lng = Number(
-      currentUser?.longitude ?? profile?.longitude ?? PROMO_UK_LNG,
-    );
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    const viewerCoords = resolvePromoViewerCoords(browseLocation, currentUser);
+    if (!viewerCoords) {
       setNearbyPromotions([]);
       return;
     }
+    const { lat, lng } = viewerCoords;
     setPromotionsLoading(true);
     try {
       const [ownerRes, vendorRes] = await Promise.all([
         getNearbyPromotions(
           lat,
           lng,
-          PROMO_RADIUS_KM,
+          PROMO_NEARBY_RADIUS_KM,
           1,
           PROMO_FETCH_LIMIT,
           'owner',
@@ -691,7 +745,7 @@ const PromotionScreen = ({ onBack }) => {
         getNearbyPromotions(
           lat,
           lng,
-          PROMO_RADIUS_KM,
+          PROMO_NEARBY_RADIUS_KM,
           1,
           PROMO_FETCH_LIMIT,
           'vendor',
@@ -710,23 +764,11 @@ const PromotionScreen = ({ onBack }) => {
     } finally {
       setPromotionsLoading(false);
     }
-  }, [
-    currentUser?.latitude,
-    currentUser?.longitude,
-    profile?.latitude,
-    profile?.longitude,
-  ]);
+  }, [browseLocation, currentUser]);
 
-  /** Up to 4 promos in a 2×2 grid; 3 items → 2 top + 1 bottom. Empty → 4 Browse tiles. */
+  /** Up to 4 promos in a 2×2 grid preview. */
   const promotionPreviewSlots = useMemo(() => {
     const list = nearbyPromotions || [];
-    if (list.length === 0) {
-      return [0, 1, 2, 3].map(i => ({
-        kind: 'more',
-        id: `more-${i}`,
-        index: i,
-      }));
-    }
     return list.slice(0, 4).map((p, i) => ({
       kind: 'promo',
       promotion: p,
@@ -758,7 +800,7 @@ const PromotionScreen = ({ onBack }) => {
     try {
       const [postRes, shortRes] = await Promise.all([
         getPostsByUser(userId, 1, 50, currentUser?.id),
-        shortsService.getUserShorts(userId, 1, 50),
+        shortsService.getUserShorts(userId, 1, 50, currentUser?.id),
       ]);
       const raw = postRes?.posts || [];
       const postCards = raw.map(p => mapPostToCardTab(p, p.user));
@@ -906,6 +948,7 @@ const PromotionScreen = ({ onBack }) => {
           p?.thumbnailUrl || p?.mediaUrl,
           'https://via.placeholder.com/600',
         ),
+        isScheduled: isFutureScheduledMedia(p),
         createdAt:
           new Date(p?.publishedAt || p?.createdAt || 0).getTime() || Date.now(),
       };
@@ -925,6 +968,7 @@ const PromotionScreen = ({ onBack }) => {
       ),
       type: v?.type || v?._type || v?.contentType || '',
       isShort: v?.type === 'short' || Boolean(v?.isShort),
+      isScheduled: isFutureScheduledMedia(v),
       createdAt:
         new Date(v?.publishedAt || v?.createdAt || 0).getTime() || Date.now(),
     }));
@@ -947,10 +991,10 @@ const PromotionScreen = ({ onBack }) => {
       isDisliked: g.isDisliked ?? false,
     }));
 
-    return [...postItems, ...videoItems, ...galleryItems].sort(
-      (a, b) => b.createdAt - a.createdAt,
-    );
-  }, [postsTabRaw, myVideos, galleryTab]);
+    return [...postItems, ...videoItems, ...galleryItems]
+      .filter(item => isOwnProfile || !item.isScheduled)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [postsTabRaw, myVideos, galleryTab, isOwnProfile]);
 
   /**
    * Video tab / library row: full video → HomeOne detail; short → ShortsVideoScreen.
@@ -1913,6 +1957,9 @@ const PromotionScreen = ({ onBack }) => {
     );
     setEditPhone(currentUser?.phone ?? profile?.phone ?? '');
     setEditAddress(profile?.address ?? currentUser?.address ?? '');
+    setEditPostcode(profile?.postcode ?? currentUser?.postcode ?? '');
+    setEditLatitude(profile?.latitude ?? currentUser?.latitude ?? null);
+    setEditLongitude(profile?.longitude ?? currentUser?.longitude ?? null);
     setEditSocialLinks(
       SOCIAL_TYPES.map(t => ({ type: t.value, url: linkMap[t.value] || '' })),
     );
@@ -1947,18 +1994,75 @@ const PromotionScreen = ({ onBack }) => {
     }
   }, [userId]);
 
-  const loadInstagramLinkStatus = useCallback(async () => {
+  const loadInstagramLinkStatus = useCallback(async (sync = true) => {
     if (!userId) return;
     setInstagramChecking(true);
     try {
-      const res = await getInstagramLinkStatus(userId);
+      const res = await getInstagramLinkStatus(userId, sync);
       setInstagramLinkStatus(res);
+      return res;
     } catch {
       setInstagramLinkStatus(null);
+      return null;
     } finally {
       setInstagramChecking(false);
     }
   }, [userId]);
+
+  const handleVerifyInstagram = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || userId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('Instagram', 'Sign in to connect Instagram.');
+      return;
+    }
+    const hasFbPages = (facebookPages || []).length > 0;
+    if (!hasFbPages) {
+      setInstagramChecking(true);
+      try {
+        const res = await getFacebookConnectUrl(connectUserId, {
+          forInstagram: true,
+        });
+        const url = String(res?.url || '').trim();
+        if (!url) {
+          Alert.alert('Instagram', 'Could not get connect link.');
+          return;
+        }
+        setFacebookConnectUrl(url);
+        await Linking.openURL(url);
+        Alert.alert(
+          'Instagram',
+          'Sign in with Facebook and choose the Page linked to your Instagram Business account. When finished, return here and tap Check Instagram link.',
+        );
+      } catch (e) {
+        Alert.alert(
+          'Instagram',
+          e?.message ||
+            'Could not start Instagram connect. Check FACEBOOK_APP_ID on the server.',
+        );
+      } finally {
+        setInstagramChecking(false);
+      }
+      return;
+    }
+    const res = await loadInstagramLinkStatus(true);
+    const linked = (res?.pages || []).some(row => row.instagramLinked);
+    const stored = (res?.instagramAccounts || []).length > 0;
+    if (linked || stored) {
+      await loadFacebookPages();
+      Alert.alert('Instagram', 'Instagram connected successfully.');
+      return;
+    }
+    Alert.alert(
+      'Instagram',
+      'No Instagram Business account linked to your Facebook Page yet. Link them in Meta Business Suite, then tap Check Instagram link again.',
+    );
+  }, [
+    userId,
+    currentUser?.id,
+    facebookPages,
+    loadInstagramLinkStatus,
+    loadFacebookPages,
+  ]);
 
   const handleVerifyFacebook = useCallback(async () => {
     const connectUserId = String(currentUser?.id || userId || '').trim();
@@ -2048,19 +2152,38 @@ const PromotionScreen = ({ onBack }) => {
     }
     setYoutubeConnecting(true);
     try {
-      const res = await getYouTubeConnectUrl(connectUserId);
+      await connectYouTubeAccount(connectUserId);
+      await loadFacebookPages();
+      Alert.alert('YouTube', 'YouTube channel connected successfully.');
+    } catch (e) {
+      Alert.alert(
+        'YouTube',
+        e?.message ||
+          'Could not connect YouTube. Add your Gmail as a Google OAuth test user, or use the browser link below.',
+      );
+    } finally {
+      setYoutubeConnecting(false);
+    }
+  }, [userId, currentUser?.id, loadFacebookPages]);
+
+  const handleOpenYoutubeBrowserLink = useCallback(async () => {
+    const connectUserId = String(currentUser?.id || userId || '').trim();
+    if (!connectUserId) {
+      Alert.alert('YouTube', 'Sign in to verify YouTube.');
+      return;
+    }
+    setYoutubeConnecting(true);
+    try {
+      const res = await getYouTubeConnectUrl(connectUserId, 'verify');
       const url = String(res?.url || '').trim();
       if (!url) {
         Alert.alert('YouTube', 'Could not get connect link.');
         return;
       }
       setYoutubeConnectUrl(url);
+      await Linking.openURL(url);
     } catch (e) {
-      Alert.alert(
-        'YouTube',
-        e?.message ||
-          'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server (and googleClientId in config.js as fallback). Add the redirect URI in Google Cloud → OAuth client.',
-      );
+      Alert.alert('YouTube', e?.message || 'Could not open YouTube connect link.');
     } finally {
       setYoutubeConnecting(false);
     }
@@ -2080,6 +2203,32 @@ const PromotionScreen = ({ onBack }) => {
     );
   }, []);
 
+  const showFacebookVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(editSocialLinks, profile, currentUser, 'facebook'),
+    [editSocialLinks, profile, currentUser],
+  );
+  const showInstagramVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(
+        editSocialLinks,
+        profile,
+        currentUser,
+        'instagram',
+      ) || showFacebookVerify,
+    [editSocialLinks, profile, currentUser, showFacebookVerify],
+  );
+  const showTiktokVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(editSocialLinks, profile, currentUser, 'tiktok'),
+    [editSocialLinks, profile, currentUser],
+  );
+  const showYoutubeVerify = useMemo(
+    () =>
+      !!getSavedSocialLinkUrl(editSocialLinks, profile, currentUser, 'youtube'),
+    [editSocialLinks, profile, currentUser],
+  );
+
   const saveProfile = async () => {
     if (!isOwnProfile) return;
     if (!userId) return;
@@ -2092,12 +2241,54 @@ const PromotionScreen = ({ onBack }) => {
         }))
         .filter(l => l.url);
       const nameValue = editName.trim() || undefined;
+      const addressStr = editAddress.trim() || undefined;
+      let postcodeStr = editPostcode.trim()
+        ? normalizeUkPostcode(editPostcode)
+        : undefined;
+      if (!postcodeStr && addressStr) {
+        postcodeStr = extractUkPostcodeFromText(addressStr) || undefined;
+      }
+      let latitude = undefined;
+      let longitude = undefined;
+      if (
+        editLatitude != null &&
+        editLongitude != null &&
+        Number.isFinite(editLatitude) &&
+        Number.isFinite(editLongitude)
+      ) {
+        latitude = editLatitude;
+        longitude = editLongitude;
+      } else if (addressStr) {
+        let coords = await geocodeAddress(addressStr);
+        if (!coords && addressStr) {
+          coords = await geocodeAddress(`${addressStr}, United Kingdom`);
+        }
+        if (
+          !coords ||
+          !Number.isFinite(coords.lat) ||
+          !Number.isFinite(coords.lng)
+        ) {
+          const fallback = getFallbackCoordsForUKArea(addressStr);
+          if (fallback) coords = fallback;
+        }
+        if (
+          coords &&
+          Number.isFinite(coords.lat) &&
+          Number.isFinite(coords.lng)
+        ) {
+          latitude = coords.lat;
+          longitude = coords.lng;
+        }
+      }
       await updateChannelProfile(userId, {
         name: nameValue,
         nickname: nameValue,
         channelAbout: editChannelAbout.trim() || undefined,
         phone: editPhone.trim() || undefined,
-        address: editAddress.trim() || undefined,
+        address: addressStr,
+        postcode: postcodeStr,
+        ...(latitude != null && { latitude }),
+        ...(longitude != null && { longitude }),
         socialLinks: socialLinks.length ? socialLinks : undefined,
       });
       await loadProfile();
@@ -2108,12 +2299,43 @@ const PromotionScreen = ({ onBack }) => {
           nickname: nameValue || currentUser.nickname,
           channelAbout: editChannelAbout.trim() || currentUser.channelAbout,
           phone: editPhone.trim() || currentUser.phone,
-          address: editAddress.trim() || currentUser.address,
+          address: addressStr || currentUser.address,
+          postcode: postcodeStr || currentUser.postcode,
+          ...(latitude != null && { latitude }),
+          ...(longitude != null && { longitude }),
           socialLinks: socialLinks.length
             ? socialLinks
             : currentUser.socialLinks,
         }),
       );
+      if (
+        latitude != null &&
+        longitude != null &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude)
+      ) {
+        const areaLabel = formatCityCountryPostcodeLine({
+          address: addressStr,
+          postcode: postcodeStr,
+        });
+        dispatch(
+          setBrowseLocation({
+            lat: latitude,
+            lng: longitude,
+            postcode: postcodeStr || '',
+            addressText: addressStr || '',
+            areaLabel,
+          }),
+        );
+        persistBrowseLocation({
+          userId,
+          lat: latitude,
+          lng: longitude,
+          postcode: postcodeStr || '',
+          addressText: addressStr || '',
+          areaLabel,
+        }).catch(() => {});
+      }
       setEditProfileVisible(false);
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to update profile');
@@ -2270,13 +2492,68 @@ const PromotionScreen = ({ onBack }) => {
   const profileForCard = useMemo(
     () => ({
       ...profile,
+      postcode:
+        profile?.postcode ||
+        (isOwnProfile ? currentUser?.postcode : '') ||
+        '',
+      address:
+        profile?.address ||
+        (isOwnProfile ? currentUser?.address : '') ||
+        '',
       channelAbout: promoCtaMessage,
       messageCount: isOwnProfile
         ? inboxConversationCount
         : profile?.messageCount ?? 0,
     }),
-    [profile, promoCtaMessage, isOwnProfile, inboxConversationCount],
+    [
+      profile,
+      promoCtaMessage,
+      isOwnProfile,
+      inboxConversationCount,
+      currentUser?.postcode,
+      currentUser?.address,
+    ],
   );
+
+  const handleNotificationBellPress = useCallback(() => {
+    if (!currentUser?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
+    if (isOwnProfile) {
+      setNotificationsModalVisible(true);
+      loadNotifTab();
+    }
+  }, [currentUser?.id, isOwnProfile, navigation, loadNotifTab]);
+
+  const renderPromoNotificationRow = useCallback((n, idx) => (
+    <View key={n.id || `n-${idx}`} style={styles.promoNotifRow}>
+      <Icon
+        name={
+          n.type === 'order'
+            ? 'cart'
+            : n.type === 'restaurant_booking'
+            ? 'calendar-account'
+            : n.type === 'content'
+            ? 'video'
+            : 'bell'
+        }
+        size={22}
+        color="#666"
+        style={styles.promoNotifIcon}
+      />
+      <View style={styles.promoNotifBody}>
+        <Text style={styles.promoNotifMsg} numberOfLines={2}>
+          {n.message}
+        </Text>
+        <Text style={styles.promoNotifMeta}>
+          {n.type || 'general'} •{' '}
+          {n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ''}
+        </Text>
+      </View>
+      {n.status === 'unread' ? <View style={styles.promoNotifDot} /> : null}
+    </View>
+  ), []);
 
   const handleProfileMessagePress = useCallback(() => {
     if (!currentUser?.id) {
@@ -2315,32 +2592,38 @@ const PromotionScreen = ({ onBack }) => {
   ]);
 
   const handlePromotionSubscribe = useCallback(async () => {
-    if (!currentUser?.id || !userId || isOwnProfile) return;
-    if (profile?.isSubscribed) return;
+    if (!currentUser?.id || !userId || isOwnProfile || !profile) return;
     setProfileSubscribeLoading(true);
     try {
-      await subscribeToChannel(currentUser.id, userId);
-      setProfile(prev =>
-        prev
-          ? {
-              ...prev,
-              isSubscribed: true,
-              subscriberCount: (prev.subscriberCount ?? 0) + 1,
-            }
-          : prev,
-      );
+      if (profile.isSubscribed) {
+        await unsubscribeFromChannel(currentUser.id, userId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: false,
+                subscriberCount: Math.max(0, (prev.subscriberCount ?? 0) - 1),
+              }
+            : prev,
+        );
+      } else {
+        await subscribeToChannel(currentUser.id, userId);
+        setProfile(prev =>
+          prev
+            ? {
+                ...prev,
+                isSubscribed: true,
+                subscriberCount: (prev.subscriberCount ?? 0) + 1,
+              }
+            : prev,
+        );
+      }
     } catch (_) {
       loadProfile();
     } finally {
       setProfileSubscribeLoading(false);
     }
-  }, [
-    currentUser?.id,
-    userId,
-    isOwnProfile,
-    profile?.isSubscribed,
-    loadProfile,
-  ]);
+  }, [currentUser?.id, userId, isOwnProfile, profile, loadProfile]);
 
   if (!currentUser?.id) {
     return (
@@ -2392,7 +2675,7 @@ const PromotionScreen = ({ onBack }) => {
           />
           <TouchableOpacity
             style={styles.promoHeaderBell}
-            onPress={handleProfileMessagePress}
+            onPress={handleNotificationBellPress}
             activeOpacity={0.8}
           >
             <Icon name="bell-outline" size={24} color="#1F2937" />
@@ -2416,13 +2699,6 @@ const PromotionScreen = ({ onBack }) => {
           showSubscribe={!isOwnProfile}
           onSubscribe={
             !isOwnProfile ? handlePromotionSubscribe : undefined
-          }
-          ctaText={
-            !isOwnProfile && profile?.isSubscribed ? 'Subscribed' : undefined
-          }
-          ctaDisabled={
-            !isOwnProfile &&
-            (profileSubscribeLoading || !!profile?.isSubscribed)
           }
           subscribeLoading={profileSubscribeLoading}
           onMessagePress={handleProfileMessagePress}
@@ -2653,6 +2929,20 @@ const PromotionScreen = ({ onBack }) => {
                                 <Icon name="play" size={14} color="#fff" />
                               </View>
                             ) : null}
+                            {isOwnProfile && item.isScheduled ? (
+                              <View style={styles.promoGalleryScheduledBadge}>
+                                <Icon
+                                  name="clock-outline"
+                                  size={11}
+                                  color="#fff"
+                                />
+                                <Text
+                                  style={styles.promoGalleryScheduledBadgeText}
+                                >
+                                  Scheduled
+                                </Text>
+                              </View>
+                            ) : null}
                           </TouchableOpacity>
                         ))}
                       </View>
@@ -2816,36 +3106,7 @@ const PromotionScreen = ({ onBack }) => {
                     No notifications yet.
                   </Text>
                 ) : (
-                  notifTab.map((n, idx) => (
-                    <View key={n.id || `n-${idx}`} style={styles.promoNotifRow}>
-                      <Icon
-                        name={
-                          n.type === 'order'
-                            ? 'cart'
-                            : n.type === 'content'
-                            ? 'video'
-                            : 'bell'
-                        }
-                        size={22}
-                        color="#666"
-                        style={styles.promoNotifIcon}
-                      />
-                      <View style={styles.promoNotifBody}>
-                        <Text style={styles.promoNotifMsg} numberOfLines={2}>
-                          {n.message}
-                        </Text>
-                        <Text style={styles.promoNotifMeta}>
-                          {n.type || 'general'} •{' '}
-                          {n.createdAt
-                            ? new Date(n.createdAt).toLocaleDateString()
-                            : ''}
-                        </Text>
-                      </View>
-                      {n.status === 'unread' ? (
-                        <View style={styles.promoNotifDot} />
-                      ) : null}
-                    </View>
-                  ))
+                  notifTab.map((n, idx) => renderPromoNotificationRow(n, idx))
                 )}
               </>
             ) : null}
@@ -2886,47 +3147,32 @@ const PromotionScreen = ({ onBack }) => {
                 </View>
               ))}
             </View>
+          ) : nearbyPromotions.length === 0 ? (
+            <View style={styles.promoPreviewEmpty}>
+              <Text style={styles.promoPreviewEmptyText}>No Promotions Here</Text>
+            </View>
           ) : (
             <View style={styles.promoPreviewRow}>
               {promotionPreviewSlots.map(slot => {
                 const bg =
                   PROMO_PREVIEW_BG[slot.index % PROMO_PREVIEW_BG.length];
-                if (slot.kind === 'promo') {
-                  const p = slot.promotion;
-                  return (
-                    <TouchableOpacity
-                      key={p.id}
-                      style={[
-                        styles.promoPreviewCard,
-                        { backgroundColor: bg, width: PROMO_PREVIEW_CARD_W },
-                      ]}
-                      activeOpacity={0.85}
-                      onPress={() =>
-                        navigation.navigate('PromotionFullDetail', {
-                          promotion: p,
-                        })
-                      }
-                    >
-                      <Text style={styles.promoPreviewTitle} numberOfLines={2}>
-                        {p.user?.nickname || p.user?.name || p.title || 'Offer'}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }
+                const p = slot.promotion;
                 return (
                   <TouchableOpacity
-                    key={slot.id}
+                    key={p.id}
                     style={[
                       styles.promoPreviewCard,
-                      styles.promoPreviewMore,
-                      { borderColor: bg, width: PROMO_PREVIEW_CARD_W },
+                      { backgroundColor: bg, width: PROMO_PREVIEW_CARD_W },
                     ]}
                     activeOpacity={0.85}
-                    onPress={() => navigation.navigate('AllPromotions')}
+                    onPress={() =>
+                      navigation.navigate('PromotionFullDetail', {
+                        promotion: p,
+                      })
+                    }
                   >
-                    <Icon name="storefront-outline" size={22} color={bg} />
-                    <Text style={[styles.promoPreviewMoreText, { color: bg }]}>
-                      {nearbyPromotions.length === 0 ? 'Browse' : 'See all'}
+                    <Text style={styles.promoPreviewTitle} numberOfLines={2}>
+                      {p.user?.nickname || p.user?.name || p.title || 'Offer'}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -2964,6 +3210,57 @@ const PromotionScreen = ({ onBack }) => {
           <Icon name="chevron-down" size={45} color="#333" />
         </View> */}
       </ScrollView>
+
+      <Modal
+        visible={notificationsModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setNotificationsModalVisible(false)}
+      >
+        <View style={styles.editModalOverlay}>
+          <TouchableOpacity
+            style={styles.editModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setNotificationsModalVisible(false)}
+          />
+          <View style={styles.notificationsModalBox}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Notifications</Text>
+              <TouchableOpacity
+                onPress={() => setNotificationsModalVisible(false)}
+              >
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            {notifTabLoading && notifTab.length === 0 ? (
+              <View style={styles.notificationsModalLoading}>
+                <ActivityIndicator size="small" color="#FF7F0B" />
+                <Text style={styles.notificationsModalLoadingText}>
+                  Loading notifications...
+                </Text>
+              </View>
+            ) : notifTab.length === 0 ? (
+              <Text style={styles.notificationsModalEmpty}>
+                No notifications yet.
+              </Text>
+            ) : (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={notifTabLoading}
+                    onRefresh={loadNotifTab}
+                    colors={['#FF7F0B']}
+                    tintColor="#FF7F0B"
+                  />
+                }
+              >
+                {notifTab.map((n, idx) => renderPromoNotificationRow(n, idx))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <CommentsModal
         visible={!!commentsModalPostId}
@@ -3738,14 +4035,86 @@ const PromotionScreen = ({ onBack }) => {
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
               />
-              <Text style={styles.editLabel}>Address</Text>
+              <Text style={styles.editLabel}>UK Postcode</Text>
               <TextInput
                 style={styles.editInput}
+                value={editPostcode}
+                onChangeText={setEditPostcode}
+                placeholder="e.g. SW1A 1AA"
+                placeholderTextColor="#999"
+                autoCapitalize="characters"
+              />
+              <Text style={styles.editLabel}>Address</Text>
+              <TextInput
+                style={[styles.editInput, styles.editAddressInput]}
                 value={editAddress}
-                onChangeText={setEditAddress}
-                placeholder="Address / Location"
+                onChangeText={v => {
+                  setEditAddress(v);
+                  setEditLatitude(null);
+                  setEditLongitude(null);
+                }}
+                placeholder="Street, city, postcode"
                 placeholderTextColor="#999"
               />
+              {editAddress.trim() ? (
+                <Text style={styles.editLocationPreview}>
+                  {formatCityCountryPostcodeLine({
+                    address: editAddress,
+                    postcode: editPostcode,
+                  })}
+                </Text>
+              ) : null}
+              <View style={styles.editAddressActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.editAddressActionBtn,
+                    styles.editAddressActionBtnFirst,
+                  ]}
+                  onPress={() => setLocationMapVisible(true)}
+                  accessibilityLabel="Pick on map"
+                >
+                  <Icon name="map" size={20} color="#fff" />
+                  <Text style={styles.editAddressActionText} numberOfLines={1}>
+                    Pick on map
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editAddressActionBtn}
+                  accessibilityLabel="Use my location"
+                  onPress={() => {
+                    getCurrentPositionSafe(
+                      async position => {
+                        const lat = position?.coords?.latitude;
+                        const lng = position?.coords?.longitude;
+                        if (
+                          lat == null ||
+                          lng == null ||
+                          !Number.isFinite(lat) ||
+                          !Number.isFinite(lng)
+                        ) {
+                          return;
+                        }
+                        const addr = await reverseGeocode(lat, lng);
+                        setEditAddress(
+                          addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                        );
+                        setEditLatitude(lat);
+                        setEditLongitude(lng);
+                      },
+                      () =>
+                        Alert.alert(
+                          'Location',
+                          'Could not get your location. Check permissions or enter address manually.',
+                        ),
+                    );
+                  }}
+                >
+                  <Icon name="crosshairs-gps" size={20} color="#fff" />
+                  <Text style={styles.editAddressActionText} numberOfLines={1}>
+                    Use my location
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Social links
               </Text>
@@ -3782,6 +4151,8 @@ const PromotionScreen = ({ onBack }) => {
                   </View>
                 ))}
               </View>
+              {showFacebookVerify ? (
+                <>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Facebook page verification
               </Text>
@@ -3867,23 +4238,40 @@ const PromotionScreen = ({ onBack }) => {
                   </Text>
                 )}
               </View>
+                </>
+              ) : null}
+              {showInstagramVerify ? (
+                <>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Instagram (via Facebook Page)
               </Text>
               <Text style={styles.facebookMetaHint}>
-                In Meta Business Suite, link an Instagram Business account to your Facebook
-                Page. Use Verify Facebook above (includes Instagram permissions); we save
-                the IG connection for auto-post when available.
+                Instagram connects through your Facebook Page (Meta requirement). Tap
+                Verify Instagram to sign in — Facebook Page connection is not required
+                first. Link Instagram Business to your Page in Meta Business Suite if
+                needed.
               </Text>
               <View style={styles.facebookCard}>
                 <View style={styles.facebookActionsRow}>
                   <TouchableOpacity
                     style={styles.facebookActionBtn}
-                    onPress={loadInstagramLinkStatus}
+                    onPress={handleVerifyInstagram}
                     disabled={instagramChecking}
                   >
                     <Text style={styles.facebookActionBtnText}>
-                      {instagramChecking ? 'Checking...' : 'Check Instagram link'}
+                      {instagramChecking ? 'Loading...' : 'Verify Instagram'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.facebookActionBtn,
+                      styles.facebookRefreshBtn,
+                    ]}
+                    onPress={() => loadInstagramLinkStatus(true)}
+                    disabled={instagramChecking}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      Check Instagram link
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -3907,7 +4295,7 @@ const PromotionScreen = ({ onBack }) => {
                   </View>
                 ) : (
                   <Text style={styles.facebookHelpText}>
-                    Connect Facebook pages first, then tap Check Instagram link.
+                    Tap Verify Instagram to connect — no Facebook verify step needed first.
                   </Text>
                 )}
                 {instagramLinkStatus?.instagramAccounts?.length > 0 ? (
@@ -3919,6 +4307,10 @@ const PromotionScreen = ({ onBack }) => {
                   </Text>
                 ) : null}
               </View>
+                </>
+              ) : null}
+              {showTiktokVerify ? (
+                <>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 TikTok verification
               </Text>
@@ -4003,13 +4395,18 @@ const PromotionScreen = ({ onBack }) => {
                   </Text>
                 )}
               </View>
+                </>
+              ) : null}
+              {showYoutubeVerify ? (
+                <>
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 YouTube verification
               </Text>
               <Text style={styles.facebookMetaHint}>
-                Google Cloud Console → enable YouTube Data API v3 → OAuth Web client →
-                Authorized redirect URIs (exact match). Scopes: youtube.readonly,
-                youtube.upload. See ethics-backend/docs/YOUTUBE_SETUP.md on the server.
+                Verify uses Google Sign-In with youtube.readonly only. If Google shows
+                "Access blocked", add the user Gmail under Google Cloud Console → OAuth
+                consent screen → Test users (app is in Testing mode). Redirect URI for
+                browser fallback:
               </Text>
               <View style={styles.facebookRedirectRow}>
                 <Text selectable style={styles.facebookRedirectUriText}>
@@ -4031,6 +4428,18 @@ const PromotionScreen = ({ onBack }) => {
                   >
                     <Text style={styles.facebookActionBtnText}>
                       {youtubeConnecting ? 'Loading...' : 'Verify YouTube'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.facebookActionBtn,
+                      styles.facebookRefreshBtn,
+                    ]}
+                    onPress={handleOpenYoutubeBrowserLink}
+                    disabled={youtubeConnecting}
+                  >
+                    <Text style={styles.facebookActionBtnText}>
+                      Browser link
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -4088,6 +4497,8 @@ const PromotionScreen = ({ onBack }) => {
                   </Text>
                 )}
               </View>
+                </>
+              ) : null}
             </ScrollView>
             <TouchableOpacity
               style={[
@@ -4104,6 +4515,22 @@ const PromotionScreen = ({ onBack }) => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <MapLocationPicker
+        visible={locationMapVisible}
+        onClose={() => setLocationMapVisible(false)}
+        title="Your location"
+        initialLat={editLatitude}
+        initialLng={editLongitude}
+        initialPostcode={editPostcode}
+        initialAddress={editAddress}
+        onConfirm={browse => {
+          setEditLatitude(browse.lat);
+          setEditLongitude(browse.lng);
+          setEditPostcode(browse.postcode || editPostcode);
+          setEditAddress(browse.addressText || browse.areaLabel || editAddress);
+          setLocationMapVisible(false);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -4483,6 +4910,14 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'center',
   },
+  promoPreviewEmpty: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  promoPreviewEmptyText: {
+    color: '#888',
+    fontSize: 13,
+  },
 
   bottomArrowContainer: {
     alignItems: 'center',
@@ -4557,6 +4992,36 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   editInputMultiline: { minHeight: 80, textAlignVertical: 'top' },
+  editAddressInput: { marginBottom: 10 },
+  editLocationPreview: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  editAddressActions: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 4,
+  },
+  editAddressActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  editAddressActionBtnFirst: { marginRight: 8 },
+  editAddressActionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+    flexShrink: 1,
+  },
   editSaveBtn: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -4931,6 +5396,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF7F0B',
     marginLeft: 8,
   },
+  notificationsModalBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '75%',
+    paddingBottom: 16,
+  },
+  notificationsModalLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 8,
+  },
+  notificationsModalLoadingText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  notificationsModalEmpty: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#888',
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
   promoGalleryPreviewBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -5020,7 +5509,7 @@ const styles = StyleSheet.create({
   },
   promoVisitorVideoBadge: {
     position: 'absolute',
-    top: 6,
+    bottom: 6,
     right: 6,
     width: 22,
     height: 22,
@@ -5028,6 +5517,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.52)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  promoGalleryScheduledBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FF7F0B',
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  promoGalleryScheduledBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   promoIgPreviewMeta: {
     position: 'absolute',

@@ -15,34 +15,45 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { getNearbyPromotions } from '../services/promotionService';
+import {
+  resolvePromoViewerCoords,
+  PROMO_NEARBY_RADIUS_KM,
+} from '../services/userLocationService';
 import { safeImageUri } from '../utils/helper';
 
-const UK_DEFAULT_LAT = 51.5074;
-const UK_DEFAULT_LNG = -0.1278;
 const DEFAULT_THUMB =
   'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
 
 const AllPromotionsScreen = () => {
   const navigation = useNavigation();
   const currentUser = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const lat = currentUser?.latitude ?? UK_DEFAULT_LAT;
-  const lng = currentUser?.longitude ?? UK_DEFAULT_LNG;
-
   const loadPromotions = useCallback(async () => {
+    const viewerCoords = resolvePromoViewerCoords(browseLocation, currentUser);
     setLoading(true);
     try {
-      const res = await getNearbyPromotions(lat, lng, 500, 1, 100);
+      if (!viewerCoords) {
+        setPromotions([]);
+        return;
+      }
+      const res = await getNearbyPromotions(
+        viewerCoords.lat,
+        viewerCoords.lng,
+        PROMO_NEARBY_RADIUS_KM,
+        1,
+        100,
+      );
       setPromotions(res?.promotions ?? []);
     } catch (e) {
       setPromotions([]);
     } finally {
       setLoading(false);
     }
-  }, [lat, lng]);
+  }, [browseLocation, currentUser]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

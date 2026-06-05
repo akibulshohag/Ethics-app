@@ -57,6 +57,48 @@ export const getChannelOrderReviews = async (
 };
 
 /**
+ * Logged-in customers within the owner's delivery radius (owner only).
+ * GET /users/:ownerId/delivery-area-users?page=&limit=
+ */
+export const getDeliveryAreaUsers = async (ownerId, page = 1, limit = 50) => {
+  try {
+    const response = await axios.get(
+      `${API_URL}/${ownerId}/delivery-area-users`,
+      {
+        params: { page, limit },
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    const status = error?.response?.status;
+    const rawMsg = error?.response?.data?.message ?? error?.message;
+    const message = Array.isArray(rawMsg)
+      ? rawMsg.join(', ')
+      : String(rawMsg || '').trim();
+    if (status === 404 || status === 501) {
+      return {
+        items: [],
+        total: 0,
+        radiusKm: null,
+        message:
+          message ||
+          'Delivery area users is not available yet. Deploy the latest backend.',
+      };
+    }
+    if (status === 403) {
+      return {
+        items: [],
+        total: 0,
+        radiusKm: null,
+        message: message || 'You can only view area users on your own profile.',
+      };
+    }
+    throw new Error(message || 'Could not load delivery area users');
+  }
+};
+
+/**
  * List followers (subscribers) for a given channel/user.
  * GET /users/:channelUserId/followers?currentUserId=&page=&limit=
  */
@@ -175,24 +217,24 @@ const FB_OAUTH_SCOPES_CORE =
 const FB_OAUTH_SCOPES_INSTAGRAM_DEFAULT =
   'instagram_basic,instagram_content_publish';
 
-const getFacebookOAuthScopesString = () => {
-  if (config.facebookIncludeInstagramScopes !== true) {
-    return FB_OAUTH_SCOPES_CORE;
+const getFacebookOAuthScopesString = (forInstagram = false) => {
+  if (forInstagram || config.facebookIncludeInstagramScopes === true) {
+    const custom = String(config.facebookInstagramLoginScopes || '').trim();
+    const ig = custom || FB_OAUTH_SCOPES_INSTAGRAM_DEFAULT;
+    return `${FB_OAUTH_SCOPES_CORE},${ig}`;
   }
-  const custom = String(config.facebookInstagramLoginScopes || '').trim();
-  const ig = custom || FB_OAUTH_SCOPES_INSTAGRAM_DEFAULT;
-  return `${FB_OAUTH_SCOPES_CORE},${ig}`;
+  return FB_OAUTH_SCOPES_CORE;
 };
 
 /** Build OAuth dialog URL; must match backend `SocialAuthService.getFacebookConnectUrl`. */
-export const buildFacebookConnectUrl = (userId, appId) => {
+export const buildFacebookConnectUrl = (userId, appId, forInstagram = false) => {
   const uid = String(userId || '').trim();
   const id = String(appId || '').trim();
   if (!uid || !id) return '';
   const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
   const redirectUri = `${base}/social-auth/facebook/callback`;
   const state = encodeURIComponent(JSON.stringify({ userId: uid }));
-  const scopes = encodeURIComponent(getFacebookOAuthScopesString());
+  const scopes = encodeURIComponent(getFacebookOAuthScopesString(forInstagram));
   return (
     `https://www.facebook.com/v21.0/dialog/oauth?client_id=${encodeURIComponent(
       id,
@@ -285,18 +327,18 @@ export const getTikTokConnectUrl = async userId => {
   }
 };
 
-const YOUTUBE_OAUTH_SCOPES =
-  'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.upload';
+const YOUTUBE_VERIFY_SCOPES =
+  'https://www.googleapis.com/auth/youtube.readonly';
 
 /** Build Google OAuth URL; must match backend `SocialAuthService.getYouTubeConnectUrl`. */
-export const buildYouTubeConnectUrl = (userId, clientId) => {
+export const buildYouTubeConnectUrl = (userId, clientId, mode = 'verify') => {
   const uid = String(userId || '').trim();
   const id = String(clientId || '').trim();
   if (!uid || !id) return '';
   const base = String(config.apiBaseUrl || '').replace(/\/$/, '');
   const redirectUri = `${base}/social-auth/youtube/callback`;
-  const state = encodeURIComponent(JSON.stringify({ userId: uid }));
-  const scope = encodeURIComponent(YOUTUBE_OAUTH_SCOPES);
+  const state = encodeURIComponent(JSON.stringify({ userId: uid, mode }));
+  const scope = encodeURIComponent(YOUTUBE_VERIFY_SCOPES);
   return (
     `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
       id,
@@ -306,14 +348,23 @@ export const buildYouTubeConnectUrl = (userId, clientId) => {
     `&scope=${scope}` +
     `&state=${state}` +
     `&access_type=offline` +
-    `&prompt=consent`
+    `&prompt=consent` +
+    `&include_granted_scopes=true`
   );
+};
+
+/**
+ * Preferred: native Google Sign-In (avoids browser OAuth redirect issues on mobile).
+ */
+export const connectYouTubeAccount = async userId => {
+  const { connectYouTubeWithGoogleSignIn } = require('./socialAuthService');
+  return connectYouTubeWithGoogleSignIn(userId);
 };
 
 /**
  * YouTube OAuth connect URL. Requires GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET on API.
  */
-export const getYouTubeConnectUrl = async userId => {
+export const getYouTubeConnectUrl = async (userId, mode = 'verify') => {
   const uid = String(userId ?? '').trim();
   if (!uid) {
     throw new Error('Sign in required to connect YouTube.');
@@ -322,7 +373,7 @@ export const getYouTubeConnectUrl = async userId => {
     const response = await axios.get(
       `${config.apiBaseUrl}/social-auth/youtube/connect`,
       {
-        params: { userId: uid },
+        params: { userId: uid, mode },
         headers: getAuthHeaders(),
       },
     );
@@ -330,8 +381,8 @@ export const getYouTubeConnectUrl = async userId => {
   } catch (error) {
     const localId = String(config.googleClientId || '').trim();
     if (localId) {
-      const url = buildYouTubeConnectUrl(uid, localId);
-      if (url) return { url };
+      const url = buildYouTubeConnectUrl(uid, localId, mode);
+      if (url) return { url, mode };
     }
     throw new Error(parseAxiosApiError(error));
   }
@@ -340,21 +391,22 @@ export const getYouTubeConnectUrl = async userId => {
 /**
  * Instagram Business link status for each connected Facebook Page + saved IG accounts.
  */
-export const getInstagramLinkStatus = async userId => {
+export const getInstagramLinkStatus = async (userId, sync = true) => {
   const uid = String(userId ?? '').trim();
   if (!uid) throw new Error('userId required');
   const response = await axios.get(
     `${config.apiBaseUrl}/social-accounts/instagram-status`,
     {
-      params: { userId: uid },
+      params: { userId: uid, sync: sync ? '1' : '0' },
       headers: getAuthHeaders(),
     },
   );
   return response.data;
 };
 
-export const getFacebookConnectUrl = async userId => {
+export const getFacebookConnectUrl = async (userId, options = {}) => {
   const uid = String(userId ?? '').trim();
+  const forInstagram = options?.forInstagram === true;
   if (!uid) {
     throw new Error('Sign in required to connect Facebook.');
   }
@@ -362,7 +414,7 @@ export const getFacebookConnectUrl = async userId => {
     const response = await axios.get(
       `${config.apiBaseUrl}/social-auth/facebook/connect`,
       {
-        params: { userId: uid },
+        params: { userId: uid, ...(forInstagram ? { instagram: '1' } : {}) },
         headers: getAuthHeaders(),
       },
     );
@@ -370,7 +422,7 @@ export const getFacebookConnectUrl = async userId => {
   } catch (error) {
     const localAppId = String(config.facebookAppId || '').trim();
     if (localAppId) {
-      const url = buildFacebookConnectUrl(uid, localAppId);
+      const url = buildFacebookConnectUrl(uid, localAppId, forInstagram);
       if (url) return { url };
     }
     throw new Error(parseAxiosApiError(error));
@@ -388,18 +440,92 @@ export const getSocialAccounts = async userId => {
   return response.data;
 };
 
+function extractPatchProfileError(error) {
+  const data = error?.response?.data;
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message.trim();
+  }
+  if (Array.isArray(data?.message)) {
+    return data.message.join(', ');
+  }
+  const firstErr = Array.isArray(data?.errors) ? data.errors[0] : null;
+  const constraint = firstErr?.constraints
+    ? Object.values(firstErr.constraints)[0]
+    : null;
+  if (constraint) {
+    return `${constraint}${firstErr.property ? ` (${firstErr.property})` : ''}`;
+  }
+  return error?.message || 'Failed to update profile';
+}
+
+/** Ensure lat/lng are numbers for API validation (not strings). */
+function normalizeProfilePatchBody(data) {
+  if (!data || typeof data !== 'object') return data;
+  const body = { ...data };
+  if (body.latitude != null && body.latitude !== '') {
+    const lat = Number(body.latitude);
+    if (Number.isFinite(lat)) body.latitude = lat;
+    else delete body.latitude;
+  }
+  if (body.longitude != null && body.longitude !== '') {
+    const lng = Number(body.longitude);
+    if (Number.isFinite(lng)) body.longitude = lng;
+    else delete body.longitude;
+  }
+  [
+    'deliveryAreaKm',
+    'taxCharge0To10Km',
+    'taxCharge11To20Km',
+    'taxCharge21To30Km',
+  ].forEach(field => {
+    if (body[field] != null && body[field] !== '') {
+      const n = Number(body[field]);
+      if (Number.isFinite(n)) body[field] = n;
+      else delete body[field];
+    }
+  });
+  return body;
+}
+
 /**
  * Update channel profile (nickname, channelAbout, socialLinks, etc.) - only for own channel
  */
 export const updateChannelProfile = async (userId, data) => {
-  try {
-    const response = await axios.patch(`${API_URL}/${userId}`, data, {
+  const patch = async body =>
+    axios.patch(`${API_URL}/${userId}`, normalizeProfilePatchBody(body), {
       headers: getAuthHeaders(),
     });
+
+  try {
+    const response = await patch(data);
     return response.data;
   } catch (error) {
+    const status = error?.response?.status;
+    const postcode = data?.postcode;
+    if (status === 400 && postcode) {
+      try {
+        const { postcode: _pc, ...rest } = data;
+        let address = String(rest.address || '').trim();
+        const pc = String(postcode).trim();
+        if (pc) {
+          const compactAddr = address.replace(/\s/g, '').toUpperCase();
+          const compactPc = pc.replace(/\s/g, '').toUpperCase();
+          if (!compactAddr.includes(compactPc)) {
+            address = address ? `${address}, ${pc}` : pc;
+          }
+        }
+        const response = await patch({
+          ...rest,
+          address: address || rest.address,
+        });
+        return response.data;
+      } catch (retryErr) {
+        console.error('Error updating channel profile (retry):', retryErr);
+        throw new Error(extractPatchProfileError(retryErr));
+      }
+    }
     console.error('Error updating channel profile:', error);
-    throw error;
+    throw new Error(extractPatchProfileError(error));
   }
 };
 

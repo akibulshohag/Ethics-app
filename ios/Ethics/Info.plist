@@ -34,7 +34,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>Eatix uses your location to show restaurants and food videos near your UK postcode.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photo library to select videos and thumbnails for upload</string>
 	<key>NSCameraUsageDescription</key>

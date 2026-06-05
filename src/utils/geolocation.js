@@ -3,6 +3,7 @@
  * Requests location permission before getting position (Android).
  */
 import { Platform, PermissionsAndroid } from 'react-native';
+import { normalizeUkPostcode } from './ukPostcode';
 
 /**
  * Build a short address (e.g. "London Ea, London A1") from Google address_components.
@@ -100,13 +101,101 @@ const COUNTRY_REGION = {
 // UK postcode pattern (e.g. WD5 0AB, SW1A 1AA, M1 1AA) to bias geocoding to UK
 const UK_POSTCODE_REGEX = /[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}/i;
 
+const NOMINATIM_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'EatixApp/1.0 (React Native)',
+};
+
+/**
+ * UK postcode → lat/lng via postcodes.io (free, no API key). Works for RH7 6AA, WD5 0AB, etc.
+ * @returns {Promise<{ lat: number, lng: number, address?: string } | null>}
+ */
+export async function geocodeUkPostcode(raw) {
+  const pc = normalizeUkPostcode(raw);
+  if (!pc) return null;
+
+  const compact = pc.replace(/\s+/g, '');
+  try {
+    const res = await fetch(
+      `https://api.postcodes.io/postcodes/${encodeURIComponent(compact)}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    const data = await res.json();
+    if (data?.status === 200 && data?.result) {
+      const r = data.result;
+      const lat = Number(r.latitude);
+      const lng = Number(r.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const parts = [
+          r.parish || r.admin_ward,
+          r.admin_district || r.region,
+          pc,
+        ].filter(Boolean);
+        return { lat, lng, address: parts.join(', ') };
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const q = encodeURIComponent(`${pc}, United Kingdom`);
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=gb`,
+      { headers: NOMINATIM_HEADERS },
+    );
+    const arr = await res.json();
+    const hit = Array.isArray(arr) ? arr[0] : null;
+    if (hit?.lat != null && hit?.lon != null) {
+      return {
+        lat: parseFloat(hit.lat),
+        lng: parseFloat(hit.lon),
+        address: hit.display_name || `${pc}, United Kingdom`,
+      };
+    }
+  } catch (_) {}
+
+  const fallback = getFallbackCoordsForUKArea(pc);
+  if (fallback) {
+    return { ...fallback, address: `${pc}, United Kingdom` };
+  }
+  return null;
+}
+
+/** Forward geocode free-text (non-postcode) via Nominatim when Google fails. */
+async function geocodeForwardNominatim(address, countryCode = 'gb') {
+  try {
+    const q = encodeURIComponent(String(address).trim());
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=${countryCode}`,
+      { headers: NOMINATIM_HEADERS },
+    );
+    const arr = await res.json();
+    const hit = Array.isArray(arr) ? arr[0] : null;
+    if (hit?.lat != null && hit?.lon != null) {
+      return {
+        lat: parseFloat(hit.lat),
+        lng: parseFloat(hit.lon),
+      };
+    }
+  } catch (_) {}
+  return null;
+}
+
 export async function geocodeAddress(address) {
   if (!address || !String(address).trim()) return null;
+  const raw = String(address).trim();
+
+  if (UK_POSTCODE_REGEX.test(raw) || normalizeUkPostcode(raw)) {
+    const uk = await geocodeUkPostcode(raw);
+    if (uk) return { lat: uk.lat, lng: uk.lng };
+  }
+
   try {
     const { config } = require('../../config');
     const key = config?.googleMapsApiKey;
-    if (!key || !key.trim()) return null;
-    const raw = String(address).trim();
+    if (!key || !key.trim()) {
+      const nom = await geocodeForwardNominatim(raw, 'gb');
+      return nom;
+    }
     const encoded = encodeURIComponent(raw);
     const lower = raw.toLowerCase();
     let region =
@@ -136,9 +225,22 @@ export async function geocodeAddress(address) {
         return { lat: loc.lat, lng: loc.lng };
       }
     }
+    const nom = await geocodeForwardNominatim(
+      raw,
+      region === 'uk' || UK_POSTCODE_REGEX.test(raw) ? 'gb' : 'gb',
+    );
+    if (nom) return nom;
+    if (UK_POSTCODE_REGEX.test(raw) || normalizeUkPostcode(raw)) {
+      const uk = await geocodeUkPostcode(raw);
+      if (uk) return { lat: uk.lat, lng: uk.lng };
+    }
     return null;
   } catch (e) {
-    return null;
+    if (UK_POSTCODE_REGEX.test(raw) || normalizeUkPostcode(raw)) {
+      const uk = await geocodeUkPostcode(raw);
+      if (uk) return { lat: uk.lat, lng: uk.lng };
+    }
+    return geocodeForwardNominatim(raw, 'gb');
   }
 }
 
@@ -187,6 +289,9 @@ const UK_AREA_COORDS = {
   'Leicester': { lat: 52.6369, lng: -1.1398 },
   'Coventry': { lat: 52.4068, lng: -1.5197 },
   'Wolverhampton': { lat: 52.5862, lng: -2.1289 },
+  'RH7 6AA': { lat: 51.1764, lng: -0.0039 },
+  'Lingfield': { lat: 51.1764, lng: -0.0039 },
+  'RH7': { lat: 51.1764, lng: -0.0039 },
 };
 
 /**
@@ -254,7 +359,14 @@ export function getFallbackCoordsForUKArea(areaDescription) {
   if (lower.includes('leicester')) return UK_AREA_COORDS['Leicester'];
   if (lower.includes('coventry')) return UK_AREA_COORDS['Coventry'];
   if (lower.includes('wolverhampton')) return UK_AREA_COORDS['Wolverhampton'];
-  if (UK_POSTCODE_REGEX.test(trimmed)) return UK_DEFAULT_COORDS;
+  if (lower.includes('lingfield') || lower.startsWith('rh7')) {
+    return UK_AREA_COORDS['RH7 6AA'];
+  }
+  if (UK_POSTCODE_REGEX.test(trimmed)) {
+    const n = normalizeUkPostcode(trimmed);
+    if (n && UK_AREA_COORDS[n]) return UK_AREA_COORDS[n];
+    return UK_DEFAULT_COORDS;
+  }
   return null;
 }
 

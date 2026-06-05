@@ -6,6 +6,14 @@ const appSlice = createSlice({
     user: null,
     onboardingDone: false,
     shortsMuted: true,
+    browseLocation: {
+      lat: null,
+      lng: null,
+      postcode: '',
+      addressText: '',
+      areaLabel: '',
+      updatedAt: 0,
+    },
   },
   reducers: {
     appSetUser: (state, action) => {
@@ -14,6 +22,27 @@ const appSlice = createSlice({
       } else {
         state.user = { ...state.user, ...action.payload };
       }
+    },
+    setBrowseLocation: (state, action) => {
+      const p = action.payload || {};
+      state.browseLocation = {
+        lat: p.lat ?? null,
+        lng: p.lng ?? null,
+        postcode: String(p.postcode || ''),
+        addressText: String(p.addressText || ''),
+        areaLabel: String(p.areaLabel || ''),
+        updatedAt: p.updatedAt ?? Date.now(),
+      };
+    },
+    clearBrowseLocation: state => {
+      state.browseLocation = {
+        lat: null,
+        lng: null,
+        postcode: '',
+        addressText: '',
+        areaLabel: '',
+        updatedAt: 0,
+      };
     },
     setOnboardingDone: (state, action) => {
       state.onboardingDone = action.payload !== false;
@@ -24,6 +53,6 @@ const appSlice = createSlice({
   },
 });
 
-export const { appSetUser, setOnboardingDone, setShortsMuted } = appSlice.actions;
+export const { appSetUser, setOnboardingDone, setShortsMuted, setBrowseLocation, clearBrowseLocation } = appSlice.actions;
 
 export default appSlice.reducer;

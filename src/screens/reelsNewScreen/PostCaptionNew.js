@@ -15,6 +15,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const { width } = Dimensions.get('window');
+const CAPTION_PREVIEW_HEIGHT = Math.min(width * 0.9, 340);
+const CAPTION_PREVIEW_WIDTH = Math.round((CAPTION_PREVIEW_HEIGHT * 9) / 16);
 
 const normalizeHashtag = raw => {
   const clean = String(raw || '')
@@ -271,7 +273,16 @@ const styles = StyleSheet.create({
   activeLabel: { color: '#F5A623', fontWeight: 'bold' },
 
   scrollContent: { paddingBottom: 20, backgroundColor: 'white' },
-  videoPreviewContainer: { width, height: 240, position: 'relative' },
+  videoPreviewContainer: {
+    width: CAPTION_PREVIEW_WIDTH,
+    height: CAPTION_PREVIEW_HEIGHT,
+    alignSelf: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    borderRadius: 12,
+    marginTop: 8,
+  },
   previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -15,6 +15,40 @@ const getAuthHeaders = () => {
   return {};
 };
 
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduleDate ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
+};
+
+const filterPublicScheduledVideos = data => {
+  if (!data || !Array.isArray(data.videos)) return data;
+  return {
+    ...data,
+    videos: data.videos.filter(video => !isFutureScheduledMedia(video)),
+  };
+};
+
+const filterUserVideosForViewer = (data, userId, viewerUserId) => {
+  if (!data || !Array.isArray(data.videos)) return data;
+  const viewerIsOwner =
+    viewerUserId != null &&
+    userId != null &&
+    String(viewerUserId) === String(userId);
+  if (viewerIsOwner) return data;
+  return {
+    ...data,
+    videos: data.videos.filter(video => !isFutureScheduledMedia(video)),
+  };
+};
+
 /**
  * Upload video with thumbnail - same approach as profile/gallery (fetch + FormData, no Content-Type).
  * React Native sends file URIs correctly this way.
@@ -110,7 +144,7 @@ export const uploadVideo = async videoData => {
 export const getVideos = async (params = {}) => {
   try {
     const response = await axios.get(API_URL, { params });
-    return response.data;
+    return filterPublicScheduledVideos(response.data);
   } catch (error) {
     console.error('Error fetching videos:', error);
     throw error;
@@ -316,13 +350,13 @@ export const recordView = async (
 /**
  * Get user's uploaded videos
  */
-export const getUserVideos = async (userId, page = 1, limit = 20) => {
+export const getUserVideos = async (userId, page = 1, limit = 20, viewerUserId) => {
   try {
     const response = await axios.get(`${API_URL}/user/${userId}`, {
       params: { page, limit },
       headers: { ...getAuthHeaders() },
     });
-    return response.data;
+    return filterUserVideosForViewer(response.data, userId, viewerUserId);
   } catch (error) {
     console.error('Error fetching user videos:', error);
     throw error;

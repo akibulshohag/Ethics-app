@@ -69,6 +69,15 @@
 # react-native-blob-util
 -keep class com.ReactNativeBlobUtil.** { *; }
 
+# Google Sign-In (release APK — avoids DEVELOPER_ERROR from stripped classes)
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+-keep class com.reactnativegooglesignin.** { *; }
+
+# Facebook SDK (native login)
+-keep class com.facebook.** { *; }
+-keepattributes Signature
+
 # -------------------------------------------------------
 #  General Optimizations
 # -------------------------------------------------------

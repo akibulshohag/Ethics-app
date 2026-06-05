@@ -21,11 +21,11 @@ import { shortsService } from '../../services/shortsService';
 import { getSocialAccounts } from '../../services/postService';
 import { normalizeAnchor } from '../../constants/overlayTextAnchor';
 import { resolveReelUploadFilterId } from '../../constants/reelStylePresets';
+import { thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
 
 const defaultScheduleTime = () => {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(9, 0, 0, 0);
+  d.setMinutes(d.getMinutes() + 10, 0, 0);
   return d;
 };
 
@@ -546,18 +546,21 @@ const ScheduleScreen = () => {
       );
       return;
     }
-    const buildUploadFormData = ({ simplifiedProcessing = false } = {}) => {
+    const buildUploadFormData = ({
+      simplifiedProcessing = false,
+      draftSource = draft,
+    } = {}) => {
       const formData = new FormData();
       formData.append('files', {
-        uri: draft.video.uri,
-        type: draft.video.type || 'video/mp4',
-        name: draft.video.name || 'reel.mp4',
+        uri: draftSource.video.uri,
+        type: draftSource.video.type || 'video/mp4',
+        name: draftSource.video.name || 'reel.mp4',
       });
-      if (draft?.thumbnail?.uri) {
+      if (draftSource?.thumbnail?.uri) {
         formData.append('files', {
-          uri: draft.thumbnail.uri,
-          type: draft.thumbnail.type || 'image/jpeg',
-          name: draft.thumbnail.name || 'thumb.jpg',
+          uri: draftSource.thumbnail.uri,
+          type: draftSource.thumbnail.type || 'image/jpeg',
+          name: draftSource.thumbnail.name || 'thumb.jpg',
         });
       }
       formData.append('userId', String(user.id));
@@ -894,7 +897,20 @@ const ScheduleScreen = () => {
         navigation.setParams?.({ draft: updatedDraft });
       } else {
         setUploadStage('Preparing upload...');
-        const fullPayload = buildUploadFormData();
+        let uploadDraft = draft;
+        if (
+          uploadDraft?.video?.uri &&
+          !String(uploadDraft?.thumbnail?.uri || '').trim()
+        ) {
+          setUploadStage('Generating thumbnail...');
+          try {
+            const thumb = await thumbnailFromVideoFrame(uploadDraft.video.uri);
+            if (thumb) uploadDraft = { ...uploadDraft, thumbnail: thumb };
+          } catch (_) {
+            // backend can auto-generate if client frame grab fails
+          }
+        }
+        const fullPayload = buildUploadFormData({ draftSource: uploadDraft });
         setUploadStage('Uploading reel...');
         const uploadRes = await shortsService.uploadShort(fullPayload, user.id);
         createdOrUpdatedShort = extractShortFromResponse(uploadRes);
@@ -1116,6 +1132,7 @@ const ScheduleScreen = () => {
             </View>
           </View>
 
+          {/* Future boost feature: keep hidden until local boost targeting is ready.
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Boost Your Reach</Text>
             <View style={styles.boostBox}>
@@ -1149,6 +1166,7 @@ const ScheduleScreen = () => {
               <View style={styles.sliderHandle} />
             </View>
           </View>
+          */}
 
           <TouchableOpacity
             style={[styles.mainButton, uploading && styles.mainButtonDisabled]}

@@ -14,7 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import profileCardBg from '../assets/img/bg.png';
 import { safeImageUri } from '../utils/helper';
-import { formatShortProfileLocationLine } from '../utils/locationFormat';
+import { formatShortProfileLocationLine, formatCityCountryPostcodeLine } from '../utils/locationFormat';
 import { getConversations } from '../services/chatService';
 import UserProfileCard from './UserProfileCard';
 
@@ -59,6 +59,10 @@ const BusinessProfileCard = ({
   onAvatarPress,
   onCoverPress,
   coverUploading = false,
+  onSubscribe,
+  subscribeLoading = false,
+  onOrderNowPress,
+  onBookNowPress,
 }) => {
   const navigation = useNavigation();
   const currentUser = useSelector(s => s?.app?.user);
@@ -70,6 +74,10 @@ const BusinessProfileCard = ({
     profile?.channelName || profile?.nickname || profile?.name || '—';
   const subtitle =
     String(profile?.nickname || profile?.channelName || '').trim() ||
+    formatCityCountryPostcodeLine({
+      address: profile?.address,
+      postcode: profile?.postcode,
+    }) ||
     formatShortProfileLocationLine(profile?.address) ||
     '—';
 
@@ -121,6 +129,10 @@ const BusinessProfileCard = ({
         canEdit={!!isOwnProfile}
         onAvatarPress={isOwnProfile ? onAvatarPress : undefined}
         showSubscribe={!isOwnProfile}
+        onSubscribe={onSubscribe}
+        subscribeLoading={subscribeLoading}
+        onOrderNowPress={onOrderNowPress}
+        onBookNowPress={onBookNowPress}
         onPressFollowers={() =>
           navigation.navigate('FollowersListScreen', {
             profileId: profile?.id,

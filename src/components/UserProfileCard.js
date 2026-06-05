@@ -12,7 +12,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import profileCardBg from '../assets/img/bg.png';
 import { safeImageUri } from '../utils/helper';
-import { formatShortProfileLocationLine } from '../utils/locationFormat';
+import { formatShortProfileLocationLine, formatCityCountryPostcodeLine } from '../utils/locationFormat';
 
 /** Figma fill 351px on ~375 → 12px side inset */
 const CARD_INSET = 12;
@@ -98,7 +98,12 @@ const UserProfileCard = ({
   const city = String(profile?.city || profile?.town || '').trim();
   const country = String(profile?.country || '').trim();
   const addressLine = String(profile?.address || '').trim();
+  const profilePostcode = String(profile?.postcode || '').trim();
   const displayLocation =
+    formatCityCountryPostcodeLine({
+      address: addressLine,
+      postcode: profilePostcode,
+    }) ||
     formatShortProfileLocationLine(addressLine) ||
     (city && country ? `${city}, ${country}` : city || country || '—');
 
@@ -136,13 +141,16 @@ const UserProfileCard = ({
   const buttonLabel = ctaText || (isSubscribed ? 'Subscribed' : 'Subscribe');
   const buttonDisabled = ctaText
     ? ctaDisabled
-    : !onSubscribe || subscribeLoading || isSubscribed;
+    : !onSubscribe || subscribeLoading;
 
   const profileRole = String(profile?.role || '').toLowerCase();
   const isFoodExplorerUser = profileRole === 'user';
   const isBusinessProfile = profileRole === 'owner' || profileRole === 'vendor';
   const showRating = !isFoodExplorerUser;
-  const showOrderBook = isBusinessProfile && !onEditProfile;
+  const showOrderBook =
+    isBusinessProfile &&
+    !onEditProfile &&
+    !!(onOrderNowPress || onBookNowPress);
   const showSelfEditHero = !!onEditProfile;
   const showExplorerBar = !showSelfEditHero;
 

@@ -32,6 +32,7 @@ class MainApplication : Application(), ReactApplication {
       FacebookSdk.fullyInitialize()
       AppEventsLogger.activateApp(this)
     }
+    SigningKeyHashUtil.logSigningFingerprints(packageName, packageManager)
     loadReactNative(this)
   }
 }

@@ -102,3 +102,17 @@ export const formatDistanceKm = km => {
   if (km < 1) return `${Math.round(km * 1000)} m`;
   return `${km.toFixed(1)} km`;
 };
+
+/** Owner delivery tax/charge by distance tier (0-10, 11-20, 21-30 km). */
+export const resolveTaxChargeForDistanceKm = (distanceKm, ownerProfile) => {
+  if (distanceKm == null || !Number.isFinite(Number(distanceKm))) return 0;
+  const d = Number(distanceKm);
+  const pick = value => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+  if (d <= 10) return pick(ownerProfile?.taxCharge0To10Km);
+  if (d <= 20) return pick(ownerProfile?.taxCharge11To20Km);
+  if (d <= 30) return pick(ownerProfile?.taxCharge21To30Km);
+  return pick(ownerProfile?.taxCharge21To30Km);
+};

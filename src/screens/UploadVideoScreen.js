@@ -115,7 +115,7 @@ const UploadVideoScreen = () => {
     try {
       setLoading(true);
       // Get only current user's videos
-      const response = await getUserVideos(user.id, 1, 50);
+      const response = await getUserVideos(user.id, 1, 50, user.id);
 
       if (response && response.videos) {
         setVideos(response.videos);

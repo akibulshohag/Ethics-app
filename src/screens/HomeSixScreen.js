@@ -19,12 +19,17 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
-import { appSetUser } from '../redux/actions/appSlice';
+import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
+import {
+  resolvePostLoginBrowseLocation,
+  homeRouteForBrowseLocation,
+  persistBrowseLocation,
+} from '../services/userLocationService';
 import { getRolesList } from '../services/roleService';
 import {
   register,
-  verifyEmailOtp,
-  resendEmailVerificationOtp,
+  // Future: verifyEmailOtp,
+  // resendEmailVerificationOtp,
   validatePasswordStrength,
 } from '../services/authService';
 import {
@@ -57,9 +62,10 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [verificationMode, setVerificationMode] = useState(false);
-  const [verificationOtp, setVerificationOtp] = useState('');
-  const [pendingEmail, setPendingEmail] = useState('');
+  // Future: email verification after signup
+  // const [verificationMode, setVerificationMode] = useState(false);
+  // const [verificationOtp, setVerificationOtp] = useState('');
+  // const [pendingEmail, setPendingEmail] = useState('');
 
   useEffect(() => {
     getRolesList()
@@ -117,18 +123,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         ...(roleId ? { roleId } : {}),
       });
 
-      if (data?.requiresEmailVerification) {
-        setPendingEmail(email.trim());
-        setVerificationMode(true);
-        setVerificationOtp('');
-        setTimeout(() => {
-          Alert.alert(
-            'Verify Email',
-            'We sent a verification OTP to your email. Enter OTP to activate your account.',
-          );
-        }, 100);
-        return;
-      }
+      // Future: if (data?.requiresEmailVerification) { ... OTP step ... }
 
       const userData = {
         id: data.user.id,
@@ -140,6 +135,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         role: data.user.role,
         roleId: data.user.roleId,
         address: data.user.address,
+        postcode: data.user.postcode,
         latitude: data.user.latitude,
         longitude: data.user.longitude,
         token: data.token,
@@ -163,51 +159,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
     }
   };
 
-  const handleVerifyEmailOtp = async () => {
-    if (!pendingEmail || !verificationOtp.trim()) {
-      Alert.alert('Error', 'Please enter OTP');
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await verifyEmailOtp(pendingEmail, verificationOtp);
-
-      const userData = {
-        id: data.user.id,
-        name: data.user.name || 'New User',
-        email: data.user.email,
-        phone: data.user.phone || '',
-        nickname: data.user.nickname || '',
-        gender: data.user.gender || 'others',
-        role: data.user.role,
-        roleId: data.user.roleId,
-        address: data.user.address,
-        latitude: data.user.latitude,
-        longitude: data.user.longitude,
-        token: data.token,
-      };
-
-      dispatch(appSetUser(userData));
-      navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
-    } catch (error) {
-      Alert.alert('Error', error.message || 'OTP verification failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendVerificationOtp = async () => {
-    if (!pendingEmail) return;
-    setLoading(true);
-    try {
-      await resendEmailVerificationOtp(pendingEmail);
-      Alert.alert('Success', 'OTP sent again to your email');
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to resend OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Future: handleVerifyEmailOtp / handleResendVerificationOtp
 
   const handleLoginPress = () => {
     if (onLoginPress) {
@@ -235,6 +187,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         role: data.user.role,
         roleId: data.user.roleId,
         address: data.user.address,
+        postcode: data.user.postcode,
         latitude: data.user.latitude,
         longitude: data.user.longitude,
         pin: data.user.pin,
@@ -244,7 +197,25 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         token: data.token,
       };
       dispatch(appSetUser(userData));
-      navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
+      const browseLoc = await resolvePostLoginBrowseLocation({
+        ...userData,
+        savedLastLocation: data.user?.savedLastLocation,
+      });
+      if (browseLoc) {
+        dispatch(setBrowseLocation(browseLoc));
+        await persistBrowseLocation({
+          userId: userData?.id,
+          lat: browseLoc.lat,
+          lng: browseLoc.lng,
+          postcode: browseLoc.postcode || '',
+          addressText: browseLoc.addressText || '',
+          areaLabel: browseLoc.areaLabel || '',
+        });
+      }
+      navigation.reset({
+        index: 0,
+        routes: [homeRouteForBrowseLocation(browseLoc)],
+      });
     } catch (error) {
       const msg = normalizeSocialAuthError(error);
       if (msg !== 'Sign-in cancelled') {
@@ -305,23 +276,14 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
               </Text>
 
               <View style={styles.cardBody}>
-                {!verificationMode ? (
-                  <View style={styles.radioGroup}>
-                    <Text style={styles.roleLabel}>Choose account type</Text>
-                    <View style={styles.roleChips}>
-                      <RadioButton label="Diner" value="Diner" />
-                      <RadioButton label="Business" value="Business" />
-                      <RadioButton label="vendor" value="vendor" />
-                    </View>
+                <View style={styles.radioGroup}>
+                  <Text style={styles.roleLabel}>Choose account type</Text>
+                  <View style={styles.roleChips}>
+                    <RadioButton label="Diner" value="Diner" />
+                    <RadioButton label="Business" value="Business" />
+                    <RadioButton label="vendor" value="vendor" />
                   </View>
-                ) : (
-                  <View style={styles.radioGroup}>
-                    <Text style={styles.roleLabel}>Email verification</Text>
-                    <Text style={styles.verifyHintText}>
-                      Enter OTP sent to {pendingEmail}
-                    </Text>
-                  </View>
-                )}
+                </View>
 
                 <View style={styles.inputWrapper}>
                   <Icon
@@ -342,107 +304,81 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
                   />
                 </View>
 
-                {!verificationMode ? (
-                  <>
-                    <View style={styles.inputWrapper}>
-                      <Icon
-                        name="lock-outline"
-                        size={22}
-                        color="#7A4B00"
-                        style={styles.inputIcon}
-                      />
-                      <TextInput
-                        placeholder="Password"
-                        placeholderTextColor="#8E6230"
-                        secureTextEntry={!passwordVisible}
-                        style={styles.input}
-                        value={password}
-                        onChangeText={setPassword}
-                        editable={!loading}
-                      />
-                      <TouchableOpacity
-                        onPress={() => setPasswordVisible(!passwordVisible)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Icon
-                          name={passwordVisible ? 'eye-off' : 'eye'}
-                          size={22}
-                          color="#7A4B00"
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.inputWrapper}>
-                      <Icon
-                        name="lock-outline"
-                        size={22}
-                        color="#7A4B00"
-                        style={styles.inputIcon}
-                      />
-                      <TextInput
-                        placeholder="Confirm Password"
-                        placeholderTextColor="#8E6230"
-                        secureTextEntry={!confirmPasswordVisible}
-                        style={styles.input}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        editable={!loading}
-                      />
-                      <TouchableOpacity
-                        onPress={() =>
-                          setConfirmPasswordVisible(!confirmPasswordVisible)
-                        }
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Icon
-                          name={confirmPasswordVisible ? 'eye-off' : 'eye'}
-                          size={22}
-                          color="#7A4B00"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.inputWrapper}>
+                <View style={styles.inputWrapper}>
+                  <Icon
+                    name="lock-outline"
+                    size={22}
+                    color="#7A4B00"
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    placeholder="Password"
+                    placeholderTextColor="#8E6230"
+                    secureTextEntry={!passwordVisible}
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    editable={!loading}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setPasswordVisible(!passwordVisible)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
                     <Icon
-                      name="shield-check-outline"
+                      name={passwordVisible ? 'eye-off' : 'eye'}
                       size={22}
                       color="#7A4B00"
-                      style={styles.inputIcon}
                     />
-                    <TextInput
-                      placeholder="Enter OTP"
-                      placeholderTextColor="#8E6230"
-                      style={styles.input}
-                      value={verificationOtp}
-                      onChangeText={setVerificationOtp}
-                      keyboardType="number-pad"
-                      editable={!loading}
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.inputWrapper}>
+                  <Icon
+                    name="lock-outline"
+                    size={22}
+                    color="#7A4B00"
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    placeholder="Confirm Password"
+                    placeholderTextColor="#8E6230"
+                    secureTextEntry={!confirmPasswordVisible}
+                    style={styles.input}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    editable={!loading}
+                  />
+                  <TouchableOpacity
+                    onPress={() =>
+                      setConfirmPasswordVisible(!confirmPasswordVisible)
+                    }
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Icon
+                      name={confirmPasswordVisible ? 'eye-off' : 'eye'}
+                      size={22}
+                      color="#7A4B00"
                     />
-                  </View>
-                )}
+                  </TouchableOpacity>
+                </View>
 
                 <TouchableOpacity
                   style={styles.actionBtnSignUp}
-                  onPress={verificationMode ? handleVerifyEmailOtp : handleSignUp}
+                  onPress={handleSignUp}
                   disabled={loading || rolesLoading}
                 >
                   {loading ? (
                     <ActivityIndicator color="#FFF" size="small" />
                   ) : (
-                    <Text style={styles.btnText}>
-                      {verificationMode ? 'Verify Email' : 'Sign Up'}
-                    </Text>
+                    <Text style={styles.btnText}>Sign Up</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionBtnLogin}
-                  onPress={verificationMode ? handleResendVerificationOtp : handleLoginPress}
+                  onPress={handleLoginPress}
                   disabled={loading}
                 >
-                  <Text style={styles.signInText}>
-                    {verificationMode ? 'Resend OTP' : 'Login'}
-                  </Text>
+                  <Text style={styles.signInText}>Login</Text>
                 </TouchableOpacity>
 
                 <View style={styles.socialContainer}>

@@ -6,6 +6,7 @@ import { getChannelProfile } from './channelService';
 import { getMenuByUserId } from './menuService';
 import { getUserVideos } from './videoService';
 import { shortsService } from './shortsService';
+import { UK_DEFAULT_RADIUS_KM } from '../utils/ukPostcode';
 import {
   buildDiscoveryCategoriesFromRestaurants,
   getDiscoveryCategoryByKey,
@@ -55,8 +56,27 @@ export async function loadDiscoveryRestaurants({
   currentUserId = null,
   page = 1,
   limit = 40,
+  locationOpts = null,
 } = {}) {
-  const top = await getTopRestaurantsByOrders({ page, limit });
+  const lat = locationOpts?.viewerLat ?? locationOpts?.lat;
+  const lng = locationOpts?.viewerLng ?? locationOpts?.lng;
+  const hasNearby =
+    lat != null &&
+    lng != null &&
+    Number.isFinite(Number(lat)) &&
+    Number.isFinite(Number(lng));
+
+  const top = await getTopRestaurantsByOrders({
+    page,
+    limit,
+    ...(hasNearby
+      ? {
+          nearbyLat: Number(lat),
+          nearbyLng: Number(lng),
+          radiusKm: locationOpts?.radiusKm ?? UK_DEFAULT_RADIUS_KM,
+        }
+      : {}),
+  });
   const base = Array.isArray(top?.restaurants) ? top.restaurants : [];
   const enriched = await Promise.all(
     base.map(async r => {
@@ -113,6 +133,10 @@ export async function loadDiscoveryRestaurants({
           r?.name ||
           'Restaurant',
         address: profile?.address || r?.address || 'Near you',
+        postcode: profile?.postcode || r?.postcode || '',
+        latitude: profile?.latitude ?? r?.latitude ?? null,
+        longitude: profile?.longitude ?? r?.longitude ?? null,
+        distanceKm: r?.distanceKm ?? null,
         shortAddress: shortLocation(profile, profile?.address || r?.address),
         rating:
           profile?.averageRating ??

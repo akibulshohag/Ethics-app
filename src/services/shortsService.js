@@ -39,6 +39,40 @@ const shouldFallbackViewerParam = (error, params) =>
     error?.response?.status === 400
   );
 
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduleDate ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
+};
+
+const filterPublicScheduledShorts = data => {
+  if (!data || !Array.isArray(data.shorts)) return data;
+  return {
+    ...data,
+    shorts: data.shorts.filter(short => !isFutureScheduledMedia(short)),
+  };
+};
+
+const filterUserShortsForViewer = (data, userId, viewerUserId) => {
+  if (!data || !Array.isArray(data.shorts)) return data;
+  const viewerIsOwner =
+    viewerUserId != null &&
+    userId != null &&
+    String(viewerUserId) === String(userId);
+  if (viewerIsOwner) return data;
+  return {
+    ...data,
+    shorts: data.shorts.filter(short => !isFutureScheduledMedia(short)),
+  };
+};
+
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const parseUploadFormDataParts = formData => {
@@ -301,7 +335,7 @@ export const shortsService = {
         params,
         headers: getAuthHeaders(),
       });
-      return response.data;
+      return filterPublicScheduledShorts(response.data);
     } catch (error) {
       if (!shouldFallbackViewerParam(error, params)) throw error;
       const fallbackParams = { ...params };
@@ -310,7 +344,7 @@ export const shortsService = {
         params: fallbackParams,
         headers: getAuthHeaders(),
       });
-      return retry.data;
+      return filterPublicScheduledShorts(retry.data);
     }
   },
 
@@ -583,14 +617,14 @@ export const shortsService = {
         params,
         headers: getAuthHeaders(),
       });
-      return response.data;
+      return filterUserShortsForViewer(response.data, userId, viewerUserId);
     } catch (error) {
       if (!shouldFallbackViewerParam(error, params)) throw error;
       const retry = await axios.get(`${API_URL}/user/${userId}`, {
         params: {page, limit},
         headers: getAuthHeaders(),
       });
-      return retry.data;
+      return filterUserShortsForViewer(retry.data, userId, undefined);
     }
   },
 

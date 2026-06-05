@@ -12,19 +12,35 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import Toast from 'react-native-toast-message';
+import { appSetUser } from '../redux/actions/appSlice';
 import { createRestaurantOrder } from '../services/orderService';
 import { COLORS, SPACING, BORDER_RADIUS } from '../constants/theme';
+import {
+  normalizeUkPhone,
+  validUkPhoneNumber,
+} from '../utils/ukPhone';
 
 const CheckoutScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const dispatch = useDispatch();
   const { user } = useSelector(state => state.app) || {};
   const { ownerId, items = [], ownerName } = route.params || {};
 
   const [deliveryNotes, setDeliveryNotes] = useState('');
+  const [contactPhone, setContactPhone] = useState(String(user?.phone || '').trim());
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [placing, setPlacing] = useState(false);
+
+  const hasValidPhone = validUkPhoneNumber(contactPhone);
+  const phoneError =
+    phoneTouched && contactPhone.trim() && !hasValidPhone
+      ? 'Enter a valid UK phone number'
+      : phoneTouched && !contactPhone.trim()
+        ? 'Phone number is required'
+        : '';
 
   const subtotal = items.reduce(
     (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
@@ -44,6 +60,23 @@ const CheckoutScreen = () => {
       Alert.alert('Error', 'No items to order.');
       return;
     }
+    const phone = normalizeUkPhone(contactPhone);
+    if (!phone || !validUkPhoneNumber(phone)) {
+      setPhoneTouched(true);
+      Alert.alert(
+        'Contact phone required',
+        'Enter a valid UK phone number before placing your order.',
+      );
+      return;
+    }
+    const addressText = String(deliveryNotes || user?.address || '').trim();
+    if (!addressText) {
+      Alert.alert(
+        'Delivery address required',
+        'Add delivery notes or set an address in your profile.',
+      );
+      return;
+    }
     setPlacing(true);
     try {
       await createRestaurantOrder(user.token, {
@@ -52,8 +85,10 @@ const CheckoutScreen = () => {
           menuItemId: i.menuItemId,
           quantity: i.quantity || 1,
         })),
-        deliveryAddress: deliveryNotes.trim() || undefined,
+        deliveryAddress: addressText,
+        customerPhone: phone,
       });
+      dispatch(appSetUser({ ...user, phone }));
       Toast.show({
         type: 'success',
         text1: 'Order placed successfully',
@@ -111,10 +146,29 @@ const CheckoutScreen = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Delivery notes (optional)</Text>
+          <Text style={styles.sectionTitle}>Contact phone (required)</Text>
+          <TextInput
+            style={[styles.phoneInput, phoneError ? styles.phoneInputError : null]}
+            placeholder="07xxx xxxxxx"
+            placeholderTextColor={COLORS.gray500}
+            keyboardType="phone-pad"
+            value={contactPhone}
+            onChangeText={v => {
+              setContactPhone(v);
+              if (!phoneTouched) setPhoneTouched(true);
+            }}
+            onBlur={() => setPhoneTouched(true)}
+          />
+          {phoneError ? (
+            <Text style={styles.phoneErrorText}>{phoneError}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Delivery address / notes</Text>
           <TextInput
             style={styles.input}
-            placeholder="Address or special instructions"
+            placeholder="Delivery address or special instructions"
             placeholderTextColor={COLORS.gray500}
             value={deliveryNotes}
             onChangeText={setDeliveryNotes}
@@ -131,8 +185,11 @@ const CheckoutScreen = () => {
 
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.confirmBtn, placing && styles.confirmBtnDisabled]}
-          disabled={placing}
+          style={[
+            styles.confirmBtn,
+            (placing || !hasValidPhone) && styles.confirmBtnDisabled,
+          ]}
+          disabled={placing || !hasValidPhone}
           onPress={handleConfirmOrder}
         >
           {placing ? (
@@ -227,6 +284,22 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  phoneInput: {
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: BORDER_RADIUS.md,
+    padding: 12,
+    fontSize: 16,
+    color: COLORS.textPrimary,
+  },
+  phoneInputError: {
+    borderColor: '#E53935',
+  },
+  phoneErrorText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#C62828',
   },
   totalRow: {
     flexDirection: 'row',

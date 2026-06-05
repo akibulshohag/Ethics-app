@@ -26,8 +26,9 @@ import { Dropdown } from 'react-native-element-dropdown';
 import { getRolesList } from '../services/roleService';
 import {
   register,
-  verifyEmailOtp,
-  resendEmailVerificationOtp,
+  // Future: email verification after signup
+  // verifyEmailOtp,
+  // resendEmailVerificationOtp,
   validatePasswordStrength,
   SIGNUP_ROLES,
 } from '../services/authService';
@@ -44,9 +45,10 @@ const SignUpScreen = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [verificationMode, setVerificationMode] = useState(false);
-  const [pendingEmail, setPendingEmail] = useState('');
-  const [verificationOtp, setVerificationOtp] = useState('');
+  // Future: email verification step after signup
+  // const [verificationMode, setVerificationMode] = useState(false);
+  // const [pendingEmail, setPendingEmail] = useState('');
+  // const [verificationOtp, setVerificationOtp] = useState('');
 
   useEffect(() => {
     getRolesList()
@@ -116,16 +118,17 @@ const SignUpScreen = () => {
         ...(isFallbackRoleId ? {} : { roleId: selectedRole.id }),
       });
 
-      if (data?.requiresEmailVerification) {
-        setPendingEmail(email.trim());
-        setVerificationMode(true);
-        setVerificationOtp('');
-        Alert.alert(
-          'Verify Email',
-          'We sent a verification OTP to your email. Enter OTP to activate your account.',
-        );
-        return;
-      }
+      // Future: email verification before first login
+      // if (data?.requiresEmailVerification) {
+      //   setPendingEmail(email.trim());
+      //   setVerificationMode(true);
+      //   setVerificationOtp('');
+      //   Alert.alert(
+      //     'Verify Email',
+      //     'We sent a verification OTP to your email. Enter OTP to activate your account.',
+      //   );
+      //   return;
+      // }
 
       // Save user data to Redux (which persists to AsyncStorage)
       const userData = {
@@ -162,51 +165,9 @@ const SignUpScreen = () => {
     }
   };
 
-  const handleVerifyEmailOtp = async () => {
-    if (!pendingEmail || !verificationOtp.trim()) {
-      Alert.alert('Error', 'Please enter OTP');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const data = await verifyEmailOtp(pendingEmail, verificationOtp);
-
-      const userData = {
-        id: data.user.id,
-        name: data.user.name || 'New User',
-        email: data.user.email,
-        phone: data.user.phone || '',
-        nickname: data.user.nickname || '',
-        gender: data.user.gender || 'others',
-        role: data.user.role,
-        roleId: data.user.roleId,
-        address: data.user.address,
-        latitude: data.user.latitude,
-        longitude: data.user.longitude,
-        token: data.token,
-      };
-      dispatch(appSetUser(userData));
-      navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
-    } catch (error) {
-      Alert.alert('Error', error.message || 'OTP verification failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendVerificationOtp = async () => {
-    if (!pendingEmail) return;
-    setLoading(true);
-    try {
-      await resendEmailVerificationOtp(pendingEmail);
-      Alert.alert('Success', 'OTP sent again to your email');
-    } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to resend OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Future: email verification handlers
+  // const handleVerifyEmailOtp = async () => { ... };
+  // const handleResendVerificationOtp = async () => { ... };
 
   return (
     <View style={styles.container}>
@@ -251,48 +212,28 @@ const SignUpScreen = () => {
             />
           </View>
 
-          {!verificationMode ? (
-            <>
-              <Text style={styles.inputLabel}>Create Password</Text>
-              <View style={[styles.inputWrapper, styles.inputActive]}>
-                <Icon name="lock" size={20} color="black" />
-                <TextInput
-                  style={styles.input}
-                  secureTextEntry={!passwordVisible}
-                  placeholder="Enter password"
-                  value={password}
-                  onChangeText={setPassword}
-                />
-                <TouchableOpacity
-                  onPress={() => setPasswordVisible(!passwordVisible)}
-                >
-                  <Icon
-                    name={passwordVisible ? 'eye' : 'eye-off'}
-                    size={20}
-                    color="black"
-                  />
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.inputLabel}>Email Verification OTP</Text>
-              <View style={styles.inputWrapper}>
-                <Icon name="shield-check" size={20} color="black" />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter OTP"
-                  placeholderTextColor="#999"
-                  value={verificationOtp}
-                  onChangeText={setVerificationOtp}
-                  keyboardType="number-pad"
-                />
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>Create Password</Text>
+          <View style={[styles.inputWrapper, styles.inputActive]}>
+            <Icon name="lock" size={20} color="black" />
+            <TextInput
+              style={styles.input}
+              secureTextEntry={!passwordVisible}
+              placeholder="Enter password"
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              onPress={() => setPasswordVisible(!passwordVisible)}
+            >
+              <Icon
+                name={passwordVisible ? 'eye' : 'eye-off'}
+                size={20}
+                color="black"
+              />
+            </TouchableOpacity>
+          </View>
 
-          {!verificationMode ? (
-            <>
+          <>
               {/* Role Input */}
               <Text style={styles.inputLabel}>Account Type</Text>
               <View style={styles.inputWrapper}>
@@ -327,10 +268,8 @@ const SignUpScreen = () => {
                 />
               </View>
             </>
-          ) : null}
 
-          {!verificationMode ? (
-            <>
+          <>
               <Text style={styles.inputLabel}>Confirm Password</Text>
               <View style={styles.inputWrapper}>
                 <Icon name="lock" size={20} color="black" />
@@ -353,7 +292,6 @@ const SignUpScreen = () => {
                 </TouchableOpacity>
               </View>
             </>
-          ) : null}
 
           {/* Sign Up Button */}
           <Pressable
@@ -363,33 +301,17 @@ const SignUpScreen = () => {
                 backgroundColor: hovered || pressed ? '#F97507' : '#32373D',
               },
             ]}
-            onPress={verificationMode ? handleVerifyEmailOtp : handleSignUp}
+            onPress={handleSignUp}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.signUpButtonText}>
-                {verificationMode ? 'Verify Email' : 'Sign up'}
-              </Text>
+              <Text style={styles.signUpButtonText}>Sign up</Text>
             )}
           </Pressable>
 
-          {verificationMode ? (
-            <Pressable
-              style={({ hovered, pressed }) => [
-                styles.signUpButton,
-                {
-                  marginTop: 12,
-                  backgroundColor: hovered || pressed ? '#1f242a' : '#32373D',
-                },
-              ]}
-              onPress={handleResendVerificationOtp}
-              disabled={loading}
-            >
-              <Text style={styles.signUpButtonText}>Resend OTP</Text>
-            </Pressable>
-          ) : null}
+          {/* Future: OTP verify + Resend OTP buttons when email verification is enabled */}
 
           {/* Divider */}
           <View style={styles.dividerContainer}>
