@@ -22,8 +22,19 @@ import { useSelector } from 'react-redux';
 import {
   getRestaurantOrderById,
   updateRestaurantOrderStatus,
+  assignRiderToOrder,
+  rejectRiderAssignment,
 } from '../services/orderService';
 import { getChannelProfile } from '../services/channelService';
+import {
+  orderStatusLabel,
+  orderStatusColor,
+  customerOrderStatusLabel,
+  customerOrderStatusColor,
+  isPickupFulfillment,
+  isDeliveryFulfillment,
+} from '../utils/orderStatus';
+import { listOwnerRiders } from '../services/riderService';
 import { safeImageUri } from '../utils/helper';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
@@ -61,38 +72,6 @@ const escapeHtml = value =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const statusToLabel = status => {
-  const s = String(status || '').toLowerCase();
-  switch (s) {
-    case 'pending':
-      return 'Pending';
-    case 'confirmed':
-      return 'Accepted';
-    case 'cancelled':
-      return 'Rejected';
-    case 'preparing':
-      return 'Preparing';
-    case 'completed':
-      return 'Completed';
-    default:
-      return status || 'Pending';
-  }
-};
-
-const statusColor = status => {
-  switch (String(status || '').toLowerCase()) {
-    case 'completed':
-      return '#22c55e';
-    case 'cancelled':
-      return '#F04438';
-    case 'confirmed':
-    case 'preparing':
-      return '#FDB022';
-    default:
-      return '#666';
-  }
-};
-
 export default function OrderDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -104,11 +83,15 @@ export default function OrderDetailsScreen() {
     'superadmin',
     'super_admin',
   ].includes(role);
+  const isRider = role === 'rider';
   const { orderId, order: orderParam } = route.params || {};
   const [order, setOrder] = useState(orderParam || null);
   const [loading, setLoading] = useState(!orderParam && !!orderId);
   const [updating, setUpdating] = useState(false);
   const [invoiceOptionsVisible, setInvoiceOptionsVisible] = useState(false);
+  const [riders, setRiders] = useState([]);
+  const [assignModalVisible, setAssignModalVisible] = useState(false);
+  const [assigningRider, setAssigningRider] = useState(false);
 
   useEffect(() => {
     if (orderParam) {
@@ -238,11 +221,15 @@ export default function OrderDetailsScreen() {
   const handleAccept = async () => {
     setUpdating(true);
     try {
-      await updateRestaurantOrderStatus(user.token, order.id, 'completed');
-      setOrder(prev => (prev ? { ...prev, status: 'completed' } : prev));
-      navigation.goBack();
+      const updated = await updateRestaurantOrderStatus(
+        user.token,
+        order.id,
+        'preparing',
+      );
+      setOrder(updated);
+      Alert.alert('Accepted', 'Order is now preparing.');
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Failed to accept');
+      Alert.alert('Error', e?.message || 'Failed to accept order');
     } finally {
       setUpdating(false);
     }
@@ -331,6 +318,8 @@ export default function OrderDetailsScreen() {
   const currency = '£';
   const displayOrderId = order.id ? `#${String(order.id)}` : '—';
   const orderStatus = String(order?.status || '').toLowerCase();
+  const isPickupOrder = isPickupFulfillment(order?.fulfillmentType);
+  const isDeliveryOrder = isDeliveryFulfillment(order?.fulfillmentType);
   const isPendingOrder = orderStatus === 'pending';
   const rawDeliveryAddress = String(order?.deliveryAddress || '');
   const hasNoteMarker = rawDeliveryAddress.includes(ORDER_NOTE_MARKER);
@@ -357,6 +346,314 @@ export default function OrderDetailsScreen() {
       ? Number(ownerDeliveryAreaKmRaw)
       : null;
   const orderPlacedText = formatDate(order?.createdAt);
+  const isOrderOwner =
+    order?.ownerId === user?.id || order?.owner?.id === user?.id;
+  const isCustomer = order?.userId === user?.id;
+  const rider = order?.rider;
+  const riderName =
+    rider?.nickname || rider?.name || rider?.email || 'Rider';
+  const riderPhotoRaw =
+    Array.isArray(rider?.photos) && rider.photos.length > 0
+      ? rider.photos[0]
+      : null;
+  const riderAvatarFallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    riderName,
+  )}&background=111&color=fff`;
+  const riderAvatarUri = safeImageUri(riderPhotoRaw, riderAvatarFallback);
+
+  const loadRidersForAssign = async () => {
+    const ownerId = order?.ownerId || user?.id;
+    if (!ownerId) return;
+    try {
+      const res = await listOwnerRiders(ownerId);
+      setRiders(res?.riders ?? []);
+    } catch {
+      setRiders([]);
+    }
+  };
+
+  const handleAssignRider = async riderId => {
+    if (!user?.token || !order?.id || !riderId) return;
+    setAssigningRider(true);
+    try {
+      const updated = await assignRiderToOrder(user.token, order.id, riderId);
+      setOrder(updated);
+      setAssignModalVisible(false);
+      Alert.alert('Assigned', 'Rider assigned for delivery.');
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to assign rider');
+    } finally {
+      setAssigningRider(false);
+    }
+  };
+
+  const openRiderChat = () => {
+    const riderId = order?.riderId || order?.rider?.id;
+    if (!riderId) return;
+    navigation.navigate('ChatScreen', {
+      partnerId: riderId,
+      partnerName: riderName,
+      partnerAvatar: riderAvatarUri,
+      orderId: order?.id,
+      orderDetails: { itemName: order?.items?.[0]?.itemName },
+    });
+  };
+
+  const openCustomerChat = () => {
+    const customerId = order?.userId || order?.user?.id;
+    if (!customerId) return;
+    navigation.navigate('ChatScreen', {
+      partnerId: customerId,
+      partnerName: order?.user?.name || order?.user?.email || 'Customer',
+      partnerAvatar: order?.user?.photos?.[0],
+      orderId: order?.id,
+      orderDetails: { itemName: order?.items?.[0]?.itemName },
+    });
+  };
+
+  const handleRiderAccept = () => {
+    Alert.alert('Accept delivery', 'Accept this delivery assignment?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          setUpdating(true);
+          try {
+            const updated = await updateRestaurantOrderStatus(
+              user.token,
+              order.id,
+              'rider_accepted',
+            );
+            setOrder(updated);
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to accept delivery');
+          } finally {
+            setUpdating(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleRiderReject = () => {
+    Alert.alert(
+      'Reject delivery',
+      'Decline this assignment? The restaurant can assign another rider.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            setUpdating(true);
+            try {
+              const updated = await rejectRiderAssignment(user.token, order.id);
+              Alert.alert('Rejected', 'Order returned to the restaurant.');
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to reject assignment');
+            } finally {
+              setUpdating(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOwnerStart = () => {
+    Alert.alert(
+      'Start delivery',
+      'Send the rider out for delivery? The customer will see rider details and can chat.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes',
+          onPress: async () => {
+            setUpdating(true);
+            try {
+              const updated = await updateRestaurantOrderStatus(
+                user.token,
+                order.id,
+                'out_for_delivery',
+              );
+              setOrder(updated);
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to start delivery');
+            } finally {
+              setUpdating(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOwnerMarkReady = () => {
+    Alert.alert(
+      'Mark ready',
+      'Mark this order ready for customer pick-up?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes',
+          onPress: async () => {
+            setUpdating(true);
+            try {
+              const updated = await updateRestaurantOrderStatus(
+                user.token,
+                order.id,
+                'ready',
+              );
+              setOrder(updated);
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to mark order ready');
+            } finally {
+              setUpdating(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOwnerCompletePickup = () => {
+    Alert.alert('Complete order', 'Customer collected the order?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          setUpdating(true);
+          try {
+            const updated = await updateRestaurantOrderStatus(
+              user.token,
+              order.id,
+              'completed',
+            );
+            setOrder(updated);
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to complete order');
+          } finally {
+            setUpdating(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleRiderDeliveryComplete = () => {
+    Alert.alert(
+      'Delivery complete',
+      'Mark this delivery as complete? The restaurant owner will finalize the order.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes',
+          onPress: async () => {
+            setUpdating(true);
+            try {
+              const updated = await updateRestaurantOrderStatus(
+                user.token,
+                order.id,
+                'delivery_complete',
+              );
+              setOrder(updated);
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to mark delivery complete');
+            } finally {
+              setUpdating(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleOwnerCompleteDelivery = () => {
+    Alert.alert('Complete order', 'Mark this order as complete?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          setUpdating(true);
+          try {
+            const updated = await updateRestaurantOrderStatus(
+              user.token,
+              order.id,
+              'completed',
+            );
+            setOrder(updated);
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to complete order');
+          } finally {
+            setUpdating(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const canRiderAccept =
+    isRider &&
+    isDeliveryOrder &&
+    order?.riderId === user?.id &&
+    orderStatus === 'rider_assigned';
+  const canOwnerStart =
+    (isOrderOwner ||
+      ['admin', 'superadmin', 'super_admin'].includes(role)) &&
+    isDeliveryOrder &&
+    orderStatus === 'rider_accepted';
+  const canOwnerMarkReady =
+    (isOrderOwner ||
+      ['admin', 'superadmin', 'super_admin'].includes(role)) &&
+    isPickupOrder &&
+    orderStatus === 'preparing';
+  const canOwnerCompletePickup =
+    (isOrderOwner ||
+      ['admin', 'superadmin', 'super_admin'].includes(role)) &&
+    isPickupOrder &&
+    orderStatus === 'ready';
+  const canOwnerCompleteDelivery =
+    (isOrderOwner ||
+      ['admin', 'superadmin', 'super_admin'].includes(role)) &&
+    isDeliveryOrder &&
+    orderStatus === 'delivery_complete';
+  const canRiderComplete =
+    isRider &&
+    isDeliveryOrder &&
+    order?.riderId === user?.id &&
+    orderStatus === 'out_for_delivery';
+  const canRiderChatCustomer =
+    isRider &&
+    isDeliveryOrder &&
+    order?.riderId === user?.id &&
+    orderStatus === 'out_for_delivery';
+  const canOwnerAssign =
+    (isOrderOwner ||
+      ['admin', 'superadmin', 'super_admin'].includes(role)) &&
+    isDeliveryOrder &&
+    orderStatus === 'preparing';
+  const customerCanSeeRider =
+    isCustomer &&
+    isDeliveryOrder &&
+    ['out_for_delivery', 'delivery_complete', 'completed'].includes(orderStatus) &&
+    !!rider;
+  const showRiderToCustomer =
+    customerCanSeeRider &&
+    ['out_for_delivery', 'delivery_complete'].includes(orderStatus);
+  const showRiderDetails =
+    !!rider && (isOrderOwner || isRider || customerCanSeeRider);
+  const canChatRider =
+    isOrderOwner ||
+    isRider ||
+    (isCustomer &&
+      ['out_for_delivery', 'delivery_complete'].includes(orderStatus));
+  const displayStatusLabel = isCustomer
+    ? customerOrderStatusLabel(order?.status, order?.fulfillmentType)
+    : orderStatusLabel(order?.status);
+  const displayStatusColor = isCustomer
+    ? customerOrderStatusColor(order?.status, order?.fulfillmentType)
+    : orderStatusColor(order?.status);
 
   const buildInvoiceHtml = () => {
     const invoiceDate = formatDate(order?.createdAt);
@@ -564,11 +861,11 @@ export default function OrderDetailsScreen() {
                   <View
                     style={[
                       styles.statusBadge,
-                      { backgroundColor: statusColor(order.status) },
+                      { backgroundColor: displayStatusColor },
                     ]}
                   >
                     <Text style={styles.statusBadgeText}>
-                      {statusToLabel(order.status)}
+                      {displayStatusLabel}
                     </Text>
                   </View>
                 </View>
@@ -624,7 +921,9 @@ export default function OrderDetailsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-            <Text style={styles.sectionLabel}>Delivery Address</Text>
+            <Text style={styles.sectionLabel}>
+              {isPickupOrder ? 'Pick up location' : 'Delivery Address'}
+            </Text>
             <Text style={styles.addressText}>{deliveryAddressText || '—'}</Text>
             {restaurantNoteText ? (
               <>
@@ -634,6 +933,8 @@ export default function OrderDetailsScreen() {
                 <Text style={styles.addressText}>{restaurantNoteText}</Text>
               </>
             ) : null}
+            {!isPickupOrder ? (
+              <>
             <Text style={[styles.sectionLabel, { marginTop: 15 }]}>
               Delivery Time
             </Text>
@@ -655,6 +956,99 @@ export default function OrderDetailsScreen() {
                   </Text>
                 </View>
               </>
+            ) : null}
+            {showRiderToCustomer ? (
+              <View style={styles.onWayBanner}>
+                <Icon name="bike-fast" size={22} color="#2563eb" />
+                <View style={styles.onWayBannerBody}>
+                  <Text style={styles.onWayTitle}>Rider is on the way</Text>
+                  <Text style={styles.onWaySub}>
+                    Estimated delivery:{' '}
+                    {ownerDeliveryTimeLabel || 'See restaurant time below'}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+              </>
+            ) : null}
+            <Text style={[styles.sectionLabel, { marginTop: 15 }]}>
+              {isPickupOrder ? 'Pick up' : 'Delivery Rider'}
+            </Text>
+            {isPickupOrder && (isCustomer || isOrderOwner) ? (
+              <View style={styles.pickupInfoRow}>
+                <Icon name="storefront-outline" size={22} color="#16a34a" />
+                <Text style={styles.addressText}>
+                  {orderStatus === 'ready'
+                    ? isCustomer
+                      ? 'Your order is ready — collect it from the restaurant.'
+                      : 'Order is ready for customer pick-up.'
+                    : isCustomer
+                      ? 'You will collect this order from the restaurant.'
+                      : 'Customer will pick up this order from your restaurant.'}
+                </Text>
+              </View>
+            ) : null}
+            {!isPickupOrder && showRiderDetails ? (
+              <View style={styles.ownerInfoRow}>
+                <View style={styles.ownerProfileTap}>
+                  <Image
+                    source={{ uri: riderAvatarUri }}
+                    style={styles.ownerAvatar}
+                  />
+                  <View style={styles.ownerDetails}>
+                    <Text style={styles.ownerName}>{riderName}</Text>
+                    {rider.phone ? (
+                      <Text style={styles.ownerPhone}>{rider.phone}</Text>
+                    ) : null}
+                  </View>
+                </View>
+                {canChatRider ? (
+                  <TouchableOpacity
+                    style={styles.iconCircle}
+                    onPress={openRiderChat}
+                  >
+                    <Icon name="message-text" size={18} color="white" />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : !isPickupOrder && canOwnerAssign ? (
+              <TouchableOpacity
+                style={styles.assignRiderEmptyRow}
+                activeOpacity={0.85}
+                onPress={() => {
+                  loadRidersForAssign();
+                  setAssignModalVisible(true);
+                }}
+              >
+                <Icon name="bike" size={22} color="#F5A623" />
+                <View style={styles.assignRiderEmptyBody}>
+                  <Text style={styles.addressText}>No rider assigned yet</Text>
+                  <Text style={styles.assignRiderTapHint}>Tap to assign a rider</Text>
+                </View>
+                <Icon name="chevron-right" size={22} color="#999" />
+              </TouchableOpacity>
+            ) : !isPickupOrder ? (
+              <Text style={styles.addressText}>
+                {orderStatus === 'preparing'
+                  ? 'Assign a delivery rider when the order is preparing.'
+                  : isCustomer
+                    ? 'Rider details will appear when your order is on the way.'
+                    : 'No rider assigned yet'}
+              </Text>
+            ) : null}
+            {!isPickupOrder && canOwnerAssign && rider ? (
+              <TouchableOpacity
+                style={styles.assignRiderBtn}
+                onPress={() => {
+                  loadRidersForAssign();
+                  setAssignModalVisible(true);
+                }}
+              >
+                <Icon name="bike" size={18} color="#F5A623" />
+                <Text style={styles.assignRiderBtnText}>
+                  {rider ? 'Change rider' : 'Assign rider'}
+                </Text>
+              </TouchableOpacity>
             ) : null}
             <Text style={[styles.sectionLabel, { marginTop: 12 }]}>
               Order placed
@@ -787,6 +1181,102 @@ export default function OrderDetailsScreen() {
             <Text style={styles.footerBtnText}>Accept</Text>
           </TouchableOpacity>
         </View>
+      ) : canRiderAccept ? (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.rejectBtn]}
+            onPress={handleRiderReject}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Reject</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.acceptBtn]}
+            onPress={handleRiderAccept}
+            disabled={updating}
+          >
+            <Text style={styles.footerBtnText}>Accept delivery</Text>
+          </TouchableOpacity>
+        </View>
+      ) : canOwnerMarkReady ? (
+        <View style={[styles.footer, styles.invoiceFooter]}>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.startBtn, { flex: 1 }]}
+            onPress={handleOwnerMarkReady}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Ready</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : canOwnerCompletePickup ? (
+        <View style={[styles.footer, styles.invoiceFooter]}>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.acceptBtn, { flex: 1 }]}
+            onPress={handleOwnerCompletePickup}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Complete</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : canOwnerCompleteDelivery ? (
+        <View style={[styles.footer, styles.invoiceFooter]}>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.acceptBtn, { flex: 1 }]}
+            onPress={handleOwnerCompleteDelivery}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Complete</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : canOwnerStart ? (
+        <View style={[styles.footer, styles.invoiceFooter]}>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.startBtn, { flex: 1 }]}
+            onPress={handleOwnerStart}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Start delivery</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      ) : canRiderComplete ? (
+        <View style={[styles.footer, styles.invoiceFooter]}>
+          <TouchableOpacity
+            style={[styles.footerBtn, styles.acceptBtn, { flex: 1 }]}
+            onPress={handleRiderDeliveryComplete}
+            disabled={updating}
+          >
+            {updating ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Text style={styles.footerBtnText}>Delivery Complete</Text>
+            )}
+          </TouchableOpacity>
+          {canRiderChatCustomer ? (
+            <TouchableOpacity style={styles.iconCircle} onPress={openCustomerChat}>
+              <Icon name="message-text" size={18} color="white" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : (
         <View style={[styles.footer, styles.invoiceFooter]}>
           <TouchableOpacity
@@ -799,6 +1289,42 @@ export default function OrderDetailsScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      <Modal
+        visible={assignModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAssignModalVisible(false)}
+      >
+        <Pressable
+          style={styles.invoiceModalBackdrop}
+          onPress={() => setAssignModalVisible(false)}
+        >
+          <Pressable
+            style={styles.assignModalCard}
+            onPress={e => e.stopPropagation()}
+          >
+            <Text style={styles.invoiceModalTitle}>Assign rider</Text>
+            {riders.length === 0 ? (
+              <Text style={styles.addressText}>
+                No riders yet. Create riders in Business Profile → Riders tab.
+              </Text>
+            ) : (
+              riders.map(r => (
+                <TouchableOpacity
+                  key={r.id}
+                  style={styles.assignRiderRow}
+                  disabled={assigningRider}
+                  onPress={() => handleAssignRider(r.id)}
+                >
+                  <Text style={styles.ownerName}>{r.name || r.email}</Text>
+                  <Text style={styles.ownerPhone}>{r.email}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -953,7 +1479,22 @@ const styles = StyleSheet.create({
   },
   rejectBtn: { backgroundColor: '#F75555' },
   acceptBtn: { backgroundColor: '#FDB022' },
+  startBtn: { backgroundColor: '#2563eb' },
   footerBtnText: { color: 'white', fontSize: 18, fontWeight: '700' },
+  onWayBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  onWayBannerBody: { flex: 1 },
+  onWayTitle: { fontSize: 15, fontWeight: '700', color: '#1D4ED8' },
+  onWaySub: { fontSize: 13, color: '#374151', marginTop: 4 },
   invoiceBtn: {
     backgroundColor: '#D78500',
     borderRadius: 12,
@@ -1002,5 +1543,62 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1A1C1E',
     fontWeight: '600',
+  },
+  pickupInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  assignRiderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    alignSelf: 'flex-start',
+  },
+  assignRiderBtnText: { color: '#F5A623', fontWeight: '700', fontSize: 14 },
+  assignRiderEmptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    backgroundColor: '#FFF9EE',
+  },
+  assignRiderEmptyBody: { flex: 1 },
+  assignRiderTapHint: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#F5A623',
+    fontWeight: '600',
+  },
+  assignModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    maxHeight: '70%',
+  },
+  assignRiderRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
   },
 });

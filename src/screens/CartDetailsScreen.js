@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
   Dimensions,
   Platform,
@@ -13,11 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, SHADOWS } from '../constants/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { safeImageUri } from '../utils/helper';
 import { getMenuByUserId } from '../services/menuService';
-
-const DEFAULT_IMAGE =
-  'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
+import MenuItemThumbnail from '../components/MenuItemThumbnail';
 
 const CartDetailsScreen = () => {
   const navigation = useNavigation();
@@ -166,11 +162,10 @@ const CartDetailsScreen = () => {
                 const key = item.menuItemId || item.id || String(index);
                 return (
                   <View key={key} style={styles.cartItem}>
-                    <Image
-                      source={{
-                        uri: safeImageUri(item.imageUrl, DEFAULT_IMAGE),
-                      }}
+                    <MenuItemThumbnail
+                      uri={item.imageUrl}
                       style={styles.itemImage}
+                      imageStyle={styles.itemImage}
                     />
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.itemName}</Text>
@@ -229,14 +224,10 @@ const CartDetailsScreen = () => {
                 >
                   {addMoreItems.map(it => (
                     <View key={String(it.id)} style={styles.addMoreCard}>
-                      <Image
-                        source={{
-                          uri: safeImageUri(
-                            it.imageUrl || it.thumbnailUrl,
-                            DEFAULT_IMAGE,
-                          ),
-                        }}
+                      <MenuItemThumbnail
+                        uri={it.imageUrl || it.thumbnailUrl}
                         style={styles.addMoreImage}
+                        imageStyle={styles.addMoreImage}
                       />
                       <Text style={styles.addMoreItemName} numberOfLines={1}>
                         {it.itemName || it.name || 'Item'}

@@ -8,9 +8,12 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { getUsers, getUser } from '../services/adminUserService';
@@ -31,8 +34,11 @@ const canUseFeaturedUpload = roleNorm => {
   );
 };
 
+const KEYBOARD_SCROLL_OFFSET = 120;
+
 const FeaturedVideoUploadScreen = () => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { user } = useSelector(s => s.app) || {};
   const roleNorm = String(user?.role || '').toLowerCase();
   const isAdminUser =
@@ -64,6 +70,10 @@ const FeaturedVideoUploadScreen = () => {
     useState(false);
   const [selectedFeaturedOwner, setSelectedFeaturedOwner] = useState(null);
   const featuredOwnerSearchTimeoutRef = useRef(null);
+  const scrollRef = useRef(null);
+  const fieldLayoutsRef = useRef({});
+  const lastFocusedFieldRef = useRef(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [myFeaturedProfile, setMyFeaturedProfile] = useState(null);
   const [myFeaturedProfileLoading, setMyFeaturedProfileLoading] =
     useState(false);
@@ -77,6 +87,57 @@ const FeaturedVideoUploadScreen = () => {
       ]);
     }
   }, [user?.id, user?.role, navigation]);
+
+  const registerFieldLayout = useCallback((key, y) => {
+    fieldLayoutsRef.current[key] = y;
+  }, []);
+
+  const scrollFieldIntoView = useCallback(key => {
+    const delay = Platform.OS === 'ios' ? 280 : 120;
+    setTimeout(() => {
+      const y = fieldLayoutsRef.current[key];
+      if (typeof y !== 'number' || !scrollRef.current?.scrollTo) return;
+      scrollRef.current.scrollTo({
+        y: Math.max(0, y - KEYBOARD_SCROLL_OFFSET),
+        animated: true,
+      });
+    }, delay);
+  }, []);
+
+  useEffect(() => {
+    const showEvt =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, e => {
+      setKeyboardHeight(Number(e?.endCoordinates?.height || 0));
+      if (lastFocusedFieldRef.current) {
+        scrollFieldIntoView(lastFocusedFieldRef.current);
+      }
+    });
+    const hideSub = Keyboard.addListener(hideEvt, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollFieldIntoView]);
+
+  const fieldSectionProps = useCallback(
+    key => ({
+      onLayout: e => registerFieldLayout(key, e.nativeEvent.layout.y),
+    }),
+    [registerFieldLayout],
+  );
+
+  const inputFocusProps = useCallback(
+    key => ({
+      onFocus: () => {
+        lastFocusedFieldRef.current = key;
+        scrollFieldIntoView(key);
+      },
+    }),
+    [scrollFieldIntoView],
+  );
 
   const searchFeaturedOwners = useCallback(async query => {
     setFeaturedOwnerSearchLoading(true);
@@ -289,7 +350,7 @@ const FeaturedVideoUploadScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -302,11 +363,29 @@ const FeaturedVideoUploadScreen = () => {
         <View style={styles.headerBtn} />
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
       >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingBottom:
+                SPACING.xxl +
+                Math.max(0, keyboardHeight - insets.bottom) +
+                24,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+        >
         {isAdminUser && (
           <>
             <Text style={styles.label}>
@@ -452,14 +531,17 @@ const FeaturedVideoUploadScreen = () => {
           </>
         )}
 
-        <Text style={styles.label}>Title (optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={featuredForm.title}
-          onChangeText={t => setFeaturedForm(p => ({ ...p, title: t }))}
-          placeholder="e.g. My featured promo"
-          placeholderTextColor="#999"
-        />
+        <View {...fieldSectionProps('title')}>
+          <Text style={styles.label}>Title (optional)</Text>
+          <TextInput
+            style={styles.input}
+            value={featuredForm.title}
+            onChangeText={t => setFeaturedForm(p => ({ ...p, title: t }))}
+            placeholder="e.g. My featured promo"
+            placeholderTextColor="#999"
+            {...inputFocusProps('title')}
+          />
+        </View>
         <Text style={styles.label}>Video (required)</Text>
         <TouchableOpacity
           style={[styles.primaryBtn, { marginVertical: 4 }]}
@@ -529,61 +611,79 @@ const FeaturedVideoUploadScreen = () => {
             </Text>
           )}
         </View>
-        <Text style={styles.label}>Radius (km)</Text>
-        <TextInput
-          style={styles.input}
-          value={featuredForm.radiusKm}
-          onChangeText={t => setFeaturedForm(p => ({ ...p, radiusKm: t }))}
-          placeholder="2"
-          placeholderTextColor="#999"
-          keyboardType="decimal-pad"
-        />
-        <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
-        <TextInput
-          style={styles.input}
-          value={featuredForm.startDate}
-          onChangeText={t => setFeaturedForm(p => ({ ...p, startDate: t }))}
-          placeholder="2026-02-18"
-          placeholderTextColor="#999"
-        />
-        <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
-        <TextInput
-          style={styles.input}
-          value={featuredForm.endDate}
-          onChangeText={t => setFeaturedForm(p => ({ ...p, endDate: t }))}
-          placeholder="2026-03-18"
-          placeholderTextColor="#999"
-        />
-        <Text style={styles.label}>Amount paid</Text>
-        <TextInput
-          style={styles.input}
-          value={featuredForm.amountPaid}
-          onChangeText={t => setFeaturedForm(p => ({ ...p, amountPaid: t }))}
-          placeholder="0"
-          placeholderTextColor="#999"
-          keyboardType="decimal-pad"
-        />
-        <Text style={styles.label}>Currency</Text>
-        <TextInput
-          style={styles.input}
-          value={featuredForm.currency}
-          onChangeText={t => setFeaturedForm(p => ({ ...p, currency: t }))}
-          placeholder="GBP"
-          placeholderTextColor="#999"
-        />
+        <View {...fieldSectionProps('radius')}>
+          <Text style={styles.label}>Radius (km)</Text>
+          <TextInput
+            style={styles.input}
+            value={featuredForm.radiusKm}
+            onChangeText={t => setFeaturedForm(p => ({ ...p, radiusKm: t }))}
+            placeholder="2"
+            placeholderTextColor="#999"
+            keyboardType="decimal-pad"
+            {...inputFocusProps('radius')}
+          />
+        </View>
+        <View {...fieldSectionProps('startDate')}>
+          <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
+          <TextInput
+            style={styles.input}
+            value={featuredForm.startDate}
+            onChangeText={t => setFeaturedForm(p => ({ ...p, startDate: t }))}
+            placeholder="2026-02-18"
+            placeholderTextColor="#999"
+            {...inputFocusProps('startDate')}
+          />
+        </View>
+        <View {...fieldSectionProps('endDate')}>
+          <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
+          <TextInput
+            style={styles.input}
+            value={featuredForm.endDate}
+            onChangeText={t => setFeaturedForm(p => ({ ...p, endDate: t }))}
+            placeholder="2026-03-18"
+            placeholderTextColor="#999"
+            {...inputFocusProps('endDate')}
+          />
+        </View>
+        <View {...fieldSectionProps('amountPaid')}>
+          <Text style={styles.label}>Amount paid</Text>
+          <TextInput
+            style={styles.input}
+            value={featuredForm.amountPaid}
+            onChangeText={t => setFeaturedForm(p => ({ ...p, amountPaid: t }))}
+            placeholder="0"
+            placeholderTextColor="#999"
+            keyboardType="decimal-pad"
+            {...inputFocusProps('amountPaid')}
+          />
+        </View>
+        <View {...fieldSectionProps('currency')}>
+          <Text style={styles.label}>Currency</Text>
+          <TextInput
+            style={styles.input}
+            value={featuredForm.currency}
+            onChangeText={t => setFeaturedForm(p => ({ ...p, currency: t }))}
+            placeholder="GBP"
+            placeholderTextColor="#999"
+            {...inputFocusProps('currency')}
+          />
+        </View>
 
-        <TouchableOpacity
-          style={[styles.submitBtn, submitLoading && { opacity: 0.7 }]}
-          onPress={handleCreateFeatured}
-          disabled={submitLoading}
-        >
-          {submitLoading ? (
-            <ActivityIndicator color={COLORS.white} />
-          ) : (
-            <Text style={styles.submitBtnText}>Create featured campaign</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+        <View {...fieldSectionProps('submit')}>
+          <TouchableOpacity
+            style={[styles.submitBtn, submitLoading && { opacity: 0.7 }]}
+            onPress={handleCreateFeatured}
+            disabled={submitLoading}
+          >
+            {submitLoading ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <Text style={styles.submitBtnText}>Create featured campaign</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
       <VideoCoverPickerModal
         visible={coverPickerVisible}
         onClose={() => setCoverPickerVisible(false)}
@@ -628,6 +728,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scroll: { flex: 1 },
+  keyboardView: { flex: 1 },
   scrollContent: {
     padding: SPACING.xl,
     paddingBottom: SPACING.xxl,

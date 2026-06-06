@@ -69,6 +69,13 @@ export function resolveVideoPosterUri(
   return placeholder;
 }
 
+/** Whether a menu item / menu file has a usable image URL. */
+export function hasMenuImageUrl(url) {
+  const s = String(url || '').trim();
+  if (!s || s === 'null' || s === 'undefined') return false;
+  return true;
+}
+
 /** Ensure Image source.uri is always a string (avoids "cannot cast ReadableNativeMap to String" crash) */
 export function safeImageUri(val, placeholder = 'https://via.placeholder.com/200') {
   if (typeof val === 'string' && val.trim().length > 0) return val.trim();

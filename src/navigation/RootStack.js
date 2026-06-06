@@ -1,5 +1,5 @@
 import { createStackNavigator } from '@react-navigation/stack';
-import BottomNaivgation from './BottomTabNavigation';
+import MainRoot from './MainRoot';
 import AccountScreen from '../screens/AccountScreen';
 import CreatePinScreen from '../screens/CreatePinScreen';
 import SetFingerprint from '../screens/SetFingerprint';
@@ -15,6 +15,7 @@ import MenuManageScreen from '../screens/MenuManageScreen';
 import ChatScreen from '../screens/ChatScreen';
 import DetailedChatScreen from '../screens/DetailedChatScreen';
 import OrderDetailsScreen from '../screens/OrderDetailsScreen';
+import RiderDetailScreen from '../screens/RiderDetailScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import EarningsScreen from '../screens/EarningsScreen';
 import MessageListScreen from '../screens/MessageListScreen';
@@ -36,7 +37,7 @@ const Root = createStackNavigator();
 const RootStack = () => {
   return (
     <Root.Navigator screenOptions={{ headerShown: false }}>
-      <Root.Screen name="Root" component={BottomNaivgation} />
+      <Root.Screen name="Root" component={MainRoot} />
       <Root.Screen name="Login" component={Login} />
       <Root.Screen name="SignUp" component={SignUp} />
       <Root.Screen name="ForgotPassword" component={ForgotPassword} />
@@ -55,6 +56,7 @@ const RootStack = () => {
       <Root.Screen name="ChatScreen" component={ChatScreen} />
       <Root.Screen name="DetailedChatScreen" component={DetailedChatScreen} />
       <Root.Screen name="OrderDetailsScreen" component={OrderDetailsScreen} />
+      <Root.Screen name="RiderDetailScreen" component={RiderDetailScreen} />
       <Root.Screen name="CartDetailsScreen" component={CartDetailsScreen} />
       <Root.Screen name="OrdersList" component={LiveOrdersScreen} />
       <Root.Screen name="Earnings" component={EarningsScreen} />

@@ -26,6 +26,15 @@ import {
 } from '../services/orderService';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import { safeImageUri } from '../utils/helper';
+import {
+  orderStatusLabel,
+  orderStatusColor,
+  customerOrderStatusLabel,
+  customerOrderStatusColor,
+  CUSTOMER_IN_PROGRESS_STATUSES,
+} from '../utils/orderStatus';
+import CompleteDateFilterRow from '../components/CompleteDateFilterRow';
+import { matchesCompleteDateFilter } from '../utils/orderCompleteDateFilter';
 
 const formatDate = dateStr => {
   if (!dateStr) return '';
@@ -38,37 +47,6 @@ const formatDate = dateStr => {
   return `${date} ${time}`;
 };
 
-/** Backend status → display label (for user: Pending, Accepted, Rejected, etc.) */
-const statusToLabel = status => {
-  const s = String(status || '').toLowerCase();
-  switch (s) {
-    case 'pending':
-      return 'Pending';
-    case 'confirmed':
-    case 'preparing':
-      return 'In Progress';
-    case 'cancelled':
-      return 'Rejected';
-    case 'completed':
-      return 'Completed';
-    default:
-      return status || 'Pending';
-  }
-};
-
-const statusColor = status => {
-  switch (String(status).toLowerCase()) {
-    case 'completed':
-      return COLORS.success ?? '#22c55e';
-    case 'cancelled':
-      return COLORS.error ?? '#ef4444';
-    case 'confirmed':
-    case 'preparing':
-      return COLORS.primaryOrange;
-    default:
-      return COLORS.gray600;
-  }
-};
 
 const OrderListScreen = ({ navigation, route: routeProp }) => {
   const routeHook = useRoute();
@@ -84,6 +62,8 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
   const [page, setPage] = useState(1);
   const limit = 20;
   const [activeTab, setActiveTab] = useState('All');
+  const [completeDateFilter, setCompleteDateFilter] = useState('all');
+  const [completeCustomDate, setCompleteCustomDate] = useState(null);
   const ORDER_TABS = ['All', 'Pending', 'In Progress', 'Complete', 'Rejected'];
 
   const isUser = role === 'user' || forceCustomerScope;
@@ -148,15 +128,20 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
 
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
+      if (
+        !matchesCompleteDateFilter(o, completeDateFilter, completeCustomDate)
+      ) {
+        return false;
+      }
       const s = String(o?.status || '').toLowerCase();
       if (activeTab === 'All') return true;
       if (activeTab === 'Pending') return s === 'pending';
-      if (activeTab === 'In Progress') return s === 'confirmed' || s === 'preparing';
+      if (activeTab === 'In Progress') return CUSTOMER_IN_PROGRESS_STATUSES.includes(s);
       if (activeTab === 'Complete') return s === 'completed';
       if (activeTab === 'Rejected') return s === 'cancelled';
       return true;
     });
-  }, [orders, activeTab]);
+  }, [orders, activeTab, completeDateFilter, completeCustomDate]);
 
   const updateStatus = async (orderId, newStatus) => {
     if (!user?.token) return;
@@ -275,10 +260,18 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
           <View
             style={[
               styles.badge,
-              { backgroundColor: statusColor(item.status) },
+              {
+                backgroundColor: isUser
+                  ? customerOrderStatusColor(item.status, item.fulfillmentType)
+                  : orderStatusColor(item.status),
+              },
             ]}
           >
-            <Text style={styles.badgeText}>{statusToLabel(item.status)}</Text>
+            <Text style={styles.badgeText}>
+              {isUser
+                ? customerOrderStatusLabel(item.status, item.fulfillmentType)
+                : orderStatusLabel(item.status)}
+            </Text>
           </View>
         </View>
         {isUser && (
@@ -307,6 +300,36 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
         <Text style={styles.cardItems}>
           {itemCount} item(s) · {'£'} {Number(item.totalAmount).toFixed(2)}
         </Text>
+        {isUser &&
+        item?.rider &&
+        String(item.status || '').toLowerCase() === 'out_for_delivery' ? (
+          <View style={styles.cardRiderRow}>
+            <Icon name="bike-fast" size={16} color="#2563eb" />
+            <Text style={styles.cardRiderText} numberOfLines={1}>
+              Rider on the way:{' '}
+              {item.rider.nickname ||
+                item.rider.name ||
+                item.rider.email ||
+                'Assigned'}
+            </Text>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate('ChatScreen', {
+                  partnerId: item.riderId || item.rider.id,
+                  partnerName:
+                    item.rider.nickname ||
+                    item.rider.name ||
+                    item.rider.email ||
+                    'Rider',
+                  partnerAvatar: item.rider.photos?.[0],
+                  orderId: item.id,
+                })
+              }
+            >
+              <Icon name="message-text-outline" size={18} color="#F5A623" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {isUser && (
           <View style={styles.userActionsRow}>
@@ -460,6 +483,12 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
           </TouchableOpacity>
         ))}
       </View>
+      <CompleteDateFilterRow
+        filterId={completeDateFilter}
+        onFilterChange={setCompleteDateFilter}
+        customDate={completeCustomDate}
+        onCustomDateChange={setCompleteCustomDate}
+      />
       {loading && orders.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primaryOrange} />
@@ -710,6 +739,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.textPrimary,
   },
+  cardRiderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  cardRiderText: { flex: 1, fontSize: 13, color: '#444', fontWeight: '600' },
   userActionsRow: {
     flexDirection: 'row',
     gap: 8,

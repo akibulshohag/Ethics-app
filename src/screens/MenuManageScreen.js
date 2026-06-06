@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import MenuItemThumbnail from '../components/MenuItemThumbnail';
 import { launchImageLibrary } from 'react-native-image-picker';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
@@ -791,12 +792,11 @@ const MenuManageScreen = () => {
               {section.data.map(item => (
                 <View key={item.id} style={styles.card}>
                   <View style={styles.cardLeft}>
-                    {item.imageUrl ? (
-                      <Image
-                        source={{ uri: item.imageUrl }}
-                        style={styles.cardThumb}
-                      />
-                    ) : null}
+                    <MenuItemThumbnail
+                      uri={item.imageUrl}
+                      style={styles.cardThumb}
+                      imageStyle={styles.cardThumb}
+                    />
                     <View style={styles.cardTextWrap}>
                       <Text style={styles.cardTitle}>{item.itemName}</Text>
                       <Text style={styles.cardPrice}>

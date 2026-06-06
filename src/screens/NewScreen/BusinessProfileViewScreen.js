@@ -90,6 +90,11 @@ import {
   deletePromotion,
 } from '../../services/promotionService';
 import {
+  createOwnerRider,
+  listOwnerRiders,
+  uploadOwnerRiderAvatar,
+} from '../../services/riderService';
+import {
   getMenuByUserId,
   getMenuFiles,
   uploadMenuItemImage,
@@ -100,6 +105,7 @@ import {
 import { persistBrowseLocation } from '../../services/userLocationService';
 import { appSetUser, setBrowseLocation } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
+import MenuItemThumbnail from '../../components/MenuItemThumbnail';
 import { buildPostShareMessage } from '../../utils/contentLinks';
 import {
   buildOwnerScopedShortsFeed,
@@ -528,6 +534,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [editTaxCharge11To20Km, setEditTaxCharge11To20Km] = useState('');
   const [editTaxCharge21To30Km, setEditTaxCharge21To30Km] = useState('');
   const [savingDeliverySettings, setSavingDeliverySettings] = useState(false);
+  const [riders, setRiders] = useState([]);
+  const [ridersLoading, setRidersLoading] = useState(false);
+  const [riderNameInput, setRiderNameInput] = useState('');
+  const [riderEmailInput, setRiderEmailInput] = useState('');
+  const [riderPhoneInput, setRiderPhoneInput] = useState('');
+  const [riderAddressInput, setRiderAddressInput] = useState('');
+  const [riderPasswordInput, setRiderPasswordInput] = useState('');
+  const [riderPhotoFile, setRiderPhotoFile] = useState(null);
+  const [addRiderModalVisible, setAddRiderModalVisible] = useState(false);
+  const [creatingRider, setCreatingRider] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -1123,6 +1139,100 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     isOwnerOrVendor,
     loadAreaUsers,
   ]);
+
+  const loadRiders = useCallback(async () => {
+    if (!profileUserId || !isOwnProfile || !isOwnerOrVendor) {
+      setRiders([]);
+      return;
+    }
+    setRidersLoading(true);
+    try {
+      const res = await listOwnerRiders(profileUserId);
+      setRiders(res?.riders ?? []);
+    } catch {
+      setRiders([]);
+    } finally {
+      setRidersLoading(false);
+    }
+  }, [profileUserId, isOwnProfile, isOwnerOrVendor]);
+
+  useEffect(() => {
+    if (
+      activeTab === 'Riders' &&
+      profileUserId &&
+      isOwnProfile &&
+      isOwnerOrVendor
+    ) {
+      loadRiders();
+    }
+  }, [activeTab, profileUserId, isOwnProfile, isOwnerOrVendor, loadRiders]);
+
+  const resetRiderForm = useCallback(() => {
+    setRiderNameInput('');
+    setRiderEmailInput('');
+    setRiderPhoneInput('');
+    setRiderAddressInput('');
+    setRiderPasswordInput('');
+    setRiderPhotoFile(null);
+  }, []);
+
+  const openAddRiderModal = useCallback(() => {
+    resetRiderForm();
+    setAddRiderModalVisible(true);
+  }, [resetRiderForm]);
+
+  const closeAddRiderModal = useCallback(() => {
+    if (creatingRider) return;
+    setAddRiderModalVisible(false);
+    resetRiderForm();
+  }, [creatingRider, resetRiderForm]);
+
+  const handlePickRiderPhoto = useCallback(async () => {
+    try {
+      const file = await pickProfileAvatarCrop();
+      if (file) setRiderPhotoFile(file);
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Could not process image');
+    }
+  }, []);
+
+  const handleCreateRider = async () => {
+    if (!profileUserId) return;
+    const email = String(riderEmailInput || '').trim();
+    const password = String(riderPasswordInput || '').trim();
+    const name = String(riderNameInput || '').trim();
+    if (!name) {
+      Alert.alert('Required', 'Rider name is required.');
+      return;
+    }
+    if (!email || !password) {
+      Alert.alert('Required', 'Email and password are required for the rider.');
+      return;
+    }
+    setCreatingRider(true);
+    try {
+      const res = await createOwnerRider(profileUserId, {
+        email,
+        password,
+        name,
+        phone: riderPhoneInput.trim() || undefined,
+        address: riderAddressInput.trim() || undefined,
+      });
+      const riderId = res?.rider?.id;
+      if (riderPhotoFile && riderId) {
+        await uploadOwnerRiderAvatar(profileUserId, riderId, riderPhotoFile);
+      }
+      setAddRiderModalVisible(false);
+      resetRiderForm();
+      await loadRiders();
+      Alert.alert('Success', 'Rider account created.');
+    } catch (e) {
+      const msg = e?.response?.data?.message || e?.message || 'Failed to create rider';
+      Alert.alert('Error', Array.isArray(msg) ? msg.join(', ') : String(msg));
+    } finally {
+      setCreatingRider(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'Promotions' && profileUserId) {
@@ -2807,6 +2917,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 'Photos',
                 'Notification',
                 'Area Users',
+                'Riders',
                 'Settings',
               ]
             : BASE_TABS
@@ -2912,6 +3023,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             ? 'Delivery Settings'
             : activeTab === 'Area Users'
             ? 'Area Users'
+            : activeTab === 'Riders'
+            ? 'Riders'
             : activeTab}
         </Text>
         {activeTab === 'Menus' && isOwnProfile && isOwnerOrVendor ? (
@@ -2956,10 +3069,30 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               color={galleryUploading ? '#999' : '#333'}
             />
           </TouchableOpacity>
+        ) : activeTab === 'Riders' && isOwnProfile && isOwnerOrVendor ? (
+          <TouchableOpacity onPress={openAddRiderModal}>
+            <MaterialCommunityIcons name="plus" size={24} color="#333" />
+          </TouchableOpacity>
         ) : (
           <View style={styles.plusPlaceholder} />
         )}
       </View>
+      {activeTab === 'Riders' && isOwnProfile && isOwnerOrVendor ? (
+        <View style={styles.ridersTopBar}>
+          <Text style={styles.ridersTopHint}>
+            Riders log in with email and password and see assigned deliveries on
+            the Orders tab.
+          </Text>
+          <TouchableOpacity
+            style={styles.addRiderBtn}
+            onPress={openAddRiderModal}
+            activeOpacity={0.85}
+          >
+            <MaterialCommunityIcons name="account-plus" size={20} color="#fff" />
+            <Text style={styles.addRiderBtnText}>Add Rider</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       {activeTab === 'Area Users' && isOwnProfile && isOwnerOrVendor ? (
         <View style={styles.areaUsersSummary}>
           <Text style={styles.areaUsersSummaryText}>
@@ -3097,6 +3230,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           ...u,
           id: u.id,
         }));
+      case 'Riders':
+        return riders.map(r => ({ ...r, id: r.id }));
       case 'Settings':
         return [];
       default:
@@ -3137,6 +3272,51 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
         <MaterialCommunityIcons name="chevron-right" size={22} color="#999" />
       </TouchableOpacity>
+    );
+  };
+
+  const renderRiderRow = item => {
+    const avatarUri = item.avatar
+      ? safeImageUri(item.avatar)
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          item.name || 'Rider',
+        )}&background=FF7F0B&color=fff`;
+    return (
+      <View style={styles.areaUserRow}>
+        <Image source={{ uri: avatarUri }} style={styles.areaUserAvatar} />
+        <View style={styles.areaUserBody}>
+          <Text style={styles.areaUserName} numberOfLines={1}>
+            {item.name || item.email}
+          </Text>
+          <Text style={styles.areaUserAddress} numberOfLines={1}>
+            {item.email}
+          </Text>
+          {item.phone ? (
+            <Text style={styles.areaUserAddressMuted} numberOfLines={1}>
+              {item.phone}
+            </Text>
+          ) : null}
+          {item.address ? (
+            <Text style={styles.areaUserAddress} numberOfLines={2}>
+              {item.address}
+            </Text>
+          ) : null}
+          <Text style={styles.areaUserDistance}>
+            Active: {item.activeOrders ?? 0} · Done: {item.completedOrders ?? 0}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.riderDetailsBtn}
+          onPress={() =>
+            navigation?.navigate('RiderDetailScreen', {
+              ownerId: profileUserId,
+              riderId: item.id,
+            })
+          }
+        >
+          <Text style={styles.riderDetailsBtnText}>Details</Text>
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -3308,13 +3488,21 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             }}
             activeOpacity={0.85}
           >
-            <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
-              <MaterialCommunityIcons
-                name={isPdf ? 'file-pdf-box' : 'file-image'}
-                size={24}
-                color={isPdf ? '#E53935' : '#FF7F0B'}
+            {isPdf ? (
+              <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
+                <MaterialCommunityIcons
+                  name="file-pdf-box"
+                  size={24}
+                  color="#E53935"
+                />
+              </View>
+            ) : (
+              <MenuItemThumbnail
+                uri={url}
+                style={styles.menuRowImage}
+                imageStyle={styles.menuRowImage}
               />
-            </View>
+            )}
             <View style={styles.menuRowBody}>
               <Text style={styles.menuRowName} numberOfLines={1}>
                 {item.title || (isPdf ? 'Menu PDF' : 'Menu image')}
@@ -3346,16 +3534,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       }
       return (
         <View style={styles.menuRowItem}>
-          {item.imageUrl ? (
-            <Image
-              source={{ uri: safeImageUri(item.imageUrl) }}
-              style={styles.menuRowImage}
-            />
-          ) : (
-            <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
-              <MaterialCommunityIcons name="food" size={24} color="#999" />
-            </View>
-          )}
+          <MenuItemThumbnail
+            uri={item.imageUrl}
+            style={styles.menuRowImage}
+            imageStyle={styles.menuRowImage}
+          />
           <View style={styles.menuRowBody}>
             <Text style={styles.menuRowName} numberOfLines={1}>
               {item.itemName}
@@ -3469,6 +3652,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     }
     if (activeTab === 'Area Users') {
       return renderAreaUserRow(item);
+    }
+    if (activeTab === 'Riders') {
+      return renderRiderRow(item);
     }
     return null;
   };
@@ -3650,6 +3836,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
+          ) : activeTab === 'Riders' && isOwnProfile && isOwnerOrVendor ? (
+            <RefreshControl
+              refreshing={ridersLoading}
+              onRefresh={loadRiders}
+              colors={['#FF7F0B']}
+              tintColor="#FF7F0B"
+            />
           ) : activeTab === 'Promotions' && profileUserId ? (
             <RefreshControl
               refreshing={
@@ -3741,6 +3934,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 )}
               </TouchableOpacity>
             </View>
+          ) : activeTab === 'Riders' &&
+            isOwnProfile &&
+            isOwnerOrVendor &&
+            !ridersLoading &&
+            riders.length === 0 ? (
+            <Text style={styles.areaUsersEmpty}>No riders yet. Tap Add Rider above.</Text>
           ) : activeTab === 'Area Users' &&
             isOwnProfile &&
             isOwnerOrVendor &&
@@ -5018,6 +5217,124 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </KeyboardAvoidingView>
       </Modal>
 
+      <Modal
+        visible={addRiderModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeAddRiderModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.editModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.editModalBackdrop} />
+          <View style={styles.editModalBox}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Add Rider</Text>
+              <TouchableOpacity
+                onPress={closeAddRiderModal}
+                disabled={creatingRider}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.editModalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.settingsHint}>
+                Create a rider account for your restaurant. They will log in with
+                the email and password you set here.
+              </Text>
+              <TouchableOpacity
+                style={styles.riderPhotoPicker}
+                onPress={handlePickRiderPhoto}
+                disabled={creatingRider}
+                activeOpacity={0.85}
+              >
+                {riderPhotoFile?.uri ? (
+                  <Image
+                    source={{ uri: riderPhotoFile.uri }}
+                    style={styles.riderPhotoPreview}
+                  />
+                ) : (
+                  <View style={styles.riderPhotoPlaceholder}>
+                    <MaterialCommunityIcons
+                      name="camera-plus"
+                      size={32}
+                      color="#999"
+                    />
+                  </View>
+                )}
+                <Text style={styles.riderPhotoPickerText}>
+                  {riderPhotoFile ? 'Change profile photo' : 'Add profile photo'}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.editLabel}>Name</Text>
+              <TextInput
+                style={styles.editInput}
+                value={riderNameInput}
+                onChangeText={setRiderNameInput}
+                placeholder="Rider full name"
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.editLabel}>Email</Text>
+              <TextInput
+                style={styles.editInput}
+                value={riderEmailInput}
+                onChangeText={setRiderEmailInput}
+                placeholder="rider@email.com"
+                placeholderTextColor="#999"
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+              <Text style={styles.editLabel}>Phone</Text>
+              <TextInput
+                style={styles.editInput}
+                value={riderPhoneInput}
+                onChangeText={setRiderPhoneInput}
+                placeholder="07xxx xxxxxx"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+              />
+              <Text style={styles.editLabel}>Address</Text>
+              <TextInput
+                style={[styles.editInput, styles.editInputMultiline]}
+                value={riderAddressInput}
+                onChangeText={setRiderAddressInput}
+                placeholder="Street, city, postcode"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={2}
+              />
+              <Text style={styles.editLabel}>Password</Text>
+              <TextInput
+                style={styles.editInput}
+                value={riderPasswordInput}
+                onChangeText={setRiderPasswordInput}
+                placeholder="Min 8 chars, upper, lower, number"
+                placeholderTextColor="#999"
+                secureTextEntry
+              />
+            </ScrollView>
+            <TouchableOpacity
+              style={[
+                styles.editSaveBtn,
+                creatingRider && styles.editSaveBtnDisabled,
+              ]}
+              onPress={handleCreateRider}
+              disabled={creatingRider}
+            >
+              {creatingRider ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.editSaveBtnText}>Create rider</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <MapLocationPicker
         visible={locationMapVisible}
         onClose={() => setLocationMapVisible(false)}
@@ -5823,6 +6140,65 @@ const styles = StyleSheet.create({
   areaUserDistance: {
     marginTop: 4,
     fontSize: 12,
+    color: '#FF7F0B',
+    fontWeight: '600',
+  },
+  riderDetailsBtn: {
+    backgroundColor: '#FF7F0B',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  riderDetailsBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  ridersTopBar: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  ridersTopHint: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  addRiderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FF7F0B',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  addRiderBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  riderPhotoPicker: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  riderPhotoPreview: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#eee',
+  },
+  riderPhotoPlaceholder: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderStyle: 'dashed',
+  },
+  riderPhotoPickerText: {
+    marginTop: 8,
+    fontSize: 13,
     color: '#FF7F0B',
     fontWeight: '600',
   },

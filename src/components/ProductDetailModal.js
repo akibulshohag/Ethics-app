@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Modal,
-  Image,
   TouchableOpacity,
   ScrollView,
   Dimensions,
@@ -23,11 +22,9 @@ import {
 } from '../constants/theme';
 import { useNavigation } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
+import MenuItemThumbnail from './MenuItemThumbnail';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-const DEFAULT_IMAGE =
-  'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
 
 const ProductDetailModal = ({
   visible,
@@ -101,9 +98,10 @@ const ProductDetailModal = ({
               </View>
             ) : hasDynamicMenu ? (
               <>
-                <Image
-                  source={{ uri: firstItem.imageUrl || DEFAULT_IMAGE }}
+                <MenuItemThumbnail
+                  uri={firstItem.imageUrl}
                   style={styles.productImage}
+                  imageStyle={styles.productImage}
                 />
                 <View style={styles.infoContainer}>
                   <Text style={styles.title}>{firstItem.itemName}</Text>
@@ -122,9 +120,10 @@ const ProductDetailModal = ({
                     const qty = selectedItems[item.id] || 0;
                     return (
                       <View key={item.id} style={styles.boughtItem}>
-                        <Image
-                          source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+                        <MenuItemThumbnail
+                          uri={item.imageUrl}
                           style={styles.itemThumbnail}
+                          imageStyle={styles.itemThumbnail}
                         />
                         <View style={styles.itemInfo}>
                           <Text style={styles.itemTitle}>{item.itemName}</Text>
@@ -180,9 +179,10 @@ const ProductDetailModal = ({
               </>
             ) : (
               <>
-                <Image
-                  source={{ uri: DEFAULT_IMAGE }}
+                <MenuItemThumbnail
+                  uri={null}
                   style={styles.productImage}
+                  imageStyle={styles.productImage}
                 />
                 <View style={styles.infoContainer}>
                   <Text style={styles.title}>Bang Bang Chicken Skewers</Text>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -31,6 +31,8 @@ import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
 import OrderListScreen from '../screens/OrderListScreen';
+import RiderDashboardScreen from '../screens/RiderDashboardScreen';
+import { getRestaurantOrderCounts } from '../services/orderService';
 import BusinessProfileViewScreen from '../screens/NewScreen/BusinessProfileViewScreen';
 import UserViewsScreen from '../screens/NewScreen/UserViewsScreen';
 import { BottomTabLessScreens } from '../constants/BottomLessScreens';
@@ -50,10 +52,11 @@ const getTabBarStyle = route => {
   return BottomTabLessScreens.includes(name) ? { display: 'none' } : undefined;
 };
 
-/** Orders tab: user role → own orders + status only; owner/admin → Live Orders with Accept/Reject */
+/** Orders tab: rider → dashboard; owner/admin → live orders; user → own orders */
 function OrdersTabWrapper(props) {
   const user = useSelector(state => state.app?.user);
   const role = String(user?.role || '').toLowerCase();
+  if (role === 'rider') return <RiderDashboardScreen {...props} />;
   const isOwnerOrAdmin = [
     'owner',
     'vendor',
@@ -78,6 +81,31 @@ const BottomNaivgation = () => {
   const isOwner = role === 'owner';
   const isVendor = role === 'vendor';
   const isUser = role === 'user';
+  const isRider = role === 'rider';
+  const [ordersBadge, setOrdersBadge] = useState(0);
+
+  useEffect(() => {
+    if (!user?.token) {
+      setOrdersBadge(0);
+      return;
+    }
+    let cancelled = false;
+    const loadCounts = () => {
+      getRestaurantOrderCounts(user.token)
+        .then(counts => {
+          if (!cancelled) setOrdersBadge(Number(counts?.pending) || 0);
+        })
+        .catch(() => {
+          if (!cancelled) setOrdersBadge(0);
+        });
+    };
+    loadCounts();
+    const timer = setInterval(loadCounts, 45000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [user?.token, user?.role]);
   const isAdmin =
     role === 'admin' ||
     role === 'superadmin' ||
@@ -426,6 +454,7 @@ const BottomNaivgation = () => {
               tabPress: redirectToHomeThreeIfGuest,
             }}
             options={({ route }) => ({
+              tabBarBadge: ordersBadge > 0 ? ordersBadge : undefined,
               tabBarStyle: {
                 backgroundColor: COLORS.white,
                 borderTopWidth: 1,

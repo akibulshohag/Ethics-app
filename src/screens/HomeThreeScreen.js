@@ -24,10 +24,9 @@ import { getMenuByUserId } from '../services/menuService';
 import { menuItemMatchesDiscoveryCategory } from '../constants/menuDiscoveryCategories';
 import { useSelector } from 'react-redux';
 import { getChannelProfile } from '../services/channelService';
+import MenuItemThumbnail from '../components/MenuItemThumbnail';
 
 const { width } = Dimensions.get('window');
-const DEFAULT_IMAGE =
-  'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
 
 const DAY_NAMES = [
   'Sunday',
@@ -864,9 +863,11 @@ const HomeThreeScreen = ({ onBack }) => {
           ) : null}
         </View>
         <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+          <MenuItemThumbnail
+            uri={item.imageUrl}
             style={styles.itemImage}
+            imageStyle={styles.itemImage}
+            borderColor="#F5A623"
           />
           <View style={styles.stepperContainer}>
             <TouchableOpacity

@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
 import {
@@ -58,6 +58,18 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
   // PRESERVED: Original handleLogin functionality
   const navigateAfterLogin = async userData => {
+    const role = String(userData?.role || '').toLowerCase();
+    if (role === 'rider') {
+      let rootNav = navigation;
+      while (rootNav?.getParent?.()) rootNav = rootNav.getParent();
+      rootNav.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Root' }],
+        }),
+      );
+      return;
+    }
     const browseLoc = await resolvePostLoginBrowseLocation(userData);
     if (browseLoc) {
       dispatch(setBrowseLocation(browseLoc));

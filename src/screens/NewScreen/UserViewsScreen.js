@@ -32,6 +32,7 @@ import PromotionCard from '../../components/PromotionCard';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { safeImageUri } from '../../utils/helper';
+import MenuItemThumbnail from '../../components/MenuItemThumbnail';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
 import {
@@ -2108,16 +2109,11 @@ const UserViewsScreen = ({ navigation }) => {
       }
       return (
         <View style={styles.menuRowItem}>
-          {item.imageUrl ? (
-            <Image
-              source={{ uri: safeImageUri(item.imageUrl) }}
-              style={styles.menuRowImage}
-            />
-          ) : (
-            <View style={[styles.menuRowImage, styles.menuRowImagePlaceholder]}>
-              <MaterialCommunityIcons name="food" size={24} color="#999" />
-            </View>
-          )}
+          <MenuItemThumbnail
+            uri={item.imageUrl}
+            style={styles.menuRowImage}
+            imageStyle={styles.menuRowImage}
+          />
           <View style={styles.menuRowBody}>
             <Text style={styles.menuRowName} numberOfLines={1}>
               {item.itemName}

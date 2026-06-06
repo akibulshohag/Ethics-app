@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -23,6 +23,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { COLORS } from '../constants/theme';
+import { safeImageUri } from '../utils/helper';
 
 const ActionSheetIOS =
   Platform.OS === 'ios' ? require('react-native').ActionSheetIOS : null;
@@ -139,6 +140,16 @@ const ChatScreen = () => {
   const myId = user?.id ? normalizeId(user.id) : '';
   const myIdForApi = String(user?.id ?? '').trim() || myId;
   const displayName = partnerName || 'Chat';
+  const partnerAvatarUri = useMemo(
+    () =>
+      safeImageUri(
+        partnerAvatar,
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          displayName,
+        )}&background=111&color=fff`,
+      ),
+    [partnerAvatar, displayName],
+  );
   const isOrderChat = !!orderId;
 
   const [messages, setMessages] = useState([]);
@@ -177,9 +188,9 @@ const ChatScreen = () => {
     recordRecentChatPartner({
       partnerId: partnerIdForApi,
       partnerName: displayName,
-      partnerAvatar,
+      partnerAvatar: partnerAvatarUri,
     });
-  }, [partnerIdForApi, displayName, partnerAvatar]);
+  }, [partnerIdForApi, displayName, partnerAvatarUri]);
 
   useEffect(() => {
     if (!myId || !partnerId) {
@@ -290,7 +301,7 @@ const ChatScreen = () => {
       recordRecentChatPartner({
         partnerId: partnerIdForApi,
         partnerName: displayName,
-        partnerAvatar,
+        partnerAvatar: partnerAvatarUri,
         lastMessage: text,
       });
       setMessages(prev =>
@@ -674,13 +685,7 @@ const ChatScreen = () => {
                 {!msg.isMe ? (
                   <View style={styles.leftMessageRow}>
                     <Image
-                      source={{
-                        uri:
-                          partnerAvatar ||
-                          `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                            displayName,
-                          )}&background=111&color=fff`,
-                      }}
+                      source={{ uri: partnerAvatarUri }}
                       style={styles.avatar}
                     />
                     <View style={styles.messageContent}>

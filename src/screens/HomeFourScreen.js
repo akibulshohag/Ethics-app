@@ -83,6 +83,10 @@ const HomeFourScreen = ({ onBack }) => {
   const [savingAddress, setSavingAddress] = useState(false);
   const [ownerProfile, setOwnerProfile] = useState(null);
   const [ownerProfileLoading, setOwnerProfileLoading] = useState(false);
+  const [fulfillmentType, setFulfillmentType] = useState('delivery');
+
+  const isPickup = fulfillmentType === 'collection';
+  const isDelivery = fulfillmentType === 'delivery';
 
   const syncAndBackToMenu = useCallback(() => {
     const syncParams = {
@@ -289,21 +293,33 @@ const HomeFourScreen = ({ onBack }) => {
     );
   }, [ownerProfile, customerLatLng]);
   const isOutsideDeliveryArea =
+    isDelivery &&
     ownerDeliveryAreaKm != null &&
     distanceToRestaurantKm != null &&
     distanceToRestaurantKm > ownerDeliveryAreaKm;
-  const taxChargeAmount = useMemo(
-    () => resolveTaxChargeForDistanceKm(distanceToRestaurantKm, ownerProfile),
-    [distanceToRestaurantKm, ownerProfile],
-  );
+  const taxChargeAmount = useMemo(() => {
+    if (isPickup) return 0;
+    return resolveTaxChargeForDistanceKm(distanceToRestaurantKm, ownerProfile);
+  }, [isPickup, distanceToRestaurantKm, ownerProfile]);
   const itemsNetAmount = Math.max(0, subtotal - discountAmount);
   const total = itemsNetAmount + taxChargeAmount;
   const displayTotal = total.toFixed(2);
   const displaySubtotal = subtotal.toFixed(2);
   const displayItemsNet = itemsNetAmount.toFixed(2);
   const displayDiscount = discountAmount.toFixed(2);
-  const displayTaxCharge =
-    distanceToRestaurantKm != null ? taxChargeAmount.toFixed(2) : null;
+  const displayTaxCharge = isPickup
+    ? '0.00'
+    : distanceToRestaurantKm != null
+      ? taxChargeAmount.toFixed(2)
+      : null;
+  const restaurantCollectionAddress = useMemo(() => {
+    const label = ownerProfile?.nickname || ownerProfile?.name || restaurantName;
+    const parts = [
+      String(ownerProfile?.address || '').trim(),
+      String(ownerProfile?.postcode || '').trim(),
+    ].filter(Boolean);
+    return parts.length ? `${label}, ${parts.join(', ')}` : label;
+  }, [ownerProfile, restaurantName]);
 
   const applyDeliveryLocation = useCallback(
     (lat, lng, addressText, postcode = '') => {
@@ -466,14 +482,6 @@ const HomeFourScreen = ({ onBack }) => {
       navigation.navigate('HomeSevenScreen');
       return;
     }
-    const addressText = String(selectedDeliveryAddress || '').trim();
-    if (!addressText) {
-      Alert.alert(
-        'Delivery address required',
-        'Add an address in your profile, tap Edit to enter a delivery address for this order, or use your default address when it is set.',
-      );
-      return;
-    }
     const phone = normalizeUkPhone(contactPhone);
     if (!phone || !validUkPhoneNumber(phone)) {
       setPhoneTouched(true);
@@ -487,29 +495,47 @@ const HomeFourScreen = ({ onBack }) => {
       Alert.alert('No items', 'Add items from the menu to place an order.');
       return;
     }
-    if (ownerDeliveryAreaKm != null) {
-      if (!customerLatLng) {
+
+    let deliveryAddressPayload = '';
+    if (isDelivery) {
+      const addressText = String(selectedDeliveryAddress || '').trim();
+      if (!addressText) {
         Alert.alert(
-          'Delivery location required',
-          'Use My location or Pick on map so we can check you are within this restaurant delivery area.',
+          'Delivery address required',
+          'Add an address in your profile, tap Edit to enter a delivery address for this order, or use your default address when it is set.',
         );
         return;
       }
-      if (isOutsideDeliveryArea) {
-        Alert.alert(
-          'Outside delivery area',
-          `${restaurantName} only delivers within ${ownerDeliveryAreaKm} km. Your location is about ${distanceToRestaurantKm.toFixed(1)} km away.`,
-        );
-        return;
+      if (ownerDeliveryAreaKm != null) {
+        if (!customerLatLng) {
+          Alert.alert(
+            'Delivery location required',
+            'Use My location or Pick on map so we can check you are within this restaurant delivery area.',
+          );
+          return;
+        }
+        if (isOutsideDeliveryArea) {
+          Alert.alert(
+            'Outside delivery area',
+            `${restaurantName} only delivers within ${ownerDeliveryAreaKm} km. Your location is about ${distanceToRestaurantKm.toFixed(1)} km away.`,
+          );
+          return;
+        }
       }
-    }
-    setPlacing(true);
-    try {
       const noteText = String(restaurantNote || '').trim();
-      const deliveryAddressPayload = noteText
+      deliveryAddressPayload = noteText
         ? `${addressText}${ORDER_NOTE_MARKER}${noteText}`
         : addressText;
+    } else {
+      const noteText = String(restaurantNote || '').trim();
+      const collectionBase = `Pick up — ${restaurantCollectionAddress}`;
+      deliveryAddressPayload = noteText
+        ? `${collectionBase}${ORDER_NOTE_MARKER}${noteText}`
+        : collectionBase;
+    }
 
+    setPlacing(true);
+    try {
       await createRestaurantOrder(user.token, {
         ownerId,
         items: items.map(i => ({
@@ -518,10 +544,12 @@ const HomeFourScreen = ({ onBack }) => {
         })),
         deliveryAddress: deliveryAddressPayload,
         customerPhone: phone,
-        ...(customerLatLng && {
-          customerLatitude: customerLatLng.lat,
-          customerLongitude: customerLatLng.lng,
-        }),
+        fulfillmentType,
+        ...(isDelivery &&
+          customerLatLng && {
+            customerLatitude: customerLatLng.lat,
+            customerLongitude: customerLatLng.lng,
+          }),
         ...(appliedPromotion?.promoCode && {
           promoCode: appliedPromotion.promoCode,
           promotionId: appliedPromotion.id,
@@ -561,9 +589,59 @@ const HomeFourScreen = ({ onBack }) => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
-        <Text style={styles.deliveryTitle}>Delivery at home</Text>
+        <Text style={styles.deliveryTitle}>
+          {isPickup ? 'Pick up from restaurant' : 'Delivery at home'}
+        </Text>
 
-        {(ownerDeliveryTime || ownerDeliveryAreaKm != null || ownerProfileLoading) && (
+        <View style={styles.fulfillmentToggleRow}>
+          <TouchableOpacity
+            style={[
+              styles.fulfillmentBtn,
+              isPickup && styles.fulfillmentBtnActive,
+            ]}
+            onPress={() => setFulfillmentType('collection')}
+            activeOpacity={0.85}
+          >
+            <Icon
+              name="storefront-outline"
+              size={18}
+              color={isPickup ? '#FFF' : '#1A1A1A'}
+            />
+            <Text
+              style={[
+                styles.fulfillmentBtnText,
+                isPickup && styles.fulfillmentBtnTextActive,
+              ]}
+            >
+              Pick Up
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.fulfillmentBtn,
+              isDelivery && styles.fulfillmentBtnActive,
+            ]}
+            onPress={() => setFulfillmentType('delivery')}
+            activeOpacity={0.85}
+          >
+            <Icon
+              name="truck-delivery-outline"
+              size={18}
+              color={isDelivery ? '#FFF' : '#1A1A1A'}
+            />
+            <Text
+              style={[
+                styles.fulfillmentBtnText,
+                isDelivery && styles.fulfillmentBtnTextActive,
+              ]}
+            >
+              Delivery
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {isDelivery &&
+        (ownerDeliveryTime || ownerDeliveryAreaKm != null || ownerProfileLoading) ? (
           <View style={styles.deliveryInfoCard}>
             {ownerProfileLoading ? (
               <ActivityIndicator size="small" color="#F5A623" />
@@ -597,7 +675,23 @@ const HomeFourScreen = ({ onBack }) => {
               </>
             )}
           </View>
-        )}
+        ) : null}
+
+        {isPickup ? (
+          <View style={styles.collectionInfoCard}>
+            <Icon name="storefront-outline" size={22} color="#F5A623" />
+            <View style={styles.collectionInfoBody}>
+              <Text style={styles.collectionInfoTitle}>Pick up at restaurant</Text>
+              <Text style={styles.collectionInfoText}>
+                You will collect your order from the restaurant. No delivery charge
+                applies.
+              </Text>
+              <Text style={styles.collectionInfoAddress} numberOfLines={4}>
+                {restaurantCollectionAddress}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.itemsCard}>
           {hasItems ? (
@@ -725,15 +819,21 @@ const HomeFourScreen = ({ onBack }) => {
           <Text style={styles.promoErrorText}>{promoApplyError}</Text>
         ) : null}
 
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Icon name="truck-delivery-outline" size={24} color="#1A1A1A" />
-            <Text style={styles.infoText}>Delivery in 42 mins</Text>
-          </View>
-          <Icon name="chevron-right" size={24} color="#1A1A1A" />
-        </View>
+        {isDelivery ? (
+          <>
+            <View style={styles.infoRow}>
+              <View style={styles.infoLeft}>
+                <Icon name="truck-delivery-outline" size={24} color="#1A1A1A" />
+                <Text style={styles.infoText}>
+                  {ownerDeliveryTime
+                    ? `Delivery in ${ownerDeliveryTime}`
+                    : 'Delivery in 42 mins'}
+                </Text>
+              </View>
+              <Icon name="chevron-right" size={24} color="#1A1A1A" />
+            </View>
 
-        <View style={styles.deliveryAddressCard}>
+            <View style={styles.deliveryAddressCard}>
           <View style={styles.deliveryAddressHeader}>
             <View style={styles.deliveryAddressHeaderLeft}>
               <Icon name="home-map-marker" size={22} color="#F5A623" />
@@ -890,11 +990,15 @@ const HomeFourScreen = ({ onBack }) => {
             </View>
           ) : null}
         </View>
+          </>
+        ) : null}
 
         <View style={styles.contactCard}>
           <Text style={styles.contactTitle}>Contact details</Text>
           <Text style={styles.contactSub}>
-            Required so the restaurant can reach you about delivery.
+            {isPickup
+              ? 'Required so the restaurant can reach you about your order.'
+              : 'Required so the restaurant can reach you about delivery.'}
           </Text>
           <Text style={styles.contactLabel}>Name</Text>
           <Text style={styles.contactValue}>{userName}</Text>
@@ -979,7 +1083,7 @@ const HomeFourScreen = ({ onBack }) => {
                 : '—'}
             </Text>
           </View>
-          {distanceToRestaurantKm != null && taxChargeAmount > 0 ? (
+          {isDelivery && distanceToRestaurantKm != null && taxChargeAmount > 0 ? (
             <Text style={styles.billHint}>
               Based on {formatDistanceKm(distanceToRestaurantKm)} from restaurant
             </Text>
@@ -1014,9 +1118,9 @@ const HomeFourScreen = ({ onBack }) => {
             styles.placeOrderBtn,
             (!hasItems ||
               !ownerId ||
-              (!!user?.token && !hasDeliveryAddress) ||
+              (isDelivery && !!user?.token && !hasDeliveryAddress) ||
               (!!user?.token && !hasValidPhone) ||
-              isOutsideDeliveryArea) &&
+              (isDelivery && isOutsideDeliveryArea)) &&
               styles.placeOrderBtnDisabled,
           ]}
           onPress={handlePlaceOrder}
@@ -1024,9 +1128,9 @@ const HomeFourScreen = ({ onBack }) => {
             placing ||
             !hasItems ||
             !ownerId ||
-            (!!user?.token && !hasDeliveryAddress) ||
+            (isDelivery && !!user?.token && !hasDeliveryAddress) ||
             (!!user?.token && !hasValidPhone) ||
-            isOutsideDeliveryArea
+            (isDelivery && isOutsideDeliveryArea)
           }
         >
           <View>
@@ -1085,6 +1189,67 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1A1A1A',
     marginTop: 15,
+  },
+  fulfillmentToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 4,
+  },
+  fulfillmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    backgroundColor: '#FFF',
+  },
+  fulfillmentBtnActive: {
+    backgroundColor: '#1E1E1E',
+    borderColor: '#1E1E1E',
+  },
+  fulfillmentBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1A1A1A',
+  },
+  fulfillmentBtnTextActive: {
+    color: '#FFF',
+  },
+  collectionInfoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 12,
+    marginBottom: 4,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F0E6D2',
+    backgroundColor: '#FFFBF5',
+    gap: 10,
+  },
+  collectionInfoBody: { flex: 1 },
+  collectionInfoTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  collectionInfoText: {
+    fontSize: 13,
+    color: '#667085',
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  collectionInfoAddress: {
+    fontSize: 14,
+    color: '#1A1A1A',
+    lineHeight: 20,
+    fontWeight: '600',
   },
   deliveryInfoCard: {
     marginTop: 12,

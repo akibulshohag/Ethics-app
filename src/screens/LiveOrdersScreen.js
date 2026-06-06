@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -24,9 +24,19 @@ import {
   updateRestaurantBookingStatus,
 } from '../services/bookingService';
 import OrderListScreen from './OrderListScreen';
+import {
+  orderStatusLabel,
+  orderStatusColor,
+  OWNER_PREPARING_STATUSES,
+  OWNER_DELIVERY_IN_PROGRESS_STATUSES,
+  isPickupFulfillment,
+} from '../utils/orderStatus';
+import CompleteDateFilterRow from '../components/CompleteDateFilterRow';
+import { matchesCompleteDateFilter } from '../utils/orderCompleteDateFilter';
 
-/** Shown in tab bar only; pending orders use top-left "Live Order" control. */
-const TAB_ITEMS = ['In Progress', 'Complete', 'Rejected'];
+/** Status tabs under User Orders (Pending uses Live Order button). */
+const USER_ORDER_TABS = ['All', 'Preparing', 'In Progress', 'Complete', 'Rejected'];
+const BOOKING_TABS = ['All', 'In Progress', 'Complete', 'Rejected'];
 
 function formatItems(items) {
   if (!Array.isArray(items) || items.length === 0) return 'No items';
@@ -36,36 +46,11 @@ function formatItems(items) {
 }
 
 function statusToLabel(status) {
-  const s = String(status || '').toLowerCase();
-  switch (s) {
-    case 'pending':
-      return 'Pending';
-    case 'confirmed':
-      return 'In Progress';
-    case 'cancelled':
-      return 'Rejected';
-    case 'preparing':
-      return 'Preparing';
-    case 'completed':
-      return 'Completed';
-    default:
-      return status || 'Pending';
-  }
+  return orderStatusLabel(status);
 }
 
 function statusColor(status) {
-  const s = String(status || '').toLowerCase();
-  switch (s) {
-    case 'completed':
-      return '#22c55e';
-    case 'cancelled':
-      return '#F04438';
-    case 'confirmed':
-    case 'preparing':
-      return '#FDB022';
-    default:
-      return '#666';
-  }
+  return orderStatusColor(status);
 }
 
 function formatBookingDate(value) {
@@ -95,11 +80,18 @@ export default function LiveOrdersScreen() {
   ].includes(role);
   const canAcceptReject = isOwnerOrAdmin;
   const [orderScope, setOrderScope] = useState('user');
-  const [activeTab, setActiveTab] = useState('Pending');
+  const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [completeDateFilter, setCompleteDateFilter] = useState('all');
+  const [completeCustomDate, setCompleteCustomDate] = useState(null);
+
+  const statusTabs = useMemo(
+    () => (orderScope === 'booking' ? BOOKING_TABS : USER_ORDER_TABS),
+    [orderScope],
+  );
 
   const loadOrders = useCallback(
     async (isRefresh = false) => {
@@ -129,12 +121,24 @@ export default function LiveOrdersScreen() {
             });
         const all = isBookingScope ? res?.bookings || [] : res?.orders || [];
         const filtered = all.filter(o => {
+          if (
+            !matchesCompleteDateFilter(o, completeDateFilter, completeCustomDate)
+          ) {
+            return false;
+          }
           const s = String(o?.status || '').toLowerCase();
+          if (activeTab === 'All') return true;
           if (activeTab === 'Pending') {
             return s === 'pending';
           }
+          if (activeTab === 'Preparing') {
+            return OWNER_PREPARING_STATUSES.includes(s);
+          }
           if (activeTab === 'In Progress') {
-            return s === 'confirmed' || s === 'preparing';
+            if (orderScope === 'booking') {
+              return s === 'confirmed';
+            }
+            return OWNER_DELIVERY_IN_PROGRESS_STATUSES.includes(s);
           }
           if (activeTab === 'Complete') {
             return s === 'completed';
@@ -152,7 +156,7 @@ export default function LiveOrdersScreen() {
         setRefreshing(false);
       }
     },
-    [user?.token, activeTab, orderScope],
+    [user?.token, activeTab, orderScope, completeDateFilter, completeCustomDate],
   );
 
   useFocusEffect(
@@ -163,7 +167,7 @@ export default function LiveOrdersScreen() {
 
   useEffect(() => {
     loadOrders();
-  }, [activeTab, orderScope]);
+  }, [activeTab, orderScope, completeDateFilter, completeCustomDate]);
 
   const handleReject = order => {
     Alert.alert('Reject order', 'Cancel this order?', [
@@ -192,16 +196,65 @@ export default function LiveOrdersScreen() {
   const handleAccept = async order => {
     setUpdatingId(order.id);
     try {
-      await updateRestaurantOrderStatus(user.token, order.id, 'confirmed');
+      await updateRestaurantOrderStatus(user.token, order.id, 'preparing');
       setOrders(prev =>
-        prev.map(o => (o.id === order.id ? { ...o, status: 'confirmed' } : o)),
+        prev.map(o => (o.id === order.id ? { ...o, status: 'preparing' } : o)),
       );
-      setActiveTab('In Progress');
+      setActiveTab('Preparing');
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to accept');
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const handleStartDelivery = order => {
+    Alert.alert(
+      'Start delivery',
+      'Send the rider out for delivery? The customer will see rider details and can chat.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes',
+          onPress: async () => {
+            setUpdatingId(order.id);
+            try {
+              await updateRestaurantOrderStatus(
+                user.token,
+                order.id,
+                'out_for_delivery',
+              );
+              await loadOrders(true);
+            } catch (e) {
+              Alert.alert('Error', e?.message || 'Failed to start delivery');
+            } finally {
+              setUpdatingId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMarkReady = order => {
+    Alert.alert('Mark ready', 'Mark this order ready for customer pick-up?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          setUpdatingId(order.id);
+          try {
+            await updateRestaurantOrderStatus(user.token, order.id, 'ready');
+            await loadOrders(true);
+            setActiveTab('In Progress');
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to mark ready');
+          } finally {
+            setUpdatingId(null);
+          }
+        },
+      },
+    ]);
   };
 
   const handleComplete = async order => {
@@ -387,7 +440,10 @@ export default function LiveOrdersScreen() {
                 styles.orderModePill,
                 orderScope === 'user' && styles.orderModePillActive,
               ]}
-              onPress={() => setOrderScope('user')}
+              onPress={() => {
+                setOrderScope('user');
+                setActiveTab('All');
+              }}
               activeOpacity={0.85}
             >
               <Text
@@ -404,7 +460,10 @@ export default function LiveOrdersScreen() {
                 styles.orderModePill,
                 orderScope === 'own' && styles.orderModePillActive,
               ]}
-              onPress={() => setOrderScope('own')}
+              onPress={() => {
+                setOrderScope('own');
+                setActiveTab('All');
+              }}
               activeOpacity={0.85}
             >
               <Text
@@ -423,7 +482,7 @@ export default function LiveOrdersScreen() {
               ]}
               onPress={() => {
                 setOrderScope('booking');
-                setActiveTab('Pending');
+                setActiveTab('All');
               }}
               activeOpacity={0.85}
             >
@@ -440,8 +499,16 @@ export default function LiveOrdersScreen() {
         ) : null}
 
         {orderScope === 'user' || orderScope === 'booking' ? (
-          <View style={styles.tabBarRow}>
-            {TAB_ITEMS.map(tab => (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator
+            bounces
+            alwaysBounceHorizontal
+            nestedScrollEnabled
+            style={styles.tabBarScroll}
+            contentContainerStyle={styles.tabBarRow}
+          >
+            {statusTabs.map(tab => (
               <TouchableOpacity
                 key={tab}
                 onPress={() => setActiveTab(tab)}
@@ -456,15 +523,24 @@ export default function LiveOrdersScreen() {
                     styles.tabText,
                     activeTab === tab && styles.activeTabText,
                   ]}
-                  numberOfLines={2}
+                  numberOfLines={1}
                 >
                   {tab}
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
       </SafeAreaView>
+
+      {orderScope === 'user' || orderScope === 'booking' ? (
+        <CompleteDateFilterRow
+          filterId={completeDateFilter}
+          onFilterChange={setCompleteDateFilter}
+          customDate={completeCustomDate}
+          onCustomDateChange={setCompleteCustomDate}
+        />
+      ) : null}
 
       {orderScope === 'own' ? (
         <OrderListScreen
@@ -490,10 +566,16 @@ export default function LiveOrdersScreen() {
           {orders.length === 0 ? (
             <View style={styles.centered}>
               <Text style={styles.emptyText}>
-                {activeTab === 'Pending'
+                {activeTab === 'All'
+                  ? orderScope === 'booking'
+                    ? 'No bookings yet'
+                    : 'No orders yet'
+                  : activeTab === 'Pending'
                   ? orderScope === 'booking'
                     ? 'No pending bookings'
                     : 'No pending orders'
+                  : activeTab === 'Preparing'
+                  ? 'No orders preparing'
                   : activeTab === 'In Progress'
                   ? orderScope === 'booking'
                     ? 'No accepted bookings'
@@ -524,8 +606,7 @@ export default function LiveOrdersScreen() {
               const isUpdating = updatingId === order.id;
               const orderStatus = String(order.status || '').toLowerCase();
               const isPending = orderStatus === 'pending';
-              const isInProgress =
-                orderStatus === 'confirmed' || orderStatus === 'preparing';
+              const isPickupOrder = isPickupFulfillment(order.fulfillmentType);
               return (
                 <View key={order.id} style={styles.orderCard}>
                   <View style={styles.cardHeader}>
@@ -629,8 +710,25 @@ export default function LiveOrdersScreen() {
                       </>
                     ) : canAcceptReject &&
                       orderScope === 'user' &&
+                      activeTab === 'Preparing' &&
+                      isPickupOrder &&
+                      orderStatus === 'preparing' ? (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.acceptBtn]}
+                        onPress={() => handleMarkReady(order)}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.btnText}>Ready</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : canAcceptReject &&
+                      orderScope === 'user' &&
                       activeTab === 'In Progress' &&
-                      isInProgress ? (
+                      isPickupOrder &&
+                      orderStatus === 'ready' ? (
                       <TouchableOpacity
                         style={[styles.actionButton, styles.completeBtn]}
                         onPress={() => handleComplete(order)}
@@ -640,6 +738,38 @@ export default function LiveOrdersScreen() {
                           <ActivityIndicator size="small" color="white" />
                         ) : (
                           <Text style={styles.btnText}>Complete</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : canAcceptReject &&
+                      orderScope === 'user' &&
+                      activeTab === 'In Progress' &&
+                      !isPickupOrder &&
+                      orderStatus === 'delivery_complete' ? (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.completeBtn]}
+                        onPress={() => handleComplete(order)}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.btnText}>Complete</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : canAcceptReject &&
+                      orderScope === 'user' &&
+                      activeTab === 'In Progress' &&
+                      !isPickupOrder &&
+                      orderStatus === 'rider_accepted' ? (
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.acceptBtn]}
+                        onPress={() => handleStartDelivery(order)}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={styles.btnText}>Start</Text>
                         )}
                       </TouchableOpacity>
                     ) : null}
@@ -762,22 +892,27 @@ const styles = StyleSheet.create({
   innerPlayOnLiveActive: {
     borderLeftColor: '#fff',
   },
-  tabBarRow: {
-    flexDirection: 'row',
+  tabBarScroll: {
     width: '100%',
-    alignSelf: 'stretch',
     marginTop: 8,
-    paddingHorizontal: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#E4E7EC',
   },
+  tabBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingRight: 20,
+  },
   tabItem: {
-    flex: 1,
+    flexShrink: 0,
     paddingVertical: 14,
-    paddingHorizontal: 2,
+    paddingHorizontal: 14,
+    marginRight: 4,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
+    borderRadius: 8,
   },
   activeTabItem: {
     backgroundColor: '#FDB022',

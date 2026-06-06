@@ -64,6 +64,9 @@ function buildOrderPayload(body, { legacyApi = false } = {}) {
       const lng = Number(body.customerLongitude);
       if (Number.isFinite(lng)) payload.customerLongitude = lng;
     }
+    if (body.fulfillmentType) {
+      payload.fulfillmentType = String(body.fulfillmentType);
+    }
   }
 
   return payload;
@@ -169,6 +172,46 @@ export const updateRestaurantOrderStatus = async (token, orderId, status) => {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || 'Failed to update order');
+  }
+  return res.json();
+};
+
+export const assignRiderToOrder = async (token, orderId, riderId) => {
+  const res = await fetch(`${API_URL}/${orderId}/assign-rider`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ riderId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to assign rider');
+  }
+  return res.json();
+};
+
+export const rejectRiderAssignment = async (token, orderId) => {
+  const res = await fetch(`${API_URL}/${orderId}/reject-assignment`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to reject assignment');
+  }
+  return res.json();
+};
+
+export const getRestaurantOrderCounts = async token => {
+  const res = await fetch(`${API_URL}/counts`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    return { pending: 0, inProgress: 0, completed: 0, rejected: 0 };
   }
   return res.json();
 };
