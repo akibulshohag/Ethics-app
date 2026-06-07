@@ -57,7 +57,12 @@ export const getNearbyPromotions = async (
  * Get promotions by owner user ID (public, for profile Promotions tab).
  * Returns { promotions: [...], pagination: { total, page, limit, totalPages } }
  */
-export const getPromotionsByUser = async (userId, page = 1, limit = 50) => {
+export const getPromotionsByUser = async (
+  userId,
+  page = 1,
+  limit = 50,
+  offerType,
+) => {
   if (!userId)
     return {
       promotions: [],
@@ -65,7 +70,7 @@ export const getPromotionsByUser = async (userId, page = 1, limit = 50) => {
     };
   try {
     const response = await axios.get(`${API_URL}/user/${userId}`, {
-      params: { page, limit },
+      params: { page, limit, ...(offerType ? { offerType } : {}) },
       headers: getAuthHeaders(),
     });
     return response.data;
@@ -123,9 +128,14 @@ export const uploadPromotion = async data => {
     !data?.startDate ||
     !data?.expireDate
   ) {
-    throw new Error(
-      'Promo amount, code, start date and expire date are required.',
-    );
+    const isTierOffer =
+      data?.offerType === 'amount_discount' ||
+      data?.offerType === 'booking_discount';
+    if (!isTierOffer) {
+      throw new Error(
+        'Promo amount, code, start date and expire date are required.',
+      );
+    }
   }
   const formData = new FormData();
   if (data?.thumbnailUri) {
@@ -147,10 +157,18 @@ export const uploadPromotion = async data => {
   if (data.description?.trim()) {
     formData.append('description', data.description.trim());
   }
-  formData.append('promoAmount', String(Number(data.promoAmount)));
-  formData.append('promoCode', data.promoCode.trim());
+  formData.append('promoAmount', String(Number(data.promoAmount ?? 0)));
+  formData.append('promoCode', (data.promoCode || '').trim());
   formData.append('startDate', data.startDate);
   formData.append('expireDate', data.expireDate);
+  if (data.offerType) formData.append('offerType', data.offerType);
+  if (Array.isArray(data.fulfillmentScopes) && data.fulfillmentScopes.length) {
+    formData.append('fulfillmentScopes', JSON.stringify(data.fulfillmentScopes));
+  }
+  if (Array.isArray(data.discountTiers) && data.discountTiers.length) {
+    formData.append('discountTiers', JSON.stringify(data.discountTiers));
+  }
+  if (data.tierMetricType) formData.append('tierMetricType', data.tierMetricType);
   if (Array.isArray(data.menuItemIds) && data.menuItemIds.length > 0) {
     formData.append('menuItemIds', JSON.stringify(data.menuItemIds));
   }

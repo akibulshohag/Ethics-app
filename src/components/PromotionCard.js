@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const PromotionCard = ({ item, onPress }) => {
+const PromotionCard = ({ item, onPress, isTierPromo = false }) => {
   return (
     <TouchableOpacity
       style={styles.container}
@@ -10,16 +10,23 @@ const PromotionCard = ({ item, onPress }) => {
       onPress={onPress}
     >
       <View style={styles.imageContainer}>
-        <Image source={{ uri: item.image }} style={styles.thumbnail} />
-        {/* Dark overlay on the right half of the image */}
-        <View style={styles.rightOverlay}>
-          <Text style={styles.viewCount}>{item.views}</Text>
-          <MaterialCommunityIcons
-            name="play-circle-outline"
-            size={20}
-            color="#fff"
-          />
-        </View>
+        {item.image ? (
+          <Image source={{ uri: item.image }} style={styles.thumbnail} />
+        ) : (
+          <View style={[styles.thumbnail, styles.tierPlaceholder]}>
+            <MaterialCommunityIcons name="tag-multiple" size={36} color="#FF7F0B" />
+          </View>
+        )}
+        {!isTierPromo ? (
+          <View style={styles.rightOverlay}>
+            <Text style={styles.viewCount}>{item.views}</Text>
+            <MaterialCommunityIcons
+              name="play-circle-outline"
+              size={20}
+              color="#fff"
+            />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.textContainer}>
@@ -51,6 +58,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  tierPlaceholder: {
+    backgroundColor: '#FFF4EA',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rightOverlay: {
     position: 'absolute',

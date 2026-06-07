@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useNavigation} from '@react-navigation/native';
+import {clearReelEditorDraft, newShortSessionKey} from '../utils/reelDraftStorage';
+import {navigateToRootRoute} from '../utils/navigateToRootRoute';
 
 const { height } = Dimensions.get('window');
 
@@ -31,16 +33,22 @@ const CreateVideoModal = ({
     if (onCreateShortProp) {
       onCreateShortProp();
     } else {
-      navigation.navigate('CreateShortsScreen', { isLive: false });
+      navigation.navigate('CreateShortsScreen', {
+        isLive: false,
+        sessionKey: newShortSessionKey(),
+      });
     }
   };
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     onClose?.();
     if (onCreatePostProp) {
       onCreatePostProp();
     } else {
-      navigation.navigate('PostCreateNew');
+      await clearReelEditorDraft();
+      navigateToRootRoute(navigation, 'PostCreateNew', {
+        freshSession: newShortSessionKey(),
+      });
     }
   };
 
@@ -58,7 +66,10 @@ const CreateVideoModal = ({
     if (onGoLiveProp) {
       onGoLiveProp();
     } else {
-      navigation.navigate('CreateShortsScreen', { isLive: true });
+      navigation.navigate('CreateShortsScreen', {
+        isLive: true,
+        sessionKey: newShortSessionKey(),
+      });
     }
   };
 

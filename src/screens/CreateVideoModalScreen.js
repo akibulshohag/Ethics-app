@@ -5,6 +5,7 @@ import { useSelector } from 'react-redux';
 import CreateVideoModal from '../components/CreateVideoModal';
 import { navigateToHomeOne } from '../utils/navigateToHomeOne';
 import { navigateToRootRoute } from '../utils/navigateToRootRoute';
+import { clearReelEditorDraft, newShortSessionKey } from '../utils/reelDraftStorage';
 
 const canUploadFeaturedVideo = role => {
   const r = String(role || '').toLowerCase();
@@ -64,13 +65,16 @@ const CreateVideoModalScreen = () => {
     setModalVisible(false);
     navigation.navigate('Library', {
       screen: 'CreateShortsScreen',
-      params: { isLive: false },
+      params: { isLive: false, sessionKey: newShortSessionKey() },
     });
   };
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
     setModalVisible(false);
-    navigateToRootRoute(navigation, 'PostCreateNew');
+    await clearReelEditorDraft();
+    navigateToRootRoute(navigation, 'PostCreateNew', {
+      freshSession: newShortSessionKey(),
+    });
   };
 
   const handleUploadVideo = () => {
@@ -82,7 +86,7 @@ const CreateVideoModalScreen = () => {
     setModalVisible(false);
     navigation.navigate('Library', {
       screen: 'CreateShortsScreen',
-      params: { isLive: true },
+      params: { isLive: true, sessionKey: newShortSessionKey() },
     });
   };
 

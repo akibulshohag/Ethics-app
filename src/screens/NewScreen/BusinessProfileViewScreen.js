@@ -122,6 +122,12 @@ import { normalizeUkPostcode, extractUkPostcodeFromText } from '../../utils/ukPo
 import { formatDistanceKm } from '../../utils/geoDistance';
 import { formatCityCountryPostcodeLine } from '../../utils/locationFormat';
 import CreatePromotionModal from '../../components/CreatePromotionModal';
+import CreateTierDiscountModal from '../../components/CreateTierDiscountModal';
+import {
+  OFFER_TYPES,
+  filterPromotionsByType,
+  formatPromotionSummary,
+} from '../../utils/promotionUtils';
 import Video from 'react-native-video';
 import { getSocialIcon } from '../../constants/socialLinks';
 import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
@@ -581,7 +587,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     useState(false);
   const [createPromotionModalVisible, setCreatePromotionModalVisible] =
     useState(false);
-  const [promotionSubTab, setPromotionSubTab] = useState('my'); // 'my' | 'other'
+  const [promotionSubTab, setPromotionSubTab] = useState('order'); // order | amount | booking
+  const [createTierDiscountModalVisible, setCreateTierDiscountModalVisible] =
+    useState(false);
   const [promotionDetailModalVisible, setPromotionDetailModalVisible] =
     useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState(null);
@@ -1236,16 +1244,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
   useEffect(() => {
     if (activeTab === 'Promotions' && profileUserId) {
-      loadPromotions(); // always load own promotions (My Promotions)
-      if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross(); // Other Promotions
+      loadPromotions();
     }
   }, [
     activeTab,
     profileUserId,
-    isOwnProfile,
-    isOwnerOrVendor,
     loadPromotions,
-    loadNearbyPromotionsCross,
   ]);
 
   const loadMenu = useCallback(async () => {
@@ -2961,44 +2965,32 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </ScrollView>
       </View>
 
-      {/* Promotions sub-tabs: My Promotions | Other Promotions (owner sees vendor promos, vendor sees owner promos) */}
+      {/* Promotions sub-tabs: Order | Amount Discount | Booking Discount */}
       {activeTab === 'Promotions' ? (
         <View style={styles.promotionSubTabRow}>
-          <TouchableOpacity
-            style={[
-              styles.promotionSubTabBtn,
-              promotionSubTab === 'my' && styles.promotionSubTabBtnActive,
-            ]}
-            onPress={() => setPromotionSubTab('my')}
-          >
-            <Text
-              style={[
-                styles.promotionSubTabText,
-                promotionSubTab === 'my' && styles.promotionSubTabTextActive,
-              ]}
-            >
-              My Promotions
-            </Text>
-          </TouchableOpacity>
-          {isOwnProfile && isOwnerOrVendor ? (
+          {[
+            { key: 'order', label: 'Order' },
+            { key: 'amount', label: 'Amount Discount' },
+            { key: 'booking', label: 'Booking Discount' },
+          ].map(tab => (
             <TouchableOpacity
+              key={tab.key}
               style={[
                 styles.promotionSubTabBtn,
-                promotionSubTab === 'other' && styles.promotionSubTabBtnActive,
+                promotionSubTab === tab.key && styles.promotionSubTabBtnActive,
               ]}
-              onPress={() => setPromotionSubTab('other')}
+              onPress={() => setPromotionSubTab(tab.key)}
             >
               <Text
                 style={[
                   styles.promotionSubTabText,
-                  promotionSubTab === 'other' &&
-                    styles.promotionSubTabTextActive,
+                  promotionSubTab === tab.key && styles.promotionSubTabTextActive,
                 ]}
               >
-                Other Promotions
+                {tab.label}
               </Text>
             </TouchableOpacity>
-          ) : null}
+          ))}
         </View>
       ) : null}
 
@@ -3016,9 +3008,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             : activeTab === 'Menus'
             ? 'Menus'
             : activeTab === 'Promotions'
-            ? promotionSubTab === 'other'
-              ? 'Other Promotions'
-              : 'My Promotions'
+            ? promotionSubTab === 'amount'
+              ? 'Amount Discounts'
+              : promotionSubTab === 'booking'
+              ? 'Booking Discounts'
+              : 'Order Promotions'
             : activeTab === 'Settings'
             ? 'Delivery Settings'
             : activeTab === 'Area Users'
@@ -3050,11 +3044,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
         ) : activeTab === 'Promotions' &&
-          promotionSubTab === 'my' &&
           isOwnProfile &&
           isOwnerOrVendor ? (
           <TouchableOpacity
-            onPress={() => setCreatePromotionModalVisible(true)}
+            onPress={() => {
+              if (promotionSubTab === 'order') {
+                setCreatePromotionModalVisible(true);
+              } else {
+                setCreateTierDiscountModalVisible(true);
+              }
+            }}
           >
             <MaterialCommunityIcons name="plus" size={24} color="#333" />
           </TouchableOpacity>
@@ -3124,19 +3123,21 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Posts':
         return posts;
       case 'Promotions': {
-        const list =
-          promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
-            ? nearbyPromotionsCross
-            : promotions;
+        const typeMap = {
+          order: OFFER_TYPES.ORDER,
+          amount: OFFER_TYPES.AMOUNT,
+          booking: OFFER_TYPES.BOOKING,
+        };
+        const list = filterPromotionsByType(
+          promotions,
+          typeMap[promotionSubTab] || OFFER_TYPES.ORDER,
+        );
         return list.map(p => ({
           ...p,
           id: p.id,
           title: p.title,
           image: p.thumbnailUrl || p.videoUrl,
-          price:
-            p.promoAmount != null
-              ? `${p.promoCode || ''} • ${p.promoAmount}% off`
-              : p.promoCode || '',
+          price: formatPromotionSummary(p),
           views: formatCount(p.viewCount),
         }));
       }
@@ -3433,8 +3434,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       );
     }
     if (activeTab === 'Promotions') {
-      const canManagePromotion =
-        isOwnProfile && isOwnerOrVendor && promotionSubTab === 'my';
+      const canManagePromotion = isOwnProfile && isOwnerOrVendor;
+      const isTierPromo =
+        (item.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER;
       return (
         <View style={styles.manageCardWrap}>
           <PromotionCard
@@ -3442,8 +3444,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               ...item,
               image: item.image
                 ? safeImageUri(item.image)
+                : isTierPromo
+                ? null
                 : 'https://via.placeholder.com/300',
             }}
+            isTierPromo={isTierPromo}
             onPress={() => {
               setSelectedPromotion(item);
               setPromotionVideoPaused(true);
@@ -3748,19 +3753,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       ) : null}
       {activeTab === 'Promotions' &&
-      (promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
-        ? nearbyPromotionsCrossLoading
-        : promotionsLoading) &&
-      (promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
-        ? nearbyPromotionsCross.length
-        : promotions.length) === 0 ? (
+      promotionsLoading &&
+      promotions.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
-          <Text style={styles.loadingText}>
-            {promotionSubTab === 'other'
-              ? 'Loading other promotions...'
-              : 'Loading promotions...'}
-          </Text>
+          <Text style={styles.loadingText}>Loading promotions...</Text>
         </View>
       ) : null}
       {activeTab === 'Menus' && menuLoading && menuItems.length === 0 ? (
@@ -3845,16 +3842,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             />
           ) : activeTab === 'Promotions' && profileUserId ? (
             <RefreshControl
-              refreshing={
-                promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
-                  ? nearbyPromotionsCrossRefreshing
-                  : promotionsRefreshing
-              }
-              onRefresh={() =>
-                promotionSubTab === 'other' && isOwnProfile && isOwnerOrVendor
-                  ? loadNearbyPromotionsCross(true)
-                  : loadPromotions(true)
-              }
+              refreshing={promotionsRefreshing}
+              onRefresh={() => loadPromotions(true)}
               colors={['#FF7F0B']}
               tintColor="#FF7F0B"
             />
@@ -4455,9 +4444,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         onClose={() => setCreatePromotionModalVisible(false)}
         onSuccess={() => {
           loadPromotions(true);
-          if (isOwnProfile && isOwnerOrVendor) loadNearbyPromotionsCross(true);
         }}
         userId={currentUser?.id}
+      />
+      <CreateTierDiscountModal
+        visible={createTierDiscountModalVisible}
+        onClose={() => setCreateTierDiscountModalVisible(false)}
+        onSuccess={() => loadPromotions(true)}
+        userId={currentUser?.id}
+        offerType={
+          promotionSubTab === 'booking'
+            ? OFFER_TYPES.BOOKING
+            : OFFER_TYPES.AMOUNT
+        }
       />
 
       {/* Promotion detail modal: video/image + full details */}
@@ -5948,7 +5947,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
   },
   promotionSubTabBtn: {
-    paddingHorizontal: 14,
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#f5f5f5',
@@ -5957,9 +5958,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF7F0B',
   },
   promotionSubTabText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#666',
+    textAlign: 'center',
   },
   promotionSubTabTextActive: {
     color: '#fff',

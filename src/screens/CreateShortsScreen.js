@@ -37,13 +37,18 @@ import {
   bindShortsBackdropLoop,
 } from '../utils/shortsBackdropSound';
 import {navigateToHomeOne} from '../utils/navigateToHomeOne';
+import {newShortSessionKey} from '../utils/reelDraftStorage';
 
 const {width, height} = Dimensions.get('window');
+
+const DEFAULT_COMMENTS_SETTING = 'Allow all comments';
 
 const CreateShortsScreen = ({navigation, route}) => {
   const exitToHomeOne = () => navigateToHomeOne(navigation);
 
   const initialLive = route?.params?.isLive === true;
+  const lastSessionKeyRef = useRef(null);
+  const [detailsModalKey, setDetailsModalKey] = useState(0);
   const [activeDuration, setActiveDuration] = useState(initialLive ? '10s' : '60s');
   const [soundsVisible, setSoundsVisible] = useState(false);
   const [addDetailsVisible, setAddDetailsVisible] = useState(false);
@@ -72,9 +77,53 @@ const CreateShortsScreen = ({navigation, route}) => {
   const [torchOn, setTorchOn] = useState(false);
   const [recordCommentsModalVisible, setRecordCommentsModalVisible] =
     useState(false);
-  const [commentsSetting, setCommentsSetting] = useState(
-    'Allow all comments',
+  const [commentsSetting, setCommentsSetting] = useState(DEFAULT_COMMENTS_SETTING);
+
+  const resetCreationState = useCallback(
+    (isLive = false) => {
+      if (maxDurationTimerRef.current) {
+        clearTimeout(maxDurationTimerRef.current);
+        maxDurationTimerRef.current = null;
+      }
+      backdropLoopCleanupRef.current?.();
+      backdropLoopCleanupRef.current = null;
+      void stopShortsBackdrop();
+      isRecordingRef.current = false;
+
+      setActiveDuration(isLive ? '10s' : '60s');
+      setSoundsVisible(false);
+      setAddDetailsVisible(false);
+      setFilterVisible(false);
+      setTimerVisible(false);
+      setBeautyVisible(false);
+      setSpeedVisible(false);
+      setIsEditing(false);
+      setIsLiveMode(isLive);
+      setSelectedSound(null);
+      setSelectedFilter(null);
+      setSelectedTimer(0);
+      setBeautyLevel(0);
+      setSpeedFactor(1);
+      setCameraFacing('back');
+      setPickedVideo(null);
+      setPickedThumbnail(null);
+      setIsRecording(false);
+      setCountdown(null);
+      setTorchOn(false);
+      setRecordCommentsModalVisible(false);
+      setCommentsSetting(DEFAULT_COMMENTS_SETTING);
+      setDetailsModalKey(k => k + 1);
+    },
+    [],
   );
+
+  useEffect(() => {
+    const sessionKey = route.params?.sessionKey;
+    if (sessionKey == null) return;
+    if (lastSessionKeyRef.current === sessionKey) return;
+    lastSessionKeyRef.current = sessionKey;
+    resetCreationState(route?.params?.isLive === true);
+  }, [route.params?.sessionKey, route.params?.isLive, resetCreationState]);
 
   const parseDurationSeconds = (d) => {
     if (d === '10s') return 10;
@@ -759,9 +808,13 @@ const CreateShortsScreen = ({navigation, route}) => {
         }}
       />
       <AddDetailsModal
+        key={detailsModalKey}
         visible={addDetailsVisible}
         onClose={() => setAddDetailsVisible(false)}
-        onUploadSuccess={exitToHomeOne}
+        onUploadSuccess={() => {
+          resetCreationState(initialLive);
+          exitToHomeOne();
+        }}
         shortsMetadata={shortsMetadata}
         isLive={isLiveMode}
       />

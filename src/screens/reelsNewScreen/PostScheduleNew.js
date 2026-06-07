@@ -22,6 +22,7 @@ import { getSocialAccounts } from '../../services/postService';
 import { normalizeAnchor } from '../../constants/overlayTextAnchor';
 import { resolveReelUploadFilterId } from '../../constants/reelStylePresets';
 import { thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
+import { clearReelEditorDraft } from '../../utils/reelDraftStorage';
 
 const defaultScheduleTime = () => {
   const d = new Date();
@@ -920,6 +921,9 @@ const ScheduleScreen = () => {
         platforms: selectedPlatforms,
         scheduledPublishAt: publishScheduleIso,
       });
+      if (!isEditFlow) {
+        await clearReelEditorDraft();
+      }
       Alert.alert(
         'Success',
         isEditFlow
@@ -960,6 +964,7 @@ const ScheduleScreen = () => {
             buildUploadFormData({ simplifiedProcessing: true }),
             user.id,
           );
+          await clearReelEditorDraft();
           Alert.alert(
             'Success',
             `${

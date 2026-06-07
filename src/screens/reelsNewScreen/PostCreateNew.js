@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -41,6 +41,10 @@ const CreateReelScreen = () => {
   const [socialAccounts, setSocialAccounts] = useState([]);
   const [socialLoading, setSocialLoading] = useState(false);
   const [seedLoaded, setSeedLoaded] = useState(false);
+  const lastFreshSessionRef = useRef(null);
+  const isEditMode = Boolean(
+    route.params?.isEdit || route.params?.editDraft || route.params?.short?.id,
+  );
   const incomingSeed = useMemo(() => {
     const fromDraft = route.params?.draft;
     const fromEditDraft = route.params?.editDraft;
@@ -91,9 +95,6 @@ const CreateReelScreen = () => {
     }
     return null;
   }, [route.params]);
-  const isEditMode = Boolean(
-    route.params?.isEdit || route.params?.editDraft || route.params?.short?.id,
-  );
   const steps = [
     { id: 1, label: 'Upload' },
     { id: 2, label: 'Edit' },
@@ -209,6 +210,18 @@ const CreateReelScreen = () => {
     }
     setSeedLoaded(true);
   }, [incomingSeed, seedLoaded]);
+
+  useEffect(() => {
+    const freshSession = route.params?.freshSession;
+    if (freshSession == null || isEditMode) return;
+    if (lastFreshSessionRef.current === freshSession) return;
+    lastFreshSessionRef.current = freshSession;
+    setVideoAsset(null);
+    setThumbnailAsset(null);
+    setCoverModalVisible(false);
+    setThumbLoading(false);
+    setSeedLoaded(true);
+  }, [route.params?.freshSession, isEditMode]);
 
   useEffect(() => {
     let cancelled = false;

@@ -14,6 +14,14 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { createRestaurantBooking } from '../services/bookingService';
+import { getPromotionsByUser } from '../services/promotionService';
+import {
+  findBestBookingDiscount,
+  formatTierRange,
+  isPromotionActive,
+  OFFER_TYPES,
+  parseDiscountTiers,
+} from '../utils/promotionUtils';
 
 const nextBookingTime = () => {
   const d = new Date();
@@ -45,10 +53,13 @@ const RestaurantBookingModal = ({
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [persons, setPersons] = useState('2');
+  const [bookingAmount, setBookingAmount] = useState('');
   const [bookingDate, setBookingDate] = useState(nextBookingTime);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [ownerPromotions, setOwnerPromotions] = useState([]);
+  const [promotionsLoading, setPromotionsLoading] = useState(false);
 
   const title = useMemo(
     () => `Book ${ownerName || 'Restaurant'}`,
@@ -61,8 +72,46 @@ const RestaurantBookingModal = ({
     setAddress(currentUser?.address || defaultAddress || '');
     setPhone(currentUser?.phone || currentUser?.phoneNumber || '');
     setPersons('2');
+    setBookingAmount('');
     setBookingDate(nextBookingTime());
   }, [currentUser, defaultAddress, visible]);
+
+  useEffect(() => {
+    if (!visible || !ownerId) return;
+    let cancelled = false;
+    setPromotionsLoading(true);
+    getPromotionsByUser(ownerId, 1, 50)
+      .then(res => {
+        if (!cancelled) {
+          setOwnerPromotions(
+            (res?.promotions ?? []).filter(
+              p =>
+                p.offerType === OFFER_TYPES.BOOKING && isPromotionActive(p),
+            ),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOwnerPromotions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPromotionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, ownerId]);
+
+  const bookingMetricType = ownerPromotions[0]?.tierMetricType || 'people';
+  const usesAmountMetric = bookingMetricType === 'amount';
+
+  const activeBookingDiscount = useMemo(() => {
+    const personsNum = Math.max(1, Number(persons) || 0);
+    const amountNum = bookingAmount.trim()
+      ? Number(bookingAmount)
+      : undefined;
+    return findBestBookingDiscount(ownerPromotions, personsNum, amountNum);
+  }, [ownerPromotions, persons, bookingAmount]);
 
   const submit = async () => {
     if (!currentUser?.token) {
@@ -87,6 +136,11 @@ const RestaurantBookingModal = ({
       Alert.alert('Persons required', 'Please enter total persons.');
       return;
     }
+    const amountNum = bookingAmount.trim() ? Number(bookingAmount) : undefined;
+    if (usesAmountMetric && (amountNum == null || !Number.isFinite(amountNum))) {
+      Alert.alert('Amount required', 'Enter estimated spend for this booking.');
+      return;
+    }
     setSubmitting(true);
     try {
       const booking = await createRestaurantBooking(currentUser.token, {
@@ -96,6 +150,8 @@ const RestaurantBookingModal = ({
         customerPhone: phone,
         persons: personsNum,
         bookingDate: bookingDate.toISOString(),
+        bookingAmount: amountNum,
+        promotionId: activeBookingDiscount?.id,
       });
       onBooked?.(booking);
       Alert.alert('Booking sent', 'Restaurant owner received your booking.');
@@ -119,75 +175,87 @@ const RestaurantBookingModal = ({
         onPress={() => (submitting ? null : onClose?.())}
       >
         <Pressable style={styles.sheet} onPress={e => e.stopPropagation()}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.subtitle}>Send your booking request</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
-              disabled={submitting}
-            >
-              <Icon name="close" size={20} color="#333" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.title}>{title}</Text>
 
+          {promotionsLoading ? (
+            <ActivityIndicator color="#FF7F0B" style={{ marginBottom: 12 }} />
+          ) : ownerPromotions.length > 0 ? (
+            <View style={styles.offerBox}>
+              <Text style={styles.offerTitle}>Booking offers</Text>
+              {ownerPromotions.map(promo => {
+                const tiers = parseDiscountTiers(promo.discountTiers);
+                const metric = promo.tierMetricType || 'people';
+                return (
+                  <View key={promo.id} style={styles.offerCard}>
+                    <Text style={styles.offerName}>{promo.title}</Text>
+                    {tiers.slice(0, 4).map((tier, idx) => (
+                      <Text key={`${promo.id}-${idx}`} style={styles.offerLine}>
+                        • {formatTierRange(tier, metric)}
+                      </Text>
+                    ))}
+                  </View>
+                );
+              })}
+              {activeBookingDiscount ? (
+                <Text style={styles.offerApplied}>
+                  Your booking qualifies for {activeBookingDiscount.percent}% off
+                </Text>
+              ) : (
+                <Text style={styles.offerHint}>
+                  {usesAmountMetric
+                    ? 'Enter estimated spend to see if you qualify.'
+                    : 'Adjust party size to see if you qualify.'}
+                </Text>
+              )}
+            </View>
+          ) : null}
+
+          <Text style={styles.label}>Name</Text>
+          <TextInput style={styles.input} value={name} onChangeText={setName} />
+
+          <Text style={styles.label}>Address</Text>
           <TextInput
             style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Name"
-            placeholderTextColor="#999"
-          />
-          <TextInput
-            style={[styles.input, styles.multiline]}
             value={address}
             onChangeText={setAddress}
-            placeholder="Address"
-            placeholderTextColor="#999"
-            multiline
           />
+
+          <Text style={styles.label}>Phone</Text>
           <TextInput
             style={styles.input}
             value={phone}
             onChangeText={setPhone}
-            placeholder="Phone number"
-            placeholderTextColor="#999"
             keyboardType="phone-pad"
           />
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.rowInput]}
-              value={persons}
-              onChangeText={setPersons}
-              placeholder="Persons"
-              placeholderTextColor="#999"
-              keyboardType="number-pad"
-            />
-            <TouchableOpacity
-              style={[styles.input, styles.dateInput]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Icon name="calendar-clock-outline" size={18} color="#777" />
-              <Text style={styles.dateText}>{formatDateTime(bookingDate)}</Text>
-            </TouchableOpacity>
-          </View>
 
+          <Text style={styles.label}>Persons</Text>
+          <TextInput
+            style={styles.input}
+            value={persons}
+            onChangeText={setPersons}
+            keyboardType="number-pad"
+          />
+
+          {usesAmountMetric ? (
+            <>
+              <Text style={styles.label}>Estimated spend (£)</Text>
+              <TextInput
+                style={styles.input}
+                value={bookingAmount}
+                onChangeText={setBookingAmount}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 80"
+              />
+            </>
+          ) : null}
+
+          <Text style={styles.label}>Date & time</Text>
           <TouchableOpacity
-            style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-            onPress={submit}
-            disabled={submitting}
-            activeOpacity={0.85}
+            style={styles.dateBtn}
+            onPress={() => setShowDatePicker(true)}
           >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.submitText}>Send Booking</Text>
-                <Icon name="arrow-right" size={20} color="#fff" />
-              </>
-            )}
+            <Icon name="calendar" size={18} color="#FF7F0B" />
+            <Text style={styles.dateText}>{formatDateTime(bookingDate)}</Text>
           </TouchableOpacity>
 
           {showDatePicker ? (
@@ -197,12 +265,11 @@ const RestaurantBookingModal = ({
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               minimumDate={new Date()}
               onChange={(_, date) => {
-                setShowDatePicker(false);
-                if (!date) return;
-                const next = new Date(bookingDate);
-                next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
-                setBookingDate(next);
-                setShowTimePicker(true);
+                setShowDatePicker(Platform.OS === 'ios');
+                if (date) {
+                  setBookingDate(date);
+                  setShowTimePicker(true);
+                }
               }}
             />
           ) : null}
@@ -212,14 +279,23 @@ const RestaurantBookingModal = ({
               mode="time"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={(_, date) => {
-                setShowTimePicker(false);
-                if (!date) return;
-                const next = new Date(bookingDate);
-                next.setHours(date.getHours(), date.getMinutes(), 0, 0);
-                setBookingDate(next);
+                setShowTimePicker(Platform.OS === 'ios');
+                if (date) setBookingDate(date);
               }}
             />
           ) : null}
+
+          <TouchableOpacity
+            style={[styles.submitBtn, submitting && styles.submitDisabled]}
+            onPress={submit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitText}>Send booking</Text>
+            )}
+          </TouchableOpacity>
         </Pressable>
       </Pressable>
     </Modal>
@@ -229,68 +305,64 @@ const RestaurantBookingModal = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     padding: 20,
-    paddingBottom: 28,
+    maxHeight: '90%',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  title: { fontSize: 20, fontWeight: '800', color: '#111' },
-  subtitle: { marginTop: 3, color: '#777', fontSize: 13 },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  title: { fontSize: 20, fontWeight: '700', marginBottom: 12, color: '#222' },
+  label: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 8 },
   input: {
-    minHeight: 48,
-    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FAFAFA',
-    paddingHorizontal: 14,
-    color: '#111',
-    marginBottom: 12,
-  },
-  multiline: {
-    minHeight: 72,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-  },
-  row: { flexDirection: 'row', gap: 10 },
-  rowInput: { flex: 0.35 },
-  dateInput: {
-    flex: 0.65,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderColor: '#DDD',
+    borderRadius: 10,
     paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+    fontSize: 15,
+    color: '#222',
   },
-  dateText: { marginLeft: 8, color: '#333', fontSize: 13, flex: 1 },
-  submitBtn: {
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#F5A623',
+  dateBtn: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
+    marginTop: 6,
+    paddingVertical: 10,
   },
-  submitBtnDisabled: { opacity: 0.7 },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  dateText: { fontSize: 15, color: '#333' },
+  submitBtn: {
+    marginTop: 20,
+    backgroundColor: '#FF7F0B',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  submitDisabled: { opacity: 0.7 },
+  submitText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  offerBox: {
+    backgroundColor: '#FFF8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0C2',
+  },
+  offerTitle: { fontSize: 14, fontWeight: '700', color: '#FF7F0B', marginBottom: 6 },
+  offerCard: { marginBottom: 6 },
+  offerName: { fontSize: 13, fontWeight: '600', color: '#333' },
+  offerLine: { fontSize: 12, color: '#555', marginTop: 2 },
+  offerApplied: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2E7D32',
+  },
+  offerHint: { marginTop: 6, fontSize: 12, color: '#777' },
 });
 
 export default RestaurantBookingModal;

@@ -32,10 +32,10 @@ import {
 } from '../utils/geolocation';
 import { browseAreaLabel, normalizeUkPostcode } from '../utils/ukPostcode';
 import {
-  formatUkPhoneDisplay,
-  normalizeUkPhone,
-  validUkPhoneNumber,
-} from '../utils/ukPhone';
+  calcPercentDiscount,
+  findBestAmountDiscount,
+  OFFER_TYPES,
+} from '../utils/promotionUtils';
 
 const ORDER_NOTE_MARKER = '||NOTE||';
 
@@ -59,6 +59,8 @@ const HomeFourScreen = ({ onBack }) => {
   const [placing, setPlacing] = useState(false);
   const [promoCodeInput, setPromoCodeInput] = useState('');
   const [appliedPromotion, setAppliedPromotion] = useState(null);
+  const [autoAmountDiscount, setAutoAmountDiscount] = useState(null);
+  const [ownerPromotions, setOwnerPromotions] = useState([]);
   const [promoApplyError, setPromoApplyError] = useState('');
   const [applyingPromo, setApplyingPromo] = useState(false);
   const [contactPhone, setContactPhone] = useState(String(user?.phone || '').trim());
@@ -127,11 +129,6 @@ const HomeFourScreen = ({ onBack }) => {
     (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
     0,
   );
-  const promoPercent =
-    appliedPromotion?.promoAmount != null
-      ? Number(appliedPromotion.promoAmount)
-      : 0;
-  const discountAmount = promoPercent > 0 ? (subtotal * promoPercent) / 100 : 0;
   const currency = '£';
 
   const handleApplyPromo = async () => {
@@ -151,6 +148,9 @@ const HomeFourScreen = ({ onBack }) => {
       const list = res?.promotions ?? [];
       const now = new Date();
       const match = list.find(p => {
+        if ((p.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER) {
+          return false;
+        }
         const pCode = (p.promoCode || '').trim().toUpperCase();
         if (pCode !== code.toUpperCase()) return false;
         const start = p.startDate ? new Date(p.startDate) : null;
@@ -160,10 +160,12 @@ const HomeFourScreen = ({ onBack }) => {
         return true;
       });
       if (match) {
+        setAutoAmountDiscount(null);
         setAppliedPromotion({
           id: match.id,
           promoCode: match.promoCode,
           promoAmount: match.promoAmount,
+          offerType: OFFER_TYPES.ORDER,
         });
         Toast.show({
           type: 'success',
@@ -253,6 +255,24 @@ const HomeFourScreen = ({ onBack }) => {
     };
   }, [ownerId, user?.id]);
 
+  useEffect(() => {
+    if (!ownerId) {
+      setOwnerPromotions([]);
+      return;
+    }
+    let cancelled = false;
+    getPromotionsByUser(ownerId, 1, 50)
+      .then(res => {
+        if (!cancelled) setOwnerPromotions(res?.promotions ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setOwnerPromotions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId]);
+
   const ownerDeliveryTime = String(ownerProfile?.deliveryTime || '').trim();
   const ownerDeliveryAreaKm =
     ownerProfile?.deliveryAreaKm != null &&
@@ -301,8 +321,42 @@ const HomeFourScreen = ({ onBack }) => {
     if (isPickup) return 0;
     return resolveTaxChargeForDistanceKm(distanceToRestaurantKm, ownerProfile);
   }, [isPickup, distanceToRestaurantKm, ownerProfile]);
-  const itemsNetAmount = Math.max(0, subtotal - discountAmount);
-  const total = itemsNetAmount + taxChargeAmount;
+  const billBeforeDiscount = subtotal + taxChargeAmount;
+  const fulfillmentKey = isPickup ? 'collection' : 'delivery';
+
+  useEffect(() => {
+    if (appliedPromotion) {
+      setAutoAmountDiscount(null);
+      return;
+    }
+    const match = findBestAmountDiscount(
+      ownerPromotions,
+      billBeforeDiscount,
+      fulfillmentKey,
+    );
+    setAutoAmountDiscount(match);
+  }, [
+    appliedPromotion,
+    ownerPromotions,
+    billBeforeDiscount,
+    fulfillmentKey,
+  ]);
+
+  const discountAmount = useMemo(() => {
+    if (appliedPromotion?.offerType === OFFER_TYPES.ORDER) {
+      return calcPercentDiscount(subtotal, appliedPromotion.promoAmount);
+    }
+    if (autoAmountDiscount?.percent) {
+      return calcPercentDiscount(billBeforeDiscount, autoAmountDiscount.percent);
+    }
+    return 0;
+  }, [appliedPromotion, autoAmountDiscount, subtotal, billBeforeDiscount]);
+
+  const total = Math.max(0, billBeforeDiscount - discountAmount);
+  const itemsNetAmount = Math.max(
+    0,
+    appliedPromotion ? subtotal - discountAmount : subtotal,
+  );
   const displayTotal = total.toFixed(2);
   const displaySubtotal = subtotal.toFixed(2);
   const displayItemsNet = itemsNetAmount.toFixed(2);
@@ -554,6 +608,10 @@ const HomeFourScreen = ({ onBack }) => {
           promoCode: appliedPromotion.promoCode,
           promotionId: appliedPromotion.id,
         }),
+        ...(autoAmountDiscount?.id &&
+          !appliedPromotion && {
+            promotionId: autoAmountDiscount.id,
+          }),
       });
       dispatch(appSetUser({ ...user, phone }));
       Toast.show({ type: 'success', text1: 'Order placed successfully' });
@@ -1054,13 +1112,16 @@ const HomeFourScreen = ({ onBack }) => {
               {currency} {displaySubtotal}
             </Text>
           </View>
-          {appliedPromotion && discountAmount > 0 ? (
+          {discountAmount > 0 ? (
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>
-                Promo ({appliedPromotion.promoCode})
-                {appliedPromotion.promoAmount != null
-                  ? ` ${appliedPromotion.promoAmount}% off`
-                  : ''}
+                {appliedPromotion?.promoCode
+                  ? `Promo (${appliedPromotion.promoCode})${
+                      appliedPromotion.promoAmount != null
+                        ? ` ${appliedPromotion.promoAmount}% off`
+                        : ''
+                    }`
+                  : `Amount discount (${autoAmountDiscount?.percent || 0}% off)`}
               </Text>
               <Text style={styles.billValueDiscount}>
                 -{currency} {displayDiscount}
@@ -1097,7 +1158,10 @@ const HomeFourScreen = ({ onBack }) => {
           </View>
           <Text style={styles.billFormulaHint}>
             Items {appliedPromotion && discountAmount > 0 ? 'after promo' : 'bill'}
-            {displayTaxCharge != null ? ' + taxes & charges' : ''}
+            {autoAmountDiscount && !appliedPromotion
+              ? ' + taxes/charges − amount discount'
+              : ' + taxes/charges'}
+            {appliedPromotion && discountAmount > 0 ? ' (promo on items)' : ''}
           </Text>
         </View>
 

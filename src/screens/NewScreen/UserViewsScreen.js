@@ -63,6 +63,12 @@ import CommentsModal from '../../components/CommentsModal';
 import SaveModal from '../../components/SaveModal';
 import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 import RestaurantBookingModal from '../../components/RestaurantBookingModal';
+import PromotionalOffersModal from '../../components/PromotionalOffersModal';
+import { getPromotionsByUser } from '../../services/promotionService';
+import {
+  isPromotionActive,
+  isUserWithinOwnerArea,
+} from '../../utils/promotionUtils';
 import { getSocialIcon } from '../../constants/socialLinks';
 import { listCustomPlaylists } from '../../services/playlistService';
 import {
@@ -294,6 +300,7 @@ const UserViewsScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('Gallery');
   const route = useRoute();
   const currentUser = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
   const profileUserId = route.params?.userId || currentUser?.id || null;
   const isOwnProfile =
     !!currentUser?.id &&
@@ -334,6 +341,8 @@ const UserViewsScreen = ({ navigation }) => {
   const [commentsModalGalleryPhotoId, setCommentsModalGalleryPhotoId] =
     useState(null);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [promotionalOffersVisible, setPromotionalOffersVisible] = useState(false);
+  const [ownerPromotions, setOwnerPromotions] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [menuCategories, setMenuCategories] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
@@ -1223,6 +1232,7 @@ const UserViewsScreen = ({ navigation }) => {
               }
             : prev,
         );
+        loadOwnerPromotions();
       }
     } catch (_) {
       // refresh from server on failure
@@ -1348,6 +1358,75 @@ const UserViewsScreen = ({ navigation }) => {
       setMenuLoading(false);
     }
   }, [profileUserId]);
+
+  const loadOwnerPromotions = useCallback(async () => {
+    if (!profileUserId) {
+      setOwnerPromotions([]);
+      return;
+    }
+    try {
+      const res = await getPromotionsByUser(profileUserId, 1, 50);
+      setOwnerPromotions(
+        (res?.promotions ?? []).filter(p => isPromotionActive(p)),
+      );
+    } catch (_) {
+      setOwnerPromotions([]);
+    }
+  }, [profileUserId]);
+
+  const viewerLatLng = useMemo(() => {
+    if (browseLocation?.lat != null && browseLocation?.lng != null) {
+      return {
+        lat: Number(browseLocation.lat),
+        lng: Number(browseLocation.lng),
+      };
+    }
+    if (currentUser?.latitude != null && currentUser?.longitude != null) {
+      return {
+        lat: Number(currentUser.latitude),
+        lng: Number(currentUser.longitude),
+      };
+    }
+    return null;
+  }, [browseLocation, currentUser?.latitude, currentUser?.longitude]);
+
+  const userInOwnerArea = useMemo(() => {
+    if (!viewerLatLng || !profile) return false;
+    return isUserWithinOwnerArea(
+      viewerLatLng.lat,
+      viewerLatLng.lng,
+      profile,
+    );
+  }, [viewerLatLng, profile]);
+
+  const showPromotionalOffersButton = useMemo(
+    () =>
+      isViewingBusinessProfile &&
+      !isOwnProfile &&
+      !!profile?.isSubscribed &&
+      userInOwnerArea &&
+      ownerPromotions.length > 0,
+    [
+      isViewingBusinessProfile,
+      isOwnProfile,
+      profile?.isSubscribed,
+      userInOwnerArea,
+      ownerPromotions.length,
+    ],
+  );
+
+  useEffect(() => {
+    if (profile?.isSubscribed && profileUserId && isViewingBusinessProfile) {
+      loadOwnerPromotions();
+    } else {
+      setOwnerPromotions([]);
+    }
+  }, [
+    profile?.isSubscribed,
+    profileUserId,
+    isViewingBusinessProfile,
+    loadOwnerPromotions,
+  ]);
 
   /** Followers / Following lists live on Home1 stack (same as BusinessProfileCard) */
   const handlePressFollowers = useCallback(() => {
@@ -1819,6 +1898,18 @@ const UserViewsScreen = ({ navigation }) => {
           );
         })}
       </View>
+
+      {showPromotionalOffersButton && activeTab === 'Menu' ? (
+        <TouchableOpacity
+          style={styles.promoOfferBtn}
+          onPress={() => setPromotionalOffersVisible(true)}
+          activeOpacity={0.85}
+        >
+          <MaterialCommunityIcons name="tag-multiple" size={20} color="#FF7F0B" />
+          <Text style={styles.promoOfferBtnText}>Promotional Offers</Text>
+          <MaterialCommunityIcons name="chevron-right" size={20} color="#FF7F0B" />
+        </TouchableOpacity>
+      ) : null}
 
     </View>
   );
@@ -2645,6 +2736,13 @@ const UserViewsScreen = ({ navigation }) => {
         ownerName={profile?.channelName || profile?.nickname || profile?.name}
         currentUser={currentUser}
         defaultAddress={currentUser?.address || ''}
+      />
+
+      <PromotionalOffersModal
+        visible={promotionalOffersVisible}
+        onClose={() => setPromotionalOffersVisible(false)}
+        promotions={ownerPromotions}
+        ownerName={profile?.channelName || profile?.nickname || profile?.name}
       />
 
       <GalleryVideoDetailModal
@@ -4135,6 +4233,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  promoOfferBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFF4EA',
+    borderWidth: 1,
+    borderColor: '#FFD6AD',
+  },
+  promoOfferBtnText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FF7F0B',
   },
   channelLeft: {
     flexDirection: 'row',

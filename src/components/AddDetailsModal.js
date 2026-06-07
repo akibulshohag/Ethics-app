@@ -51,6 +51,22 @@ const AddDetailsModal = ({
   const [localThumb, setLocalThumb] = useState(null);
   const [coverPickerVisible, setCoverPickerVisible] = useState(false);
 
+  const resetFormState = React.useCallback(() => {
+    setVisibilityModalVisible(false);
+    setVisibility('Public');
+    setAudienceModalVisible(false);
+    setAudience({ madeForKids: null, ageRestricted: null });
+    setCommentsModalVisible(false);
+    setComments('Allow all comments');
+    setScheduleModalVisible(false);
+    setScheduledPublishDate(null);
+    setCaption('');
+    setUploading(false);
+    setLocalVideo(null);
+    setLocalThumb(null);
+    setCoverPickerVisible(false);
+  }, []);
+
   useEffect(() => {
     if (visible && shortsMetadata?.commentsSetting) {
       setComments(shortsMetadata.commentsSetting);
@@ -214,6 +230,7 @@ const AddDetailsModal = ({
         formData.append('isLive', 'true');
       }
       await shortsService.uploadShort(formData, shortsMetadata.userId);
+      resetFormState();
       Alert.alert('Success', 'Short uploaded successfully', [
         {
           text: 'OK',
