@@ -116,6 +116,13 @@ async function geocodeUserProfileAddress(userData) {
   return null;
 }
 
+/** Profile address + coordinates (geocode when lat/lng missing). */
+export async function resolveProfileBrowseLocation(userData) {
+  const fromProfile = buildBrowseLocationFromUserProfile(userData);
+  if (fromProfile) return fromProfile;
+  return geocodeUserProfileAddress(userData);
+}
+
 /** Resolve browse location from saved choice, storage, or profile address. */
 export async function resolveUserBrowseLocation(userData) {
   const backendLoc = userData?.savedLastLocation;
@@ -124,14 +131,21 @@ export async function resolveUserBrowseLocation(userData) {
   const stored = await loadStoredBrowseLocation(userData?.id);
   const fromStored = normalizeBrowseLocation(stored);
   if (fromStored) return fromStored;
-  const fromProfile = buildBrowseLocationFromUserProfile(userData);
-  if (fromProfile) return fromProfile;
-  return geocodeUserProfileAddress(userData);
+  return resolveProfileBrowseLocation(userData);
 }
 
-/** Resolve browse location after login from backend savedLastLocation or local storage. */
+/**
+ * After login/sign-up: always prefer the user's saved profile address first,
+ * then fall back to last browse pick only when profile has no address.
+ */
 export async function resolvePostLoginBrowseLocation(userData) {
-  return resolveUserBrowseLocation(userData);
+  const profileLoc = await resolveProfileBrowseLocation(userData);
+  if (profileLoc) return profileLoc;
+  const backendLoc = userData?.savedLastLocation;
+  const fromBackend = normalizeBrowseLocation(backendLoc);
+  if (fromBackend) return fromBackend;
+  const stored = await loadStoredBrowseLocation(userData?.id);
+  return normalizeBrowseLocation(stored);
 }
 
 /**

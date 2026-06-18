@@ -61,6 +61,7 @@ import {
   toggleDislike as toggleVideoDislike,
   recordShare as recordVideoShare,
   recordView as recordVideoView,
+  deleteVideo,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import {
@@ -74,12 +75,18 @@ import {
   persistBrowseLocation,
   normalizeBrowseLocation,
   resolveUserBrowseLocation,
+  resolveProfileBrowseLocation,
   browseLocationFromUserProfile,
 } from '../services/userLocationService';
-import { browseAreaLabel, UK_DEFAULT_RADIUS_KM, extractUkPostcodeFromText } from '../utils/ukPostcode';
+import {
+  browseAreaLabel,
+  UK_DEFAULT_RADIUS_KM,
+  extractUkPostcodeFromText,
+} from '../utils/ukPostcode';
 import MapLocationPicker from '../components/MapLocationPicker';
 import RestaurantBookingModal from '../components/RestaurantBookingModal';
 import logo from '../assets/logo.png';
+import { HEADER_LOGO_STYLE } from '../constants/headerLogo';
 import { cuisineImageUriFromKey } from '../constants/cuisineCategoryImages';
 import {
   buildDiscoveryCategoriesFromMenuCaches,
@@ -88,6 +95,7 @@ import {
   resolveDiscoveryCategoryFromFilter,
   resolveCategoryChipNavigation,
 } from '../constants/menuDiscoveryCategories';
+import { buildHomeMenuCategoryChips } from '../constants/homeMenuCategories';
 
 const FEATURED_CUISINE_CHIP_ORDER = [
   'bangladeshi',
@@ -130,6 +138,9 @@ import {
   resolveViewerLocationOpts,
   getOwnerLatLngFromMediaPayload,
 } from '../utils/geoDistance';
+import NotificationBellButton from '../components/NotificationBellButton';
+import NotificationsBottomSheet from '../components/NotificationsBottomSheet';
+import { useNotifications } from '../hooks/useNotifications';
 
 const { width, height } = Dimensions.get('window');
 const FEED_HORIZONTAL_PAD = 15;
@@ -565,8 +576,9 @@ const HomeOneScreen = () => {
     {},
   );
   /** Per trending video card — same channel can appear on multiple cards */
-  const [trendingSubscribeByVideoId, setTrendingSubscribeByVideoId] =
-    useState({});
+  const [trendingSubscribeByVideoId, setTrendingSubscribeByVideoId] = useState(
+    {},
+  );
   const [subscribeTogglingVideoId, setSubscribeTogglingVideoId] =
     useState(null);
   /** Owners the user toggled on Trending — skip bulk hydrate for their cards */
@@ -601,6 +613,14 @@ const HomeOneScreen = () => {
     [user],
   );
   const isAuthenticated = !!(user?.token || authUserId);
+  const {
+    notifications,
+    unreadCount,
+    loading: notificationsLoading,
+    markRead: markNotificationReadLocal,
+    markAllRead: markAllNotificationsReadLocal,
+  } = useNotifications(isAuthenticated ? authUserId : null);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
   const isCuisineFilterScreen =
     route.name === 'HomeOneCuisineScreen' || !!route.params?.cuisineMode;
   const cuisineFilterKey = String(
@@ -660,16 +680,6 @@ const HomeOneScreen = () => {
   const headerLocationLabel = useMemo(() => {
     if (homeLocationOverride) return homeLocationOverride;
 
-    const profileAddr = String(user?.address || '').trim();
-    if (profileAddr) {
-      const fromProfile = formatCityCountryPostcodeLine({
-        address: profileAddr,
-        postcode:
-          user?.postcode || extractUkPostcodeFromText(profileAddr) || '',
-      });
-      if (fromProfile && fromProfile !== 'Set your area') return fromProfile;
-    }
-
     const sessionAddr = String(addressText || '').trim();
     const browseAddr = String(browseLocation?.addressText || '').trim();
     const addr = sessionAddr || browseAddr;
@@ -684,6 +694,18 @@ const HomeOneScreen = () => {
       postcode: pc,
     });
     if (formatted && formatted !== 'Set your area') return formatted;
+    if (browseLocation?.areaLabel) return browseLocation.areaLabel;
+
+    const profileAddr = String(user?.address || '').trim();
+    if (profileAddr) {
+      const fromProfile = formatCityCountryPostcodeLine({
+        address: profileAddr,
+        postcode:
+          user?.postcode || extractUkPostcodeFromText(profileAddr) || '',
+      });
+      if (fromProfile && fromProfile !== 'Set your area') return fromProfile;
+    }
+
     return (
       browseAreaLabel({
         postcode: pc,
@@ -703,56 +725,33 @@ const HomeOneScreen = () => {
   ]);
 
   useEffect(() => {
-    setHomeLocationOverride(null);
-  }, [user?.address, user?.postcode]);
-
-  useEffect(() => {
-    if (!user?.address?.trim()) return;
-    const sessionAddr = String(addressText || '').trim();
-    if (sessionAddr && sessionAddr !== user.address) return;
-
-    const lat = Number(user.latitude);
-    const lng = Number(user.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-    const pc =
-      String(user.postcode || '').trim() ||
-      extractUkPostcodeFromText(user.address) ||
-      '';
-    const label = formatCityCountryPostcodeLine({
-      address: user.address,
-      postcode: pc,
-    });
-    const currentLabel = formatCityCountryPostcodeLine({
-      addressText: browseLocation?.addressText || addressText,
-      postcode: browseLocation?.postcode || browsePostcode,
-      areaLabel: browseLocation?.areaLabel,
-    });
-    if (label && label === currentLabel) return;
-
-    setAddressText(user.address);
-    if (pc) setBrowsePostcode(pc);
+    if (selectedLocation?.lat != null && selectedLocation?.lng != null) return;
+    const lat = browseLocation?.lat != null ? Number(browseLocation.lat) : null;
+    const lng = browseLocation?.lng != null ? Number(browseLocation.lng) : null;
+    if (
+      lat == null ||
+      lng == null ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng)
+    ) {
+      return;
+    }
     setSelectedLocation({ lat, lng });
-    dispatch(
-      setBrowseLocation({
-        lat,
-        lng,
-        postcode: pc,
-        addressText: user.address,
-        areaLabel: label,
-      }),
-    );
+    if (!addressText && browseLocation?.addressText) {
+      setAddressText(browseLocation.addressText);
+    }
+    if (!browsePostcode && browseLocation?.postcode) {
+      setBrowsePostcode(browseLocation.postcode);
+    }
   }, [
-    user?.address,
-    user?.postcode,
-    user?.latitude,
-    user?.longitude,
-    addressText,
-    browsePostcode,
+    browseLocation?.lat,
+    browseLocation?.lng,
     browseLocation?.addressText,
     browseLocation?.postcode,
-    browseLocation?.areaLabel,
-    dispatch,
+    selectedLocation?.lat,
+    selectedLocation?.lng,
+    addressText,
+    browsePostcode,
   ]);
 
   const homeFeedCache = useSelector(state => state.homeFeed);
@@ -814,8 +813,7 @@ const HomeOneScreen = () => {
         mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? s.mediaUrl,
         visibility: updated?.visibility ?? s.visibility,
         commentSetting: updated?.commentSetting ?? s.commentSetting,
-        scheduledPublishAt:
-          updated?.scheduledPublishAt ?? s.scheduledPublishAt,
+        scheduledPublishAt: updated?.scheduledPublishAt ?? s.scheduledPublishAt,
         scheduleAt: updated?.scheduleAt ?? s.scheduleAt,
         scheduleDate: updated?.scheduleDate ?? s.scheduleDate,
         scheduledAt: updated?.scheduledAt ?? s.scheduledAt,
@@ -855,6 +853,7 @@ const HomeOneScreen = () => {
         postcode: pc,
       });
       setHomeLocationOverride(areaLabel);
+      if (label) setAddressText(label);
       dispatch(
         setBrowseLocation({
           lat: coords.lat,
@@ -1151,10 +1150,56 @@ const HomeOneScreen = () => {
 
             const raw = await AsyncStorage.getItem(LOCATION_KEY);
             if (!raw) {
-              if (!cancelled) setLocationModalVisible(true);
+              if (!cancelled) {
+                const profileLocResolved = await resolveProfileBrowseLocation(
+                  u,
+                );
+                if (profileLocResolved) {
+                  setSelectedLocation({
+                    lat: profileLocResolved.lat,
+                    lng: profileLocResolved.lng,
+                  });
+                  setAddressText(profileLocResolved.addressText || '');
+                  setBrowsePostcode(profileLocResolved.postcode || '');
+                  dispatch(setBrowseLocation(profileLocResolved));
+                  loadFeaturedAndFeed();
+                  loadContinueWatching();
+                } else {
+                  setLocationModalVisible(true);
+                }
+              }
               return;
             }
             const saved = JSON.parse(raw);
+            const profileAddress = String(u?.address || '').trim();
+            const savedAddress = String(saved?.addressText || '').trim();
+            if (
+              profileAddress &&
+              savedAddress &&
+              profileAddress !== savedAddress
+            ) {
+              const profileLocResolved = await resolveProfileBrowseLocation(u);
+              if (profileLocResolved && !cancelled) {
+                setSelectedLocation({
+                  lat: profileLocResolved.lat,
+                  lng: profileLocResolved.lng,
+                });
+                setAddressText(profileLocResolved.addressText || '');
+                setBrowsePostcode(profileLocResolved.postcode || '');
+                dispatch(setBrowseLocation(profileLocResolved));
+                await persistBrowseLocation({
+                  userId: u?.id,
+                  lat: profileLocResolved.lat,
+                  lng: profileLocResolved.lng,
+                  postcode: profileLocResolved.postcode || '',
+                  addressText: profileLocResolved.addressText || '',
+                  areaLabel: profileLocResolved.areaLabel || '',
+                });
+                loadFeaturedAndFeed();
+                loadContinueWatching();
+                return;
+              }
+            }
             const sameUser =
               saved?.userId == null || !userRef.current?.id
                 ? true
@@ -1309,9 +1354,7 @@ const HomeOneScreen = () => {
       const cachedPopularShorts = (cached.popularShorts || []).filter(
         onlyPublishedNow,
       );
-      const cachedNewShorts = (cached.newShorts || []).filter(
-        onlyPublishedNow,
-      );
+      const cachedNewShorts = (cached.newShorts || []).filter(onlyPublishedNow);
       setFeaturedVideo(
         cached.featuredVideo && !isFutureScheduledMedia(cached.featuredVideo)
           ? cached.featuredVideo
@@ -1676,10 +1719,12 @@ const HomeOneScreen = () => {
       const mappedShortsWithMenu = mappedShorts
         .filter(onlyPublishedNow)
         .map(withMenuSearchMeta);
-      const mappedPopularShortsWithMenu =
-        mappedPopularShorts.filter(onlyPublishedNow).map(withMenuSearchMeta);
-      const mappedNewestShortsWithMenu =
-        mappedNewestShorts.filter(onlyPublishedNow).map(withMenuSearchMeta);
+      const mappedPopularShortsWithMenu = mappedPopularShorts
+        .filter(onlyPublishedNow)
+        .map(withMenuSearchMeta);
+      const mappedNewestShortsWithMenu = mappedNewestShorts
+        .filter(onlyPublishedNow)
+        .map(withMenuSearchMeta);
       const matchesSearch = item => {
         if (!q) return true;
         const haystack = [
@@ -1807,6 +1852,70 @@ const HomeOneScreen = () => {
       setContinueData([]);
     }
   }, [user?.id, viewerLocationOpts]);
+
+  const lastBrowseSyncRef = useRef(Number(browseLocation?.updatedAt || 0));
+
+  const applyBrowseLocationToSession = useCallback(loc => {
+    if (!loc || loc.lat == null || loc.lng == null) return false;
+    const lat = Number(loc.lat);
+    const lng = Number(loc.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    const areaLabel =
+      String(loc.areaLabel || '').trim() ||
+      formatCityCountryPostcodeLine({
+        addressText: loc.addressText || '',
+        postcode: loc.postcode || '',
+      });
+    setSelectedLocation({ lat, lng });
+    if (loc.addressText) setAddressText(String(loc.addressText));
+    if (loc.postcode) setBrowsePostcode(String(loc.postcode));
+    if (areaLabel) setHomeLocationOverride(areaLabel);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    const updatedAt = Number(browseLocation?.updatedAt || 0);
+    if (!updatedAt || updatedAt <= lastBrowseSyncRef.current) return;
+    if (browseLocation?.lat == null || browseLocation?.lng == null) return;
+    lastBrowseSyncRef.current = updatedAt;
+    if (applyBrowseLocationToSession(browseLocation)) {
+      loadFeaturedAndFeed();
+      loadContinueWatching();
+    }
+  }, [
+    browseLocation?.updatedAt,
+    browseLocation?.lat,
+    browseLocation?.lng,
+    browseLocation?.addressText,
+    browseLocation?.postcode,
+    browseLocation?.areaLabel,
+    applyBrowseLocationToSession,
+    loadFeaturedAndFeed,
+    loadContinueWatching,
+  ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!browseLocation?.lat || !browseLocation?.lng) return;
+      const expectedLabel =
+        String(browseLocation.areaLabel || '').trim() ||
+        formatCityCountryPostcodeLine({
+          addressText: browseLocation.addressText || '',
+          postcode: browseLocation.postcode || '',
+        });
+      if (!expectedLabel || homeLocationOverride === expectedLabel) return;
+      const browseAddr = String(browseLocation.addressText || '').trim();
+      const profileAddr = String(user?.address || '').trim();
+      if (profileAddr && browseAddr && profileAddr === browseAddr) {
+        applyBrowseLocationToSession(browseLocation);
+      }
+    }, [
+      browseLocation,
+      user?.address,
+      homeLocationOverride,
+      applyBrowseLocationToSession,
+    ]),
+  );
 
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -2453,8 +2562,7 @@ const HomeOneScreen = () => {
           item?.channelName ||
           item?.title ||
           'Restaurant',
-        address:
-          owner?.address || item?.creatorAddress || item?.location || '',
+        address: owner?.address || item?.creatorAddress || item?.location || '',
       });
       setBookingModalVisible(true);
     },
@@ -2937,7 +3045,7 @@ const HomeOneScreen = () => {
     item => {
       if (!item?.id) return;
       const ownerId = item?.userId ?? item?.user?.id ?? null;
-      const canEdit =
+      const isOwner =
         !!actorUserId && !!ownerId && String(ownerId) === String(actorUserId);
       setHomeMoreTarget({
         contentType: 'short',
@@ -2950,7 +3058,8 @@ const HomeOneScreen = () => {
         channelName:
           item.user?.nickname || item.user?.name || item.channelName || '',
         ownerId,
-        canEdit,
+        canEdit: isOwner,
+        canDelete: isOwner,
         sourceItem: item,
       });
       setHomeMoreVisible(true);
@@ -2963,11 +3072,8 @@ const HomeOneScreen = () => {
       if (!item?.id) return;
       const isShort = String(item.type || '').toLowerCase() === 'short';
       const ownerId = item?.userId ?? item?.user?.id ?? null;
-      const canEdit =
-        isShort &&
-        !!actorUserId &&
-        !!ownerId &&
-        String(ownerId) === String(actorUserId);
+      const isOwner =
+        !!actorUserId && !!ownerId && String(ownerId) === String(actorUserId);
       setHomeMoreTarget({
         contentType: isShort ? 'short' : 'video',
         contentId: item.id,
@@ -2980,7 +3086,8 @@ const HomeOneScreen = () => {
         channelName:
           item.channelName || item.user?.nickname || item.user?.name || '',
         ownerId,
-        canEdit,
+        canEdit: isShort && isOwner,
+        canDelete: isOwner,
         sourceItem: item,
       });
       setHomeMoreVisible(true);
@@ -2991,6 +3098,9 @@ const HomeOneScreen = () => {
   const openHomeMoreFromSelected = useCallback(() => {
     if (!selectedItem?.id) return;
     const isShort = selectedItem.type === 'short';
+    const ownerId = selectedItem?.userId ?? selectedItem?.user?.id ?? null;
+    const isOwner =
+      !!actorUserId && !!ownerId && String(ownerId) === String(actorUserId);
     setHomeMoreTarget({
       contentType: isShort ? 'short' : 'video',
       contentId: selectedItem.id,
@@ -3001,13 +3111,9 @@ const HomeOneScreen = () => {
         selectedItem?.user?.nickname ||
         selectedItem?.user?.name ||
         '',
-      ownerId: selectedItem?.userId ?? selectedItem?.user?.id ?? null,
-      canEdit:
-        isShort &&
-        !!actorUserId &&
-        !!(selectedItem?.userId ?? selectedItem?.user?.id) &&
-        String(selectedItem?.userId ?? selectedItem?.user?.id) ===
-          String(actorUserId),
+      ownerId,
+      canEdit: isShort && isOwner,
+      canDelete: isOwner,
       sourceItem: selectedItem,
     });
     setHomeMoreVisible(true);
@@ -3245,6 +3351,53 @@ const HomeOneScreen = () => {
       },
     });
   }, [actorUserId, homeMoreTarget, navigation, requireLogin, user?.role]);
+
+  const onMoreDelete = useCallback(() => {
+    const t = homeMoreTarget;
+    if (!t?.contentId || !t.canDelete) return;
+    if (!requireLogin()) return;
+    const label = t.contentType === 'short' ? 'short' : 'video';
+    Alert.alert(
+      `Delete ${label}`,
+      `Are you sure you want to delete this ${label}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (t.contentType === 'short') {
+                await shortsService.deleteShort(t.contentId, actorUserId);
+                setFeedShorts(prev =>
+                  prev.filter(s => String(s?.id) !== String(t.contentId)),
+                );
+              } else {
+                await deleteVideo(t.contentId, actorUserId);
+                setFeedVideos(prev =>
+                  prev.filter(v => String(v?.id) !== String(t.contentId)),
+                );
+              }
+              if (String(selectedItem?.id) === String(t.contentId)) {
+                setIsRestaurantDetail(false);
+                setIsVideoDetail(false);
+                setSelectedItem(null);
+              }
+              closeHomeMore();
+            } catch (e) {
+              Alert.alert('Error', e?.message || `Failed to delete ${label}`);
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    homeMoreTarget,
+    requireLogin,
+    actorUserId,
+    selectedItem?.id,
+    closeHomeMore,
+  ]);
 
   const onMoreOpenReport = useCallback(() => {
     if (!requireLogin()) return;
@@ -3516,7 +3669,7 @@ const HomeOneScreen = () => {
     const secondaryLoc = addr || primaryLoc;
     const cuisineKey = normalizeCuisine(selectedCuisine);
     const cuisineSelected = isCuisineFilterScreen && !!cuisineKey;
-    const safeChipOptions = displayedCuisineOptions;
+    const safeChipOptions = buildHomeMenuCategoryChips();
     const getItemMenuTagsLower = item => {
       const directTags = Array.isArray(item?._menuTagsLower)
         ? item._menuTagsLower
@@ -3919,87 +4072,98 @@ const HomeOneScreen = () => {
           >
             <Text style={styles.navBtnText}>{'<'} Home</Text>
           </TouchableOpacity> */}
-            <View style={styles.headerLogoContainer}>
+            <View style={styles.headerLeftCol}>
               <Image
                 source={logo}
                 style={styles.logoImage}
                 resizeMode="contain"
               />
-            </View>
-            {!(user?.token || user?.id) ? (
               <TouchableOpacity
-                style={[styles.navBtn]}
-                onPress={() => navigation.navigate('HomeSevenScreen')}
+                style={styles.eatixLocationRow}
+                activeOpacity={0.85}
+                onPress={() => setLocationModalVisible(true)}
               >
-                <Text style={styles.navBtnText}>Login {'>'}</Text>
+                <Icon name="map-marker-outline" size={17} color="#FFF" />
+                <View style={styles.eatixLocationLabelWrap}>
+                  <Text style={styles.eatixLocationText} numberOfLines={1}>
+                    {primaryLoc}
+                  </Text>
+                  <Icon
+                    name="chevron-down"
+                    size={16}
+                    color="#FFF"
+                    style={styles.eatixLocationChevron}
+                  />
+                </View>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                // style={[styles.navBtn]}
-                onPress={() => {
-                  const role = (user?.role || '').toLowerCase();
-                  if (role === 'owner' || role === 'vendor') {
-                    navigation.navigate('BusinessProfileViewScreen');
-                  } else if (role === 'user') {
-                    navigation.navigate('PromotionScreen');
-                  } else if (role === 'admin') {
-                    navigation.getParent()?.navigate('Admin');
-                  } else {
-                    navigation
-                      .getParent()
-                      ?.navigate('Library', { screen: 'ProfileScreen' });
-                  }
-                }}
-              >
-                {(() => {
-                  // Same as PromotionScreen: backend photos are [{ src, title }]; use first photo src
-                  const firstPhoto =
-                    user?.photos?.[0] ??
-                    (Array.isArray(user?.photos) ? user.photos[0] : null);
-                  const photo =
-                    user?.avatar ||
-                    (typeof firstPhoto === 'string'
-                      ? firstPhoto
-                      : firstPhoto?.src) ||
-                    null;
-                  const profileImageUri =
-                    typeof photo === 'string' && photo.trim()
-                      ? photo.trim()
-                      : null;
-                  const hasProfileImage =
-                    profileImageUri &&
-                    String(profileImageUri).trim().length > 0;
-                  if (hasProfileImage) {
+            </View>
+            <View style={styles.headerRightGroup}>
+              {isAuthenticated ? (
+                <NotificationBellButton
+                  unreadCount={unreadCount}
+                  onPress={() => setNotificationsVisible(true)}
+                  iconColor="#FFF"
+                />
+              ) : null}
+              {!(user?.token || user?.id) ? (
+                <TouchableOpacity
+                  style={[styles.navBtn]}
+                  onPress={() => navigation.navigate('HomeSevenScreen')}
+                >
+                  <Text style={styles.navBtnText}>Login {'>'}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  // style={[styles.navBtn]}
+                  onPress={() => {
+                    const role = (user?.role || '').toLowerCase();
+                    if (role === 'owner' || role === 'vendor') {
+                      navigation.navigate('BusinessProfileViewScreen');
+                    } else if (role === 'user') {
+                      navigation.navigate('PromotionScreen');
+                    } else if (role === 'admin') {
+                      navigation.getParent()?.navigate('Admin');
+                    } else {
+                      navigation
+                        .getParent()
+                        ?.navigate('Library', { screen: 'ProfileScreen' });
+                    }
+                  }}
+                >
+                  {(() => {
+                    // Same as PromotionScreen: backend photos are [{ src, title }]; use first photo src
+                    const firstPhoto =
+                      user?.photos?.[0] ??
+                      (Array.isArray(user?.photos) ? user.photos[0] : null);
+                    const photo =
+                      user?.avatar ||
+                      (typeof firstPhoto === 'string'
+                        ? firstPhoto
+                        : firstPhoto?.src) ||
+                      null;
+                    const profileImageUri =
+                      typeof photo === 'string' && photo.trim()
+                        ? photo.trim()
+                        : null;
+                    const hasProfileImage =
+                      profileImageUri &&
+                      String(profileImageUri).trim().length > 0;
+                    if (hasProfileImage) {
+                      return (
+                        <Image
+                          source={{ uri: safeImageUri(profileImageUri) }}
+                          style={styles.profileAvatar}
+                        />
+                      );
+                    }
                     return (
-                      <Image
-                        source={{ uri: safeImageUri(profileImageUri) }}
-                        style={styles.profileAvatar}
-                      />
+                      <Icon name="account-outline" size={28} color="#FFF" />
                     );
-                  }
-                  return <Icon name="account-outline" size={28} color="#FFF" />;
-                })()}
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.eatixLocationRow}
-            activeOpacity={0.85}
-            onPress={() => setLocationModalVisible(true)}
-          >
-            <Icon name="map-marker-outline" size={17} color="#FFF" />
-            <View style={styles.eatixLocationLabelWrap}>
-              <Text style={styles.eatixLocationText} numberOfLines={1}>
-                {primaryLoc}
-              </Text>
-              <Icon
-                name="chevron-down"
-                size={16}
-                color="#FFF"
-                style={styles.eatixLocationChevron}
-              />
+                  })()}
+                </TouchableOpacity>
+              )}
             </View>
-          </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -4080,10 +4244,9 @@ const HomeOneScreen = () => {
                     key={cuisine.key}
                     style={styles.cuisineChip}
                     onPress={() => {
-                      const nav = resolveCategoryChipNavigation(cuisine);
                       navigation.navigate('HomeSearchCategoryScreen', {
-                        categoryKey: nav.categoryKey,
-                        categoryLabel: nav.categoryLabel,
+                        categoryKey: cuisine.key,
+                        categoryLabel: cuisine.label,
                         nearLabel: primaryLoc || '',
                         viewerLat: selectedLocation?.lat ?? user?.latitude,
                         viewerLng: selectedLocation?.lng ?? user?.longitude,
@@ -5432,7 +5595,9 @@ const HomeOneScreen = () => {
         onNotInterested={onMoreNotInterested}
         onReport={onMoreOpenReport}
         onEdit={onMoreEditShort}
+        onDelete={onMoreDelete}
         showEdit={!!homeMoreTarget?.canEdit}
+        showDelete={!!homeMoreTarget?.canDelete}
       />
 
       <RestaurantBookingModal
@@ -5441,7 +5606,21 @@ const HomeOneScreen = () => {
         ownerId={bookingTarget?.ownerId}
         ownerName={bookingTarget?.ownerName}
         currentUser={user}
-        defaultAddress={user?.address || addressText || bookingTarget?.address || ''}
+        defaultAddress={
+          user?.address || addressText || bookingTarget?.address || ''
+        }
+      />
+
+      <NotificationsBottomSheet
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+        notifications={notifications}
+        loading={notificationsLoading}
+        unreadCount={unreadCount}
+        onMarkRead={markNotificationReadLocal}
+        onMarkAllRead={markAllNotificationsReadLocal}
+        navigation={navigation}
+        currentUser={user}
       />
 
       <ReportContentModal
@@ -6208,7 +6387,17 @@ const styles = StyleSheet.create({
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerLeftCol: {
+    flex: 1,
+    alignItems: 'flex-start',
+    paddingRight: 8,
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   navBtn: {
     backgroundColor: 'rgba(255,255,255,0.25)',
@@ -6224,15 +6413,7 @@ const styles = StyleSheet.create({
   },
   navBtnText: { color: '#424242', fontSize: 12, fontWeight: '600' },
   headerLogo: { color: '#FFF', fontSize: 26, fontWeight: 'bold' },
-  headerLogoContainer: {
-    flex: 1,
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-  },
-  logoImage: {
-    width: 100,
-    height: 30,
-  },
+  logoImage: HEADER_LOGO_STYLE,
   resultsTitle: {
     color: '#FFF',
     marginTop: 10,
@@ -6243,8 +6424,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    marginTop: 8,
-    maxWidth: '78%',
+    maxWidth: '100%',
   },
   eatixLocationLabelWrap: {
     flexDirection: 'row',

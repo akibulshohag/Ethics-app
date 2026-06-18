@@ -268,7 +268,7 @@ const parseAxiosApiError = err => {
     if (e && e !== 'Bad Request') msg = e;
   }
   if (!msg && status) {
-    msg = `Server error (${status}). Add FACEBOOK_APP_ID (and APP_URL) on the Eatix API server, or set facebookAppId in app config.js.`;
+    msg = `Server error (${status}). Add FACEBOOK_APP_ID (and APP_URL) on the Eatwaze API server, or set facebookAppId in app config.js.`;
   }
   if (!msg) msg = String(err?.message || 'Request failed');
   return msg;
@@ -473,14 +473,22 @@ function normalizeProfilePatchBody(data) {
     else delete body.longitude;
   }
   [
+    'contentAreaKm',
+    'pickupAreaKm',
     'deliveryAreaKm',
     'taxCharge0To10Km',
     'taxCharge11To20Km',
     'taxCharge21To30Km',
+    'vendorMinOrderQty',
+    'vendorMaxOrderQty',
   ].forEach(field => {
+    if (body[field] === null || body[field] === '') {
+      body[field] = null;
+      return;
+    }
     if (body[field] != null && body[field] !== '') {
       const n = Number(body[field]);
-      if (Number.isFinite(n)) body[field] = n;
+      if (Number.isFinite(n)) body[field] = Math.floor(n);
       else delete body[field];
     }
   });

@@ -2,7 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const PromotionCard = ({ item, onPress, isTierPromo = false }) => {
+const PromotionCard = ({
+  item,
+  onPress,
+  isTierPromo = false,
+  hasVideo = false,
+}) => {
   return (
     <TouchableOpacity
       style={styles.container}
@@ -17,14 +22,14 @@ const PromotionCard = ({ item, onPress, isTierPromo = false }) => {
             <MaterialCommunityIcons name="tag-multiple" size={36} color="#FF7F0B" />
           </View>
         )}
-        {!isTierPromo ? (
+        {hasVideo ? (
+          <View style={styles.videoBadge}>
+            <MaterialCommunityIcons name="play-circle" size={28} color="#fff" />
+          </View>
+        ) : null}
+        {!isTierPromo && !hasVideo ? (
           <View style={styles.rightOverlay}>
             <Text style={styles.viewCount}>{item.views}</Text>
-            <MaterialCommunityIcons
-              name="play-circle-outline"
-              size={20}
-              color="#fff"
-            />
           </View>
         ) : null}
       </View>
@@ -63,6 +68,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF4EA',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  videoBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 16,
+    padding: 2,
   },
   rightOverlay: {
     position: 'absolute',

@@ -11,6 +11,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 
 const ROWS = [
   { key: 'edit', label: 'Edit', icon: 'pencil-outline', ownerOnly: true },
+  { key: 'delete', label: 'Delete', icon: 'delete-outline', ownerOnly: true, destructive: true },
   { key: 'playlist', label: 'Save to Playlist', icon: 'playlist-plus' },
   { key: 'watchLater', label: 'Save to Watch Later', icon: 'clock-outline' },
   { key: 'download', label: 'Download Video', icon: 'download-outline' },
@@ -29,7 +30,9 @@ const HomeMoreOptionModal = ({
   onNotInterested,
   onReport,
   onEdit,
+  onDelete,
   showEdit = false,
+  showDelete = false,
 }) => {
   const run = key => {
     if (key === 'report') {
@@ -45,11 +48,16 @@ const HomeMoreOptionModal = ({
       share: onShare,
       notInterested: onNotInterested,
       edit: onEdit,
+      delete: onDelete,
     };
     setTimeout(() => map[key]?.(), 0);
   };
 
-  const visibleRows = ROWS.filter(row => !row.ownerOnly || showEdit);
+  const visibleRows = ROWS.filter(row => {
+    if (row.key === 'edit') return showEdit;
+    if (row.key === 'delete') return showDelete;
+    return !row.ownerOnly;
+  });
 
   return (
     <Modal
@@ -75,12 +83,19 @@ const HomeMoreOptionModal = ({
                   <MaterialCommunityIcons
                     name={row.icon}
                     size={26}
-                    color={row.accent ? '#F5A623' : '#212121'}
+                    color={
+                      row.destructive
+                        ? '#E53935'
+                        : row.accent
+                          ? '#F5A623'
+                          : '#212121'
+                    }
                   />
                   <Text
                     style={[
                       styles.rowText,
                       row.accent && styles.rowTextAccent,
+                      row.destructive && styles.rowTextDestructive,
                     ]}
                   >
                     {row.label}
@@ -142,6 +157,10 @@ const styles = StyleSheet.create({
   },
   rowTextAccent: {
     color: '#F5A623',
+    fontWeight: '600',
+  },
+  rowTextDestructive: {
+    color: '#E53935',
     fontWeight: '600',
   },
 });

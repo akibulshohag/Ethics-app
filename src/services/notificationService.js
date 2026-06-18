@@ -47,3 +47,36 @@ export const markNotificationRead = async notificationId => {
     throw error;
   }
 };
+
+/**
+ * Mark all notifications as read for a user
+ */
+export const markAllNotificationsRead = async userId => {
+  try {
+    const response = await axios.patch(
+      `${API_URL}/recipient/${userId}/read-all`,
+      {},
+      { headers: getAuthHeaders() },
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error marking all notifications read:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get unread notification count for a user
+ */
+export const getUnreadNotificationCount = async userId => {
+  try {
+    const response = await axios.get(
+      `${API_URL}/recipient/${userId}/unread-count`,
+      { headers: getAuthHeaders() },
+    );
+    return response.data?.count ?? 0;
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    return 0;
+  }
+};

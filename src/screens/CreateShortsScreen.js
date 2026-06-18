@@ -38,6 +38,7 @@ import {
 } from '../utils/shortsBackdropSound';
 import {navigateToHomeOne} from '../utils/navigateToHomeOne';
 import {newShortSessionKey} from '../utils/reelDraftStorage';
+import {thumbnailFromVideoFrame} from '../utils/videoThumbnail';
 
 const {width, height} = Dimensions.get('window');
 
@@ -316,6 +317,12 @@ const CreateShortsScreen = ({navigation, route}) => {
             uri: asset.uri,
             type: asset.type || 'video/mp4',
             name: asset.fileName || 'short.mp4',
+            duration:
+              asset.duration != null ? Math.max(0, Number(asset.duration)) : undefined,
+          });
+          setPickedThumbnail(null);
+          thumbnailFromVideoFrame(asset.uri).then(thumb => {
+            if (thumb) setPickedThumbnail(thumb);
           });
           setIsEditing(true);
         }
@@ -391,6 +398,7 @@ const CreateShortsScreen = ({navigation, route}) => {
     videoUri: pickedVideo?.uri,
     videoType: pickedVideo?.type,
     videoName: pickedVideo?.name,
+    durationSec: pickedVideo?.duration,
     thumbnailUri: pickedThumbnail?.uri,
     thumbnailType: pickedThumbnail?.type,
     thumbnailName: pickedThumbnail?.name,

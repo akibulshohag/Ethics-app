@@ -11,39 +11,58 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  CommonActions,
+} from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
-import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
+import {
+  appSetUser,
+  setBrowseLocation,
+  clearBrowseLocation,
+} from '../redux/actions/appSlice';
 import {
   resolvePostLoginBrowseLocation,
   homeRouteForBrowseLocation,
   persistBrowseLocation,
 } from '../services/userLocationService';
-import {
-  login,
-  // Future: verifyEmailOtp,
-  isAccountInactiveError,
-} from '../services/authService';
+import { login, isAccountInactiveError } from '../services/authService';
 import {
   loginWithFacebook,
   loginWithGoogle,
   normalizeSocialAuthError,
 } from '../services/socialAuthService';
-const { width, height } = Dimensions.get('window');
+import signupFood from '../assets/img/signupfood.png';
+import decorBowl from '../assets/img/s1.png';
+import decorSkyline from '../assets/img/s2.png';
 
-/** Full-screen login backdrop */
-const LOGIN_SCREEN_YELLOW = '#F5A623';
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const ORANGE = '#F5A623';
+const CREAM = '#FFF5EB';
+const CARD_MARGIN_H = 18;
+const CARD_MARGIN_B = 28;
+const CARD_PAD_H = 20;
+const CARD_INNER_W = SCREEN_WIDTH - CARD_MARGIN_H * 2;
+const HEADER_FOOD_H = SCREEN_HEIGHT * 0.22;
+const CARD_BOTTOM_ART_H = SCREEN_HEIGHT * 0.11;
 
 const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const navigation = useNavigation();
   const route = useRoute();
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
 
-  // PRESERVED: Original params
   const returnToOrder = route.params?.returnToOrder;
   const ownerUserId = route.params?.ownerUserId;
 
@@ -52,11 +71,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  // Future: email verification on login for pending accounts
-  // const [verificationMode, setVerificationMode] = useState(false);
-  // const [verificationOtp, setVerificationOtp] = useState('');
 
-  // PRESERVED: Original handleLogin functionality
   const navigateAfterLogin = async userData => {
     const role = String(userData?.role || '').toLowerCase();
     if (role === 'rider') {
@@ -71,6 +86,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       return;
     }
     const browseLoc = await resolvePostLoginBrowseLocation(userData);
+    dispatch(clearBrowseLocation());
     if (browseLoc) {
       dispatch(setBrowseLocation(browseLoc));
       await persistBrowseLocation({
@@ -104,7 +120,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
     try {
       const data = await login(email, password);
 
-      // PRESERVED: Complete user data object
       const userData = {
         id: data.user.id,
         name: data.user.name,
@@ -156,8 +171,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
     }
   };
 
-  // Future: handleVerifyPendingAccount / handleResendOtpForPendingAccount
-
   const handleSocialLogin = async provider => {
     setLoading(true);
     try {
@@ -201,160 +214,173 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
   return (
     <View style={styles.screenRoot}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={LOGIN_SCREEN_YELLOW}
-      />
-      <SafeAreaView style={styles.overlay}>
-        <View style={styles.bgOrbOne} />
-        <View style={styles.bgOrbTwo} />
-        <View style={styles.bgOrbThree} />
+      <StatusBar barStyle="light-content" backgroundColor={ORANGE} />
+      <View style={styles.foodImageWrap} pointerEvents="none">
+        <Image
+          source={signupFood}
+          style={styles.foodImage}
+          resizeMode="cover"
+        />
+      </View>
+      <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <View style={styles.navHeader}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              {
+                paddingTop: insets.top + 4,
+                paddingBottom: insets.bottom + CARD_MARGIN_B,
+              },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             <TouchableOpacity
               onPress={() => (onBack ? onBack() : navigation.goBack())}
               style={styles.backBtn}
             >
-              <Icon name="chevron-left" size={18} color="#2D1800" />
+              <Icon name="chevron-left" size={20} color="#FFF" />
               <Text style={styles.backText}>Back</Text>
             </TouchableOpacity>
-          </View>
 
-          <View style={styles.centerContainer}>
-            <View style={styles.loginCard}>
-              <View style={styles.cardGlow} />
-              <Text style={styles.headerTitle}>Welcome back</Text>
-              <Text style={styles.headerSubTitle}>
-                Sign in to continue your journey
-              </Text>
+            <Text style={styles.pageTitle}>Login</Text>
 
-              <View style={styles.cardBody}>
-                <View style={styles.inputWrapper}>
-                  <Icon
-                    name="email-outline"
-                    size={22}
-                    color="#7A4B00"
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    placeholder="Enter your email"
-                    placeholderTextColor="#8E6230"
-                    style={styles.input}
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    editable={!loading}
-                  />
-                </View>
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Mail</Text>
+              <View style={styles.inputWrapper}>
+                <Icon
+                  name="message-text-outline"
+                  size={22}
+                  color="#5C5C5C"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  placeholder="email"
+                  placeholderTextColor="#B0B0B0"
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+              </View>
 
-                <View style={styles.inputWrapper}>
-                  <Icon
-                    name="lock-outline"
-                    size={22}
-                    color="#7A4B00"
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    placeholder="Password"
-                    placeholderTextColor="#8E6230"
-                    secureTextEntry={!passwordVisible}
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    editable={!loading}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setPasswordVisible(!passwordVisible)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Icon
-                      name={passwordVisible ? 'eye-off' : 'eye'}
-                      size={22}
-                      color="#7A4B00"
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.utilityRow}>
-                  <TouchableOpacity
-                    style={styles.checkboxContainer}
-                    onPress={() => setRememberMe(!rememberMe)}
-                    disabled={loading}
-                  >
-                    <Icon
-                      name={
-                        rememberMe
-                          ? 'checkbox-marked'
-                          : 'checkbox-blank-outline'
-                      }
-                      size={20}
-                      color="#8C5700"
-                    />
-                    <Text style={styles.utilityText}>Remember me</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('ForgotPassword')}
-                    disabled={loading}
-                  >
-                    <Text style={styles.utilityText}>Forgot Password?</Text>
-                  </TouchableOpacity>
-                </View>
-
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <Icon
+                  name="lock-outline"
+                  size={22}
+                  color="#5C5C5C"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  placeholder="Password"
+                  placeholderTextColor="#B0B0B0"
+                  secureTextEntry={!passwordVisible}
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!loading}
+                />
                 <TouchableOpacity
-                  style={styles.actionBtnLogin}
-                  onPress={handleLogin}
+                  onPress={() => setPasswordVisible(!passwordVisible)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Icon
+                    name={passwordVisible ? 'eye-off' : 'eye'}
+                    size={22}
+                    color="#8A8A8A"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.utilityRow}>
+                <TouchableOpacity
+                  style={styles.checkboxContainer}
+                  onPress={() => setRememberMe(!rememberMe)}
                   disabled={loading}
                 >
-                  {loading ? (
-                    <ActivityIndicator color="#FFF" size="small" />
-                  ) : (
-                    <Text style={styles.btnText}>Login</Text>
-                  )}
+                  <Icon
+                    name={
+                      rememberMe ? 'checkbox-marked' : 'checkbox-blank-outline'
+                    }
+                    size={20}
+                    color={ORANGE}
+                  />
+                  <Text style={styles.utilityText}>Remember me</Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity
-                  style={styles.actionBtnSignUp}
-                  onPress={() =>
-                    onSignUp
-                      ? onSignUp()
-                      : navigation.navigate('HomeSixScreen')
-                  }
+                  onPress={() => navigation.navigate('ForgotPassword')}
                   disabled={loading}
                 >
-                  <Text style={styles.signUpText}>Sign Up</Text>
+                  <Text style={styles.forgotText}>Forgot Password?</Text>
                 </TouchableOpacity>
+              </View>
 
-                <View style={styles.socialContainer}>
-                  <Text style={styles.socialTitle}>Or continue with</Text>
-                  <View style={styles.socialPill}>
-                    <TouchableOpacity
-                      style={styles.socialIcon}
-                      onPress={() => handleSocialLogin('facebook')}
-                      disabled={loading}
-                      activeOpacity={0.75}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Icon name="facebook" size={32} color="#1877F2" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.socialIcon}
-                      onPress={() => handleSocialLogin('google')}
-                      disabled={loading}
-                      activeOpacity={0.75}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Icon name="google" size={32} color="#EA4335" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              <TouchableOpacity
+                style={styles.actionBtnPrimary}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <Text style={styles.btnText}>Log in</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionBtnSecondary}
+                onPress={() =>
+                  onSignUp ? onSignUp() : navigation.navigate('HomeSixScreen')
+                }
+                disabled={loading}
+              >
+                <Text style={styles.secondaryBtnText}>Sign Up</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.orText}>Or</Text>
+              <Text style={styles.signInWithText}>Sign in with</Text>
+              <View style={styles.socialPill}>
+                <TouchableOpacity
+                  style={styles.socialIcon}
+                  onPress={() => handleSocialLogin('facebook')}
+                  disabled={loading}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Icon name="facebook" size={32} color="#1877F2" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.socialIcon}
+                  onPress={() => handleSocialLogin('google')}
+                  disabled={loading}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Icon name="google" size={32} color="#EA4335" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.bottomArtRow} pointerEvents="none">
+                <Image
+                  source={decorBowl}
+                  style={styles.decorLeft}
+                  resizeMode="contain"
+                />
+                <Image
+                  source={decorSkyline}
+                  style={styles.decorRight}
+                  resizeMode="contain"
+                />
               </View>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
@@ -364,175 +390,190 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 const styles = StyleSheet.create({
   screenRoot: {
     flex: 1,
-    width,
-    height,
-    backgroundColor: LOGIN_SCREEN_YELLOW,
+    backgroundColor: ORANGE,
   },
-  overlay: {
+  safeArea: {
     flex: 1,
-    backgroundColor: LOGIN_SCREEN_YELLOW,
-  },
-  bgOrbOne: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 140,
-    backgroundColor: 'rgba(255, 255, 255, 0.28)',
-    top: -70,
-    right: -50,
-  },
-  bgOrbTwo: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 160,
-    backgroundColor: 'rgba(255, 140, 0, 0.28)',
-    bottom: 160,
-    left: -90,
-  },
-  bgOrbThree: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 120,
-    backgroundColor: 'rgba(122, 62, 0, 0.16)',
-    bottom: -70,
-    right: -60,
+    backgroundColor: ORANGE,
   },
   keyboardView: { flex: 1 },
-  navHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    alignItems: 'center',
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: CARD_MARGIN_H,
+  },
+  foodImageWrap: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: SCREEN_WIDTH * 0.56,
+    height: HEADER_FOOD_H,
+    overflow: 'hidden',
+    borderBottomLeftRadius: SCREEN_WIDTH * 0.28,
+    zIndex: 1,
+  },
+  foodImage: {
+    width: '100%',
+    height: '100%',
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    zIndex: 2,
+    marginBottom: 6,
   },
   backText: {
-    color: '#2D1800',
-    fontSize: 13,
-    fontWeight: '700',
-    marginLeft: 4,
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 2,
   },
-
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-  },
-  loginCard: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 245, 220, 0.62)',
-    borderRadius: 30,
-    paddingVertical: 24,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.75)',
-    marginBottom: 56,
-    shadowColor: '#9B4D00',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-    overflow: 'hidden',
-  },
-  cardGlow: {
-    position: 'absolute',
-    top: -90,
-    right: -70,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
-  },
-  headerTitle: {
-    fontSize: 30,
+  pageTitle: {
+    fontSize: 32,
     fontWeight: '800',
-    color: '#2D1800',
-    textAlign: 'center',
-    letterSpacing: 0.3,
+    color: '#FFF',
+    marginTop: 20,
+    marginBottom: 22,
+    letterSpacing: 0.2,
+    maxWidth: SCREEN_WIDTH * 0.62,
+    zIndex: 2,
   },
-  headerSubTitle: {
-    fontSize: 16,
-    color: '#5E3500',
-    textAlign: 'center',
-    marginBottom: 24,
-    marginTop: 6,
+  card: {
+    backgroundColor: CREAM,
+    borderRadius: 28,
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  cardBody: { padding: 5 },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: ORANGE,
+    marginBottom: 6,
+    marginLeft: 2,
+  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.70)',
-    borderRadius: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
     height: 52,
-    paddingHorizontal: 15,
-    marginBottom: 15,
+    paddingHorizontal: 14,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: '#E8E0D5',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: '#2A1A00', fontSize: 15 },
-
+  input: { flex: 1, color: '#333', fontSize: 15 },
   utilityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 20,
+    marginTop: 2,
   },
   checkboxContainer: { flexDirection: 'row', alignItems: 'center' },
-  utilityText: { fontSize: 13, color: '#5E3500', marginLeft: 5 },
-  actionBtnLogin: {
-    backgroundColor: '#2B1A00',
+  utilityText: { fontSize: 13, color: '#555', marginLeft: 6 },
+  forgotText: { fontSize: 13, color: ORANGE, fontWeight: '600' },
+  actionBtnPrimary: {
+    backgroundColor: ORANGE,
     height: 52,
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
-    shadowColor: '#5B3200',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 7,
+    shadowColor: '#C47A00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  actionBtnSignUp: {
+  actionBtnSecondary: {
     height: 52,
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(122, 72, 0, 0.30)',
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 1.5,
+    borderColor: ORANGE,
+    backgroundColor: '#FFF',
+    marginBottom: 20,
   },
   btnText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
-  signUpText: { color: '#5B3200', fontSize: 18, fontWeight: '700' },
-  socialContainer: { alignItems: 'center', marginTop: 25 },
-  socialTitle: { color: '#5E3500', fontSize: 15, marginBottom: 15 },
+  secondaryBtnText: { color: ORANGE, fontSize: 18, fontWeight: '700' },
+  orText: {
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  signInWithText: {
+    textAlign: 'center',
+    color: '#444',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
   socialPill: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: ORANGE,
+    marginBottom: 8,
   },
   socialIcon: {
-    marginHorizontal: 8,
+    marginHorizontal: 10,
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bottomArtRow: {
+    position: 'relative',
+    width: CARD_INNER_W,
+    height: CARD_BOTTOM_ART_H,
+    marginTop: 4,
+    marginHorizontal: -CARD_PAD_H,
+    alignSelf: 'center',
+    overflow: 'hidden',
+  },
+  decorLeft: {
+    position: 'absolute',
+    left: -58,
+    bottom: -10,
+    width: CARD_INNER_W * 0.5,
+    height: CARD_BOTTOM_ART_H * 1.38,
+    opacity: 0.9,
+    blendMode: 'screen',
+  },
+  decorRight: {
+    position: 'absolute',
+    right: -50,
+    bottom: -6,
+    width: CARD_INNER_W * 0.68,
+    height: CARD_BOTTOM_ART_H * 1.3,
+    opacity: 0.9,
+    blendMode: 'screen',
   },
 });
 

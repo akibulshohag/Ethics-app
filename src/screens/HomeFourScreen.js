@@ -25,16 +25,34 @@ import { getPromotionsByUser } from '../services/promotionService';
 import { getChannelProfile } from '../services/channelService';
 import MapLocationPicker from '../components/MapLocationPicker';
 import { distanceKmBetween, formatDistanceKm, resolveTaxChargeForDistanceKm } from '../utils/geoDistance';
+import { getOwnerAreaKm } from '../utils/promotionUtils';
 import { config } from '../../config';
 import {
   getCurrentPositionSafe,
   reverseGeocode,
 } from '../utils/geolocation';
+import {
+  getVendorOrderLimits,
+  validateVendorOrderItems,
+  adjustVendorItemQty,
+} from '../utils/vendorOrderLimits';
 import { browseAreaLabel, normalizeUkPostcode } from '../utils/ukPostcode';
+import {
+  formatUkPhoneDisplay,
+  normalizeUkPhone,
+  validUkPhoneNumber,
+} from '../utils/ukPhone';
 import {
   calcPercentDiscount,
   findBestAmountDiscount,
+  findMatchingTier,
+  formatFreeTaxChargeSummary,
+  getFreeTaxChargeTier,
+  isFreeTaxChargePromotion,
+  matchesFulfillmentScope,
   OFFER_TYPES,
+  parsePercentDiscountTiers,
+  parsePromotionTiers,
 } from '../utils/promotionUtils';
 
 const ORDER_NOTE_MARKER = '||NOTE||';
@@ -114,8 +132,15 @@ const HomeFourScreen = ({ onBack }) => {
       const next = Array.isArray(prev) ? [...prev] : [];
       const row = next[index];
       if (!row) return prev;
-      const currentQty = Math.max(1, Number(row.quantity) || 1);
-      const nextQty = currentQty + delta;
+      const currentQty = Math.max(0, Number(row.quantity) || 0);
+      const { qty: nextQty, toast } = adjustVendorItemQty(
+        currentQty,
+        delta,
+        vendorLimits,
+      );
+      if (toast) {
+        Toast.show({ type: 'error', text1: 'Order quantity', text2: toast });
+      }
       if (nextQty <= 0) {
         next.splice(index, 1);
       } else {
@@ -130,62 +155,6 @@ const HomeFourScreen = ({ onBack }) => {
     0,
   );
   const currency = '£';
-
-  const handleApplyPromo = async () => {
-    const code = (promoCodeInput || '').trim();
-    if (!code) {
-      setPromoApplyError('Enter a promo code');
-      return;
-    }
-    if (!ownerId) {
-      setPromoApplyError('Restaurant not set');
-      return;
-    }
-    setApplyingPromo(true);
-    setPromoApplyError('');
-    try {
-      const res = await getPromotionsByUser(ownerId, 1, 50);
-      const list = res?.promotions ?? [];
-      const now = new Date();
-      const match = list.find(p => {
-        if ((p.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER) {
-          return false;
-        }
-        const pCode = (p.promoCode || '').trim().toUpperCase();
-        if (pCode !== code.toUpperCase()) return false;
-        const start = p.startDate ? new Date(p.startDate) : null;
-        const end = p.expireDate ? new Date(p.expireDate) : null;
-        if (start && start > now) return false;
-        if (end && end < now) return false;
-        return true;
-      });
-      if (match) {
-        setAutoAmountDiscount(null);
-        setAppliedPromotion({
-          id: match.id,
-          promoCode: match.promoCode,
-          promoAmount: match.promoAmount,
-          offerType: OFFER_TYPES.ORDER,
-        });
-        Toast.show({
-          type: 'success',
-          text1: `${match.promoCode} applied`,
-          text2:
-            match.promoAmount != null
-              ? `${match.promoAmount}% off`
-              : 'Discount applied',
-        });
-      } else {
-        setAppliedPromotion(null);
-        setPromoApplyError('Invalid or expired promo code');
-      }
-    } catch (e) {
-      setAppliedPromotion(null);
-      setPromoApplyError('Could not verify promo code');
-    } finally {
-      setApplyingPromo(false);
-    }
-  };
 
   const removePromo = () => {
     setAppliedPromotion(null);
@@ -274,12 +243,12 @@ const HomeFourScreen = ({ onBack }) => {
   }, [ownerId]);
 
   const ownerDeliveryTime = String(ownerProfile?.deliveryTime || '').trim();
-  const ownerDeliveryAreaKm =
-    ownerProfile?.deliveryAreaKm != null &&
-    Number.isFinite(Number(ownerProfile.deliveryAreaKm)) &&
-    Number(ownerProfile.deliveryAreaKm) > 0
-      ? Number(ownerProfile.deliveryAreaKm)
-      : null;
+  const ownerDeliveryAreaKm = getOwnerAreaKm(ownerProfile, 'delivery');
+  const ownerPickupAreaKm = getOwnerAreaKm(ownerProfile, 'pickup');
+  const vendorLimits = useMemo(
+    () => getVendorOrderLimits(ownerProfile),
+    [ownerProfile],
+  );
   const customerLatLng = useMemo(() => {
     if (deliveryCoords?.lat != null && deliveryCoords?.lng != null) {
       return { lat: deliveryCoords.lat, lng: deliveryCoords.lng };
@@ -317,12 +286,135 @@ const HomeFourScreen = ({ onBack }) => {
     ownerDeliveryAreaKm != null &&
     distanceToRestaurantKm != null &&
     distanceToRestaurantKm > ownerDeliveryAreaKm;
-  const taxChargeAmount = useMemo(() => {
+  const isOutsidePickupArea =
+    isPickup &&
+    ownerPickupAreaKm != null &&
+    distanceToRestaurantKm != null &&
+    distanceToRestaurantKm > ownerPickupAreaKm;
+  const fulfillmentKey = isPickup ? 'collection' : 'delivery';
+  const taxChargeBeforePromo = useMemo(() => {
     if (isPickup) return 0;
     return resolveTaxChargeForDistanceKm(distanceToRestaurantKm, ownerProfile);
   }, [isPickup, distanceToRestaurantKm, ownerProfile]);
+
+  const promoWaivesTax = useMemo(() => {
+    if (!appliedPromotion || isPickup) return false;
+    if (
+      !matchesFulfillmentScope(
+        appliedPromotion.fulfillmentScopes,
+        fulfillmentKey,
+      )
+    ) {
+      return false;
+    }
+    return !!getFreeTaxChargeTier(appliedPromotion, subtotal);
+  }, [appliedPromotion, subtotal, isPickup, fulfillmentKey]);
+
+  const taxChargeAmount = promoWaivesTax ? 0 : taxChargeBeforePromo;
   const billBeforeDiscount = subtotal + taxChargeAmount;
-  const fulfillmentKey = isPickup ? 'collection' : 'delivery';
+
+  const handleApplyPromo = useCallback(async () => {
+    const code = (promoCodeInput || '').trim();
+    if (!code) {
+      setPromoApplyError('Enter a promo code');
+      return;
+    }
+    if (!ownerId) {
+      setPromoApplyError('Restaurant not set');
+      return;
+    }
+    setApplyingPromo(true);
+    setPromoApplyError('');
+    try {
+      const res = await getPromotionsByUser(ownerId, 1, 50);
+      const list = res?.promotions ?? [];
+      const now = new Date();
+      const match = list.find(p => {
+        if ((p.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER) {
+          return false;
+        }
+        const pCode = (p.promoCode || '').trim().toUpperCase();
+        if (pCode !== code.toUpperCase()) return false;
+        const start = p.startDate ? new Date(p.startDate) : null;
+        const end = p.expireDate ? new Date(p.expireDate) : null;
+        if (start && start > now) return false;
+        if (end && end < now) return false;
+        return true;
+      });
+      if (match) {
+        const allTiers = parsePromotionTiers(match.discountTiers);
+        const freeTaxTier = getFreeTaxChargeTier(match, subtotal);
+        const percentTiers = parsePercentDiscountTiers(match.discountTiers);
+        const isDeliveryFreePromo = isFreeTaxChargePromotion(match);
+
+        if (
+          (percentTiers.length || isDeliveryFreePromo) &&
+          !matchesFulfillmentScope(match.fulfillmentScopes, fulfillmentKey)
+        ) {
+          setAppliedPromotion(null);
+          setPromoApplyError(
+            'This promo does not apply to your selected order type',
+          );
+          return;
+        }
+
+        if (isDeliveryFreePromo) {
+          if (isPickup) {
+            setAppliedPromotion(null);
+            setPromoApplyError('This promo applies to delivery orders only');
+            return;
+          }
+          if (!freeTaxTier) {
+            setAppliedPromotion(null);
+            setPromoApplyError(
+              `Minimum order £${Number(allTiers.find(t => t.benefit)?.minValue || 0).toFixed(0)} required for free tax & charges`,
+            );
+            return;
+          }
+        }
+
+        const tier = percentTiers.length
+          ? findMatchingTier(percentTiers, billBeforeDiscount, 'amount')
+          : null;
+        if (percentTiers.length && !tier && !freeTaxTier) {
+          setAppliedPromotion(null);
+          setPromoApplyError('Order total does not qualify for this promo');
+          return;
+        }
+
+        setAutoAmountDiscount(null);
+        setAppliedPromotion({
+          id: match.id,
+          promoCode: match.promoCode,
+          promoAmount: tier?.percent ?? match.promoAmount,
+          offerType: OFFER_TYPES.ORDER,
+          discountTiers: match.discountTiers,
+          fulfillmentScopes: match.fulfillmentScopes,
+          tierPercent: tier?.percent,
+          freeTaxTier,
+        });
+        Toast.show({
+          type: 'success',
+          text1: `${match.promoCode} applied`,
+          text2: freeTaxTier
+            ? formatFreeTaxChargeSummary(freeTaxTier)
+            : tier?.percent
+              ? `${tier.percent}% off (bill tier)`
+              : match.promoAmount != null
+                ? `${match.promoAmount}% off`
+                : 'Discount applied',
+        });
+      } else {
+        setAppliedPromotion(null);
+        setPromoApplyError('Invalid or expired promo code');
+      }
+    } catch (e) {
+      setAppliedPromotion(null);
+      setPromoApplyError('Could not verify promo code');
+    } finally {
+      setApplyingPromo(false);
+    }
+  }, [promoCodeInput, ownerId, fulfillmentKey, billBeforeDiscount, subtotal]);
 
   useEffect(() => {
     if (appliedPromotion) {
@@ -344,19 +436,49 @@ const HomeFourScreen = ({ onBack }) => {
 
   const discountAmount = useMemo(() => {
     if (appliedPromotion?.offerType === OFFER_TYPES.ORDER) {
+      const percentTiers = parsePercentDiscountTiers(
+        appliedPromotion.discountTiers,
+      );
+      if (percentTiers.length) {
+        if (
+          !matchesFulfillmentScope(
+            appliedPromotion.fulfillmentScopes,
+            fulfillmentKey,
+          )
+        ) {
+          return 0;
+        }
+        const tier = findMatchingTier(
+          percentTiers,
+          billBeforeDiscount,
+          'amount',
+        );
+        if (tier) {
+          return calcPercentDiscount(billBeforeDiscount, tier.percent);
+        }
+      }
+      if (promoWaivesTax) {
+        return 0;
+      }
       return calcPercentDiscount(subtotal, appliedPromotion.promoAmount);
     }
     if (autoAmountDiscount?.percent) {
       return calcPercentDiscount(billBeforeDiscount, autoAmountDiscount.percent);
     }
     return 0;
-  }, [appliedPromotion, autoAmountDiscount, subtotal, billBeforeDiscount]);
-
-  const total = Math.max(0, billBeforeDiscount - discountAmount);
+  }, [
+    appliedPromotion,
+    autoAmountDiscount,
+    subtotal,
+    billBeforeDiscount,
+    fulfillmentKey,
+    promoWaivesTax,
+  ]);
   const itemsNetAmount = Math.max(
     0,
     appliedPromotion ? subtotal - discountAmount : subtotal,
   );
+  const total = Math.max(0, itemsNetAmount + taxChargeAmount);
   const displayTotal = total.toFixed(2);
   const displaySubtotal = subtotal.toFixed(2);
   const displayItemsNet = itemsNetAmount.toFixed(2);
@@ -550,6 +672,16 @@ const HomeFourScreen = ({ onBack }) => {
       return;
     }
 
+    const vendorQtyCheck = validateVendorOrderItems(items, vendorLimits);
+    if (!vendorQtyCheck.ok) {
+      Toast.show({
+        type: 'error',
+        text1: 'Order quantity',
+        text2: vendorQtyCheck.message,
+      });
+      return;
+    }
+
     let deliveryAddressPayload = '';
     if (isDelivery) {
       const addressText = String(selectedDeliveryAddress || '').trim();
@@ -581,6 +713,22 @@ const HomeFourScreen = ({ onBack }) => {
         ? `${addressText}${ORDER_NOTE_MARKER}${noteText}`
         : addressText;
     } else {
+      if (ownerPickupAreaKm != null) {
+        if (!customerLatLng) {
+          Alert.alert(
+            'Location required',
+            'Set your location in your profile so we can check you are within this restaurant pickup area.',
+          );
+          return;
+        }
+        if (isOutsidePickupArea) {
+          Alert.alert(
+            'Outside pickup area',
+            `${restaurantName} only accepts pickup within ${ownerPickupAreaKm} km. Your location is about ${distanceToRestaurantKm.toFixed(1)} km away.`,
+          );
+          return;
+        }
+      }
       const noteText = String(restaurantNote || '').trim();
       const collectionBase = `Pick up — ${restaurantCollectionAddress}`;
       deliveryAddressPayload = noteText
@@ -599,11 +747,10 @@ const HomeFourScreen = ({ onBack }) => {
         deliveryAddress: deliveryAddressPayload,
         customerPhone: phone,
         fulfillmentType,
-        ...(isDelivery &&
-          customerLatLng && {
-            customerLatitude: customerLatLng.lat,
-            customerLongitude: customerLatLng.lng,
-          }),
+        ...(customerLatLng && {
+          customerLatitude: customerLatLng.lat,
+          customerLongitude: customerLatLng.lng,
+        }),
         ...(appliedPromotion?.promoCode && {
           promoCode: appliedPromotion.promoCode,
           promotionId: appliedPromotion.id,
@@ -735,7 +882,36 @@ const HomeFourScreen = ({ onBack }) => {
           </View>
         ) : null}
 
-        {isPickup ? (
+        {isPickup &&
+        (ownerPickupAreaKm != null || ownerProfileLoading) ? (
+          <View style={styles.collectionInfoCard}>
+            <Icon name="storefront-outline" size={22} color="#F5A623" />
+            <View style={styles.collectionInfoBody}>
+              <Text style={styles.collectionInfoTitle}>Pick up at restaurant</Text>
+              <Text style={styles.collectionInfoText}>
+                You will collect your order from the restaurant. No delivery charge
+                applies.
+              </Text>
+              {ownerPickupAreaKm != null ? (
+                <Text style={styles.collectionInfoText}>
+                  Pickup within {ownerPickupAreaKm} km
+                  {distanceToRestaurantKm != null
+                    ? ` · You are ${formatDistanceKm(distanceToRestaurantKm)} away`
+                    : ''}
+                </Text>
+              ) : null}
+              {isOutsidePickupArea ? (
+                <Text style={styles.deliveryAreaWarning}>
+                  Your location is outside this restaurant pickup area. Update your
+                  profile address to order for pickup.
+                </Text>
+              ) : null}
+              <Text style={styles.collectionInfoAddress} numberOfLines={4}>
+                {restaurantCollectionAddress}
+              </Text>
+            </View>
+          </View>
+        ) : isPickup ? (
           <View style={styles.collectionInfoCard}>
             <Icon name="storefront-outline" size={22} color="#F5A623" />
             <View style={styles.collectionInfoBody}>
@@ -764,6 +940,11 @@ const HomeFourScreen = ({ onBack }) => {
                       <Text style={styles.itemName}>
                         {item.itemName || 'Item'}
                       </Text>
+                      {item.description ? (
+                        <Text style={styles.itemDescription} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      ) : null}
                       <Text style={styles.itemPrice}>
                         {currency} {price.toFixed(2)}
                       </Text>
@@ -852,9 +1033,16 @@ const HomeFourScreen = ({ onBack }) => {
           </View>
           {appliedPromotion ? (
             <Text style={styles.appliedPromoText}>
-              {appliedPromotion.promoAmount != null
-                ? `${appliedPromotion.promoAmount}% off`
-                : 'Applied'}
+              {promoWaivesTax
+                ? formatFreeTaxChargeSummary(
+                    getFreeTaxChargeTier(appliedPromotion, subtotal),
+                  )
+                : appliedPromotion.tierPercent
+                  ? `${appliedPromotion.tierPercent}% off`
+                  : appliedPromotion.promoAmount != null &&
+                      Number(appliedPromotion.promoAmount) > 0
+                    ? `${appliedPromotion.promoAmount}% off`
+                    : 'Applied'}
             </Text>
           ) : (
             <TouchableOpacity
@@ -1112,20 +1300,29 @@ const HomeFourScreen = ({ onBack }) => {
               {currency} {displaySubtotal}
             </Text>
           </View>
-          {discountAmount > 0 ? (
+          {discountAmount > 0 || promoWaivesTax ? (
             <View style={styles.billRow}>
               <Text style={styles.billLabel}>
                 {appliedPromotion?.promoCode
                   ? `Promo (${appliedPromotion.promoCode})${
-                      appliedPromotion.promoAmount != null
-                        ? ` ${appliedPromotion.promoAmount}% off`
-                        : ''
+                      promoWaivesTax
+                        ? ' · tax & charges free'
+                        : appliedPromotion.tierPercent
+                          ? ` ${appliedPromotion.tierPercent}% off`
+                          : appliedPromotion.promoAmount != null &&
+                              Number(appliedPromotion.promoAmount) > 0
+                            ? ` ${appliedPromotion.promoAmount}% off`
+                            : ''
                     }`
                   : `Amount discount (${autoAmountDiscount?.percent || 0}% off)`}
               </Text>
-              <Text style={styles.billValueDiscount}>
-                -{currency} {displayDiscount}
-              </Text>
+              {discountAmount > 0 ? (
+                <Text style={styles.billValueDiscount}>
+                  -{currency} {displayDiscount}
+                </Text>
+              ) : (
+                <Text style={styles.billValueDiscount}>Free</Text>
+              )}
             </View>
           ) : null}
           {appliedPromotion && discountAmount > 0 ? (
@@ -1184,7 +1381,8 @@ const HomeFourScreen = ({ onBack }) => {
               !ownerId ||
               (isDelivery && !!user?.token && !hasDeliveryAddress) ||
               (!!user?.token && !hasValidPhone) ||
-              (isDelivery && isOutsideDeliveryArea)) &&
+              (isDelivery && isOutsideDeliveryArea) ||
+              (isPickup && isOutsidePickupArea)) &&
               styles.placeOrderBtnDisabled,
           ]}
           onPress={handlePlaceOrder}
@@ -1194,7 +1392,8 @@ const HomeFourScreen = ({ onBack }) => {
             !ownerId ||
             (isDelivery && !!user?.token && !hasDeliveryAddress) ||
             (!!user?.token && !hasValidPhone) ||
-            (isDelivery && isOutsideDeliveryArea)
+            (isDelivery && isOutsideDeliveryArea) ||
+            (isPickup && isOutsidePickupArea)
           }
         >
           <View>
@@ -1547,6 +1746,12 @@ const styles = StyleSheet.create({
   itemInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   itemTextContainer: { marginLeft: 10, flex: 1 },
   itemName: { fontSize: 16, fontWeight: 'bold', color: '#1A1A1A' },
+  itemDescription: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 16,
+    marginTop: 2,
+  },
   itemPrice: { fontSize: 14, color: '#666' },
   stepperContainer: {
     flexDirection: 'row',

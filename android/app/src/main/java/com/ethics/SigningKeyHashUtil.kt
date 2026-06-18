@@ -7,10 +7,10 @@ import java.security.MessageDigest
 
 /**
  * Logs the APK signing certificate hash Meta calls "Key hash" and SHA-1 for Google Cloud.
- * After installing a release APK, run: adb logcat -s EatixSigningKeys
+ * After installing a release APK, run: adb logcat -s EatwazeSigningKeys
  */
 object SigningKeyHashUtil {
-  private const val TAG = "EatixSigningKeys"
+  private const val TAG = "EatwazeSigningKeys"
 
   fun logSigningFingerprints(packageName: String, packageManager: PackageManager) {
     try {

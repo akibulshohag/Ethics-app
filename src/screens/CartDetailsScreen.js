@@ -14,6 +14,13 @@ import { COLORS, SPACING, SHADOWS } from '../constants/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getMenuByUserId } from '../services/menuService';
 import MenuItemThumbnail from '../components/MenuItemThumbnail';
+import Toast from 'react-native-toast-message';
+import { getChannelProfile } from '../services/channelService';
+import {
+  getVendorOrderLimits,
+  validateVendorOrderItems,
+  adjustVendorItemQty,
+} from '../utils/vendorOrderLimits';
 
 const CartDetailsScreen = () => {
   const navigation = useNavigation();
@@ -22,6 +29,11 @@ const CartDetailsScreen = () => {
   const [items, setItems] = useState(Array.isArray(paramItems) ? paramItems : []);
   const [suggestedItems, setSuggestedItems] = useState([]);
   const [suggestedLoading, setSuggestedLoading] = useState(false);
+  const [vendorLimits, setVendorLimits] = useState({
+    isVendor: false,
+    min: null,
+    max: null,
+  });
 
   const { total, currency } = useMemo(() => {
     const t = (items || []).reduce(
@@ -36,6 +48,15 @@ const CartDetailsScreen = () => {
 
   const onCheckout = () => {
     if (!items.length || !ownerId) return;
+    const check = validateVendorOrderItems(items, vendorLimits);
+    if (!check.ok) {
+      Toast.show({
+        type: 'error',
+        text1: 'Order quantity',
+        text2: check.message,
+      });
+      return;
+    }
     const rootNav = navigation.getParent?.() ?? navigation;
     rootNav.navigate('Root', {
       screen: 'Home1',
@@ -55,8 +76,11 @@ const CartDetailsScreen = () => {
       const next = (prev || []).map(i => ({ ...i }));
       const idx = next.findIndex(i => (i.menuItemId || i.id) === key);
       if (idx === -1) return prev;
-      const cur = next[idx]?.quantity || 1;
-      const newQty = Math.max(0, cur + delta);
+      const cur = next[idx]?.quantity || 0;
+      const { qty: newQty, toast } = adjustVendorItemQty(cur, delta, vendorLimits);
+      if (toast) {
+        Toast.show({ type: 'error', text1: 'Order quantity', text2: toast });
+      }
       if (newQty === 0) {
         next.splice(idx, 1);
         return next;
@@ -65,6 +89,24 @@ const CartDetailsScreen = () => {
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!ownerId) {
+      setVendorLimits({ isVendor: false, min: null, max: null });
+      return;
+    }
+    let mounted = true;
+    getChannelProfile(ownerId)
+      .then(p => {
+        if (mounted) setVendorLimits(getVendorOrderLimits(p));
+      })
+      .catch(() => {
+        if (mounted) setVendorLimits({ isVendor: false, min: null, max: null });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [ownerId]);
 
   useEffect(() => {
     let mounted = true;
@@ -97,15 +139,22 @@ const CartDetailsScreen = () => {
     setItems(prev => {
       const next = (prev || []).map(i => ({ ...i }));
       const idx = next.findIndex(i => String(i.menuItemId || i.id) === key);
+      const current = idx >= 0 ? next[idx].quantity || 0 : 0;
+      const { qty: newQty, toast } = adjustVendorItemQty(current, 1, vendorLimits);
+      if (toast) {
+        Toast.show({ type: 'error', text1: 'Order quantity', text2: toast });
+        return prev;
+      }
       if (idx >= 0) {
-        next[idx].quantity = (next[idx].quantity || 1) + 1;
+        next[idx].quantity = newQty;
         return next;
       }
       next.push({
         menuItemId: key,
         itemName: menuItem.itemName || menuItem.name || 'Item',
+        description: menuItem.description || '',
         price: Number(menuItem.price) || 0,
-        quantity: 1,
+        quantity: newQty,
         currency: menuItem.currency || '£',
         imageUrl: menuItem.imageUrl || menuItem.thumbnailUrl || null,
       });
@@ -169,6 +218,11 @@ const CartDetailsScreen = () => {
                     />
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.itemName}</Text>
+                      {item.description ? (
+                        <Text style={styles.itemDescription} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      ) : null}
                       <View style={styles.qtyRow}>
                         <TouchableOpacity
                           style={styles.qtyBtn}
@@ -457,6 +511,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: COLORS.gray800,
+    marginBottom: 2,
+  },
+  itemDescription: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    lineHeight: 16,
     marginBottom: 4,
   },
   itemMeta: {

@@ -446,7 +446,7 @@ const PreviewReelScreen = () => {
         </View>
 
         <Text style={styles.rankText}>
-          {draft?.caption?.trim() || 'Ranked popular near you by eatix'}
+          {draft?.caption?.trim() || 'Ranked popular near you by Eatwaze'}
         </Text>
 
         <View style={styles.tagRow}>

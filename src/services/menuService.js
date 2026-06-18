@@ -63,7 +63,14 @@ export const updateMenuItem = async (token, id, body) => {
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to update');
+  if (!res.ok) {
+    let message = 'Failed to update menu item';
+    try {
+      const err = await res.json();
+      message = err?.message || message;
+    } catch (_) {}
+    throw new Error(message);
+  }
   return res.json();
 };
 

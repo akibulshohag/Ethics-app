@@ -12,10 +12,14 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import {
   OFFER_TYPES,
   formatFulfillmentScopes,
+  formatFreeTaxChargeSummary,
   formatPromotionSummary,
   formatTierRange,
+  getFreeTaxChargeTier,
   isPromotionActive,
-  parseDiscountTiers,
+  parsePercentDiscountTiers,
+  parsePromotionTiers,
+  PROMO_BENEFITS,
 } from '../utils/promotionUtils';
 
 const sectionTitle = type => {
@@ -24,8 +28,15 @@ const sectionTitle = type => {
   return 'Promo codes & offers';
 };
 
-const PromotionalOffersModal = ({ visible, onClose, promotions = [], ownerName }) => {
-  const active = (Array.isArray(promotions) ? promotions : []).filter(isPromotionActive);
+const PromotionalOffersModal = ({
+  visible,
+  onClose,
+  promotions = [],
+  ownerName,
+  includeInactive = false,
+}) => {
+  const list = Array.isArray(promotions) ? promotions : [];
+  const active = includeInactive ? list : list.filter(isPromotionActive);
   const orderOffers = active.filter(p => (p.offerType || OFFER_TYPES.ORDER) === OFFER_TYPES.ORDER);
   const amountOffers = active.filter(p => p.offerType === OFFER_TYPES.AMOUNT);
   const bookingOffers = active.filter(p => p.offerType === OFFER_TYPES.BOOKING);
@@ -36,33 +47,71 @@ const PromotionalOffersModal = ({ visible, onClose, promotions = [], ownerName }
       <View style={styles.section} key={type}>
         <Text style={styles.sectionTitle}>{sectionTitle(type)}</Text>
         {items.map(promo => {
-          const tiers = parseDiscountTiers(promo.discountTiers);
+          const tiers = parsePromotionTiers(promo.discountTiers);
+          const percentTiers = parsePercentDiscountTiers(promo.discountTiers);
+          const freeTaxTier = tiers.find(
+            t => t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE,
+          );
           const metric =
             promo.offerType === OFFER_TYPES.BOOKING
               ? promo.tierMetricType || 'people'
               : 'amount';
           return (
             <View key={promo.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{promo.title}</Text>
+              <View style={styles.cardTitleRow}>
+                <Text style={styles.cardTitle}>{promo.title}</Text>
+                {includeInactive && !isPromotionActive(promo) ? (
+                  <Text style={styles.inactiveBadge}>Inactive</Text>
+                ) : null}
+              </View>
               {promo.offerType === OFFER_TYPES.ORDER ? (
-                <Text style={styles.cardSub}>
-                  Code: <Text style={styles.bold}>{promo.promoCode}</Text> · {promo.promoAmount}% off
-                </Text>
+                <>
+                  <Text style={styles.cardSub}>
+                    Code: <Text style={styles.bold}>{promo.promoCode}</Text>
+                    {promo.promoAmount != null &&
+                    Number(promo.promoAmount) > 0 &&
+                    !percentTiers.length &&
+                    !freeTaxTier
+                      ? ` · ${promo.promoAmount}% off`
+                      : ''}
+                  </Text>
+                  {freeTaxTier ? (
+                    <Text style={styles.cardSub}>
+                      {formatFreeTaxChargeSummary(freeTaxTier)}
+                    </Text>
+                  ) : null}
+                  {percentTiers.length ? (
+                    <View style={styles.tierList}>
+                      {percentTiers.map((tier, idx) => (
+                        <Text key={`${promo.id}-order-tier-${idx}`} style={styles.tierLine}>
+                          • {formatTierRange(tier, 'amount')}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                  {promo.fulfillmentScopes?.length ? (
+                    <Text style={styles.cardSub}>
+                      {formatFulfillmentScopes(promo.fulfillmentScopes)}
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
               {promo.offerType === OFFER_TYPES.AMOUNT ? (
                 <Text style={styles.cardSub}>{formatFulfillmentScopes(promo.fulfillmentScopes)}</Text>
               ) : null}
-              {tiers.length ? (
-                <View style={styles.tierList}>
-                  {tiers.map((tier, idx) => (
-                    <Text key={`${promo.id}-tier-${idx}`} style={styles.tierLine}>
-                      • {formatTierRange(tier, metric)}
-                    </Text>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.cardSub}>{formatPromotionSummary(promo)}</Text>
-              )}
+              {promo.offerType !== OFFER_TYPES.ORDER ? (
+                percentTiers.length ? (
+                  <View style={styles.tierList}>
+                    {percentTiers.map((tier, idx) => (
+                      <Text key={`${promo.id}-tier-${idx}`} style={styles.tierLine}>
+                        • {formatTierRange(tier, metric)}
+                      </Text>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.cardSub}>{formatPromotionSummary(promo)}</Text>
+                )
+              ) : null}
               {promo.description ? (
                 <Text style={styles.cardDesc}>{promo.description}</Text>
               ) : null}
@@ -91,7 +140,11 @@ const PromotionalOffersModal = ({ visible, onClose, promotions = [], ownerName }
             {empty ? (
               <View style={styles.emptyWrap}>
                 <MaterialCommunityIcons name="tag-off-outline" size={40} color="#BBB" />
-                <Text style={styles.emptyText}>No active offers right now.</Text>
+                <Text style={styles.emptyText}>
+                  {includeInactive
+                    ? 'No promotions yet.'
+                    : 'No active offers right now.'}
+                </Text>
               </View>
             ) : (
               <>
@@ -135,7 +188,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EEE',
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#222' },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  cardTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#222' },
+  inactiveBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#888',
+    backgroundColor: '#EEE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
   cardSub: { fontSize: 13, color: '#555', marginTop: 4 },
   cardDesc: { fontSize: 12, color: '#777', marginTop: 6 },
   tierList: { marginTop: 6 },

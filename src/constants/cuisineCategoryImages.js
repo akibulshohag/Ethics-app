@@ -7,6 +7,20 @@ const px = id =>
 
 const DEFAULT = px(1640777);
 
+/** Exact home menu category keys → image */
+const BY_EXACT_KEY = {
+  indian: px(2474661),
+  chinese: px(1893556),
+  italian: px(1146760),
+  chef_specialties: px(376464),
+  starters: px(1279330),
+  mains: px(941861),
+  desserts: px(2915280),
+  rice_or_naan: px(958545),
+  tandoori: px(2233348),
+  tikka: px(2097090),
+};
+
 /** keyword → image URI (longer phrases first) */
 const BY_KEYWORD = [
   ['biryani', px(958545)],
@@ -16,7 +30,11 @@ const BY_KEYWORD = [
   ['cake', px(2915280)],
   ['cupcake', px(1486906)],
   ['appetizer', px(1279330)],
+  ['tandoori', px(2233348)],
+  ['tikka', px(2097090)],
   ['starter', px(1279330)],
+  ['main course', px(941861)],
+  ['dessert', px(2915280)],
   ['bangla', px(2474661)],
   ['bangladeshi', px(958545)],
   ['indian', px(2474661)],
@@ -89,6 +107,8 @@ export const cuisineImageUriFromKey = key => {
     .toLowerCase()
     .replace(/\s+/g, ' ');
   if (!k) return DEFAULT;
+
+  if (BY_EXACT_KEY[k]) return BY_EXACT_KEY[k];
 
   for (let i = 0; i < BY_KEYWORD.length; i += 1) {
     const [needle, uri] = BY_KEYWORD[i];

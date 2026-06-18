@@ -29,7 +29,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { appSetUser } from '../redux/actions/appSlice';
+import { appSetUser, clearBrowseLocation } from '../redux/actions/appSlice';
+import { LOCATION_STORAGE_KEY } from '../services/userLocationService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -416,13 +417,13 @@ const LibraryScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               dispatch(appSetUser(null));
-              // Clear storage but keep location so re-login can go to HomeOneScreen with saved location
-              const KEEP_KEYS = ['USER_LOCATION_SELECTION'];
+              dispatch(clearBrowseLocation());
               const allKeys = await AsyncStorage.getAllKeys();
-              const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+              const toRemove = allKeys.filter(k => k !== LOCATION_STORAGE_KEY);
               if (toRemove.length > 0) {
                 await AsyncStorage.multiRemove(toRemove);
               }
+              await AsyncStorage.removeItem(LOCATION_STORAGE_KEY);
               const parent = navigation.getParent();
               const root = parent?.getParent?.();
               if (root) {

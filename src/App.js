@@ -20,9 +20,24 @@ import {
   disconnectNotificationSocket,
 } from './services/notificationSocket';
 import { parseSharedContentUrl } from './utils/contentLinks';
+import {
+  ensureSessionOnStartup,
+  setupSessionLifecycle,
+} from './services/sessionService';
 
 const AppContent = () => {
   const { user, onboardingDone } = useSelector(state => state.app);
+
+  useEffect(() => {
+    const cleanup = setupSessionLifecycle();
+    return cleanup;
+  }, []);
+
+  useEffect(() => {
+    if (user?.id && user?.token) {
+      ensureSessionOnStartup();
+    }
+  }, [user?.id, user?.token]);
 
   useEffect(() => {
     if (user?.id) {
@@ -44,7 +59,7 @@ const AppContent = () => {
       return true;
     } else {
       if (currentRouteName === 'HomeScreen') {
-        Alert.alert('Warning', 'Are you sure to close Ethics App', [
+        Alert.alert('Warning', 'Are you sure you want to close Eatwaze?', [
           {
             text: 'Cancel',
             onPress: () => null,

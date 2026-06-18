@@ -2250,12 +2250,23 @@ const PromotionScreen = ({ onBack }) => {
       }
       let latitude = undefined;
       let longitude = undefined;
-      if (
+      const previousAddress = String(
+        profile?.address ?? currentUser?.address ?? '',
+      ).trim();
+      const previousPostcode = String(
+        profile?.postcode ?? currentUser?.postcode ?? '',
+      ).trim();
+      const addressChanged = !!addressStr && addressStr !== previousAddress;
+      const postcodeChanged =
+        !!postcodeStr && postcodeStr !== previousPostcode;
+      const shouldReuseEditCoords =
+        !addressChanged &&
+        !postcodeChanged &&
         editLatitude != null &&
         editLongitude != null &&
         Number.isFinite(editLatitude) &&
-        Number.isFinite(editLongitude)
-      ) {
+        Number.isFinite(editLongitude);
+      if (shouldReuseEditCoords) {
         latitude = editLatitude;
         longitude = editLongitude;
       } else if (addressStr) {
@@ -3315,6 +3326,12 @@ const PromotionScreen = ({ onBack }) => {
         currentUser={currentUser}
         navigation={navigation}
         siblingItems={myVideos}
+        onContentDeleted={({ contentId }) => {
+          setMyVideos(prev =>
+            prev.filter(v => String(v.id) !== String(contentId)),
+          );
+          setPromoGalleryVideoModal(null);
+        }}
       />
 
       <Modal

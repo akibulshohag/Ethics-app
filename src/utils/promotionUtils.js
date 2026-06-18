@@ -4,24 +4,94 @@ export const OFFER_TYPES = {
   BOOKING: 'booking_discount',
 };
 
-export const parseDiscountTiers = raw => {
+export const PROMO_BENEFITS = {
+  FREE_TAX_CHARGE: 'free_tax_charge',
+};
+
+export const ORDER_DISCOUNT_MODES = {
+  AMOUNT: 'amount',
+  DELIVERY_FREE: 'delivery_free',
+};
+
+/** Thumbnail for list/cards — never use video URL as Image source. */
+export function getPromotionDisplayImage(promo) {
+  const thumb = String(promo?.thumbnailUrl || '').trim();
+  if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
+    return thumb;
+  }
+  return null;
+}
+
+const mapTierRow = t => ({
+  minValue: Number(t?.minValue),
+  maxValue:
+    t?.maxValue != null && t?.maxValue !== '' ? Number(t.maxValue) : null,
+  percent: Number(t?.percent),
+  metricType: t?.metricType,
+  benefit:
+    t?.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE
+      ? PROMO_BENEFITS.FREE_TAX_CHARGE
+      : undefined,
+});
+
+export const parsePromotionTiers = raw => {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map(t => ({
-      minValue: Number(t?.minValue),
-      maxValue:
-        t?.maxValue != null && t?.maxValue !== ''
-          ? Number(t.maxValue)
-          : null,
-      percent: Number(t?.percent),
-      metricType: t?.metricType,
-    }))
+    .map(mapTierRow)
     .filter(
       t =>
         Number.isFinite(t.minValue) &&
-        Number.isFinite(t.percent) &&
-        t.percent > 0,
+        ((Number.isFinite(t.percent) && t.percent > 0) ||
+          t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE),
     );
+};
+
+export const parsePercentDiscountTiers = raw =>
+  parsePromotionTiers(raw).filter(
+    t => t.benefit !== PROMO_BENEFITS.FREE_TAX_CHARGE,
+  );
+
+export const parseDiscountTiers = parsePercentDiscountTiers;
+
+export const isFreeTaxChargePromotion = promo =>
+  parsePromotionTiers(promo?.discountTiers).some(
+    t => t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE,
+  );
+
+export const findMatchingTierInList = (tiers, value, metricType = 'amount') => {
+  const list = Array.isArray(tiers) ? tiers : [];
+  const v = Number(value);
+  if (!Number.isFinite(v) || !list.length) return null;
+  const sorted = [...list]
+    .filter(t => (t.metricType || metricType) === metricType)
+    .sort((a, b) => Number(b.minValue) - Number(a.minValue));
+  for (const tier of sorted) {
+    const min = Number(tier.minValue);
+    const max =
+      tier.maxValue != null && Number.isFinite(Number(tier.maxValue))
+        ? Number(tier.maxValue)
+        : null;
+    if (v >= min && (max == null || v <= max)) return tier;
+  }
+  return null;
+};
+
+export const getFreeTaxChargeTier = (promoOrTiers, itemsSubtotal) => {
+  const tiers = Array.isArray(promoOrTiers)
+    ? promoOrTiers
+    : parsePromotionTiers(promoOrTiers?.discountTiers);
+  return findMatchingTierInList(
+    tiers.filter(t => t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE),
+    itemsSubtotal,
+    'amount',
+  );
+};
+
+export const formatFreeTaxChargeSummary = (tier, currency = '£') => {
+  if (!tier) return '';
+  const min = Number(tier.minValue);
+  if (!Number.isFinite(min)) return '';
+  return `${currency}${min}+ → tax & charges free on delivery`;
 };
 
 export const isPromotionActive = promo => {
@@ -42,23 +112,8 @@ export const matchesFulfillmentScope = (scopes, fulfillmentType) => {
   return list.includes(ft);
 };
 
-export const findMatchingTier = (tiers, value, metricType = 'amount') => {
-  const list = parseDiscountTiers(tiers);
-  const v = Number(value);
-  if (!Number.isFinite(v) || !list.length) return null;
-  const sorted = [...list]
-    .filter(t => (t.metricType || metricType) === metricType)
-    .sort((a, b) => Number(b.minValue) - Number(a.minValue));
-  for (const tier of sorted) {
-    const min = Number(tier.minValue);
-    const max =
-      tier.maxValue != null && Number.isFinite(Number(tier.maxValue))
-        ? Number(tier.maxValue)
-        : null;
-    if (v >= min && (max == null || v <= max)) return tier;
-  }
-  return null;
-};
+export const findMatchingTier = (tiers, value, metricType = 'amount') =>
+  findMatchingTierInList(parsePercentDiscountTiers(tiers), value, metricType);
 
 export const calcPercentDiscount = (amount, percent) => {
   const base = Number(amount);
@@ -90,12 +145,38 @@ export const formatTierRange = (tier, metricType = 'amount', currency = '£') =>
 
 export const formatPromotionSummary = (promo, currency = '£') => {
   const type = promo?.offerType || OFFER_TYPES.ORDER;
+  const allTiers = parsePromotionTiers(promo?.discountTiers);
+  const freeTaxTier = allTiers.find(
+    t => t.benefit === PROMO_BENEFITS.FREE_TAX_CHARGE,
+  );
+  const tiers = parsePercentDiscountTiers(promo?.discountTiers);
   if (type === OFFER_TYPES.ORDER) {
     const code = (promo?.promoCode || '').trim();
     const pct = promo?.promoAmount;
-    return code && pct != null ? `${code} • ${pct}% off` : code || promo?.title || 'Offer';
+    const codeLine =
+      code && pct != null && Number(pct) > 0 && !tiers.length && !freeTaxTier
+        ? `${code} • ${pct}% off`
+        : code || '';
+    const freeLine = freeTaxTier
+      ? formatFreeTaxChargeSummary(freeTaxTier, currency)
+      : '';
+    if (tiers.length) {
+      const tierLine = tiers
+        .slice(0, 2)
+        .map(t => formatTierRange(t, 'amount', currency))
+        .join(' · ');
+      return (
+        [codeLine, freeLine, tierLine].filter(Boolean).join(' · ') ||
+        promo?.title ||
+        'Offer'
+      );
+    }
+    return (
+      [codeLine, freeLine].filter(Boolean).join(' · ') ||
+      promo?.title ||
+      'Offer'
+    );
   }
-  const tiers = parseDiscountTiers(promo?.discountTiers);
   if (!tiers.length) return promo?.title || 'Discount offer';
   const metric =
     type === OFFER_TYPES.BOOKING
@@ -127,9 +208,15 @@ export const findBestAmountDiscount = (
   billTotal,
   fulfillmentType,
 ) => {
-  const list = filterPromotionsByType(promotions, OFFER_TYPES.AMOUNT).filter(
-    isPromotionActive,
-  );
+  const list = (Array.isArray(promotions) ? promotions : []).filter(p => {
+    const type = p?.offerType || OFFER_TYPES.ORDER;
+    if (type === OFFER_TYPES.AMOUNT) return isPromotionActive(p);
+    if (type === OFFER_TYPES.ORDER) {
+      const tiers = parseDiscountTiers(p?.discountTiers);
+      return isPromotionActive(p) && tiers.length > 0;
+    }
+    return false;
+  });
   for (const promo of list) {
     if (!matchesFulfillmentScope(promo.fulfillmentScopes, fulfillmentType)) {
       continue;
@@ -139,7 +226,7 @@ export const findBestAmountDiscount = (
       return {
         id: promo.id,
         title: promo.title,
-        offerType: OFFER_TYPES.AMOUNT,
+        offerType: promo.offerType || OFFER_TYPES.AMOUNT,
         percent: tier.percent,
         tier,
         promo,
@@ -173,7 +260,34 @@ export const findBestBookingDiscount = (promotions, persons, bookingAmount) => {
   return null;
 };
 
-export const isUserWithinOwnerArea = (userLat, userLng, ownerProfile) => {
+/** Resolve owner radius for content browse, pickup, or delivery. */
+export const getOwnerAreaKm = (ownerProfile, areaType = 'content') => {
+  const positive = value => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  if (areaType === 'delivery') {
+    return positive(ownerProfile?.deliveryAreaKm);
+  }
+  if (areaType === 'pickup') {
+    return (
+      positive(ownerProfile?.pickupAreaKm) ??
+      positive(ownerProfile?.contentAreaKm) ??
+      positive(ownerProfile?.deliveryAreaKm)
+    );
+  }
+  return (
+    positive(ownerProfile?.contentAreaKm) ??
+    positive(ownerProfile?.deliveryAreaKm)
+  );
+};
+
+export const isUserWithinOwnerArea = (
+  userLat,
+  userLng,
+  ownerProfile,
+  areaType = 'content',
+) => {
   if (
     ownerProfile?.latitude == null ||
     ownerProfile?.longitude == null ||
@@ -182,11 +296,7 @@ export const isUserWithinOwnerArea = (userLat, userLng, ownerProfile) => {
   ) {
     return false;
   }
-  const maxKm =
-    ownerProfile?.deliveryAreaKm != null &&
-    Number(ownerProfile.deliveryAreaKm) > 0
-      ? Number(ownerProfile.deliveryAreaKm)
-      : null;
+  const maxKm = getOwnerAreaKm(ownerProfile, areaType);
   if (maxKm == null) return true;
   const R = 6371;
   const lat1 = Number(ownerProfile.latitude);

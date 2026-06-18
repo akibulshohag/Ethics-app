@@ -1147,7 +1147,7 @@ const ScheduleScreen = () => {
                   <Text style={styles.boostTitle}>Starter Boost</Text>
                 </View>
                 <Text style={styles.boostSub}>
-                  Ranked popular near you by eatix
+                  Ranked popular near you by Eatwaze
                 </Text>
                 <Text style={styles.boostPrice}>Stating from GBP7-GBP30</Text>
               </View>

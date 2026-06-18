@@ -22,6 +22,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { launchImageLibrary } from 'react-native-image-picker';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { uploadPost, getSocialAccounts } from '../services/postService';
+import VideoCoverPickerModal from './VideoCoverPickerModal';
+import VideoCoverSuggestionsRow from './VideoCoverSuggestionsRow';
+import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 import {
   COLORS,
   ORANGE_GRADIENT_CTA,
@@ -96,6 +99,7 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   const [video, setVideo] = useState(null);
   const [videoDuration, setVideoDuration] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [coverPickerVisible, setCoverPickerVisible] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [platforms, setPlatforms] = useState([
     'facebook',
@@ -280,6 +284,10 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   };
 
   const pickThumbnail = () => {
+    if (video?.uri) {
+      setCoverPickerVisible(true);
+      return;
+    }
     launchImageLibrary({ mediaType: 'photo', quality: 0.8 }, res => {
       if (res.didCancel) return;
       if (res.errorCode) {
@@ -316,6 +324,10 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
             type: asset.type || 'video/mp4',
             name: asset.fileName || 'video.mp4',
           });
+          setThumbnail(null);
+          thumbnailFromVideoFrame(asset.uri).then(thumb => {
+            if (thumb) setThumbnail(thumb);
+          });
         }
       },
     );
@@ -325,6 +337,12 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
   const removeVideo = () => {
     setVideo(null);
     setVideoDuration(0);
+    setThumbnail(null);
+  };
+
+  const applyCoverFrame = frame => {
+    const asset = frameToThumbnailAsset(frame);
+    if (asset) setThumbnail(asset);
   };
 
   const getHashtagsArray = () => {
@@ -632,6 +650,28 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
                     </View>
                   )}
                 </TouchableOpacity>
+
+                {video?.uri ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.coverFromVideoLink}
+                      onPress={() => setCoverPickerVisible(true)}
+                      disabled={uploading}
+                    >
+                      <Text style={styles.coverFromVideoLinkText}>
+                        Choose cover frame from video
+                      </Text>
+                    </TouchableOpacity>
+                    <VideoCoverSuggestionsRow
+                      videoUri={video.uri}
+                      durationSec={videoDuration}
+                      selectedUri={thumbnail?.uri}
+                      onSelect={applyCoverFrame}
+                      onPressSeeAll={() => setCoverPickerVisible(true)}
+                      compact
+                    />
+                  </>
+                ) : null}
               </View>
 
               <View style={styles.sectionCard}>
@@ -1070,6 +1110,15 @@ const CreatePostModal = ({ visible, onClose, onSuccess, userId }) => {
         </KeyboardAvoidingView>
       </Modal>
 
+      <VideoCoverPickerModal
+        visible={coverPickerVisible}
+        onClose={() => setCoverPickerVisible(false)}
+        videoUri={video?.uri}
+        durationSec={videoDuration}
+        title="Select post cover"
+        onSelect={applyCoverFrame}
+      />
+
       {Platform.OS === 'ios' ? (
         <Modal
           visible={showDatePicker}
@@ -1485,6 +1534,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'capitalize',
     letterSpacing: 0.2,
+  },
+  coverFromVideoLink: {
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  coverFromVideoLinkText: {
+    fontSize: 13,
+    color: COLORS.primaryOrange,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   platformChipTextActive: {
     color: '#5C4033',

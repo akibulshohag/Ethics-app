@@ -26,8 +26,9 @@ import VideoDescriptionModal from './VideoDescriptionModal';
 import LocationSearchModal from './LocationSearchModal';
 import VideoScheduleModal from './VideoScheduleModal';
 import VideoCoverPickerModal from './VideoCoverPickerModal';
+import VideoCoverSuggestionsRow from './VideoCoverSuggestionsRow';
 import { uploadVideo } from '../services/videoService';
-import { thumbnailFromVideoFrame } from '../utils/videoThumbnail';
+import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 import {
   listCustomPlaylists,
   setCustomPlaylistItem,
@@ -445,6 +446,19 @@ const VideoUploadSettings = ({
             >
               <Text style={styles.galleryCoverBtnText}>Or choose photo from gallery</Text>
             </TouchableOpacity>
+            {selectedVideo?.uri ? (
+              <VideoCoverSuggestionsRow
+                videoUri={selectedVideo.uri}
+                durationSec={selectedVideo.duration}
+                selectedUri={selectedThumbnail?.uri}
+                onSelect={frame => {
+                  const asset = frameToThumbnailAsset(frame);
+                  if (asset) setSelectedThumbnail(asset);
+                }}
+                onPressSeeAll={pickCoverFromVideo}
+                compact
+              />
+            ) : null}
             {uploading && (
               <View style={styles.uploadProgressOverlay}>
                 <ActivityIndicator size="large" color="#fff" />
@@ -604,7 +618,10 @@ const VideoUploadSettings = ({
           onClose={() => setCoverPickerVisible(false)}
           videoUri={selectedVideo?.uri}
           durationSec={selectedVideo?.duration}
-          onSelect={frame => setSelectedThumbnail(frame)}
+          onSelect={frame => {
+            const asset = frameToThumbnailAsset(frame);
+            if (asset) setSelectedThumbnail(asset);
+          }}
           title="Select video cover"
         />
         <Modal

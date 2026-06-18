@@ -148,8 +148,9 @@ async function loginWithFacebookBusinessConfig(configId) {
 
 async function loginWithFacebookSdkPermissions() {
   LoginManager.setLoginBehavior('native_with_fallback');
-  // Business apps need at least one business permission beyond public_profile.
-  const fbPermissions = ['public_profile', 'pages_show_list'];
+  // Standard consumer login: public_profile + email both have Advanced Access
+  // by default, so no Business Verification or App Review is required.
+  const fbPermissions = ['public_profile', 'email'];
   const result = await LoginManager.logInWithPermissions(fbPermissions);
   if (result?.isCancelled) {
     throw new Error('Facebook login was cancelled');
@@ -217,7 +218,7 @@ function normalizeYouTubeConnectError(error) {
     )
   ) {
     return (
-      'Google blocked YouTube access because the Eatix OAuth app is still in Testing mode. ' +
+      'Google blocked YouTube access because the Eatwaze OAuth app is still in Testing mode. ' +
       'Add your Gmail under Google Cloud Console → OAuth consent screen → Test users, then try again. ' +
       'For all users without adding test accounts, publish the app and complete Google verification.'
     );
@@ -280,15 +281,25 @@ export async function connectYouTubeWithGoogleSignIn(userId) {
   }
 
   const { request } = require('./api');
-  return request({
-    endpoint: 'social-auth/youtube/connect-mobile',
-    method: 'POST',
-    body: {
-      userId: uid,
-      serverAuthCode,
-      mode: 'verify',
-    },
-  });
+  try {
+    return await request({
+      endpoint: 'social-auth/youtube/connect-mobile',
+      method: 'POST',
+      body: {
+        userId: uid,
+        serverAuthCode,
+        mode: 'verify',
+      },
+    });
+  } catch (error) {
+    const data = error?.response?.data;
+    const backendMsg = Array.isArray(data?.message)
+      ? data.message.join(', ')
+      : data?.message || data?.error;
+    throw new Error(
+      String(backendMsg || error?.message || 'YouTube connect failed'),
+    );
+  }
 }
 
 export function normalizeSocialAuthError(error) {
@@ -355,7 +366,7 @@ export function normalizeSocialAuthError(error) {
   if (/key hash|key hashes/i.test(msg)) {
     return (
       'Facebook needs your APK key hash in Meta Developer Console. Install the APK, run ' +
-      'adb logcat -s EatixSigningKeys, copy the Facebook Key hash, and add it under your Meta app Android settings.'
+      'adb logcat -s EatwazeSigningKeys, copy the Facebook Key hash, and add it under your Meta app Android settings.'
     );
   }
   return msg || 'Social sign-in failed';

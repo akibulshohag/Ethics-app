@@ -31,11 +31,11 @@ const HelpCenterScreen = () => {
 
   const faqData = [
     {
-      question: 'What is Eatix?',
+      question: 'What is Eatwaze?',
       answer: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit...',
     },
     {
-      question: 'How to use Eatix?',
+      question: 'How to use Eatwaze?',
       answer: 'Follow the onboarding steps to set up your profile...',
     },
     {

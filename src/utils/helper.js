@@ -86,6 +86,24 @@ export function safeImageUri(val, placeholder = 'https://via.placeholder.com/200
   return placeholder;
 }
 
+/** Ensure local media paths work with RN multipart uploads. */
+export function normalizeUploadUri(uri) {
+  const raw = String(uri || '').trim();
+  if (!raw) return raw;
+  const lower = raw.toLowerCase();
+  if (
+    lower.startsWith('file://') ||
+    lower.startsWith('content://') ||
+    lower.startsWith('ph://') ||
+    lower.startsWith('assets-library://') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://')
+  ) {
+    return raw;
+  }
+  return `file://${raw}`;
+}
+
 /** True when URI must be uploaded (not a remote https URL stored on the server). */
 export function isLocalMediaUri(uri) {
   const s = String(uri || '').trim();

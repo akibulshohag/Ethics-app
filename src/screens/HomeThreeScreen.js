@@ -25,6 +25,14 @@ import { menuItemMatchesDiscoveryCategory } from '../constants/menuDiscoveryCate
 import { useSelector } from 'react-redux';
 import { getChannelProfile } from '../services/channelService';
 import MenuItemThumbnail from '../components/MenuItemThumbnail';
+import MenuAllergenRow from '../components/MenuAllergenRow';
+import Toast from 'react-native-toast-message';
+import {
+  getVendorOrderLimits,
+  validateVendorOrderItems,
+  adjustVendorItemQty,
+  vendorOrderLimitsHint,
+} from '../utils/vendorOrderLimits';
 
 const { width } = Dimensions.get('window');
 
@@ -163,6 +171,11 @@ const HomeThreeScreen = ({ onBack }) => {
   const [openingHours, setOpeningHours] = useState([]);
   const [restaurantAvgRating, setRestaurantAvgRating] = useState(0);
   const [restaurantReviewCount, setRestaurantReviewCount] = useState(0);
+  const [vendorLimits, setVendorLimits] = useState({
+    isVendor: false,
+    min: null,
+    max: null,
+  });
   const [nowTick, setNowTick] = useState(0);
   const insets = useSafeAreaInsets();
 
@@ -196,6 +209,7 @@ const HomeThreeScreen = ({ onBack }) => {
     getChannelProfile(ownerId, viewerId)
       .then(p => {
         setOpeningHours(normalizeOpeningHours(p?.openingHours));
+        setVendorLimits(getVendorOrderLimits(p));
         const avgRaw =
           p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
         const countRaw =
@@ -212,6 +226,7 @@ const HomeThreeScreen = ({ onBack }) => {
       })
       .catch(() => {
         setOpeningHours([]);
+        setVendorLimits({ isVendor: false, min: null, max: null });
         setRestaurantAvgRating(0);
         setRestaurantReviewCount(0);
       });
@@ -726,14 +741,53 @@ const HomeThreeScreen = ({ onBack }) => {
     </ScrollView>
   );
 
+  const vendorLimitsHint = useMemo(
+    () => vendorOrderLimitsHint(vendorLimits),
+    [vendorLimits],
+  );
+
+  const showVendorQtyToast = message => {
+    if (!message) return;
+    Toast.show({ type: 'error', text1: 'Order quantity', text2: message });
+  };
+
   const setItemQty = (id, qty) => {
-    const n = Math.max(
-      0,
-      typeof qty === 'function' ? qty(selectedItems[id] || 0) : qty,
-    );
+    const current = selectedItems[id] || 0;
+    let next;
+    let toast = null;
+
+    if (typeof qty === 'function') {
+      const delta = qty(current) - current;
+      const result = adjustVendorItemQty(current, delta, vendorLimits);
+      next = result.qty;
+      toast = result.toast;
+    } else {
+      next = Math.max(0, qty);
+      if (vendorLimits.isVendor) {
+        const check = validateVendorOrderItems(
+          [{ menuItemId: id, quantity: next, itemName: 'This item' }],
+          vendorLimits,
+        );
+        if (!check.ok && next > 0) {
+          showVendorQtyToast(check.firstError);
+          return;
+        }
+      }
+    }
+
+    if (toast) showVendorQtyToast(toast);
     setSelectedItems(prev =>
-      n === 0 ? { ...prev, [id]: undefined } : { ...prev, [id]: n },
+      next === 0 ? { ...prev, [id]: undefined } : { ...prev, [id]: next },
     );
+  };
+
+  const ensureVendorCartValid = items => {
+    const check = validateVendorOrderItems(items, vendorLimits);
+    if (!check.ok) {
+      showVendorQtyToast(check.message);
+      return false;
+    }
+    return true;
   };
 
   const totalCount = Object.values(selectedItems).reduce(
@@ -766,6 +820,7 @@ const HomeThreeScreen = ({ onBack }) => {
         return {
           menuItemId,
           itemName: menuItem?.itemName || 'Item',
+          description: menuItem?.description || '',
           price: menuItem?.price ?? 0,
           quantity,
           currency: 'GBP',
@@ -776,6 +831,7 @@ const HomeThreeScreen = ({ onBack }) => {
       Alert.alert('Add items', 'Select at least one item and quantity.');
       return;
     }
+    if (!ensureVendorCartValid(items)) return;
     if (!ownerId) return;
     navigation.navigate('CartDetailsScreen', {
       ownerId,
@@ -798,6 +854,7 @@ const HomeThreeScreen = ({ onBack }) => {
           return {
             menuItemId,
             itemName: menuItem?.itemName || 'Item',
+            description: menuItem?.description || '',
             price: menuItem?.price ?? 0,
             quantity,
             currency: 'GBP',
@@ -843,6 +900,16 @@ const HomeThreeScreen = ({ onBack }) => {
               <View style={[styles.dietDot, styles.dietDotNonVeg]} />
             ) : null}
           </View>
+          {item.description ? (
+            <Text style={styles.itemDesc} numberOfLines={2}>
+              {item.description}
+            </Text>
+          ) : null}
+          <MenuAllergenRow
+            allergens={item.allergens}
+            allergenIconUrls={item.allergenIconUrls}
+            iconSize={14}
+          />
           <Text style={styles.itemPrice}>
             £{Number(item.price || 0).toFixed(2)}
             {to > 0 ? (
@@ -856,11 +923,6 @@ const HomeThreeScreen = ({ onBack }) => {
               </Text>
             ) : null}
           </Text>
-          {item.description ? (
-            <Text style={styles.itemDesc} numberOfLines={3}>
-              {item.description}
-            </Text>
-          ) : null}
         </View>
         <View style={styles.imageContainer}>
           <MenuItemThumbnail
@@ -934,6 +996,12 @@ const HomeThreeScreen = ({ onBack }) => {
             <Text style={styles.openCloseBannerText} numberOfLines={2}>
               {openCloseBannerText}
             </Text>
+          </View>
+        )}
+
+        {!!vendorLimitsHint && (
+          <View style={styles.vendorQtyBanner}>
+            <Text style={styles.vendorQtyBannerText}>{vendorLimitsHint}</Text>
           </View>
         )}
 
@@ -1064,6 +1132,7 @@ const HomeThreeScreen = ({ onBack }) => {
           disabled={cartBarDisabled}
           onPress={() => {
             if (cartBarDisabled) return;
+            if (!ensureVendorCartValid(itemsForCheckout)) return;
             navigation.navigate('HomeFourScreen', {
               ownerId: hasDynamicMenu ? ownerId : null,
               items: itemsForCheckout,
@@ -1536,6 +1605,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  vendorQtyBanner: {
+    marginHorizontal: 15,
+    marginBottom: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFF3E0',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+  },
+  vendorQtyBannerText: {
+    color: '#7a4b00',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   sectionHeading: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -1575,7 +1659,7 @@ const styles = StyleSheet.create({
     color: '#222',
     marginBottom: 5,
   },
-  itemDesc: { fontSize: 13, color: '#777', lineHeight: 18 },
+  itemDesc: { fontSize: 12, color: '#888', lineHeight: 16, marginTop: 2 },
   imageContainer: { width: '35%', alignItems: 'center' },
   itemImage: {
     width: '100%',

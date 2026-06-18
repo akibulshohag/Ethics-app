@@ -16,7 +16,8 @@ import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import VideoCoverPickerModal from '../../components/VideoCoverPickerModal';
-import { thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
+import VideoCoverSuggestionsRow from '../../components/VideoCoverSuggestionsRow';
+import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
 import { getSocialAccounts } from '../../services/postService';
 
 const { width } = Dimensions.get('window');
@@ -421,6 +422,20 @@ const CreateReelScreen = () => {
             ) : null}
           </TouchableOpacity>
 
+          {canGoNext ? (
+            <VideoCoverSuggestionsRow
+              videoUri={videoAsset?.uri}
+              durationSec={videoAsset?.durationSec}
+              selectedUri={thumbnailAsset?.uri}
+              onSelect={frame => {
+                const asset = frameToThumbnailAsset(frame);
+                if (asset) setThumbnailAsset(asset);
+              }}
+              onPressSeeAll={() => setCoverModalVisible(true)}
+              compact
+            />
+          ) : null}
+
           <View style={styles.thumbnailBtnRow}>
             <TouchableOpacity
               style={[
@@ -543,12 +558,8 @@ const CreateReelScreen = () => {
           durationSec={videoAsset?.durationSec}
           title="Choose thumbnail frame"
           onSelect={item => {
-            if (!item?.uri) return;
-            setThumbnailAsset({
-              uri: item.uri,
-              type: item.type || 'image/jpeg',
-              name: item.fileName || 'cover.jpg',
-            });
+            const asset = frameToThumbnailAsset(item);
+            if (asset) setThumbnailAsset(asset);
           }}
         />
       </View>

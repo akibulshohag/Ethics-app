@@ -21,6 +21,8 @@ import { createFeatured } from '../services/featuredService';
 import { uploadVideo } from '../services/videoService';
 import { launchImageLibrary } from 'react-native-image-picker';
 import VideoCoverPickerModal from '../components/VideoCoverPickerModal';
+import VideoCoverSuggestionsRow from '../components/VideoCoverSuggestionsRow';
+import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 
 const canUseFeaturedUpload = roleNorm => {
@@ -209,8 +211,12 @@ const FeaturedVideoUploadScreen = () => {
         return;
       }
       if (res.assets?.[0]) {
-        setFeaturedVideoFile(res.assets[0]);
+        const asset = res.assets[0];
+        setFeaturedVideoFile(asset);
         setFeaturedThumbnailFile(null);
+        thumbnailFromVideoFrame(asset.uri).then(thumb => {
+          if (thumb) setFeaturedThumbnailFile(thumb);
+        });
       }
     });
   };
@@ -580,6 +586,19 @@ const FeaturedVideoUploadScreen = () => {
             Or pick cover photo from gallery
           </Text>
         </TouchableOpacity>
+        {featuredVideoFile?.uri ? (
+          <VideoCoverSuggestionsRow
+            videoUri={featuredVideoFile.uri}
+            durationSec={featuredVideoFile.duration}
+            selectedUri={featuredThumbnailFile?.uri}
+            onSelect={frame => {
+              const asset = frameToThumbnailAsset(frame);
+              if (asset) setFeaturedThumbnailFile(asset);
+            }}
+            onPressSeeAll={openThumbnailFromVideo}
+            compact
+          />
+        ) : null}
         <Text style={styles.label}>Location</Text>
         <View style={styles.selectedOwnerBox}>
           {isAdminUser ? (

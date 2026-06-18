@@ -32,6 +32,7 @@ import {
   customerOrderStatusLabel,
   customerOrderStatusColor,
   CUSTOMER_IN_PROGRESS_STATUSES,
+  isDeliveryFulfillment,
 } from '../utils/orderStatus';
 import CompleteDateFilterRow from '../components/CompleteDateFilterRow';
 import { matchesCompleteDateFilter } from '../utils/orderCompleteDateFilter';
@@ -382,6 +383,25 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
                 Review Order
               </Text>
             </TouchableOpacity>
+            {String(item.status || '').toLowerCase() === 'completed' &&
+            item?.riderId &&
+            isDeliveryFulfillment(item.fulfillmentType) ? (
+              <TouchableOpacity
+                style={[styles.userActionBtn, styles.userActionBtnOutline]}
+                onPress={() =>
+                  navigation.navigate('OrderDetailsScreen', {
+                    orderId: item.id,
+                    order: item,
+                  })
+                }
+              >
+                <Text
+                  style={[styles.userActionText, styles.userActionTextOutline]}
+                >
+                  Review Rider
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
 

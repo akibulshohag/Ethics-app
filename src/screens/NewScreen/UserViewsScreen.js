@@ -33,6 +33,9 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { safeImageUri } from '../../utils/helper';
 import MenuItemThumbnail from '../../components/MenuItemThumbnail';
+import MenuAllergenRow from '../../components/MenuAllergenRow';
+import { mapMenuListRow } from '../../utils/menuListItem';
+import { viewerContentParams } from '../../utils/contentVisibility';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
 import {
@@ -68,6 +71,8 @@ import { getPromotionsByUser } from '../../services/promotionService';
 import {
   isPromotionActive,
   isUserWithinOwnerArea,
+  formatPromotionSummary,
+  parsePercentDiscountTiers,
 } from '../../utils/promotionUtils';
 import { getSocialIcon } from '../../constants/socialLinks';
 import { listCustomPlaylists } from '../../services/playlistService';
@@ -82,9 +87,39 @@ import {
 } from '../../utils/navigateToScopedShortsPlayer';
 import { recordRecentChatPartner } from '../../services/chatRecentStorage';
 import { getMenuByUserId } from '../../services/menuService';
-import { getNotificationsByUserId } from '../../services/notificationService';
+import { useNotifications } from '../../hooks/useNotifications';
+import NotificationBellButton from '../../components/NotificationBellButton';
 
 const { width } = Dimensions.get('window');
+
+const PROMO_CAROUSEL_H_PADDING = 14;
+const PROMO_CAROUSEL_GAP = 8;
+const PROMO_CAROUSEL_CARD_WIDTH =
+  (width - PROMO_CAROUSEL_H_PADDING * 2 - PROMO_CAROUSEL_GAP) / 2.75;
+
+const getProfilePromoHeadline = promo => {
+  const pct = Number(promo?.promoAmount);
+  if (Number.isFinite(pct) && pct > 0) {
+    return `${Math.round(pct)}% OFF`;
+  }
+  const tiers = parsePercentDiscountTiers(promo?.discountTiers);
+  if (tiers.length) {
+    const maxPct = Math.max(...tiers.map(t => Number(t.percent) || 0));
+    if (maxPct > 0) return `${Math.round(maxPct)}% OFF`;
+  }
+  const title = String(promo?.title || '').trim();
+  return title ? title.toUpperCase() : 'OFFER';
+};
+
+const getProfilePromoDescription = promo =>
+  String(promo?.description || '').trim() ||
+  formatPromotionSummary(promo) ||
+  'No min. order · valid for selected items';
+
+const getProfilePromoActionLabel = promo => {
+  const code = String(promo?.promoCode || '').trim();
+  return code ? 'Use Code' : 'Auto Applied';
+};
 
 const TABS = [
   'Gallery',
@@ -307,6 +342,13 @@ const UserViewsScreen = ({ navigation }) => {
     !!profileUserId &&
     String(profileUserId) === String(currentUser.id);
 
+  const {
+    notifications,
+    unreadCount: unreadNotificationCount,
+    loading: notificationsLoading,
+    refresh: loadNotifications,
+  } = useNotifications(currentUser?.id || null);
+
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState(null);
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
@@ -342,12 +384,11 @@ const UserViewsScreen = ({ navigation }) => {
     useState(null);
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [promotionalOffersVisible, setPromotionalOffersVisible] = useState(false);
+  const [selectedPromotionId, setSelectedPromotionId] = useState(null);
   const [ownerPromotions, setOwnerPromotions] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [menuCategories, setMenuCategories] = useState([]);
   const [menuLoading, setMenuLoading] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsModalVisible, setNotificationsModalVisible] =
     useState(false);
 
@@ -1242,19 +1283,6 @@ const UserViewsScreen = ({ navigation }) => {
     }
   };
 
-  const loadNotifications = useCallback(async () => {
-    if (!currentUser?.id) return;
-    setNotificationsLoading(true);
-    try {
-      const data = await getNotificationsByUserId(currentUser.id);
-      setNotifications(Array.isArray(data) ? data : data?.notifications ?? []);
-    } catch (_) {
-      setNotifications([]);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  }, [currentUser?.id]);
-
   const handleNotificationBellPress = useCallback(() => {
     if (requireLogin()) return;
     if (!currentUser?.id) return;
@@ -1366,13 +1394,14 @@ const UserViewsScreen = ({ navigation }) => {
     }
     try {
       const res = await getPromotionsByUser(profileUserId, 1, 50);
+      const all = res?.promotions ?? [];
       setOwnerPromotions(
-        (res?.promotions ?? []).filter(p => isPromotionActive(p)),
+        isOwnProfile ? all : all.filter(p => isPromotionActive(p)),
       );
     } catch (_) {
       setOwnerPromotions([]);
     }
-  }, [profileUserId]);
+  }, [profileUserId, isOwnProfile]);
 
   const viewerLatLng = useMemo(() => {
     if (browseLocation?.lat != null && browseLocation?.lng != null) {
@@ -1399,6 +1428,29 @@ const UserViewsScreen = ({ navigation }) => {
     );
   }, [viewerLatLng, profile]);
 
+  const showOwnerPromotionsCarousel = useMemo(
+    () => isViewingBusinessProfile && ownerPromotions.length > 0,
+    [isViewingBusinessProfile, ownerPromotions.length],
+  );
+
+  const modalPromotions = useMemo(() => {
+    if (!selectedPromotionId) return ownerPromotions;
+    const match = ownerPromotions.find(
+      p => String(p.id) === String(selectedPromotionId),
+    );
+    return match ? [match] : ownerPromotions;
+  }, [ownerPromotions, selectedPromotionId]);
+
+  const openPromotionalOffers = useCallback((promotionId = null) => {
+    setSelectedPromotionId(promotionId);
+    setPromotionalOffersVisible(true);
+  }, []);
+
+  const closePromotionalOffers = useCallback(() => {
+    setPromotionalOffersVisible(false);
+    setSelectedPromotionId(null);
+  }, []);
+
   const showPromotionalOffersButton = useMemo(
     () =>
       isViewingBusinessProfile &&
@@ -1416,17 +1468,12 @@ const UserViewsScreen = ({ navigation }) => {
   );
 
   useEffect(() => {
-    if (profile?.isSubscribed && profileUserId && isViewingBusinessProfile) {
-      loadOwnerPromotions();
-    } else {
+    if (!profileUserId || !isViewingBusinessProfile) {
       setOwnerPromotions([]);
+      return;
     }
-  }, [
-    profile?.isSubscribed,
-    profileUserId,
-    isViewingBusinessProfile,
-    loadOwnerPromotions,
-  ]);
+    loadOwnerPromotions();
+  }, [profileUserId, isViewingBusinessProfile, loadOwnerPromotions]);
 
   /** Followers / Following lists live on Home1 stack (same as BusinessProfileCard) */
   const handlePressFollowers = useCallback(() => {
@@ -1532,9 +1579,16 @@ const UserViewsScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setVideosLoading(true);
     try {
+      const visibility = viewerContentParams(currentUser, browseLocation);
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(profileUserId, 1, 100, currentUser?.id),
-        shortsService.getUserShorts(profileUserId, 1, 100, currentUser?.id),
+        getUserVideos(profileUserId, 1, 100, currentUser?.id, visibility),
+        shortsService.getUserShorts(
+          profileUserId,
+          1,
+          100,
+          currentUser?.id,
+          visibility,
+        ),
       ]);
       const videos = (vRes?.videos ?? []).map(v => ({ ...v, type: 'video' }));
       const shorts = (sRes?.shorts ?? []).map(s => ({ ...s, type: 'short' }));
@@ -1544,15 +1598,22 @@ const UserViewsScreen = ({ navigation }) => {
     } finally {
       setVideosLoading(false);
     }
-  }, [profileUserId, currentUser?.id]);
+  }, [profileUserId, currentUser, browseLocation]);
 
   const loadPosts = useCallback(async () => {
     if (!profileUserId) return;
     setPostsLoading(true);
     try {
+      const visibility = viewerContentParams(currentUser, browseLocation);
       const [postRes, shortRes] = await Promise.all([
-        getPostsByUser(profileUserId, 1, 50, currentUser?.id),
-        shortsService.getUserShorts(profileUserId, 1, 50, currentUser?.id),
+        getPostsByUser(profileUserId, 1, 50, currentUser?.id, visibility),
+        shortsService.getUserShorts(
+          profileUserId,
+          1,
+          50,
+          currentUser?.id,
+          visibility,
+        ),
       ]);
       const postRows = (postRes?.posts || []).map(p => ({
         ...p,
@@ -1573,7 +1634,7 @@ const UserViewsScreen = ({ navigation }) => {
     } finally {
       setPostsLoading(false);
     }
-  }, [profileUserId, currentUser?.id]);
+  }, [profileUserId, currentUser, browseLocation]);
 
   const openShortFromPostsTab = useCallback(
     item => {
@@ -1757,6 +1818,54 @@ const UserViewsScreen = ({ navigation }) => {
     if (activeTab === 'Menu' && !isOwnerProfile) setActiveTab('Gallery');
   }, [activeTab, isOwnerProfile]);
 
+  const renderProfilePromotionCarousel = () => {
+    if (!showOwnerPromotionsCarousel) return null;
+    return (
+      <View style={styles.profilePromoCarouselWrap}>
+        <FlatList
+          horizontal
+          data={ownerPromotions}
+          keyExtractor={item => String(item.id)}
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={PROMO_CAROUSEL_CARD_WIDTH + PROMO_CAROUSEL_GAP}
+          snapToAlignment="start"
+          contentContainerStyle={styles.profilePromoCarouselContent}
+          ItemSeparatorComponent={() => (
+            <View style={{ width: PROMO_CAROUSEL_GAP }} />
+          )}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                styles.profilePromoCard,
+                { width: PROMO_CAROUSEL_CARD_WIDTH },
+              ]}
+              activeOpacity={0.9}
+              onPress={() => openPromotionalOffers(item.id)}
+            >
+              <MaterialCommunityIcons
+                name="ticket-percent-outline"
+                size={18}
+                color="#F5A623"
+              />
+              <Text style={styles.profilePromoHeadline} numberOfLines={1}>
+                {getProfilePromoHeadline(item)}
+              </Text>
+              <Text style={styles.profilePromoDesc} numberOfLines={2}>
+                {getProfilePromoDescription(item)}
+              </Text>
+              <View style={styles.profilePromoActionBtn}>
+                <Text style={styles.profilePromoActionText}>
+                  {getProfilePromoActionLabel(item)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <UserProfileCard
@@ -1766,6 +1875,9 @@ const UserViewsScreen = ({ navigation }) => {
         onSubscribe={handleProfileSubscribe}
         onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
+        subscribeInExplorerBar={
+          showProfileSubscribe && isViewingBusinessProfile
+        }
         onPressFollowers={handlePressFollowers}
         onPressFollowing={handlePressFollowing}
         onPressReviews={() => {
@@ -1790,6 +1902,8 @@ const UserViewsScreen = ({ navigation }) => {
             : undefined
         }
       />
+
+      {renderProfilePromotionCarousel()}
 
       {/* Social icons row — business profiles only (hidden for role "user") */}
       {String(profile?.role || '').toLowerCase() !== 'user' ? (
@@ -1902,7 +2016,7 @@ const UserViewsScreen = ({ navigation }) => {
       {showPromotionalOffersButton && activeTab === 'Menu' ? (
         <TouchableOpacity
           style={styles.promoOfferBtn}
-          onPress={() => setPromotionalOffersVisible(true)}
+          onPress={() => openPromotionalOffers()}
           activeOpacity={0.85}
         >
           <MaterialCommunityIcons name="tag-multiple" size={20} color="#FF7F0B" />
@@ -1946,16 +2060,7 @@ const UserViewsScreen = ({ navigation }) => {
               id: `section-${cat.id}`,
               title: cat.name,
             });
-            items.forEach(m =>
-              result.push({
-                type: 'menu',
-                id: m.id,
-                itemName: m.itemName,
-                price: m.price,
-                imageUrl: m.imageUrl,
-                description: m.description,
-              }),
-            );
+            items.forEach(m => result.push(mapMenuListRow(m)));
           }
         });
         const uncategorized = menuItems.filter(
@@ -1967,28 +2072,10 @@ const UserViewsScreen = ({ navigation }) => {
             id: 'section-uncategorized',
             title: 'Menu',
           });
-          uncategorized.forEach(m =>
-            result.push({
-              type: 'menu',
-              id: m.id,
-              itemName: m.itemName,
-              price: m.price,
-              imageUrl: m.imageUrl,
-              description: m.description,
-            }),
-          );
+          uncategorized.forEach(m => result.push(mapMenuListRow(m)));
         }
         if (result.length === 0 && menuItems.length > 0) {
-          menuItems.forEach(m =>
-            result.push({
-              type: 'menu',
-              id: m.id,
-              itemName: m.itemName,
-              price: m.price,
-              imageUrl: m.imageUrl,
-              description: m.description,
-            }),
-          );
+          menuItems.forEach(m => result.push(mapMenuListRow(m)));
         }
         return result;
       }
@@ -2209,14 +2296,18 @@ const UserViewsScreen = ({ navigation }) => {
             <Text style={styles.menuRowName} numberOfLines={1}>
               {item.itemName}
             </Text>
-            <Text style={styles.menuRowPrice}>
-              {item.price != null ? `£${Number(item.price).toFixed(2)}` : '—'}
-            </Text>
             {item.description ? (
               <Text style={styles.menuRowDescription} numberOfLines={2}>
                 {item.description}
               </Text>
             ) : null}
+            <MenuAllergenRow
+              allergens={item.allergens}
+              allergenIconUrls={item.allergenIconUrls}
+            />
+            <Text style={styles.menuRowPrice}>
+              {item.price != null ? `£${Number(item.price).toFixed(2)}` : '—'}
+            </Text>
           </View>
           <TouchableOpacity
             style={styles.menuRowCartBtn}
@@ -2388,17 +2479,14 @@ const UserViewsScreen = ({ navigation }) => {
             style={styles.promoHeaderLogo}
             resizeMode="contain"
           />
-          <TouchableOpacity
-            style={styles.promoHeaderBell}
-            onPress={handleNotificationBellPress}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="bell-outline"
+          <View style={styles.promoHeaderBell}>
+            <NotificationBellButton
+              unreadCount={unreadNotificationCount}
+              onPress={handleNotificationBellPress}
+              iconColor="#1F2937"
               size={24}
-              color="#1F2937"
             />
-          </TouchableOpacity>
+          </View>
         </View>
       </LinearGradient>
       {!profileUserId ? (
@@ -2740,9 +2828,10 @@ const UserViewsScreen = ({ navigation }) => {
 
       <PromotionalOffersModal
         visible={promotionalOffersVisible}
-        onClose={() => setPromotionalOffersVisible(false)}
-        promotions={ownerPromotions}
+        onClose={closePromotionalOffers}
+        promotions={modalPromotions}
         ownerName={profile?.channelName || profile?.nickname || profile?.name}
+        includeInactive={isOwnProfile}
       />
 
       <GalleryVideoDetailModal
@@ -2754,6 +2843,12 @@ const UserViewsScreen = ({ navigation }) => {
         currentUser={currentUser}
         navigation={navigation}
         siblingItems={rawVideos}
+        onContentDeleted={({ contentId }) => {
+          setRawVideos(prev =>
+            prev.filter(v => String(v.id) !== String(contentId)),
+          );
+          setGalleryVideoModal(null);
+        }}
       />
 
       {/* Instagram / Gallery photo preview — full screen */}
@@ -3644,10 +3739,56 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   headerContainer: {
     paddingBottom: 0,
     backgroundColor: '#FFFFFF',
+  },
+  profilePromoCarouselWrap: {
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 4,
+  },
+  profilePromoCarouselContent: {
+    paddingHorizontal: PROMO_CAROUSEL_H_PADDING,
+    paddingVertical: 8,
+  },
+  profilePromoCard: {
+    backgroundColor: '#FFF8EE',
+    borderWidth: 1,
+    borderColor: '#F5A623',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+    minHeight: 118,
+    justifyContent: 'space-between',
+  },
+  profilePromoHeadline: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1A1A1A',
+    marginTop: 4,
+    letterSpacing: 0.1,
+  },
+  profilePromoDesc: {
+    fontSize: 10,
+    lineHeight: 13,
+    color: '#666666',
+    marginTop: 4,
+    flex: 1,
+  },
+  profilePromoActionBtn: {
+    backgroundColor: '#F5A623',
+    borderRadius: 6,
+    paddingVertical: 6,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  profilePromoActionText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   profileSocialRow: {
     flexDirection: 'row',
@@ -3746,7 +3887,8 @@ const styles = StyleSheet.create({
   menuRowDescription: {
     fontSize: 12,
     color: '#888',
-    marginTop: 4,
+    marginTop: 2,
+    lineHeight: 16,
   },
   menuRowCartBtn: {
     marginLeft: 8,

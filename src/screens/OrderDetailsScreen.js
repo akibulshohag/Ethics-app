@@ -12,6 +12,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  TextInput,
   NativeModules,
   Platform,
 } from 'react-native';
@@ -24,6 +25,9 @@ import {
   updateRestaurantOrderStatus,
   assignRiderToOrder,
   rejectRiderAssignment,
+  getRestaurantOrderRiderReview,
+  upsertRestaurantOrderRiderReview,
+  deleteRestaurantOrderRiderReview,
 } from '../services/orderService';
 import { getChannelProfile } from '../services/channelService';
 import {
@@ -92,6 +96,12 @@ export default function OrderDetailsScreen() {
   const [riders, setRiders] = useState([]);
   const [assignModalVisible, setAssignModalVisible] = useState(false);
   const [assigningRider, setAssigningRider] = useState(false);
+  const [riderReviewModalVisible, setRiderReviewModalVisible] = useState(false);
+  const [riderReviewLoading, setRiderReviewLoading] = useState(false);
+  const [riderReviewSubmitting, setRiderReviewSubmitting] = useState(false);
+  const [riderReview, setRiderReview] = useState(null);
+  const [riderReviewRating, setRiderReviewRating] = useState(0);
+  const [riderReviewComment, setRiderReviewComment] = useState('');
 
   useEffect(() => {
     if (orderParam) {
@@ -165,6 +175,70 @@ export default function OrderDetailsScreen() {
     user?.id,
     user?.deliveryTime,
     user?.deliveryAreaKm,
+  ]);
+
+  const orderStatusEarly = String(order?.status || '').toLowerCase();
+  const isPickupOrderEarly = isPickupFulfillment(order?.fulfillmentType);
+  const isDeliveryOrderEarly = isDeliveryFulfillment(order?.fulfillmentType);
+  const isCustomerEarly = order?.userId === user?.id;
+  const isOrderOwnerEarly =
+    order?.ownerId === user?.id || order?.owner?.id === user?.id;
+  const canCustomerReviewRider =
+    isCustomerEarly &&
+    orderStatusEarly === 'completed' &&
+    isDeliveryOrderEarly &&
+    !!order?.riderId;
+  const canRiderViewReview =
+    isRider &&
+    orderStatusEarly === 'completed' &&
+    order?.riderId === user?.id;
+  const shouldLoadRiderReview =
+    isDeliveryOrderEarly &&
+    orderStatusEarly === 'completed' &&
+    !!order?.riderId;
+
+  useEffect(() => {
+    if (!order?.id || !user?.token) return;
+    if (!shouldLoadRiderReview) {
+      setRiderReview(null);
+      return;
+    }
+    const embedded = order?.riderReview;
+    if (embedded && typeof embedded === 'object') {
+      setRiderReview(embedded);
+      setRiderReviewRating(Number(embedded.rating) || 0);
+      setRiderReviewComment(String(embedded.comment || ''));
+      return;
+    }
+    let cancelled = false;
+    setRiderReviewLoading(true);
+    getRestaurantOrderRiderReview(user.token, order.id)
+      .then(data => {
+        if (cancelled) return;
+        if (data && typeof data === 'object') {
+          setRiderReview(data);
+          setRiderReviewRating(Number(data.rating) || 0);
+          setRiderReviewComment(String(data.comment || ''));
+        } else {
+          setRiderReview(null);
+          setRiderReviewRating(0);
+          setRiderReviewComment('');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRiderReview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRiderReviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    order?.id,
+    order?.riderReview,
+    user?.token,
+    shouldLoadRiderReview,
   ]);
 
   const handleCall = () => {
@@ -360,6 +434,12 @@ export default function OrderDetailsScreen() {
     riderName,
   )}&background=111&color=fff`;
   const riderAvatarUri = safeImageUri(riderPhotoRaw, riderAvatarFallback);
+  const riderAvgRating =
+    order?.riderAvgRating != null &&
+    Number.isFinite(Number(order.riderAvgRating))
+      ? Number(order.riderAvgRating)
+      : null;
+  const riderReviewCount = Number(order?.riderReviewCount || 0);
 
   const loadRidersForAssign = async () => {
     const ownerId = order?.ownerId || user?.id;
@@ -655,6 +735,71 @@ export default function OrderDetailsScreen() {
     ? customerOrderStatusColor(order?.status, order?.fulfillmentType)
     : orderStatusColor(order?.status);
 
+  const openRiderReviewModal = () => {
+    if (riderReview) {
+      setRiderReviewRating(Number(riderReview.rating) || 0);
+      setRiderReviewComment(String(riderReview.comment || ''));
+    } else {
+      setRiderReviewRating(0);
+      setRiderReviewComment('');
+    }
+    setRiderReviewModalVisible(true);
+  };
+
+  const submitRiderReview = async () => {
+    if (!user?.token || !order?.id) return;
+    if (!riderReviewRating || riderReviewRating < 1) {
+      Alert.alert('Rating required', 'Please select a star rating for the rider.');
+      return;
+    }
+    setRiderReviewSubmitting(true);
+    try {
+      const saved = await upsertRestaurantOrderRiderReview(
+        user.token,
+        order.id,
+        {
+          rating: riderReviewRating,
+          comment: riderReviewComment,
+        },
+      );
+      setRiderReview(saved);
+      setOrder(prev => (prev ? { ...prev, riderReview: saved } : prev));
+      setRiderReviewModalVisible(false);
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to submit rider review');
+    } finally {
+      setRiderReviewSubmitting(false);
+    }
+  };
+
+  const confirmDeleteRiderReview = () => {
+    if (!user?.token || !order?.id) return;
+    Alert.alert('Delete review', 'Remove your rider review for this order?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setRiderReviewSubmitting(true);
+          try {
+            await deleteRestaurantOrderRiderReview(user.token, order.id);
+            setRiderReview(null);
+            setRiderReviewRating(0);
+            setRiderReviewComment('');
+            setOrder(prev =>
+              prev ? { ...prev, riderReview: null } : prev,
+            );
+            setRiderReviewModalVisible(false);
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to delete review');
+          } finally {
+            setRiderReviewSubmitting(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const buildInvoiceHtml = () => {
     const invoiceDate = formatDate(order?.createdAt);
     const itemsRows = (items || [])
@@ -694,8 +839,8 @@ export default function OrderDetailsScreen() {
             </style>
           </head>
           <body>
-            <div class="nb"><b>N.B:</b> This invoice is auto-generated by Eatix.</div>
-            <div class="logo">EATIX</div>
+            <div class="nb"><b>N.B:</b> This invoice is auto-generated by Eatwaze.</div>
+            <div class="logo">EATWAZE</div>
             <div class="top">
               <div class="col">
                 <h4>Customer</h4>
@@ -768,7 +913,7 @@ export default function OrderDetailsScreen() {
       throw new Error('PDF module generate method unavailable.');
     }
     const html = buildInvoiceHtml();
-    const baseName = `eatix_invoice_${String(order?.id || 'order')}`;
+    const baseName = `eatwaze_invoice_${String(order?.id || 'order')}`;
     const file = await generatePDF({
       html,
       fileName: baseName,
@@ -989,26 +1134,116 @@ export default function OrderDetailsScreen() {
               </View>
             ) : null}
             {!isPickupOrder && showRiderDetails ? (
-              <View style={styles.ownerInfoRow}>
-                <View style={styles.ownerProfileTap}>
-                  <Image
-                    source={{ uri: riderAvatarUri }}
-                    style={styles.ownerAvatar}
-                  />
-                  <View style={styles.ownerDetails}>
-                    <Text style={styles.ownerName}>{riderName}</Text>
-                    {rider.phone ? (
-                      <Text style={styles.ownerPhone}>{rider.phone}</Text>
+              <View style={styles.riderDetailsBlock}>
+                <View style={styles.ownerInfoRow}>
+                  <View style={styles.ownerProfileTap}>
+                    <Image
+                      source={{ uri: riderAvatarUri }}
+                      style={styles.ownerAvatar}
+                    />
+                    <View style={styles.ownerDetails}>
+                      <Text style={styles.ownerName}>{riderName}</Text>
+                      {rider.phone ? (
+                        <Text style={styles.ownerPhone}>{rider.phone}</Text>
+                      ) : null}
+                      {riderAvgRating != null ? (
+                        <View style={styles.riderAvgRow}>
+                          <Icon name="star" size={15} color="#F5A623" />
+                          <Text style={styles.riderAvgText}>
+                            {riderAvgRating.toFixed(1)}
+                          </Text>
+                          {riderReviewCount > 0 ? (
+                            <Text style={styles.riderAvgMeta}>
+                              ({riderReviewCount}{' '}
+                              {riderReviewCount === 1 ? 'review' : 'reviews'})
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  {canChatRider ? (
+                    <TouchableOpacity
+                      style={styles.iconCircle}
+                      onPress={openRiderChat}
+                    >
+                      <Icon name="message-text" size={18} color="white" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                {orderStatus === 'completed' ? (
+                  <View style={styles.riderOrderReviewSection}>
+                    {riderReviewLoading ? (
+                      <ActivityIndicator size="small" color="#F5A623" />
+                    ) : riderReview ? (
+                      <>
+                        <Text style={styles.riderOrderReviewLabel}>
+                          {isCustomer
+                            ? 'Your rider rating'
+                            : canRiderViewReview
+                              ? 'Customer rating'
+                              : 'Rider rating for this order'}
+                        </Text>
+                        <View style={styles.riderReviewStarsRow}>
+                          {[1, 2, 3, 4, 5].map(s => (
+                            <Icon
+                              key={`rider-star-${s}`}
+                              name={
+                                s <= Number(riderReview.rating)
+                                  ? 'star'
+                                  : 'star-outline'
+                              }
+                              size={20}
+                              color={
+                                s <= Number(riderReview.rating)
+                                  ? '#F5A623'
+                                  : '#CCC'
+                              }
+                            />
+                          ))}
+                        </View>
+                        {riderReview.comment ? (
+                          <Text style={styles.riderReviewComment}>
+                            {riderReview.comment}
+                          </Text>
+                        ) : null}
+                        {canRiderViewReview && riderReview.user ? (
+                          <Text style={styles.riderReviewMeta}>
+                            From{' '}
+                            {riderReview.user.nickname ||
+                              riderReview.user.name ||
+                              riderReview.user.email ||
+                              'Customer'}
+                          </Text>
+                        ) : null}
+                        {canCustomerReviewRider ? (
+                          <TouchableOpacity
+                            style={styles.riderReviewEditBtn}
+                            onPress={openRiderReviewModal}
+                          >
+                            <Text style={styles.riderReviewEditBtnText}>
+                              Edit rating
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </>
+                    ) : canCustomerReviewRider ? (
+                      <TouchableOpacity
+                        style={styles.riderReviewSubmitBtn}
+                        onPress={openRiderReviewModal}
+                      >
+                        <Icon name="star-outline" size={18} color="#fff" />
+                        <Text style={styles.riderReviewSubmitBtnText}>
+                          Rate your rider
+                        </Text>
+                      </TouchableOpacity>
+                    ) : isOrderOwner || canRiderViewReview ? (
+                      <Text style={styles.riderReviewPendingText}>
+                        No customer rating yet for this delivery.
+                      </Text>
                     ) : null}
                   </View>
-                </View>
-                {canChatRider ? (
-                  <TouchableOpacity
-                    style={styles.iconCircle}
-                    onPress={openRiderChat}
-                  >
-                    <Icon name="message-text" size={18} color="white" />
-                  </TouchableOpacity>
                 ) : null}
               </View>
             ) : !isPickupOrder && canOwnerAssign ? (
@@ -1123,6 +1358,7 @@ export default function OrderDetailsScreen() {
             </Text>
           </View>
         </View>
+
       </ScrollView>
 
       <Modal
@@ -1322,6 +1558,82 @@ export default function OrderDetailsScreen() {
                 </TouchableOpacity>
               ))
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={riderReviewModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() =>
+          riderReviewSubmitting ? null : setRiderReviewModalVisible(false)
+        }
+      >
+        <Pressable
+          style={styles.reviewOverlay}
+          onPress={() =>
+            riderReviewSubmitting ? null : setRiderReviewModalVisible(false)
+          }
+        >
+          <Pressable
+            style={styles.reviewSheet}
+            onPress={e => e.stopPropagation()}
+          >
+            <View style={styles.reviewHandle} />
+            <Text style={styles.reviewTitle}>Review rider</Text>
+            <Text style={styles.reviewSubTitle} numberOfLines={1}>
+              {riderName}
+            </Text>
+            <View style={styles.reviewStarsRow}>
+              {[1, 2, 3, 4, 5].map(s => (
+                <TouchableOpacity
+                  key={`edit-rr-${s}`}
+                  onPress={() =>
+                    riderReviewSubmitting ? null : setRiderReviewRating(s)
+                  }
+                  disabled={riderReviewSubmitting}
+                  style={styles.reviewStarBtn}
+                >
+                  <Icon
+                    name={s <= riderReviewRating ? 'star' : 'star-outline'}
+                    size={32}
+                    color={s <= riderReviewRating ? '#F5A623' : '#CCC'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Comment (optional)"
+              placeholderTextColor="#9CA3AF"
+              value={riderReviewComment}
+              onChangeText={setRiderReviewComment}
+              editable={!riderReviewSubmitting}
+              multiline
+            />
+            <View style={styles.reviewBtnsRow}>
+              {riderReview ? (
+                <TouchableOpacity
+                  style={[styles.reviewBtn, styles.reviewBtnDanger]}
+                  onPress={confirmDeleteRiderReview}
+                  disabled={riderReviewSubmitting}
+                >
+                  <Text style={styles.reviewBtnText}>Delete</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.reviewBtn, styles.reviewBtnPrimary]}
+                onPress={submitRiderReview}
+                disabled={riderReviewSubmitting}
+              >
+                {riderReviewSubmitting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.reviewBtnText}>Submit</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1601,4 +1913,147 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EEE',
   },
+  riderDetailsBlock: {
+    marginTop: 4,
+  },
+  riderAvgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  riderAvgText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1C1E',
+  },
+  riderAvgMeta: {
+    fontSize: 12,
+    color: '#667085',
+  },
+  riderOrderReviewSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F2F4F7',
+  },
+  riderOrderReviewLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#667085',
+    marginBottom: 6,
+  },
+  riderReviewPendingText: {
+    fontSize: 13,
+    color: '#667085',
+    fontStyle: 'italic',
+  },
+  riderReviewStarsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  riderReviewComment: {
+    fontSize: 14,
+    color: '#444',
+    lineHeight: 20,
+  },
+  riderReviewMeta: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#888',
+  },
+  riderReviewEditBtn: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F5A623',
+  },
+  riderReviewEditBtnText: {
+    color: '#F5A623',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  riderReviewSubmitBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F5A623',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  riderReviewSubmitBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  reviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  reviewSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    paddingTop: 10,
+  },
+  reviewHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#DDD',
+    marginBottom: 12,
+  },
+  reviewTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1C1E',
+  },
+  reviewSubTitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#666',
+  },
+  reviewStarsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginVertical: 16,
+  },
+  reviewStarBtn: { padding: 4 },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    fontSize: 14,
+    color: '#111',
+  },
+  reviewBtnsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  reviewBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewBtnPrimary: { backgroundColor: '#F5A623' },
+  reviewBtnDanger: { backgroundColor: '#DC2626' },
+  reviewBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

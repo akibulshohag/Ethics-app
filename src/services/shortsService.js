@@ -610,8 +610,8 @@ export const shortsService = {
   /**
    * Get user shorts
    */
-  async getUserShorts(userId, page = 1, limit = 20, viewerUserId) {
-    const params = {page, limit, viewerUserId};
+  async getUserShorts(userId, page = 1, limit = 20, viewerUserId, extraParams = {}) {
+    const params = { page, limit, viewerUserId, ...extraParams };
     try {
       const response = await axios.get(`${API_URL}/user/${userId}`, {
         params,

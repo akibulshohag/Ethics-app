@@ -91,6 +91,9 @@ const UserProfileCard = ({
   coverUploading = false,
   ctaText,
   ctaDisabled = false,
+  showPromotionsButton = false,
+  onPromotionsPress,
+  subscribeInExplorerBar = false,
 }) => {
   const displayName =
     profile?.channelName || profile?.nickname || profile?.name || 'User';
@@ -147,6 +150,9 @@ const UserProfileCard = ({
   const isFoodExplorerUser = profileRole === 'user';
   const isBusinessProfile = profileRole === 'owner' || profileRole === 'vendor';
   const showRating = !isFoodExplorerUser;
+  const showBioSubscribe = showSubscribe && !subscribeInExplorerBar;
+  const showBioActions =
+    (showPromotionsButton || showBioSubscribe) && !showSelfEditHero;
   const showOrderBook =
     isBusinessProfile &&
     !onEditProfile &&
@@ -318,12 +324,59 @@ const UserProfileCard = ({
             <View
               style={[
                 styles.explorerRatingBarOuter,
-                !showRating && styles.explorerRatingBarSolo,
+                !showRating && !subscribeInExplorerBar && styles.explorerRatingBarSolo,
               ]}
             >
               <View style={styles.explorerSegment}>
                 <Text style={styles.foodExplorerText}>Food Explorer</Text>
               </View>
+              {subscribeInExplorerBar && showSubscribe ? (
+                isSubscribed || ctaText === 'Subscribed' ? (
+                  <TouchableOpacity
+                    onPress={onSubscribe}
+                    disabled={buttonDisabled}
+                    activeOpacity={0.85}
+                    style={styles.subscribeHeroSegment}
+                  >
+                    <LinearGradient
+                      colors={SUBSCRIBED_BTN_GRADIENT.colors}
+                      start={SUBSCRIBED_BTN_GRADIENT.start}
+                      end={SUBSCRIBED_BTN_GRADIENT.end}
+                      style={[
+                        styles.subscribeHeroSegmentInner,
+                        (subscribeLoading || buttonDisabled) &&
+                          styles.subscribeBtnDisabled,
+                      ]}
+                    >
+                      {subscribeLoading ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Text style={styles.subscribeHeroText}>
+                          {buttonLabel}
+                        </Text>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.subscribeHeroSegment,
+                      styles.subscribeHeroSegmentActive,
+                      (subscribeLoading || buttonDisabled) &&
+                        styles.subscribeBtnDisabled,
+                    ]}
+                    onPress={onSubscribe}
+                    disabled={buttonDisabled}
+                    activeOpacity={0.85}
+                  >
+                    {subscribeLoading ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.subscribeHeroText}>{buttonLabel}</Text>
+                    )}
+                  </TouchableOpacity>
+                )
+              ) : null}
               {showRating ? (
                 <TouchableOpacity
                   style={styles.ratingSegment}
@@ -383,52 +436,78 @@ const UserProfileCard = ({
           >
             <View style={styles.bioSection}>
               <Text style={styles.profileCtaText}>{statusText}</Text>
-              {showSubscribe && !showSelfEditHero ? (
-                isSubscribed || ctaText === 'Subscribed' ? (
-                  <TouchableOpacity
-                    onPress={onSubscribe}
-                    disabled={buttonDisabled}
-                    activeOpacity={0.85}
-                    style={styles.subscribeBtnTouchable}
-                  >
-                    <LinearGradient
-                      colors={SUBSCRIBED_BTN_GRADIENT.colors}
-                      start={SUBSCRIBED_BTN_GRADIENT.start}
-                      end={SUBSCRIBED_BTN_GRADIENT.end}
+              {(showBioActions) ? (
+                <View style={styles.bioActionRow}>
+                  {showPromotionsButton ? (
+                    <TouchableOpacity
                       style={[
-                        styles.subscribeBtnWide,
-                        (subscribeLoading || buttonDisabled) &&
-                          styles.subscribeBtnDisabled,
+                        styles.bioActionBtn,
+                        styles.bioActionBtnInner,
+                        styles.subscribeBtnActive,
+                        !showBioSubscribe && styles.bioActionBtnSolo,
                       ]}
+                      onPress={onPromotionsPress}
+                      disabled={!onPromotionsPress}
+                      activeOpacity={onPromotionsPress ? 0.85 : 1}
                     >
-                      {subscribeLoading ? (
-                        <ActivityIndicator size="small" color="#FFF" />
-                      ) : (
-                        <Text style={styles.subscribeBtnText}>
-                          {buttonLabel}
-                        </Text>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.subscribeBtnWide,
-                      styles.subscribeBtnActive,
-                      (subscribeLoading || buttonDisabled) &&
-                        styles.subscribeBtnDisabled,
-                    ]}
-                    onPress={onSubscribe}
-                    disabled={buttonDisabled}
-                    activeOpacity={0.85}
-                  >
-                    {subscribeLoading ? (
-                      <ActivityIndicator size="small" color="#FFF" />
+                      <Text style={styles.subscribeBtnText}>Promotions</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {showBioSubscribe ? (
+                    isSubscribed || ctaText === 'Subscribed' ? (
+                      <TouchableOpacity
+                        onPress={onSubscribe}
+                        disabled={buttonDisabled}
+                        activeOpacity={0.85}
+                        style={[
+                          styles.bioActionBtn,
+                          !showPromotionsButton && styles.bioActionBtnSolo,
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={SUBSCRIBED_BTN_GRADIENT.colors}
+                          start={SUBSCRIBED_BTN_GRADIENT.start}
+                          end={SUBSCRIBED_BTN_GRADIENT.end}
+                          style={[
+                            styles.bioActionBtnInner,
+                            (subscribeLoading || buttonDisabled) &&
+                              styles.subscribeBtnDisabled,
+                          ]}
+                        >
+                          {subscribeLoading ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                          ) : (
+                            <Text style={styles.subscribeBtnText}>
+                              {buttonLabel}
+                            </Text>
+                          )}
+                        </LinearGradient>
+                      </TouchableOpacity>
                     ) : (
-                      <Text style={styles.subscribeBtnText}>{buttonLabel}</Text>
-                    )}
-                  </TouchableOpacity>
-                )
+                      <TouchableOpacity
+                        style={[
+                          styles.bioActionBtn,
+                          styles.bioActionBtnInner,
+                          styles.subscribeBtnActive,
+                          (subscribeLoading || buttonDisabled) &&
+                            styles.subscribeBtnDisabled,
+                          !showPromotionsButton && styles.bioActionBtnSolo,
+                        ]}
+                        onPress={onSubscribe}
+                        disabled={buttonDisabled}
+                        activeOpacity={0.85}
+                      >
+                        {subscribeLoading ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <Text style={styles.subscribeBtnText}>
+                            {buttonLabel}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )
+                  ) : null}
+                </View>
               ) : null}
             </View>
           </LinearGradient>
@@ -697,6 +776,36 @@ const styles = StyleSheet.create({
     color: '#1A1A1A',
     lineHeight: 16,
   },
+  subscribeHeroSegment: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  subscribeHeroSegmentInner: {
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 16,
+    paddingRight: 16,
+    minHeight: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subscribeHeroSegmentActive: {
+    backgroundColor: '#F5A623',
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingLeft: 16,
+    paddingRight: 16,
+    minHeight: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subscribeHeroText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
   starRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -762,6 +871,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: SHEET_GAP,
     paddingHorizontal: 4,
+  },
+  bioActionRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  bioActionBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  bioActionBtnSolo: {
+    maxWidth: 220,
+    flex: 0,
+    flexGrow: 1,
+  },
+  bioActionBtnInner: {
+    flex: 1,
+    minHeight: 42,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subscribeBtnTouchable: {
     alignSelf: 'center',

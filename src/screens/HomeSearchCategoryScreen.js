@@ -32,8 +32,10 @@ import {
   resolveCategoryChipNavigation,
   resolveDiscoveryCategoryFromFilter,
 } from '../constants/menuDiscoveryCategories';
+import { buildHomeMenuCategoryChips } from '../constants/homeMenuCategories';
 import { UK_DEFAULT_RADIUS_KM } from '../utils/ukPostcode';
 import logo from '../assets/logo.png';
+import { HEADER_LOGO_STYLE } from '../constants/headerLogo';
 
 const FEED_HORIZONTAL_PAD = 15;
 
@@ -115,10 +117,7 @@ const parseGlobalFeatured = raw => {
     mediaType: 'video',
     mediaId: String(video.id || ''),
     mediaUrl: video.videoUrl || '',
-    mediaThumb:
-      video.thumbnailUrl ||
-      video.videoUrl ||
-      DEFAULT_IMG,
+    mediaThumb: video.thumbnailUrl || video.videoUrl || DEFAULT_IMG,
     totalViews: Number(video.viewCount || 0),
     rating: Number(owner.averageRating ?? owner.rating ?? 0),
     reviewCount: Number(owner.reviewCount ?? owner.ratingCount ?? 0),
@@ -149,7 +148,8 @@ export default function HomeSearchCategoryScreen() {
     const discovery = resolveDiscoveryCategoryFromFilter(nav.categoryKey);
     return {
       categoryKey: discovery?.key || nav.categoryKey,
-      categoryLabel: discovery?.label || nav.categoryLabel,
+      categoryLabel:
+        route.params?.categoryLabel || nav.categoryLabel || discovery?.label,
     };
   }, [route.params?.categoryKey, route.params?.categoryLabel]);
 
@@ -167,13 +167,9 @@ export default function HomeSearchCategoryScreen() {
 
   const locationOpts = useMemo(() => {
     const lat =
-      route.params?.viewerLat ??
-      browseLocation?.lat ??
-      user?.latitude;
+      route.params?.viewerLat ?? browseLocation?.lat ?? user?.latitude;
     const lng =
-      route.params?.viewerLng ??
-      browseLocation?.lng ??
-      user?.longitude;
+      route.params?.viewerLng ?? browseLocation?.lng ?? user?.longitude;
     if (lat == null || lng == null) return undefined;
     const viewerLat = Number(lat);
     const viewerLng = Number(lng);
@@ -190,8 +186,10 @@ export default function HomeSearchCategoryScreen() {
     user?.longitude,
   ]);
 
-  const { restaurants: cachedRestaurants, categories, loading: cacheLoading } =
+  const { restaurants: cachedRestaurants, loading: cacheLoading } =
     useDiscoveryData(locationOpts);
+
+  const homeMenuCategories = useMemo(() => buildHomeMenuCategoryChips(), []);
 
   const [browseRows, setBrowseRows] = useState([]);
   const [browseLoading, setBrowseLoading] = useState(true);
@@ -325,10 +323,10 @@ export default function HomeSearchCategoryScreen() {
       const nav = resolveCategoryChipNavigation(cat);
       navigation.replace('HomeSearchCategoryScreen', {
         categoryKey: nav.categoryKey,
-        categoryLabel: nav.categoryLabel,
+        categoryLabel: cat.label || nav.categoryLabel,
         nearLabel,
-        viewerLat: locationOpts.viewerLat,
-        viewerLng: locationOpts.viewerLng,
+        viewerLat: locationOpts?.viewerLat,
+        viewerLng: locationOpts?.viewerLng,
       });
     },
     [navigation, nearLabel, locationOpts],
@@ -377,9 +375,7 @@ export default function HomeSearchCategoryScreen() {
     } else if (role === 'admin') {
       navigation.getParent()?.navigate('Admin');
     } else {
-      navigation
-        .getParent()
-        ?.navigate('Library', { screen: 'ProfileScreen' });
+      navigation.getParent()?.navigate('Library', { screen: 'ProfileScreen' });
     }
   }, [navigation, user?.role]);
 
@@ -402,12 +398,30 @@ export default function HomeSearchCategoryScreen() {
             >
               <Icon name="arrow-left" size={24} color="#FFF" />
             </TouchableOpacity>
-            <View style={styles.headerLogoContainer}>
+            <View style={styles.headerLeftCol}>
               <Image
                 source={logo}
                 style={styles.logoImage}
                 resizeMode="contain"
               />
+              <TouchableOpacity
+                style={styles.eatixLocationRow}
+                activeOpacity={0.85}
+                onPress={openLocationPicker}
+              >
+                <Icon name="map-marker-outline" size={17} color="#FFF" />
+                <View style={styles.eatixLocationLabelWrap}>
+                  <Text style={styles.eatixLocationText} numberOfLines={1}>
+                    {primaryLoc}
+                  </Text>
+                  <Icon
+                    name="chevron-down"
+                    size={16}
+                    color="#FFF"
+                    style={styles.eatixLocationChevron}
+                  />
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
           {!(user?.token || user?.id) ? (
@@ -430,24 +444,6 @@ export default function HomeSearchCategoryScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity
-          style={styles.eatixLocationRow}
-          activeOpacity={0.85}
-          onPress={openLocationPicker}
-        >
-          <Icon name="map-marker-outline" size={17} color="#FFF" />
-          <View style={styles.eatixLocationLabelWrap}>
-            <Text style={styles.eatixLocationText} numberOfLines={1}>
-              {primaryLoc}
-            </Text>
-            <Icon
-              name="chevron-down"
-              size={16}
-              color="#FFF"
-              style={styles.eatixLocationChevron}
-            />
-          </View>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.body}>
@@ -482,116 +478,120 @@ export default function HomeSearchCategoryScreen() {
         </View>
 
         <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.title}>{categoryLabel}</Text>
-        {isSearching ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {filteredCategoryRows.length} result
-            {filteredCategoryRows.length === 1 ? '' : 's'} for “{searchTrimmed}”
-          </Text>
-        ) : null}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.title}>{categoryLabel}</Text>
+          {isSearching ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {filteredCategoryRows.length} result
+              {filteredCategoryRows.length === 1 ? '' : 's'} for “
+              {searchTrimmed}”
+            </Text>
+          ) : null}
 
-        {categories.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryRow}
-            style={styles.categoryScroll}
-          >
-            {categories.map(cat => {
-              const active = cat.key === categoryKey;
-              return (
-                <TouchableOpacity
-                  key={cat.key}
-                  style={[styles.categoryChip, active && styles.categoryChipActive]}
-                  onPress={() => switchCategory(cat)}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.categoryIconWrap}>
-                    <Image
-                      source={{ uri: cat.imageUri }}
-                      style={styles.categoryIcon}
-                    />
-                  </View>
-                  <Text
+          {homeMenuCategories.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryRow}
+              style={styles.categoryScroll}
+            >
+              {homeMenuCategories.map(cat => {
+                const active = cat.key === categoryKey;
+                return (
+                  <TouchableOpacity
+                    key={cat.key}
                     style={[
-                      styles.categoryLabel,
-                      active && styles.categoryLabelActive,
+                      styles.categoryChip,
+                      active && styles.categoryChipActive,
                     ]}
-                    numberOfLines={2}
+                    onPress={() => switchCategory(cat)}
+                    activeOpacity={0.85}
                   >
-                    {cat.label}
-                  </Text>
-                  {active ? <View style={styles.categoryUnderline} /> : null}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        ) : null}
+                    <View style={styles.categoryIconWrap}>
+                      <Image
+                        source={{ uri: cat.imageUri }}
+                        style={styles.categoryIcon}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.categoryLabel,
+                        active && styles.categoryLabelActive,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {cat.label}
+                    </Text>
+                    {active ? <View style={styles.categoryUnderline} /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : null}
 
-        {showFeatured ? (
-          <>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Featured Near You</Text>
-            </View>
-            <CategoryFeaturedHeroCard
-              channelName={globalFeatured.name}
-              metaLine={rowMetaLine(globalFeatured, categoryLabel)}
-              img={globalFeatured.mediaThumb}
-              showPlayIcon
-              onPress={() => onRowPress(globalFeatured)}
-              onOrderPress={() => openRestaurantOrder(globalFeatured)}
-            />
-          </>
-        ) : null}
-
-        {showCategoryLoader ? (
-          <ActivityIndicator
-            size="large"
-            color="#F5A623"
-            style={{ marginTop: 24 }}
-          />
-        ) : trendingRows.length === 0 && !showFeatured ? (
-          <Text style={styles.empty}>
-            {isSearching
-              ? `No “${searchTrimmed}” matches in ${categoryLabel} yet.`
-              : `No restaurants with “${categoryLabel}” on the menu yet. Try another category.`}
-          </Text>
-        ) : trendingRows.length > 0 ? (
-          <>
-            <View style={styles.trendingHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>
-                  {isSearching ? 'Search results' : 'Trending Near You'}
-                </Text>
-                <Text style={styles.sectionSubtitle}>
-                  {isSearching
-                    ? `${trendingRows.length} restaurant${
-                        trendingRows.length === 1 ? '' : 's'
-                      } with ${categoryLabel}`
-                    : `Restaurants with ${categoryLabel} on the menu`}
-                </Text>
+          {showFeatured ? (
+            <>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Featured Near You</Text>
               </View>
-            </View>
-            {trendingRows.map(row => (
-              <CategoryTrendingCard
-                key={row.id}
-                channelName={row.name}
-                img={row.mediaThumb}
-                views={rowViewsLabel(row)}
-                locationLabel={rowLocationLabel(row)}
-                rating={row.rating}
-                showPlayIcon={rowHasVideo(row)}
-                onPress={() => onRowPress(row)}
-                onOrderPress={() => openRestaurantOrder(row)}
+              <CategoryFeaturedHeroCard
+                channelName={globalFeatured.name}
+                metaLine={rowMetaLine(globalFeatured, categoryLabel)}
+                img={globalFeatured.mediaThumb}
+                showPlayIcon
+                onPress={() => onRowPress(globalFeatured)}
+                onOrderPress={() => openRestaurantOrder(globalFeatured)}
               />
-            ))}
-          </>
-        ) : null}
+            </>
+          ) : null}
+
+          {showCategoryLoader ? (
+            <ActivityIndicator
+              size="large"
+              color="#F5A623"
+              style={{ marginTop: 24 }}
+            />
+          ) : trendingRows.length === 0 && !showFeatured ? (
+            <Text style={styles.empty}>
+              {isSearching
+                ? `No “${searchTrimmed}” matches in ${categoryLabel} yet.`
+                : `No restaurants with “${categoryLabel}” on the menu yet. Try another category.`}
+            </Text>
+          ) : trendingRows.length > 0 ? (
+            <>
+              <View style={styles.trendingHeader}>
+                <View>
+                  <Text style={styles.sectionTitle}>
+                    {isSearching ? 'Search results' : 'Trending Near You'}
+                  </Text>
+                  <Text style={styles.sectionSubtitle}>
+                    {isSearching
+                      ? `${trendingRows.length} restaurant${
+                          trendingRows.length === 1 ? '' : 's'
+                        } with ${categoryLabel}`
+                      : `Restaurants with ${categoryLabel} on the menu`}
+                  </Text>
+                </View>
+              </View>
+              {trendingRows.map(row => (
+                <CategoryTrendingCard
+                  key={row.id}
+                  channelName={row.name}
+                  img={row.mediaThumb}
+                  views={rowViewsLabel(row)}
+                  locationLabel={rowLocationLabel(row)}
+                  rating={row.rating}
+                  showPlayIcon={rowHasVideo(row)}
+                  onPress={() => onRowPress(row)}
+                  onOrderPress={() => openRestaurantOrder(row)}
+                />
+              ))}
+            </>
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -605,12 +605,12 @@ const styles = StyleSheet.create({
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   navLeft: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   headerBackBtn: { padding: 2, marginRight: 4 },
   navBtn: {
@@ -626,18 +626,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
   navBtnText: { color: '#424242', fontSize: 12, fontWeight: '600' },
-  headerLogoContainer: {
+  headerLeftCol: {
     flex: 1,
     alignItems: 'flex-start',
-    justifyContent: 'flex-start',
   },
-  logoImage: { width: 100, height: 30 },
+  logoImage: HEADER_LOGO_STYLE,
   eatixLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    marginTop: 8,
-    maxWidth: '78%',
+    maxWidth: '100%',
   },
   eatixLocationLabelWrap: {
     flexDirection: 'row',

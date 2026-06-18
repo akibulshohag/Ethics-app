@@ -95,9 +95,10 @@ export const getPostsByUser = async (
   page = 1,
   limit = 20,
   viewerUserId,
+  extraParams = {},
 ) => {
   try {
-    const params = { page, limit };
+    const params = { page, limit, ...extraParams };
     if (viewerUserId) params.viewerUserId = viewerUserId;
     const response = await axios.get(`${API_URL}/user/${userId}`, {
       params,
@@ -113,10 +114,13 @@ export const getPostsByUser = async (
 /**
  * Get single post by ID
  */
-export const getPostById = async (postId, userId) => {
+export const getPostById = async (postId, userId, viewerRole) => {
   try {
     const response = await axios.get(`${API_URL}/${postId}`, {
-      params: userId ? { userId } : {},
+      params: {
+        ...(userId ? { userId } : {}),
+        ...(viewerRole ? { viewerRole } : {}),
+      },
       headers: getAuthHeaders(),
     });
     return response.data;

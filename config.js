@@ -6,7 +6,7 @@ import {
   resolveGoogleWebClientId,
 } from './googleAuthConfig';
 
-export const APP_NAME = 'Ethics';
+export const APP_NAME = 'Eatwaze';
 export const TEL_NUMBER = '018********';
 
 // Override for physical device: use your computer's LAN IP (e.g. 192.168.1.x:3000)
@@ -60,11 +60,12 @@ export const config = {
    */
   facebookClientToken: '17658cbb4f5031595adeb84c3f084ab5',
   /**
-   * Required for Facebook Login for Business (Meta app eatix-update).
-   * Meta → Facebook Login for Business → Configurations → Create configuration
-   * (permissions: public_profile + pages_show_list) → paste Configuration ID here.
+   * Leave EMPTY to use standard consumer Facebook Login (public_profile + email),
+   * which has Advanced Access by default — no Business Verification / App Review.
+   * Only set a Configuration ID if you intentionally switch to Facebook Login
+   * for Business (Meta → Facebook Login for Business → Configurations).
    */
-  facebookLoginConfigId: '1544203097136826',
+  facebookLoginConfigId: '',
   /**
    * Must match server `FACEBOOK_ENABLE_INSTAGRAM_LOGIN`. Set true when Meta OAuth works.
    */

@@ -33,7 +33,7 @@ async function reverseGeocodeNominatim(lat, lng) {
     const res = await fetch(url, {
       headers: {
         'Accept-Language': 'en',
-        'User-Agent': 'EatixApp/1.0 (React Native)',
+        'User-Agent': 'EatwazeApp/1.0 (React Native)',
       },
     });
     const data = await res.json();
@@ -103,7 +103,7 @@ const UK_POSTCODE_REGEX = /[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}/i;
 
 const NOMINATIM_HEADERS = {
   Accept: 'application/json',
-  'User-Agent': 'EatixApp/1.0 (React Native)',
+  'User-Agent': 'EatwazeApp/1.0 (React Native)',
 };
 
 /**
@@ -569,7 +569,7 @@ async function requestLocationPermission() {
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       {
         title: 'Location permission',
-        message: 'eatix needs your location to show nearby videos and set your profile location.',
+        message: 'Eatwaze needs your location to show nearby videos and set your profile location.',
         buttonNeutral: 'Ask Later',
         buttonNegative: 'Deny',
         buttonPositive: 'Allow',
@@ -635,7 +635,7 @@ export function getCurrentPositionSafe(onSuccess, onError, options = {}) {
           doGetPosition();
         } else {
           onError(
-            'Location permission was not granted. To see nearby content, allow location in Settings > Apps > eatix > Permissions.',
+            'Location permission was not granted. To see nearby content, allow location in Settings > Apps > Eatwaze > Permissions.',
           );
         }
       })

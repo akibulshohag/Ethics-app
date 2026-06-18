@@ -23,7 +23,9 @@ import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
 import VideoScheduleModal from './VideoScheduleModal';
 import VideoCoverPickerModal from './VideoCoverPickerModal';
+import VideoCoverSuggestionsRow from './VideoCoverSuggestionsRow';
 import { shortsService } from '../services/shortsService';
+import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 
 const AddDetailsModal = ({
   visible,
@@ -75,18 +77,36 @@ const AddDetailsModal = ({
 
   const videoUri = shortsMetadata?.videoUri || localVideo?.uri;
   const videoMeta = localVideo || shortsMetadata;
+  const videoDurationSec =
+    videoMeta?.duration ??
+    videoMeta?.durationSec ??
+    shortsMetadata?.durationSec;
+  const activeThumbUri =
+    localThumb?.uri || shortsMetadata?.thumbnailUri || null;
+
+  const applyCoverFrame = frame => {
+    const asset = frameToThumbnailAsset(frame);
+    if (asset) setLocalThumb(asset);
+  };
 
   const pickVideoInModal = () => {
     launchImageLibrary({ mediaType: 'video', videoMaxDuration: 180 }, res => {
       if (res.didCancel) return;
       const asset = res.assets?.[0];
       if (asset?.uri) {
-        setLocalVideo({
+        const nextVideo = {
           uri: asset.uri,
           type: asset.type || 'video/mp4',
           name: asset.fileName || 'short.mp4',
-        });
+          duration:
+            asset.duration != null ? Math.max(0, Number(asset.duration)) : undefined,
+        };
+        setLocalVideo(nextVideo);
+        setLocalThumb(null);
         if (onVideoPicked) onVideoPicked(asset);
+        thumbnailFromVideoFrame(asset.uri).then(thumb => {
+          if (thumb) setLocalThumb(thumb);
+        });
       }
     });
   };
@@ -289,10 +309,7 @@ const AddDetailsModal = ({
             >
               <Image
                 source={{
-                  uri:
-                    shortsMetadata.thumbnailUri ||
-                    localThumb?.uri ||
-                    DEFAULT_THUMBNAIL,
+                  uri: activeThumbUri || DEFAULT_THUMBNAIL,
                 }}
                 style={styles.coverImage}
                 resizeMode="cover"
@@ -313,6 +330,16 @@ const AddDetailsModal = ({
               />
             </View>
           </View>
+
+          {videoUri ? (
+            <VideoCoverSuggestionsRow
+              videoUri={videoUri}
+              durationSec={videoDurationSec}
+              selectedUri={activeThumbUri}
+              onSelect={applyCoverFrame}
+              onPressSeeAll={pickCoverFromVideoInModal}
+            />
+          ) : null}
 
           {!videoUri && (
             <TouchableOpacity
@@ -482,14 +509,8 @@ const AddDetailsModal = ({
           visible={coverPickerVisible}
           onClose={() => setCoverPickerVisible(false)}
           videoUri={videoUri}
-          durationSec={videoMeta?.duration}
-          onSelect={frame =>
-            setLocalThumb({
-              uri: frame.uri,
-              type: frame.type || 'image/jpeg',
-              name: frame.fileName || 'thumb.jpg',
-            })
-          }
+          durationSec={videoDurationSec}
+          onSelect={applyCoverFrame}
           title="Select short cover"
         />
       </SafeAreaView>

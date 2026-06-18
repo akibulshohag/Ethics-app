@@ -8,11 +8,15 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, FONTS } from '../constants/theme';
 import { useSelector } from 'react-redux';
-import { getNotificationsByUserId, markNotificationRead } from '../services/notificationService';
-import { onNotification } from '../services/notificationSocket';
+import { useNotifications } from '../hooks/useNotifications';
+import {
+  getNotificationIcon,
+  navigateFromNotification,
+} from '../utils/notificationNavigation';
 
 const formatTime = createdAt => {
   if (!createdAt) return '';
@@ -29,70 +33,37 @@ const formatTime = createdAt => {
   return d.toLocaleDateString();
 };
 
-const getIconForType = type => {
-  switch (type) {
-    case 'video_like':
-    case 'short_like':
-      return 'thumb-up-outline';
-    case 'video_comment':
-    case 'short_comment':
-      return 'comment-outline';
-    case 'restaurant_order':
-      return 'cart-outline';
-    default:
-      return 'bell-outline';
-  }
-};
-
 const NotificationScreen = ({ onBack }) => {
+  const navigation = useNavigation();
   const { user: currentUser } = useSelector(state => state.app) || {};
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const userId =
+    currentUser?.id ??
+    currentUser?.userId ??
+    currentUser?._id ??
+    currentUser?.uid ??
+    null;
+  const {
+    notifications,
+    loading,
+    refresh: loadNotifications,
+    markRead,
+    markAllRead,
+    unreadCount,
+  } = useNotifications(userId);
   const [refreshing, setRefreshing] = useState(false);
-
-  const loadNotifications = useCallback(async () => {
-    if (!currentUser?.id) {
-      setNotifications([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      const data = await getNotificationsByUserId(currentUser.id);
-      setNotifications(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setNotifications([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
-
-  useEffect(() => {
-    const unsubscribe = onNotification(() => {
-      loadNotifications();
-    });
-    return unsubscribe;
-  }, [loadNotifications]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadNotifications();
+    loadNotifications().finally(() => setRefreshing(false));
   };
 
   const handlePressNotification = async item => {
     if (item.status !== 'read') {
       try {
-        await markNotificationRead(item.id);
-        setNotifications(prev =>
-          prev.map(n => (n.id === item.id ? { ...n, status: 'read' } : n)),
-        );
+        await markRead(item.id);
       } catch (e) {}
     }
-    // TODO: navigate to content (video/short/order) using item.contentId and item.type
+    await navigateFromNotification(navigation, item, currentUser);
   };
 
   const renderNotification = ({ item }) => (
@@ -103,7 +74,7 @@ const NotificationScreen = ({ onBack }) => {
     >
       <View style={styles.iconWrap}>
         <Icon
-          name={getIconForType(item.type)}
+          name={getNotificationIcon(item.type)}
           size={24}
           color={COLORS.primaryOrange}
         />
@@ -124,10 +95,16 @@ const NotificationScreen = ({ onBack }) => {
           <Icon name="arrow-left" size={28} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 28 }} />
+        {unreadCount > 0 ? (
+          <TouchableOpacity onPress={markAllRead}>
+            <Text style={styles.markAll}>Mark all</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 28 }} />
+        )}
       </View>
 
-      {!currentUser?.id ? (
+      {!userId ? (
         <View style={styles.emptyWrap}>
           <Icon name="bell-outline" size={64} color="#ccc" />
           <Text style={styles.emptyText}>Log in to see notifications</Text>
@@ -175,6 +152,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 15,
     color: '#000',
+  },
+  markAll: {
+    color: COLORS.primaryOrange,
+    fontSize: 14,
+    fontWeight: '600',
   },
   notiRow: {
     flexDirection: 'row',

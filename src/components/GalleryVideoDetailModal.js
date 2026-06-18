@@ -22,6 +22,7 @@ import {
   toggleDislike,
   recordView,
   recordShare,
+  deleteVideo,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import CommentsModal from './CommentsModal';
@@ -245,6 +246,7 @@ const GalleryVideoDetailModal = ({
   currentUser,
   navigation,
   siblingItems = [],
+  onContentDeleted,
 }) => {
   const [activeId, setActiveId] = useState(null);
   const [activeKind, setActiveKind] = useState('video');
@@ -270,6 +272,12 @@ const GalleryVideoDetailModal = ({
   const [commentsVideoId, setCommentsVideoId] = useState(null);
   /** Save target; null means current active video. */
   const [saveTargetId, setSaveTargetId] = useState(null);
+  const [ownerActionsVisible, setOwnerActionsVisible] = useState(false);
+
+  const isOwnContent = useMemo(() => {
+    if (!profileUserId || !currentUser?.id) return false;
+    return String(profileUserId) === String(currentUser.id);
+  }, [profileUserId, currentUser?.id]);
 
   useEffect(() => {
     if (visible && contentId) {
@@ -347,6 +355,7 @@ const GalleryVideoDetailModal = ({
       setRelatedDetails({});
       setCommentsVideoId(null);
       setSaveTargetId(null);
+      setOwnerActionsVisible(false);
     }
   }, [visible]);
 
@@ -692,6 +701,51 @@ const GalleryVideoDetailModal = ({
     }
   };
 
+  const handleDeleteContent = useCallback(() => {
+    if (!isOwnContent || !activeId || !currentUser?.id) return;
+    setOwnerActionsVisible(false);
+    const label = activeKind === 'short' ? 'short' : 'video';
+    Alert.alert(
+      `Delete ${label}`,
+      `Are you sure you want to delete this ${label}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (activeKind === 'short') {
+                await shortsService.deleteShort(activeId, currentUser.id);
+              } else {
+                await deleteVideo(activeId, currentUser.id);
+              }
+              onContentDeleted?.({
+                contentId: activeId,
+                contentKind: activeKind,
+              });
+              onClose?.();
+            } catch (e) {
+              Alert.alert(
+                'Error',
+                e?.response?.data?.message ||
+                  e?.message ||
+                  `Failed to delete ${label}`,
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    isOwnContent,
+    activeId,
+    activeKind,
+    currentUser?.id,
+    onContentDeleted,
+    onClose,
+  ]);
+
   return (
     <Modal
       visible={visible}
@@ -709,6 +763,19 @@ const GalleryVideoDetailModal = ({
             <MaterialCommunityIcons name="arrow-left" size={24} color="#111" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
+          {isOwnContent ? (
+            <TouchableOpacity
+              style={styles.ownerMenuBtn}
+              onPress={() => setOwnerActionsVisible(true)}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <MaterialCommunityIcons
+                name="dots-vertical"
+                size={24}
+                color="#111"
+              />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {loading && !detail ? (
@@ -1115,6 +1182,36 @@ const GalleryVideoDetailModal = ({
           }
           contentId={saveTargetId ?? activeId}
         />
+
+        <Modal
+          visible={ownerActionsVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOwnerActionsVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.ownerSheetBackdrop}
+            onPress={() => setOwnerActionsVisible(false)}
+          >
+            <View style={styles.ownerSheetBox}>
+              <Text style={styles.ownerSheetTitle}>
+                {detail?.title || 'Video options'}
+              </Text>
+              <TouchableOpacity
+                style={styles.ownerSheetRow}
+                onPress={handleDeleteContent}
+              >
+                <MaterialCommunityIcons
+                  name="delete-outline"
+                  size={22}
+                  color="#E53935"
+                />
+                <Text style={styles.ownerSheetDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </SafeAreaView>
     </Modal>
   );
@@ -1123,12 +1220,16 @@ const GalleryVideoDetailModal = ({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff' },
   topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#eee',
   },
-  backBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
+  backBtn: { flexDirection: 'row', alignItems: 'center' },
+  ownerMenuBtn: { padding: 4 },
   backText: { marginLeft: 4, fontSize: 16, fontWeight: '600', color: '#111' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   muted: { marginTop: 8, color: '#888' },
@@ -1247,6 +1348,38 @@ const styles = StyleSheet.create({
   relatedTitleBlock: {
     marginTop: 10,
     paddingHorizontal: 0,
+  },
+  ownerSheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  ownerSheetBox: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 28,
+    paddingTop: 12,
+  },
+  ownerSheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111',
+    textAlign: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  ownerSheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  ownerSheetDeleteText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#E53935',
   },
 });
 

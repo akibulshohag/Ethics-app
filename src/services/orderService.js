@@ -1,5 +1,6 @@
 import { config } from '../../config';
 import { normalizeUkPhone } from '../utils/ukPhone';
+import { fetchWithAuth } from './sessionService';
 
 const API_URL = `${config.apiBaseUrl}/restaurant-orders`;
 
@@ -76,13 +77,13 @@ async function postRestaurantOrder(token, payload) {
   console.log('[Order] POST', API_URL);
   console.log('[Order] Payload:', JSON.stringify(payload, null, 2));
 
-  const res = await fetch(API_URL, {
+  const res = await fetchWithAuth(API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
+    token,
   });
 
   const raw = await res.text();
@@ -139,9 +140,7 @@ export const getRestaurantOrders = async (token, params = {}) => {
   if (params.page != null) q.set('page', String(params.page));
   if (params.limit != null) q.set('limit', String(params.limit));
   const url = q.toString() ? `${API_URL}?${q}` : API_URL;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await fetchWithAuth(url, { token });
   if (!res.ok) {
     throw new Error('Failed to load orders');
   }
@@ -308,11 +307,62 @@ export const listRestaurantOrderReviews = async (token, params = {}) => {
   if (params.page != null) q.set('page', String(params.page));
   if (params.perPage != null) q.set('perPage', String(params.perPage));
   const url = q.toString() ? `${API_URL}/reviews?${q}` : `${API_URL}/reviews`;
-  const res = await fetch(url, {
+  const res = await fetchWithAuth(url, { token });
+  if (!res.ok) {
+    throw new Error('Failed to load order reviews');
+  }
+  return res.json();
+};
+
+export const getRestaurantOrderRiderReview = async (token, orderId) => {
+  const res = await fetch(`${API_URL}/${orderId}/rider-review`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error('Failed to load order reviews');
+    if (res.status === 404) return null;
+    throw new Error('Failed to load rider review');
+  }
+  return res.json();
+};
+
+export const upsertRestaurantOrderRiderReview = async (token, orderId, body) => {
+  const res = await fetch(`${API_URL}/${orderId}/rider-review`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to submit rider review');
+  }
+  return res.json();
+};
+
+export const deleteRestaurantOrderRiderReview = async (token, orderId) => {
+  const res = await fetch(`${API_URL}/${orderId}/rider-review`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to delete rider review');
+  }
+  return res.json();
+};
+
+export const listRiderReviews = async (token, params = {}) => {
+  const q = new URLSearchParams();
+  if (params.page != null) q.set('page', String(params.page));
+  if (params.perPage != null) q.set('perPage', String(params.perPage));
+  const url = q.toString()
+    ? `${API_URL}/rider-reviews?${q}`
+    : `${API_URL}/rider-reviews`;
+  const res = await fetchWithAuth(url, { token });
+  if (!res.ok) {
+    throw new Error('Failed to load rider reviews');
   }
   return res.json();
 };

@@ -1,21 +1,28 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
   Image,
-  Text,
-  ActivityIndicator,
   StatusBar,
   Dimensions,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import splashArt from '../assets/img/b1.png';
+import OnboardingDotLoader from '../components/OnboardingDotLoader';
+
+const SPLASH_DURATION_MS = 2800;
 
 const SplashScreen = ({ navigation }) => {
-  // Navigate to the Login screen after 3 seconds
+  const navigatedRef = useRef(false);
+
   useEffect(() => {
     const timer = setTimeout(() => {
+      if (navigatedRef.current) {
+        return;
+      }
+      navigatedRef.current = true;
       navigation.replace('Onboarding');
-    }, 3000);
+    }, SPLASH_DURATION_MS);
+
     return () => clearTimeout(timer);
   }, [navigation]);
 
@@ -27,61 +34,33 @@ const SplashScreen = ({ navigation }) => {
         barStyle="light-content"
       />
 
-      <LinearGradient colors={['#FFB321', '#FF7F0B']} style={styles.gradient}>
-        <View style={styles.content}>
-          {/* Logo Section */}
-          <View style={styles.logoContainer}>
-            <Image
-              source={require('../assets/logo.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
+      <Image source={splashArt} style={styles.background} resizeMode="cover" />
 
-          {/* Loading Indicator */}
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-          </View>
-        </View>
-      </LinearGradient>
+      <View style={styles.loaderWrap} pointerEvents="none">
+        <OnboardingDotLoader size={56} color="#FFFFFF" />
+      </View>
     </View>
   );
 };
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FF7F0B',
   },
-  gradient: {
-    flex: 1,
-    justifyContent: 'center',
+  background: {
+    width,
+    height,
+  },
+  loaderWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: height * 0.555,
     alignItems: 'center',
-  },
-  content: {
-    alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoContainer: {
-    marginBottom: 50,
-  },
-  logoImage: {
-    width: width * 0.6,
-    height: 150,
-  },
-  logoText: {
-    fontSize: 80,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -2,
-  },
-  logoIcon: {
-    textDecorationLine: 'underline',
-  },
-  loaderContainer: {
-    marginTop: 40,
-    transform: [{ scale: 1.5 }],
   },
 });
 

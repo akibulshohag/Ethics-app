@@ -22,8 +22,9 @@ import {
   getRestaurantOrders,
   updateRestaurantOrderStatus,
   rejectRiderAssignment,
+  listRiderReviews,
 } from '../services/orderService';
-import { appSetUser } from '../redux/actions/appSlice';
+import { appSetUser, clearBrowseLocation } from '../redux/actions/appSlice';
 import { getChannelProfile } from '../services/channelService';
 import { safeImageUri } from '../utils/helper';
 import {
@@ -92,6 +93,11 @@ export default function RiderDashboardScreen() {
   );
   const [completeDateFilter, setCompleteDateFilter] = useState('all');
   const [completeCustomDate, setCompleteCustomDate] = useState(null);
+  const [riderReviewStats, setRiderReviewStats] = useState({
+    avgRating: null,
+    reviewCount: 0,
+  });
+  const [reviewsByOrderId, setReviewsByOrderId] = useState({});
 
   const riderName =
     riderProfile?.name ||
@@ -121,12 +127,27 @@ export default function RiderDashboardScreen() {
         const profilePromise = userId
           ? getChannelProfile(userId, userId).catch(() => null)
           : Promise.resolve(null);
-        const [ordersRes, profile] = await Promise.all([
+        const [ordersRes, profile, reviewsRes] = await Promise.all([
           getRestaurantOrders(token, { scope: 'rider', limit: 100 }),
           profilePromise,
+          listRiderReviews(token, { perPage: 100 }).catch(() => ({
+            items: [],
+            avgRating: null,
+            reviewCount: 0,
+          })),
         ]);
         const ordersList = ordersRes?.orders ?? [];
         setOrders(ordersList);
+        const reviewItems = reviewsRes?.items ?? [];
+        const reviewMap = {};
+        reviewItems.forEach(r => {
+          if (r?.orderId) reviewMap[r.orderId] = r;
+        });
+        setReviewsByOrderId(reviewMap);
+        setRiderReviewStats({
+          avgRating: reviewsRes?.avgRating ?? null,
+          reviewCount: reviewsRes?.reviewCount ?? reviewItems.length,
+        });
 
         if (profile) {
           setRiderProfile(profile);
@@ -301,12 +322,15 @@ export default function RiderDashboardScreen() {
           try {
             setProfileModalVisible(false);
             dispatch(appSetUser(null));
-            const KEEP_KEYS = ['USER_LOCATION_SELECTION'];
+            dispatch(clearBrowseLocation());
             const allKeys = await AsyncStorage.getAllKeys();
-            const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+            const toRemove = allKeys.filter(
+              k => k !== 'USER_LOCATION_SELECTION',
+            );
             if (toRemove.length > 0) {
               await AsyncStorage.multiRemove(toRemove);
             }
+            await AsyncStorage.removeItem('USER_LOCATION_SELECTION');
             let rootNav = navigation;
             while (rootNav?.getParent?.()) rootNav = rootNav.getParent();
             rootNav.dispatch(
@@ -349,7 +373,13 @@ export default function RiderDashboardScreen() {
         <View style={styles.headerRow}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.headerTitle}>Rider Dashboard</Text>
-            <Text style={styles.headerSub}>{riderName}</Text>
+            <Text style={styles.headerSub}>
+              {riderName}
+              {riderReviewStats.reviewCount > 0 &&
+              riderReviewStats.avgRating != null
+                ? ` · ${riderReviewStats.avgRating}★ (${riderReviewStats.reviewCount})`
+                : ''}
+            </Text>
           </View>
           <TouchableOpacity
             style={styles.profileBtn}
@@ -440,6 +470,10 @@ export default function RiderDashboardScreen() {
             const canChatCustomer =
               status === 'out_for_delivery' || status === 'delivery_complete';
             const isUpdating = updatingId === order.id;
+            const orderReview =
+              reviewsByOrderId[order.id] || order.riderReview || null;
+            const showReview =
+              isRiderCompleteStatus(status) && orderReview;
             return (
               <View key={order.id} style={styles.card}>
                 <TouchableOpacity onPress={() => openOrder(order)} activeOpacity={0.85}>
@@ -457,6 +491,29 @@ export default function RiderDashboardScreen() {
                   <Text style={styles.total}>
                     £ {Number(order.totalAmount || 0).toFixed(2)}
                   </Text>
+                  {showReview ? (
+                    <View style={styles.reviewRow}>
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <Icon
+                          key={`rv-${order.id}-${s}`}
+                          name={
+                            s <= Number(orderReview.rating)
+                              ? 'star'
+                              : 'star-outline'
+                          }
+                          size={14}
+                          color={
+                            s <= Number(orderReview.rating) ? '#F5A623' : '#CCC'
+                          }
+                        />
+                      ))}
+                      {orderReview.comment ? (
+                        <Text style={styles.reviewSnippet} numberOfLines={1}>
+                          {orderReview.comment}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
                 <View style={styles.actions}>
                   {canChatCustomer ? (
@@ -738,6 +795,19 @@ const styles = StyleSheet.create({
   items: { fontSize: 13, color: '#444', marginTop: 4 },
   address: { fontSize: 12, color: '#666', marginTop: 6 },
   total: { fontSize: 15, fontWeight: '700', color: '#111', marginTop: 8 },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 2,
+    marginTop: 8,
+  },
+  reviewSnippet: {
+    flex: 1,
+    marginLeft: 6,
+    fontSize: 12,
+    color: '#666',
+  },
   actions: {
     flexDirection: 'row',
     marginTop: 12,

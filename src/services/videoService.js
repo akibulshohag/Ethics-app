@@ -350,10 +350,21 @@ export const recordView = async (
 /**
  * Get user's uploaded videos
  */
-export const getUserVideos = async (userId, page = 1, limit = 20, viewerUserId) => {
+export const getUserVideos = async (
+  userId,
+  page = 1,
+  limit = 20,
+  viewerUserId,
+  extraParams = {},
+) => {
   try {
     const response = await axios.get(`${API_URL}/user/${userId}`, {
-      params: { page, limit },
+      params: {
+        page,
+        limit,
+        ...(viewerUserId ? { viewerUserId } : {}),
+        ...extraParams,
+      },
       headers: { ...getAuthHeaders() },
     });
     return filterUserVideosForViewer(response.data, userId, viewerUserId);

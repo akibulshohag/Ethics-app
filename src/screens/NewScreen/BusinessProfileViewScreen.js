@@ -82,7 +82,8 @@ import {
   deleteVideo,
 } from '../../services/videoService';
 import { shortsService } from '../../services/shortsService';
-import { getNotificationsByUserId } from '../../services/notificationService';
+import { useNotifications } from '../../hooks/useNotifications';
+import NotificationBellButton from '../../components/NotificationBellButton';
 import {
   getPromotionsByUser,
   getNearbyPromotions,
@@ -127,11 +128,15 @@ import {
   OFFER_TYPES,
   filterPromotionsByType,
   formatPromotionSummary,
+  getPromotionDisplayImage,
 } from '../../utils/promotionUtils';
 import Video from 'react-native-video';
 import { getSocialIcon } from '../../constants/socialLinks';
 import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 import { ALLERGENS, normalizeAllergens } from '../../constants/allergens';
+import MenuAllergenRow from '../../components/MenuAllergenRow';
+import { mapMenuListRow, normalizeMenuItemFromApi } from '../../utils/menuListItem';
+import { viewerContentParams } from '../../utils/contentVisibility';
 
 const { width } = Dimensions.get('window');
 
@@ -483,6 +488,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const currentUser = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
   const profileUserId = route.params?.userId ?? currentUser?.id;
   const isOwnProfile = profileUserId === currentUser?.id;
 
@@ -535,10 +541,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     DEFAULT_OPENING_HOURS,
   );
   const [editDeliveryTime, setEditDeliveryTime] = useState('');
+  const [editContentAreaKm, setEditContentAreaKm] = useState('');
+  const [editPickupAreaKm, setEditPickupAreaKm] = useState('');
   const [editDeliveryAreaKm, setEditDeliveryAreaKm] = useState('');
   const [editTaxCharge0To10Km, setEditTaxCharge0To10Km] = useState('');
   const [editTaxCharge11To20Km, setEditTaxCharge11To20Km] = useState('');
   const [editTaxCharge21To30Km, setEditTaxCharge21To30Km] = useState('');
+  const [editVendorMinOrderQty, setEditVendorMinOrderQty] = useState('');
+  const [editVendorMaxOrderQty, setEditVendorMaxOrderQty] = useState('');
   const [savingDeliverySettings, setSavingDeliverySettings] = useState(false);
   const [riders, setRiders] = useState([]);
   const [ridersLoading, setRidersLoading] = useState(false);
@@ -565,8 +575,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     useState(null);
   const [ownerVideos, setOwnerVideos] = useState([]);
   const [ownerVideosLoading, setOwnerVideosLoading] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsModalVisible, setNotificationsModalVisible] =
+    useState(false);
   const [areaUsers, setAreaUsers] = useState([]);
   const [areaUsersLoading, setAreaUsersLoading] = useState(false);
   const [areaUsersMeta, setAreaUsersMeta] = useState({
@@ -575,8 +585,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     message: '',
     total: 0,
   });
-  const [notificationsModalVisible, setNotificationsModalVisible] =
-    useState(false);
   const [promotions, setPromotions] = useState([]);
   const [promotionsLoading, setPromotionsLoading] = useState(false);
   const [promotionsRefreshing, setPromotionsRefreshing] = useState(false);
@@ -587,9 +595,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     useState(false);
   const [createPromotionModalVisible, setCreatePromotionModalVisible] =
     useState(false);
-  const [promotionSubTab, setPromotionSubTab] = useState('order'); // order | amount | booking
+  const [promotionSubTab, setPromotionSubTab] = useState('order'); // order | booking
   const [createTierDiscountModalVisible, setCreateTierDiscountModalVisible] =
     useState(false);
+  const [editingPromotion, setEditingPromotion] = useState(null);
   const [promotionDetailModalVisible, setPromotionDetailModalVisible] =
     useState(false);
   const [selectedPromotion, setSelectedPromotion] = useState(null);
@@ -625,6 +634,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const [itemEditAllergenIconUrls, setItemEditAllergenIconUrls] = useState([]);
   const [itemEditAllergenIconUploading, setItemEditAllergenIconUploading] =
     useState(false);
+  const [itemEditSelectedMenuIds, setItemEditSelectedMenuIds] = useState([]);
   const [itemEditSaving, setItemEditSaving] = useState(false);
   const [postMediaPreviewVisible, setPostMediaPreviewVisible] = useState(false);
   const [postMediaPreviewUri, setPostMediaPreviewUri] = useState(null);
@@ -822,9 +832,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setOwnerVideosLoading(true);
     try {
+      const visibility = viewerContentParams(currentUser, browseLocation);
       const [vRes, sRes] = await Promise.all([
-        getUserVideos(profileUserId, 1, 50, currentUser?.id),
-        shortsService.getUserShorts(profileUserId, 1, 50, currentUser?.id),
+        getUserVideos(profileUserId, 1, 50, currentUser?.id, visibility),
+        shortsService.getUserShorts(
+          profileUserId,
+          1,
+          50,
+          currentUser?.id,
+          visibility,
+        ),
       ]);
       const videos = (vRes?.videos ?? []).map(v => ({
         ...v,
@@ -860,7 +877,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     } finally {
       setOwnerVideosLoading(false);
     }
-  }, [profileUserId]);
+  }, [profileUserId, currentUser, browseLocation]);
 
   useEffect(() => {
     const sub = shortsService.onShortUpdated?.(updated => {
@@ -1007,18 +1024,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     [profileUserId, currentUser?.id],
   );
 
-  const loadNotifications = useCallback(async () => {
-    if (!profileUserId) return;
-    setNotificationsLoading(true);
-    try {
-      const data = await getNotificationsByUserId(profileUserId);
-      setNotifications(Array.isArray(data) ? data : data?.notifications ?? []);
-    } catch (e) {
-      setNotifications([]);
-    } finally {
-      setNotificationsLoading(false);
-    }
-  }, [profileUserId]);
+  const currentRole = (currentUser?.role || '').toLowerCase();
+  const isOwnerOrVendor = currentRole === 'owner' || currentRole === 'vendor';
+  const isVendor = currentRole === 'vendor';
+
+  const notificationUserId =
+    isOwnProfile && isOwnerOrVendor && profileUserId ? profileUserId : null;
+  const {
+    notifications,
+    unreadCount: unreadNotificationCount,
+    loading: notificationsLoading,
+    refresh: loadNotifications,
+  } = useNotifications(notificationUserId);
 
   const loadPromotions = useCallback(
     async (refresh = false) => {
@@ -1040,9 +1057,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     },
     [profileUserId],
   );
-
-  const currentRole = (currentUser?.role || '').toLowerCase();
-  const isOwnerOrVendor = currentRole === 'owner' || currentRole === 'vendor';
 
   const loadAreaUsers = useCallback(async () => {
     if (!profileUserId || !isOwnProfile || !isOwnerOrVendor) {
@@ -1264,7 +1278,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             }))
           : Promise.resolve({ files: [] }),
       ]);
-      setMenuItems(res?.menu ?? []);
+      setMenuItems(
+        (res?.menu ?? []).map(m =>
+          normalizeMenuItemFromApi(m, res?.categories ?? []),
+        ),
+      );
       setMenuCategories(res?.categories ?? []);
       setMenuFiles(filesRes?.files ?? []);
     } catch (e) {
@@ -1371,6 +1389,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   useEffect(() => {
     if (!profile || !isOwnProfile) return;
     setEditDeliveryTime(String(profile.deliveryTime || ''));
+    setEditContentAreaKm(
+      profile.contentAreaKm != null &&
+        Number.isFinite(Number(profile.contentAreaKm))
+        ? String(profile.contentAreaKm)
+        : '',
+    );
+    setEditPickupAreaKm(
+      profile.pickupAreaKm != null &&
+        Number.isFinite(Number(profile.pickupAreaKm))
+        ? String(profile.pickupAreaKm)
+        : '',
+    );
     setEditDeliveryAreaKm(
       profile.deliveryAreaKm != null &&
         Number.isFinite(Number(profile.deliveryAreaKm))
@@ -1395,6 +1425,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         ? String(profile.taxCharge21To30Km)
         : '',
     );
+    setEditVendorMinOrderQty(
+      profile.vendorMinOrderQty != null &&
+        Number.isFinite(Number(profile.vendorMinOrderQty))
+        ? String(profile.vendorMinOrderQty)
+        : '',
+    );
+    setEditVendorMaxOrderQty(
+      profile.vendorMaxOrderQty != null &&
+        Number.isFinite(Number(profile.vendorMaxOrderQty))
+        ? String(profile.vendorMaxOrderQty)
+        : '',
+    );
   }, [profile, isOwnProfile]);
 
   const parseOptionalTaxCharge = raw => {
@@ -1405,10 +1447,35 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     return { value: n, invalid: false };
   };
 
+  const parseOptionalVendorQty = raw => {
+    const text = String(raw || '').trim();
+    if (!text) return { value: null, invalid: false };
+    const n = Number(text);
+    if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
+      return { value: null, invalid: true };
+    }
+    return { value: n, invalid: false };
+  };
+
   const saveDeliverySettings = async () => {
     if (!profileUserId || profileUserId !== currentUser?.id) return;
+    const contentRaw = String(editContentAreaKm || '').trim();
+    const pickupRaw = String(editPickupAreaKm || '').trim();
     const areaRaw = String(editDeliveryAreaKm || '').trim();
+    const contentAreaKm = contentRaw ? Number(contentRaw) : undefined;
+    const pickupAreaKm = pickupRaw ? Number(pickupRaw) : undefined;
     const deliveryAreaKm = areaRaw ? Number(areaRaw) : undefined;
+    if (
+      contentRaw &&
+      (!Number.isFinite(contentAreaKm) || contentAreaKm <= 0)
+    ) {
+      Alert.alert('Invalid area', 'Enter content/browse area in km (e.g. 20).');
+      return;
+    }
+    if (pickupRaw && (!Number.isFinite(pickupAreaKm) || pickupAreaKm <= 0)) {
+      Alert.alert('Invalid area', 'Enter pickup area in km (e.g. 10).');
+      return;
+    }
     if (areaRaw && (!Number.isFinite(deliveryAreaKm) || deliveryAreaKm <= 0)) {
       Alert.alert('Invalid area', 'Enter delivery area in km (e.g. 15).');
       return;
@@ -1423,14 +1490,43 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       );
       return;
     }
+    const vendorMin = parseOptionalVendorQty(editVendorMinOrderQty);
+    const vendorMax = parseOptionalVendorQty(editVendorMaxOrderQty);
+    if (isVendor && (vendorMin.invalid || vendorMax.invalid)) {
+      Alert.alert(
+        'Invalid order quantity',
+        'Enter whole numbers of 1 or more for min/max per item, or leave blank.',
+      );
+      return;
+    }
+    if (
+      isVendor &&
+      vendorMin.value != null &&
+      vendorMax.value != null &&
+      vendorMin.value > vendorMax.value
+    ) {
+      Alert.alert(
+        'Invalid order quantity',
+        'Minimum per item cannot be greater than maximum per item.',
+      );
+      return;
+    }
     setSavingDeliverySettings(true);
     try {
       await updateChannelProfile(profileUserId, {
         deliveryTime: editDeliveryTime.trim() || undefined,
+        contentAreaKm,
+        pickupAreaKm,
         deliveryAreaKm,
         taxCharge0To10Km: tier0.value,
         taxCharge11To20Km: tier1.value,
         taxCharge21To30Km: tier2.value,
+        ...(isVendor
+          ? {
+              vendorMinOrderQty: vendorMin.value,
+              vendorMaxOrderQty: vendorMax.value,
+            }
+          : {}),
       });
       await loadProfile();
       if (currentUser?.id === profileUserId) {
@@ -1438,6 +1534,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           appSetUser({
             ...currentUser,
             deliveryTime: editDeliveryTime.trim() || currentUser.deliveryTime,
+            contentAreaKm:
+              contentAreaKm != null
+                ? contentAreaKm
+                : currentUser.contentAreaKm,
+            pickupAreaKm:
+              pickupAreaKm != null ? pickupAreaKm : currentUser.pickupAreaKm,
             deliveryAreaKm:
               deliveryAreaKm != null
                 ? deliveryAreaKm
@@ -1448,10 +1550,21 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               tier1.value != null ? tier1.value : currentUser.taxCharge11To20Km,
             taxCharge21To30Km:
               tier2.value != null ? tier2.value : currentUser.taxCharge21To30Km,
+            ...(isVendor
+              ? {
+                  vendorMinOrderQty: vendorMin.value,
+                  vendorMaxOrderQty: vendorMax.value,
+                }
+              : {}),
           }),
         );
       }
-      Alert.alert('Saved', 'Delivery settings updated.');
+      Alert.alert(
+        'Saved',
+        isVendor
+          ? 'Area, delivery, and order quantity settings updated.'
+          : 'Area and delivery settings updated.',
+      );
       if (activeTab === 'Area Users') loadAreaUsers();
     } catch (e) {
       const msg =
@@ -1881,12 +1994,23 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       }
       let latitude = undefined;
       let longitude = undefined;
-      if (
+      const previousAddress = String(
+        profile?.address ?? currentUser?.address ?? '',
+      ).trim();
+      const previousPostcode = String(
+        profile?.postcode ?? currentUser?.postcode ?? '',
+      ).trim();
+      const addressChanged = !!addressStr && addressStr !== previousAddress;
+      const postcodeChanged =
+        !!postcodeStr && postcodeStr !== previousPostcode;
+      const shouldReuseEditCoords =
+        !addressChanged &&
+        !postcodeChanged &&
         editLatitude != null &&
         editLongitude != null &&
         Number.isFinite(editLatitude) &&
-        Number.isFinite(editLongitude)
-      ) {
+        Number.isFinite(editLongitude);
+      if (shouldReuseEditCoords) {
         latitude = editLatitude;
         longitude = editLongitude;
       } else if (addressStr) {
@@ -2578,40 +2702,54 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const openItemActions = useCallback(
     (kind, item) => {
       if (!isOwnProfile || !item?.id) return;
-      setItemActionTarget({ kind, item });
+      let resolved = item;
+      if (kind === 'menu') {
+        resolved =
+          menuItems.find(m => String(m.id) === String(item.id)) ||
+          mapMenuListRow(item) ||
+          item;
+      }
+      setItemActionTarget({ kind, item: resolved });
       setItemActionVisible(true);
     },
-    [isOwnProfile],
+    [isOwnProfile, menuItems],
   );
+
+  const openPromotionEdit = useCallback(item => {
+    if (!item?.id) return;
+    setEditingPromotion(item);
+    if ((item.offerType || OFFER_TYPES.ORDER) === OFFER_TYPES.BOOKING) {
+      setCreateTierDiscountModalVisible(true);
+    } else {
+      setCreatePromotionModalVisible(true);
+    }
+  }, []);
 
   const openItemEdit = useCallback(() => {
     const target = itemActionTarget;
     if (!target?.item) return;
     const { kind, item } = target;
     setItemActionVisible(false);
+    if (kind === 'promotion') {
+      openPromotionEdit(item);
+      return;
+    }
     if (kind === 'menu') {
-      setItemEditTitle(String(item.itemName || '').trim());
-      setItemEditPrice(String(item.price ?? '').trim());
-      setItemEditDescription(String(item.description || '').trim());
-      setItemEditThumbnailUri(String(item.imageUrl || '').trim());
+      const full =
+        menuItems.find(m => String(m.id) === String(item.id)) || item;
+      setItemEditSelectedMenuIds([]);
+      setItemEditTitle(String(full.itemName || '').trim());
+      setItemEditPrice(String(full.price ?? '').trim());
+      setItemEditDescription(String(full.description || '').trim());
+      setItemEditThumbnailUri(String(full.imageUrl || '').trim());
       setItemEditVideoUri('');
       setItemEditCategoryId(
-        String(item.categoryId || item.category?.id || '').trim(),
+        String(full.categoryId || full.category?.id || '').trim(),
       );
-      setItemEditAllergens(normalizeAllergens(item.allergens));
-      setItemEditAllergenIconUrls(normalizeAllergens(item.allergenIconUrls));
-    } else if (kind === 'promotion') {
-      setItemEditTitle(String(item.title || '').trim());
-      setItemEditDescription(String(item.description || '').trim());
-      setItemEditPromoCode(String(item.promoCode || '').trim());
-      setItemEditPromoAmount(
-        item.promoAmount != null ? String(item.promoAmount) : '',
-      );
-      setItemEditThumbnailUri(
-        String(item.thumbnailUrl || item.image || '').trim(),
-      );
-      setItemEditVideoUri(String(item.videoUrl || '').trim());
+      setItemEditAllergens(normalizeAllergens(full.allergens));
+      setItemEditAllergenIconUrls(normalizeAllergens(full.allergenIconUrls));
     } else {
+      setItemEditSelectedMenuIds([]);
       setItemEditTitle(String(item.title || '').trim());
       setItemEditDescription(String(item.description || '').trim());
       setItemEditThumbnailUri(
@@ -2620,7 +2758,59 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       setItemEditVideoUri(String(item.videoUrl || item.mediaUrl || '').trim());
     }
     setItemEditVisible(true);
-  }, [itemActionTarget]);
+  }, [itemActionTarget, openPromotionEdit, menuItems]);
+
+  const itemEditMenuSections = useMemo(() => {
+    const uncategorized = menuItems.filter(
+      i => !i.categoryId && !i.category?.id,
+    );
+    const sections = [];
+    (menuCategories || []).forEach(cat => {
+      const items = menuItems.filter(
+        i => (i.categoryId || i.category?.id) === cat.id,
+      );
+      if (items.length > 0) {
+        sections.push({ id: cat.id, title: cat.name, data: items });
+      }
+    });
+    if (uncategorized.length > 0) {
+      sections.push({
+        id: 'uncategorized',
+        title: 'Uncategorized',
+        data: uncategorized,
+      });
+    }
+    if (sections.length === 0 && menuItems.length > 0) {
+      sections.push({ id: 'all', title: 'Menu', data: menuItems });
+    }
+    return sections;
+  }, [menuItems, menuCategories]);
+
+  const itemEditAllMenuIds = useMemo(
+    () => menuItems.map(i => String(i.id)).filter(Boolean),
+    [menuItems],
+  );
+
+  const itemEditAllMenusSelected =
+    itemEditAllMenuIds.length > 0 &&
+    itemEditAllMenuIds.every(id => itemEditSelectedMenuIds.includes(id));
+
+  const toggleItemEditMenuId = useCallback(id => {
+    const key = String(id);
+    setItemEditSelectedMenuIds(prev =>
+      prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key],
+    );
+  }, []);
+
+  const toggleItemEditSelectAllMenus = useCallback(() => {
+    setItemEditSelectedMenuIds(prev =>
+      itemEditAllMenuIds.length === 0
+        ? prev
+        : itemEditAllMenuIds.every(id => prev.includes(id))
+        ? []
+        : itemEditAllMenuIds,
+    );
+  }, [itemEditAllMenuIds]);
 
   const pickItemThumbnail = useCallback(async () => {
     const res = await launchImageLibrary({
@@ -2682,17 +2872,23 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     try {
       setItemEditSaving(true);
       if (kind === 'promotion') {
+        const offerType = item.offerType || OFFER_TYPES.ORDER;
         const payload = {
           title: itemEditTitle.trim() || undefined,
           description: itemEditDescription.trim() || undefined,
-          promoCode: itemEditPromoCode.trim() || undefined,
-          promoAmount:
-            itemEditPromoAmount.trim() === ''
-              ? undefined
-              : Number(itemEditPromoAmount),
           thumbnailUrl: itemEditThumbnailUri.trim() || undefined,
           videoUrl: itemEditVideoUri.trim() || undefined,
         };
+        if (offerType === OFFER_TYPES.ORDER) {
+          const code = itemEditPromoCode.trim();
+          const amountRaw = itemEditPromoAmount.trim();
+          if (code) payload.promoCode = code;
+          if (amountRaw !== '') {
+            const amount = Number(amountRaw);
+            if (Number.isFinite(amount)) payload.promoAmount = amount;
+          }
+          payload.menuItemIds = itemEditSelectedMenuIds;
+        }
         await updatePromotion(item.id, userId, payload);
         setPromotions(prev =>
           prev.map(p => (p.id === item.id ? { ...p, ...payload } : p)),
@@ -2724,24 +2920,42 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           ),
         );
       } else if (kind === 'menu') {
+        const name = itemEditTitle.trim();
+        const priceRaw = itemEditPrice.trim();
+        const price = priceRaw === '' ? NaN : Number(priceRaw);
+        if (!name) {
+          Alert.alert('Error', 'Item name is required');
+          return;
+        }
+        if (!Number.isFinite(price) || price < 0) {
+          Alert.alert('Error', 'Enter a valid price');
+          return;
+        }
         const payload = {
-          itemName: itemEditTitle.trim() || undefined,
-          description: itemEditDescription.trim() || undefined,
-          price:
-            itemEditPrice.trim() === ''
-              ? undefined
-              : Number(itemEditPrice.trim()),
-          imageUrl: itemEditThumbnailUri.trim() || undefined,
+          itemName: name,
+          description: itemEditDescription.trim() || null,
+          price,
+          imageUrl: itemEditThumbnailUri.trim() || null,
           categoryId: itemEditCategoryId ? itemEditCategoryId : null,
           allergens: Array.isArray(itemEditAllergens) ? itemEditAllergens : [],
           allergenIconUrls: Array.isArray(itemEditAllergenIconUrls)
             ? itemEditAllergenIconUrls
             : [],
         };
-        await updateMenuItem(currentUser?.token, item.id, payload);
-        setMenuItems(prev =>
-          prev.map(m => (m.id === item.id ? { ...m, ...payload } : m)),
+        const updated = await updateMenuItem(
+          currentUser?.token,
+          item.id,
+          payload,
         );
+        const normalized = normalizeMenuItemFromApi(updated, menuCategories);
+        setMenuItems(prev =>
+          prev.map(m =>
+            String(m.id) === String(item.id)
+              ? normalizeMenuItemFromApi({ ...m, ...normalized }, menuCategories)
+              : m,
+          ),
+        );
+        await loadMenu();
       }
       setItemEditVisible(false);
     } catch (e) {
@@ -2763,6 +2977,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     itemEditCategoryId,
     itemEditAllergens,
     itemEditAllergenIconUrls,
+    itemEditSelectedMenuIds,
+    menuCategories,
+    loadMenu,
   ]);
 
   const deleteItemFromActions = useCallback(() => {
@@ -2965,12 +3182,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </ScrollView>
       </View>
 
-      {/* Promotions sub-tabs: Order | Amount Discount | Booking Discount */}
+      {/* Promotions sub-tabs: Order | Booking Discount */}
       {activeTab === 'Promotions' ? (
         <View style={styles.promotionSubTabRow}>
           {[
             { key: 'order', label: 'Order' },
-            { key: 'amount', label: 'Amount Discount' },
             { key: 'booking', label: 'Booking Discount' },
           ].map(tab => (
             <TouchableOpacity
@@ -3008,9 +3224,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             : activeTab === 'Menus'
             ? 'Menus'
             : activeTab === 'Promotions'
-            ? promotionSubTab === 'amount'
-              ? 'Amount Discounts'
-              : promotionSubTab === 'booking'
+            ? promotionSubTab === 'booking'
               ? 'Booking Discounts'
               : 'Order Promotions'
             : activeTab === 'Settings'
@@ -3048,6 +3262,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           isOwnerOrVendor ? (
           <TouchableOpacity
             onPress={() => {
+              setEditingPromotion(null);
               if (promotionSubTab === 'order') {
                 setCreatePromotionModalVisible(true);
               } else {
@@ -3097,7 +3312,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <Text style={styles.areaUsersSummaryText}>
             {areaUsersMeta.radiusKm != null
               ? `Logged-in customers within ${areaUsersMeta.radiusKm} km of your restaurant`
-              : 'Set delivery area (km) in Settings to list nearby customers'}
+              : 'Set content/browse area (km) in Settings to list nearby customers'}
           </Text>
           {areaUsersMeta.ownerAddress ? (
             <Text style={styles.areaUsersSummarySub} numberOfLines={2}>
@@ -3110,7 +3325,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           {!areaUsersLoading && areaUsersMeta.radiusKm != null ? (
             <Text style={styles.areaUsersSummaryCount}>
               {areaUsersMeta.total} user
-              {areaUsersMeta.total === 1 ? '' : 's'} in your delivery area
+              {areaUsersMeta.total === 1 ? '' : 's'} in your content area
             </Text>
           ) : null}
         </View>
@@ -3125,7 +3340,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       case 'Promotions': {
         const typeMap = {
           order: OFFER_TYPES.ORDER,
-          amount: OFFER_TYPES.AMOUNT,
           booking: OFFER_TYPES.BOOKING,
         };
         const list = filterPromotionsByType(
@@ -3136,7 +3350,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           ...p,
           id: p.id,
           title: p.title,
-          image: p.thumbnailUrl || p.videoUrl,
+          image: getPromotionDisplayImage(p),
           price: formatPromotionSummary(p),
           views: formatCount(p.viewCount),
         }));
@@ -3179,15 +3393,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               id: `section-${cat.id}`,
               title: cat.name,
             });
-            items.forEach(m =>
-              result.push({
-                type: 'menu',
-                id: m.id,
-                itemName: m.itemName,
-                price: m.price,
-                imageUrl: m.imageUrl,
-              }),
-            );
+            items.forEach(m => result.push(mapMenuListRow(m)));
           }
         });
         const uncategorized = menuItems.filter(
@@ -3199,26 +3405,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             id: 'section-uncategorized',
             title: 'Uncategorized',
           });
-          uncategorized.forEach(m =>
-            result.push({
-              type: 'menu',
-              id: m.id,
-              itemName: m.itemName,
-              price: m.price,
-              imageUrl: m.imageUrl,
-            }),
-          );
+          uncategorized.forEach(m => result.push(mapMenuListRow(m)));
         }
         if (result.length === 0 && menuItems.length > 0) {
-          menuItems.forEach(m =>
-            result.push({
-              type: 'menu',
-              id: m.id,
-              itemName: m.itemName,
-              price: m.price,
-              imageUrl: m.imageUrl,
-            }),
-          );
+          menuItems.forEach(m => result.push(mapMenuListRow(m)));
         }
         return result;
       }
@@ -3435,20 +3625,20 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     }
     if (activeTab === 'Promotions') {
       const canManagePromotion = isOwnProfile && isOwnerOrVendor;
+      const listImage = item.image || getPromotionDisplayImage(item);
       const isTierPromo =
-        (item.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER;
+        (item.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER &&
+        !listImage;
+      const hasVideo = Boolean(String(item.videoUrl || '').trim());
       return (
         <View style={styles.manageCardWrap}>
           <PromotionCard
             item={{
               ...item,
-              image: item.image
-                ? safeImageUri(item.image)
-                : isTierPromo
-                ? null
-                : 'https://via.placeholder.com/300',
+              image: listImage ? safeImageUri(listImage) : null,
             }}
             isTierPromo={isTierPromo}
+            hasVideo={hasVideo}
             onPress={() => {
               setSelectedPromotion(item);
               setPromotionVideoPaused(true);
@@ -3548,6 +3738,15 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <Text style={styles.menuRowName} numberOfLines={1}>
               {item.itemName}
             </Text>
+            {item.description ? (
+              <Text style={styles.menuRowDescription} numberOfLines={2}>
+                {item.description}
+              </Text>
+            ) : null}
+            <MenuAllergenRow
+              allergens={item.allergens}
+              allergenIconUrls={item.allergenIconUrls}
+            />
             <Text style={styles.menuRowPrice}>
               {item.price != null ? `£${Number(item.price).toFixed(2)}` : '—'}
             </Text>
@@ -3693,17 +3892,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             style={styles.promoHeaderLogo}
             resizeMode="contain"
           />
-          <TouchableOpacity
-            style={styles.promoHeaderBell}
-            onPress={handleNotificationBellPress}
-            activeOpacity={0.8}
-          >
-            <MaterialCommunityIcons
-              name="bell-outline"
+          <View style={styles.promoHeaderBell}>
+            <NotificationBellButton
+              unreadCount={
+                isOwnProfile && isOwnerOrVendor ? unreadNotificationCount : 0
+              }
+              onPress={handleNotificationBellPress}
+              iconColor="#1F2937"
               size={24}
-              color="#1F2937"
             />
-          </TouchableOpacity>
+          </View>
         </View>
       </LinearGradient>
       {activeTab === 'Posts' && postsLoading && posts.length === 0 ? (
@@ -3860,8 +4058,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           activeTab === 'Settings' && isOwnProfile && isOwnerOrVendor ? (
             <View style={styles.settingsPanel}>
               <Text style={styles.settingsHint}>
-                Set how long delivery usually takes, how far you deliver from
-                your shop location on the map, and tax/charges by distance.
+                Set how long delivery usually takes, three separate areas from
+                your shop on the map (content/browse, pickup, delivery), and
+                tax/charges by distance for delivery.
               </Text>
               <Text style={styles.editLabel}>Delivery Time</Text>
               <TextInput
@@ -3871,7 +4070,37 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholder='e.g. 30-45 minutes'
                 placeholderTextColor="#999"
               />
+              <Text style={styles.editLabel}>
+                Content / Browse Area (KM)
+              </Text>
+              <Text style={styles.settingsFieldHint}>
+                Users inside this radius see your videos, shorts, posts, and
+                promotions.
+              </Text>
+              <TextInput
+                style={styles.editInput}
+                value={editContentAreaKm}
+                onChangeText={setEditContentAreaKm}
+                placeholder="e.g. 20"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.editLabel}>Pickup Area (KM)</Text>
+              <Text style={styles.settingsFieldHint}>
+                Customers must be within this radius to place pickup orders.
+              </Text>
+              <TextInput
+                style={styles.editInput}
+                value={editPickupAreaKm}
+                onChangeText={setEditPickupAreaKm}
+                placeholder="e.g. 10"
+                placeholderTextColor="#999"
+                keyboardType="decimal-pad"
+              />
               <Text style={styles.editLabel}>Delivery Area (KM)</Text>
+              <Text style={styles.settingsFieldHint}>
+                Customers must be within this radius for delivery orders.
+              </Text>
               <TextInput
                 style={styles.editInput}
                 value={editDeliveryAreaKm}
@@ -3907,6 +4136,35 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 placeholderTextColor="#999"
                 keyboardType="decimal-pad"
               />
+              {isVendor ? (
+                <>
+                  <Text style={styles.editLabel}>Min order quantity (per item)</Text>
+                  <Text style={styles.settingsFieldHint}>
+                    Each menu item in an order must meet this minimum (e.g. 5
+                    means samosa and biriyani each need at least 5).
+                  </Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editVendorMinOrderQty}
+                    onChangeText={setEditVendorMinOrderQty}
+                    placeholder="e.g. 5"
+                    placeholderTextColor="#999"
+                    keyboardType="number-pad"
+                  />
+                  <Text style={styles.editLabel}>Max order quantity (per item)</Text>
+                  <Text style={styles.settingsFieldHint}>
+                    Optional cap per menu line item. Leave blank for no maximum.
+                  </Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={editVendorMaxOrderQty}
+                    onChangeText={setEditVendorMaxOrderQty}
+                    placeholder="e.g. 50"
+                    placeholderTextColor="#999"
+                    keyboardType="number-pad"
+                  />
+                </>
+              ) : null}
               <TouchableOpacity
                 style={[
                   styles.editSaveBtn,
@@ -3936,7 +4194,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             areaUsers.length === 0 ? (
             <Text style={styles.areaUsersEmpty}>
               {areaUsersMeta.message ||
-                'No logged-in customers with a saved location in your delivery area yet.'}
+                'No logged-in customers with a saved location in your content area yet.'}
             </Text>
           ) : null
         }
@@ -4033,6 +4291,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         currentUser={currentUser}
         navigation={navigation}
         siblingItems={ownerVideos}
+        onContentDeleted={({ contentId }) => {
+          setOwnerVideos(prev =>
+            prev.filter(v => String(v.id) !== String(contentId)),
+          );
+          setGalleryVideoModal(null);
+        }}
       />
       <Modal
         visible={postActionVisible}
@@ -4272,16 +4536,16 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                         key={cat.id}
                         style={[
                           styles.postEditChip,
-                          itemEditCategoryId === cat.id &&
+                          String(itemEditCategoryId) === String(cat.id) &&
                             styles.postEditChipActive,
                         ]}
-                        onPress={() => setItemEditCategoryId(cat.id)}
+                        onPress={() => setItemEditCategoryId(String(cat.id))}
                         activeOpacity={0.85}
                       >
                         <Text
                           style={[
                             styles.postEditChipText,
-                            itemEditCategoryId === cat.id &&
+                            String(itemEditCategoryId) === String(cat.id) &&
                               styles.postEditChipTextActive,
                           ]}
                           numberOfLines={1}
@@ -4291,6 +4555,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                  {itemEditCategoryId ? (
+                    <Text style={styles.postEditSelectionHint}>
+                      Category:{' '}
+                      {(menuCategories || []).find(
+                        c => String(c.id) === String(itemEditCategoryId),
+                      )?.name || 'Selected'}
+                    </Text>
+                  ) : (
+                    <Text style={styles.postEditSelectionHint}>
+                      Category: None (Uncategorized)
+                    </Text>
+                  )}
                   <Text style={styles.postEditSmallLabel}>Allergens</Text>
                   <View style={styles.postEditAllergenWrap}>
                     {ALLERGENS.map(a => {
@@ -4319,6 +4595,19 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                         </TouchableOpacity>
                       );
                     })}
+                  </View>
+                  <Text style={styles.postEditSmallLabel}>Menu preview</Text>
+                  <View style={styles.postEditMenuPreview}>
+                    <MenuAllergenRow
+                      allergens={itemEditAllergens}
+                      allergenIconUrls={itemEditAllergenIconUrls}
+                    />
+                    {!itemEditAllergens?.length &&
+                    !itemEditAllergenIconUrls?.length ? (
+                      <Text style={styles.postEditSelectionHint}>
+                        No allergens selected — none will show on the menu.
+                      </Text>
+                    ) : null}
                   </View>
                   <Text style={styles.postEditSmallLabel}>
                     Custom allergen icons
@@ -4353,7 +4642,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                           style={styles.postEditCustomIconItem}
                         >
                           <Image
-                            source={{ uri }}
+                            source={{ uri: safeImageUri(uri) }}
                             style={styles.postEditCustomIconImage}
                           />
                           <TouchableOpacity
@@ -4393,6 +4682,99 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     placeholderTextColor="#9CA3AF"
                     keyboardType="numeric"
                   />
+                  {(itemActionTarget?.item?.offerType || OFFER_TYPES.ORDER) ===
+                  OFFER_TYPES.ORDER ? (
+                    <>
+                      <Text style={styles.postEditSmallLabel}>
+                        Menu items in this offer
+                      </Text>
+                      {menuLoading ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#FF7F0B"
+                          style={{ marginVertical: 8 }}
+                        />
+                      ) : menuItems.length === 0 ? (
+                        <Text style={styles.promoEditMenuHint}>
+                          No menu items yet. Add items in your menu first.
+                        </Text>
+                      ) : (
+                        <View style={styles.promoEditMenuList}>
+                          <TouchableOpacity
+                            style={[
+                              styles.promoEditMenuRow,
+                              styles.promoEditSelectAllRow,
+                            ]}
+                            onPress={toggleItemEditSelectAllMenus}
+                            activeOpacity={0.7}
+                          >
+                            <MaterialCommunityIcons
+                              name={
+                                itemEditAllMenusSelected
+                                  ? 'checkbox-marked'
+                                  : 'checkbox-blank-outline'
+                              }
+                              size={22}
+                              color={
+                                itemEditAllMenusSelected ? '#FF7F0B' : '#999'
+                              }
+                            />
+                            <Text style={styles.promoEditMenuName}>
+                              {itemEditAllMenusSelected
+                                ? 'Unselect all'
+                                : 'Select all'}
+                            </Text>
+                          </TouchableOpacity>
+                          {itemEditMenuSections.map(section => (
+                            <View key={section.id} style={styles.promoEditMenuSection}>
+                              <Text
+                                style={styles.promoEditMenuSectionTitle}
+                                numberOfLines={1}
+                              >
+                                {section.title}
+                              </Text>
+                              {section.data.map(menuItem => {
+                                const menuId = String(menuItem.id);
+                                const checked =
+                                  itemEditSelectedMenuIds.includes(menuId);
+                                return (
+                                  <TouchableOpacity
+                                    key={menuId}
+                                    style={styles.promoEditMenuRow}
+                                    onPress={() => toggleItemEditMenuId(menuId)}
+                                    activeOpacity={0.7}
+                                  >
+                                    <MaterialCommunityIcons
+                                      name={
+                                        checked
+                                          ? 'checkbox-marked'
+                                          : 'checkbox-blank-outline'
+                                      }
+                                      size={22}
+                                      color={checked ? '#FF7F0B' : '#999'}
+                                    />
+                                    <Text
+                                      style={styles.promoEditMenuName}
+                                      numberOfLines={1}
+                                    >
+                                      {menuItem.itemName || 'Unnamed'}
+                                    </Text>
+                                    {menuItem.price != null ? (
+                                      <Text style={styles.promoEditMenuPrice}>
+                                        {typeof menuItem.price === 'number'
+                                          ? menuItem.price.toFixed(2)
+                                          : menuItem.price}
+                                      </Text>
+                                    ) : null}
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  ) : null}
                 </>
               ) : null}
               <View style={styles.postEditRow}>
@@ -4441,22 +4823,39 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       </Modal>
       <CreatePromotionModal
         visible={createPromotionModalVisible}
-        onClose={() => setCreatePromotionModalVisible(false)}
+        promotionToEdit={
+          editingPromotion &&
+          (editingPromotion.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.BOOKING
+            ? editingPromotion
+            : null
+        }
+        onClose={() => {
+          setCreatePromotionModalVisible(false);
+          setEditingPromotion(null);
+        }}
         onSuccess={() => {
           loadPromotions(true);
+          setEditingPromotion(null);
         }}
         userId={currentUser?.id}
       />
       <CreateTierDiscountModal
         visible={createTierDiscountModalVisible}
-        onClose={() => setCreateTierDiscountModalVisible(false)}
-        onSuccess={() => loadPromotions(true)}
-        userId={currentUser?.id}
-        offerType={
-          promotionSubTab === 'booking'
-            ? OFFER_TYPES.BOOKING
-            : OFFER_TYPES.AMOUNT
+        promotionToEdit={
+          editingPromotion?.offerType === OFFER_TYPES.BOOKING
+            ? editingPromotion
+            : null
         }
+        onClose={() => {
+          setCreateTierDiscountModalVisible(false);
+          setEditingPromotion(null);
+        }}
+        onSuccess={() => {
+          loadPromotions(true);
+          setEditingPromotion(null);
+        }}
+        userId={currentUser?.id}
+        offerType={OFFER_TYPES.BOOKING}
       />
 
       {/* Promotion detail modal: video/image + full details */}
@@ -4805,6 +5204,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     Facebook page verification
                   </Text>
                   <Text style={styles.facebookMetaHint}>
+                    If Facebook shows &quot;App not active&quot; or &quot;Feature
+                    unavailable&quot; while the Meta app is in Development mode, add
+                    that person under Meta Developer Console → eatix-update → App
+                    roles → Roles → Tester. They must accept the invite on Facebook,
+                    then retry Verify Facebook.
+                    {'\n\n'}
                     If Facebook shows &quot;URL Blocked&quot;: Meta Developer
                     Console → your app → Facebook Login → Settings → turn on Client
                     OAuth Login and Web OAuth Login → add this redirect URI (exact
@@ -5675,6 +6080,7 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   headerContainer: {
     paddingBottom: 0,
@@ -6335,6 +6741,13 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginBottom: 8,
   },
+  settingsFieldHint: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 17,
+    marginBottom: 6,
+    marginTop: -4,
+  },
   settingsSaveBtn: {
     marginHorizontal: 0,
     marginTop: 20,
@@ -6595,6 +7008,12 @@ const styles = StyleSheet.create({
   },
   menuRowBody: { flex: 1, marginLeft: 12 },
   menuRowName: { fontSize: 16, fontWeight: '600', color: '#212121' },
+  menuRowDescription: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+    lineHeight: 16,
+  },
   menuRowPrice: { fontSize: 14, color: '#666', marginTop: 2 },
   menuManageBtn: {
     marginLeft: 8,
@@ -7138,6 +7557,56 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
     fontWeight: '800',
+  },
+  postEditSelectionHint: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 4,
+  },
+  postEditMenuPreview: {
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  promoEditMenuHint: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 8,
+  },
+  promoEditMenuList: {
+    marginBottom: 8,
+  },
+  promoEditMenuSection: {
+    marginTop: 8,
+  },
+  promoEditMenuSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+    marginTop: 4,
+  },
+  promoEditMenuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EEE',
+    gap: 10,
+  },
+  promoEditSelectAllRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+    marginBottom: 4,
+  },
+  promoEditMenuName: {
+    flex: 1,
+    fontSize: 15,
+    color: '#212121',
+  },
+  promoEditMenuPrice: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
   },
   postEditChipRow: {
     marginBottom: 10,

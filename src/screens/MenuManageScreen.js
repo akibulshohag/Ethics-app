@@ -20,6 +20,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import MenuItemThumbnail from '../components/MenuItemThumbnail';
+import MenuAllergenRow from '../components/MenuAllergenRow';
 import { launchImageLibrary } from 'react-native-image-picker';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
@@ -376,9 +377,7 @@ const MenuManageScreen = () => {
         : '',
     );
     setSelectedCategoryId(
-      item.categoryId ||
-        item.category?.id ||
-        (categories.length > 0 ? categories[0].id : ''),
+      String(item.categoryId || item.category?.id || ''),
     );
     setSelectedAllergens(normalizeAllergens(item.allergens));
     setCustomAllergenIcons(normalizeAllergens(item.allergenIconUrls));
@@ -454,9 +453,9 @@ const MenuManageScreen = () => {
       const payload = {
         itemName: name,
         price: numPrice,
-        description: description.trim() || undefined,
-        imageUrl: imageUrl || undefined,
-        ...(selectedCategoryId ? { categoryId: selectedCategoryId } : {}),
+        description: description.trim() || null,
+        imageUrl: imageUrl || null,
+        categoryId: selectedCategoryId ? selectedCategoryId : null,
         ...(selectedAllergens.length
           ? { allergens: selectedAllergens }
           : { allergens: [] }),
@@ -799,6 +798,11 @@ const MenuManageScreen = () => {
                     />
                     <View style={styles.cardTextWrap}>
                       <Text style={styles.cardTitle}>{item.itemName}</Text>
+                      <MenuAllergenRow
+                        allergens={item.allergens}
+                        allergenIconUrls={item.allergenIconUrls}
+                        iconSize={14}
+                      />
                       <Text style={styles.cardPrice}>
                         £{Number(item.price).toFixed(2)}
                       </Text>
@@ -906,15 +910,15 @@ const MenuManageScreen = () => {
                         key={cat.id}
                         style={[
                           styles.categoryChip,
-                          selectedCategoryId === cat.id &&
+                          String(selectedCategoryId) === String(cat.id) &&
                             styles.categoryChipActive,
                         ]}
-                        onPress={() => setSelectedCategoryId(cat.id)}
+                        onPress={() => setSelectedCategoryId(String(cat.id))}
                       >
                         <Text
                           style={[
                             styles.categoryChipText,
-                            selectedCategoryId === cat.id &&
+                            String(selectedCategoryId) === String(cat.id) &&
                               styles.categoryChipTextActive,
                           ]}
                           numberOfLines={1}
