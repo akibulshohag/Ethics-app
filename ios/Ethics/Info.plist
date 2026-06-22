@@ -48,6 +48,8 @@
 	<string>This app needs access to your camera to record videos</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Eatwaze uses your location to show restaurants and food videos near your UK postcode.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>This app needs access to your location to provide location-based features and recommendations.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs access to your microphone to record audio for videos</string>
 	<key>NSPhotoLibraryUsageDescription</key>
