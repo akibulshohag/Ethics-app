@@ -32,6 +32,25 @@
 				<string>eatix</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb1020637567080925</string>
+			</array>
+		</dict>
+	</array>
+	<key>FacebookAppID</key>
+	<string>1020637567080925</string>
+	<key>FacebookClientToken</key>
+	<string>2490cd089fef0f717b9237884f858cc7</string>
+	<key>FacebookDisplayName</key>
+	<string>Eatwaze</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>

@@ -49,16 +49,18 @@ export const config = {
   ...checkConfig(selectServer),
   googleMapsApiKey: 'AIzaSyDdAoHeCNbd81rqwMApCne-bB5qYVwCaqk',
   /**
-   * Same as backend `FACEBOOK_APP_ID` (public Meta app id). If set, the OAuth
-   * URL is built in the app when the connect API fails (e.g. missing server env).
-   * Matches Savasaachi / add the same id + FACEBOOK_APP_SECRET on eatixapi for callbacks.
+   * Business Meta app — page verify, Instagram, scheduled auto-post.
+   * Must match server `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` on eatixapi.
+   * Do NOT use this for the consumer "Login with Facebook" button.
    */
   facebookAppId: '1714809253015158',
-  /**
-   * Facebook "Client token" from Meta App dashboard (NOT app secret).
-   * Android native SDK requires this to initialize on startup.
-   */
   facebookClientToken: '17658cbb4f5031595adeb84c3f084ab5',
+  /**
+   * Consumer login only — separate Meta app (Eatwaze Login).
+   * Used by Login with Facebook + native SDK (Android strings.xml, iOS Info.plist).
+   */
+  facebookLoginAppId: '1020637567080925',
+  facebookLoginClientToken: '2490cd089fef0f717b9237884f858cc7',
   /**
    * Leave EMPTY to use standard consumer Facebook Login (public_profile + email),
    * which has Advanced Access by default — no Business Verification / App Review.

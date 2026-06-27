@@ -92,7 +92,7 @@ function parseFacebookRedirectUrl(url) {
  * Standard scope-only login fails with "needs at least one supported permission".
  */
 async function loginWithFacebookBusinessConfig(configId) {
-  const appId = String(config.facebookAppId || '').trim();
+  const appId = String(config.facebookLoginAppId || '').trim();
   const redirectUri = `fb${appId}://authorize`;
   const authUrl =
     `https://www.facebook.com/v21.0/dialog/oauth?` +
@@ -146,11 +146,12 @@ async function loginWithFacebookBusinessConfig(configId) {
   });
 }
 
-async function loginWithFacebookSdkPermissions() {
+async function loginWithFacebookSdkPermissions(requestedPermissions) {
   LoginManager.setLoginBehavior('native_with_fallback');
-  // Standard consumer login: public_profile + email both have Advanced Access
-  // by default, so no Business Verification or App Review is required.
-  const fbPermissions = ['public_profile', 'email'];
+  const fbPermissions =
+    requestedPermissions?.length > 0
+      ? requestedPermissions
+      : ['public_profile'];
   const result = await LoginManager.logInWithPermissions(fbPermissions);
   if (result?.isCancelled) {
     throw new Error('Facebook login was cancelled');
@@ -164,18 +165,18 @@ async function loginWithFacebookSdkPermissions() {
 }
 
 export async function loginWithFacebook() {
-  const appId = String(config.facebookAppId || '').trim();
-  const clientToken = String(config.facebookClientToken || '').trim();
+  const appId = String(config.facebookLoginAppId || '').trim();
+  const clientToken = String(config.facebookLoginClientToken || '').trim();
   const configId = String(config.facebookLoginConfigId || '').trim();
 
   if (!appId) {
     throw new Error(
-      'Facebook sign-in is not configured. Set `facebookAppId` in Ethics-app/config.js.',
+      'Facebook sign-in is not configured. Set `facebookLoginAppId` in Ethics-app/config.js.',
     );
   }
   if (!clientToken) {
     throw new Error(
-      'Facebook sign-in is not configured. Set `facebookClientToken` in Ethics-app/config.js and android/app/src/main/res/values/strings.xml.',
+      'Facebook sign-in is not configured. Set `facebookLoginClientToken` in Ethics-app/config.js and android/app/src/main/res/values/strings.xml.',
     );
   }
   Settings.setAppID(appId);
@@ -187,7 +188,9 @@ export async function loginWithFacebook() {
   }
 
   try {
-    return await loginWithFacebookSdkPermissions();
+    // New Meta login apps often lack `email` in Use cases → Permissions until you add it.
+    // public_profile alone is enough; API uses fb_{id}@facebook.eatix.app when email is missing.
+    return await loginWithFacebookSdkPermissions(['public_profile']);
   } catch (permErr) {
     const permMsg = String(permErr?.message || permErr || '');
     if (
