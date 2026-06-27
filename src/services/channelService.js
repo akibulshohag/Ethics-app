@@ -227,7 +227,11 @@ const getFacebookOAuthScopesString = (forInstagram = false) => {
 };
 
 /** Build OAuth dialog URL; must match backend `SocialAuthService.getFacebookConnectUrl`. */
-export const buildFacebookConnectUrl = (userId, appId, forInstagram = false) => {
+export const buildFacebookConnectUrl = (
+  userId,
+  appId,
+  forInstagram = false,
+) => {
   const uid = String(userId || '').trim();
   const id = String(appId || '').trim();
   if (!uid || !id) return '';
@@ -263,7 +267,12 @@ const parseAxiosApiError = err => {
     if (typeof m === 'string') msg = m.trim();
     else if (Array.isArray(m)) msg = m.map(String).filter(Boolean).join(', ');
   }
-  if (!msg && data && typeof data === 'object' && typeof data.error === 'string') {
+  if (
+    !msg &&
+    data &&
+    typeof data === 'object' &&
+    typeof data.error === 'string'
+  ) {
     const e = data.error.trim();
     if (e && e !== 'Bad Request') msg = e;
   }
@@ -278,8 +287,7 @@ const parseAxiosApiError = err => {
  * Get connect URL for Facebook OAuth flow.
  * Uses API when possible; if the request fails and `config.facebookAppId` is set, builds the same URL locally.
  */
-const TIKTOK_OAUTH_SCOPES =
-  'user.info.basic,user.info.profile,video.publish';
+const TIKTOK_OAUTH_SCOPES = 'user.info.basic,user.info.profile,video.publish';
 
 /** Build TikTok Login Kit URL; must match backend `SocialAuthService.getTikTokConnectUrl`. */
 export const buildTikTokConnectUrl = (userId, clientKey) => {
