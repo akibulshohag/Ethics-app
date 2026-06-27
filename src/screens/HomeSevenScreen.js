@@ -38,6 +38,7 @@ import {
 } from '../services/userLocationService';
 import { login, isAccountInactiveError } from '../services/authService';
 import {
+  loginWithApple,
   loginWithFacebook,
   loginWithGoogle,
   normalizeSocialAuthError,
@@ -177,7 +178,9 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       const data =
         provider === 'facebook'
           ? await loginWithFacebook()
-          : await loginWithGoogle();
+          : provider === 'apple'
+            ? await loginWithApple()
+            : await loginWithGoogle();
 
       const userData = {
         id: data.user.id,
@@ -365,6 +368,17 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                 >
                   <Icon name="google" size={32} color="#EA4335" />
                 </TouchableOpacity>
+                {Platform.OS === 'ios' ? (
+                  <TouchableOpacity
+                    style={styles.socialIcon}
+                    onPress={() => handleSocialLogin('apple')}
+                    disabled={loading}
+                    activeOpacity={0.75}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Icon name="apple" size={32} color="#000000" />
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               <View style={styles.bottomArtRow} pointerEvents="none">

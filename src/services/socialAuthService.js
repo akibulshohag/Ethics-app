@@ -1,10 +1,11 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import {
   GoogleSignin,
   isSuccessResponse,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
 import { AccessToken, LoginManager, Settings } from 'react-native-fbsdk-next';
+import appleAuth from '@invertase/react-native-apple-authentication';
 import { config } from '../../config';
 import { EATIX_GOOGLE_WEB_CLIENT_ID } from '../../googleAuthConfig';
 import { socialLogin } from './authService';
@@ -209,6 +210,38 @@ export async function loginWithFacebook() {
   }
 }
 
+export async function loginWithApple() {
+  if (Platform.OS !== 'ios') {
+    throw new Error('Sign in with Apple is only available on the iPhone app.');
+  }
+  if (!appleAuth.isSupported) {
+    throw new Error('Sign in with Apple is not supported on this device.');
+  }
+
+  const response = await appleAuth.performRequest({
+    requestedOperation: appleAuth.Operation.LOGIN,
+    requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
+  });
+
+  const identityToken =
+    response?.identityToken?.toString?.() || response?.identityToken || '';
+  if (!identityToken) {
+    throw new Error('Apple did not return an identity token');
+  }
+
+  const givenName = String(response?.fullName?.givenName || '').trim();
+  const familyName = String(response?.fullName?.familyName || '').trim();
+  const name = [givenName, familyName].filter(Boolean).join(' ').trim();
+  const email = String(response?.email || '').trim();
+
+  return socialLogin({
+    provider: 'apple',
+    idToken: identityToken,
+    ...(email ? { email } : {}),
+    ...(name ? { name } : {}),
+  });
+}
+
 const YOUTUBE_VERIFY_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
 
 export const YOUTUBE_VERIFY_SCOPES = YOUTUBE_VERIFY_SCOPE;
@@ -347,6 +380,12 @@ export function normalizeSocialAuthError(error) {
   }
   if (/Invalid Google token/i.test(msg)) {
     return msg;
+  }
+  if (/Invalid Apple token|Apple identity token|APPLE_BUNDLE_ID/i.test(msg)) {
+    return msg;
+  }
+  if (/1001|AppleAuthError/i.test(code) && /cancel/i.test(msg)) {
+    return 'Sign-in cancelled';
   }
   if (/Google token audience mismatch/i.test(msg)) {
     return (
