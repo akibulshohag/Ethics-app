@@ -30,6 +30,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appSetUser, clearBrowseLocation } from '../redux/actions/appSlice';
+import { deleteMyAccount } from '../services/userSafetyService';
 import { LOCATION_STORAGE_KEY } from '../services/userLocationService';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
@@ -463,6 +464,85 @@ const LibraryScreen = ({ navigation }) => {
       { cancelable: true },
     );
   }, [dispatch, navigation]);
+
+  const resetToLoginAfterDelete = useCallback(async () => {
+    dispatch(appSetUser(null));
+    dispatch(clearBrowseLocation());
+    const allKeys = await AsyncStorage.getAllKeys();
+    const toRemove = allKeys.filter(k => k !== LOCATION_STORAGE_KEY);
+    if (toRemove.length > 0) {
+      await AsyncStorage.multiRemove(toRemove);
+    }
+    await AsyncStorage.removeItem(LOCATION_STORAGE_KEY);
+    const parent = navigation.getParent();
+    const root = parent?.getParent?.();
+    if (root) {
+      root.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'Root',
+            state: {
+              index: 0,
+              routes: [
+                {
+                  name: 'Home1',
+                  state: {
+                    index: 1,
+                    routes: [
+                      { name: 'HomeOneScreen' },
+                      { name: 'HomeSevenScreen' },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+    } else {
+      navigation.navigate('HomeSevenScreen');
+    }
+  }, [dispatch, navigation]);
+
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your EatWaze account and data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirm deletion',
+              'Are you sure you want to permanently delete your account?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteMyAccount();
+                      await resetToLoginAfterDelete();
+                    } catch (error) {
+                      Alert.alert(
+                        'Could not delete account',
+                        error?.message ||
+                          'Please try again or contact support.',
+                      );
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  }, [resetToLoginAfterDelete]);
 
   const openVideoModal = useCallback(
     async videoId => {
@@ -1885,6 +1965,23 @@ const LibraryScreen = ({ navigation }) => {
         {currentUser?.id ? (
           <>
             <View style={styles.divider} />
+            <TouchableOpacity
+              style={styles.playlistItem}
+              onPress={handleDeleteAccount}
+            >
+              <View
+                style={[styles.menuIconContainer, styles.logoutIconContainer]}
+              >
+                <MaterialCommunityIcons
+                  name="account-remove-outline"
+                  size={24}
+                  color="#E53935"
+                />
+              </View>
+              <Text style={[styles.menuText, styles.logoutText]}>
+                Delete account
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.playlistItem, styles.logoutButton]}
               onPress={handleLogout}
