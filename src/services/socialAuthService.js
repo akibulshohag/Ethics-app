@@ -7,7 +7,7 @@ import {
 import { AccessToken, LoginManager, Settings } from 'react-native-fbsdk-next';
 import appleAuth from '@invertase/react-native-apple-authentication';
 import { config } from '../../config';
-import { EATIX_GOOGLE_WEB_CLIENT_ID } from '../../googleAuthConfig';
+import { EATIX_GOOGLE_WEB_CLIENT_ID, resolveGoogleIosClientId } from '../../googleAuthConfig';
 import { socialLogin } from './authService';
 
 let googleConfigured = false;
@@ -28,11 +28,28 @@ function ensureGoogleConfigured() {
         `Enable Authentication → Google. Re-download google-services.json, rebuild APK.`,
     );
   }
-  GoogleSignin.configure({
+
+  const configureOptions = {
     webClientId,
     offlineAccess: true,
     scopes: ['email', 'profile'],
-  });
+  };
+
+  if (Platform.OS === 'ios') {
+    const iosClientId = String(
+      config.googleIosClientId || resolveGoogleIosClientId() || '',
+    ).trim();
+    if (!iosClientId) {
+      throw new Error(
+        'Google Sign-In is not configured for iOS. In Firebase (eatix-17d2a): add iOS app ' +
+          'com.eatwaze.app, download GoogleService-Info.plist, then run ' +
+          'node scripts/apply-ios-google-service-info.js ~/Downloads/GoogleService-Info.plist and rebuild in Xcode.',
+      );
+    }
+    configureOptions.iosClientId = iosClientId;
+  }
+
+  GoogleSignin.configure(configureOptions);
   googleConfigured = true;
 }
 
@@ -379,6 +396,13 @@ export function normalizeSocialAuthError(error) {
     return msg;
   }
   if (/Invalid Google token/i.test(msg)) {
+    return msg;
+  }
+  if (
+    /Google Sign-In is not configured for iOS|GoogleService-Info\.plist/i.test(
+      msg,
+    )
+  ) {
     return msg;
   }
   if (/Invalid Apple token|Apple identity token|APPLE_BUNDLE_ID/i.test(msg)) {

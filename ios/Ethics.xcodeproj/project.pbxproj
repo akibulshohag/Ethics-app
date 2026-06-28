@@ -12,6 +12,7 @@
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		BF8E1DA4872284CB8E2D935C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		C2F8A9012E2B000100A75B9C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = C2F8A9002E2B000100A75B9C /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +25,7 @@
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Ethics/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Ethics/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A1E4F9022E2A000100A75B9A /* Ethics.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = Ethics.entitlements; path = Ethics/Ethics.entitlements; sourceTree = "<group>"; };
+		C2F8A9002E2B000100A75B9C /* GoogleService-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Ethics/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		AB0FDF30A3FD0D1F42A17451 /* Pods_Ethics.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Ethics.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -49,6 +51,7 @@
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				A1E4F9022E2A000100A75B9A /* Ethics.entitlements */,
+				C2F8A9002E2B000100A75B9C /* GoogleService-Info.plist */,
 			);
 			name = Ethics;
 			sourceTree = "<group>";
@@ -163,6 +166,7 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				BF8E1DA4872284CB8E2D935C /* PrivacyInfo.xcprivacy in Resources */,
+				C2F8A9012E2B000100A75B9C /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
