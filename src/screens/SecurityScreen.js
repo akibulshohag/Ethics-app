@@ -5,14 +5,10 @@ import {
   Text,
   TouchableOpacity,
   StatusBar,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, CommonActions } from '@react-navigation/native';
-import { useDispatch } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
 import {
   COLORS,
   FONTS,
@@ -20,15 +16,9 @@ import {
   BORDER_RADIUS,
   COMMON_STYLES,
 } from '../constants/theme';
-import { appSetUser } from '../redux/actions/appSlice';
-import { deleteMyAccount } from '../services/userSafetyService';
-
-const DARK_MODE_KEY = '@ethics_dark_mode';
 
 const SecurityScreen = () => {
   const navigation = useNavigation();
-  const dispatch = useDispatch();
-  const [deleting, setDeleting] = React.useState(false);
 
   const SecurityOption = ({
     iconName,
@@ -51,90 +41,10 @@ const SecurityScreen = () => {
     </TouchableOpacity>
   );
 
-  const resetToLogin = async () => {
-    dispatch(appSetUser(null));
-    const KEEP_KEYS = [DARK_MODE_KEY];
-    const allKeys = await AsyncStorage.getAllKeys();
-    const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
-    if (toRemove.length > 0) {
-      await AsyncStorage.multiRemove(toRemove);
-    }
-    let rootNav = navigation;
-    while (rootNav?.getParent?.()) rootNav = rootNav.getParent();
-    rootNav.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [
-          {
-            name: 'Root',
-            state: {
-              index: 0,
-              routes: [
-                {
-                  name: 'Home1',
-                  state: {
-                    index: 1,
-                    routes: [
-                      { name: 'HomeOneScreen' },
-                      { name: 'HomeSevenScreen' },
-                    ],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      }),
-    );
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete account?',
-      'This permanently deletes your EatWaze account and associated data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete account',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Confirm deletion',
-              'Are you sure you want to permanently delete your account?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setDeleting(true);
-                    try {
-                      await deleteMyAccount();
-                      await resetToLogin();
-                    } catch (error) {
-                      Alert.alert(
-                        'Could not delete account',
-                        error?.message ||
-                          'Please try again or contact support.',
-                      );
-                    } finally {
-                      setDeleting(false);
-                    }
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -146,7 +56,6 @@ const SecurityScreen = () => {
         <View style={{ width: 28 }} />
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
         <Text style={styles.description}>
           Manage your security settings to keep your account safe
@@ -185,26 +94,6 @@ const SecurityScreen = () => {
             access
           </Text>
         </View>
-
-        <TouchableOpacity
-          style={styles.deleteCard}
-          onPress={handleDeleteAccount}
-          disabled={deleting}
-        >
-          {deleting ? (
-            <ActivityIndicator color={COLORS.error} />
-          ) : (
-            <>
-              <Icon name="account-remove-outline" size={28} color={COLORS.error} />
-              <View style={styles.deleteContent}>
-                <Text style={styles.deleteTitle}>Delete account</Text>
-                <Text style={styles.deleteSubtitle}>
-                  Permanently remove your account and data from EatWaze
-                </Text>
-              </View>
-            </>
-          )}
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -295,31 +184,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginLeft: SPACING.sm,
     lineHeight: 20,
-  },
-  deleteCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: SPACING.xxl,
-    padding: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.error + '40',
-    backgroundColor: '#FFF5F5',
-    gap: SPACING.md,
-  },
-  deleteContent: {
-    flex: 1,
-  },
-  deleteTitle: {
-    fontSize: FONTS.lg,
-    fontWeight: FONTS.semiBold,
-    color: COLORS.error,
-    marginBottom: SPACING.xs,
-  },
-  deleteSubtitle: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray600,
-    lineHeight: 18,
   },
 });
 

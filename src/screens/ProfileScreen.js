@@ -17,6 +17,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
+import { deleteMyAccount } from '../services/userSafetyService';
 import {
   COLORS,
   FONTS,
@@ -35,6 +36,7 @@ const ProfileScreen = () => {
   const dispatch = useDispatch();
   const { user } = useSelector(state => state.app);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(DARK_MODE_KEY).then(val => {
@@ -49,6 +51,81 @@ const ProfileScreen = () => {
 
   const navigateToSecurity = () => {
     navigation.navigate('SecurityScreen');
+  };
+
+  const resetToLogin = async () => {
+    dispatch(appSetUser(null));
+    const KEEP_KEYS = ['USER_LOCATION_SELECTION', DARK_MODE_KEY];
+    const allKeys = await AsyncStorage.getAllKeys();
+    const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+    if (toRemove.length > 0) {
+      await AsyncStorage.multiRemove(toRemove);
+    }
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: 'Root',
+          state: {
+            index: 0,
+            routes: [
+              {
+                name: 'Home1',
+                state: {
+                  index: 1,
+                  routes: [
+                    { name: 'HomeOneScreen' },
+                    { name: 'HomeSevenScreen' },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your EatWaze account and data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirm deletion',
+              'Are you sure you want to permanently delete your account?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    try {
+                      await deleteMyAccount();
+                      await resetToLogin();
+                    } catch (error) {
+                      Alert.alert(
+                        'Could not delete account',
+                        error?.message ||
+                          'Please try again or contact support.',
+                      );
+                    } finally {
+                      setDeletingAccount(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const handleLogout = () => {
@@ -328,6 +405,12 @@ const ProfileScreen = () => {
           />
 
           <View style={{ marginTop: SPACING.lg }}>
+            <MenuItem
+              iconName="account-remove-outline"
+              title="Delete account"
+              color={COLORS.error}
+              onPress={deletingAccount ? undefined : handleDeleteAccount}
+            />
             <MenuItem
               iconName="logout"
               title="Logout"
