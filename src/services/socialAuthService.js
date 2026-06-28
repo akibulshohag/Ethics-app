@@ -53,7 +53,7 @@ function ensureGoogleConfigured() {
   googleConfigured = true;
 }
 
-export async function loginWithGoogle() {
+export async function loginWithGoogle({ termsAccepted } = {}) {
   ensureGoogleConfigured();
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   try {
@@ -85,6 +85,7 @@ export async function loginWithGoogle() {
     provider: 'google',
     ...(idToken ? { idToken } : {}),
     ...(accessToken ? { accessToken } : {}),
+    ...(termsAccepted ? { termsAccepted: true } : {}),
   });
 }
 
@@ -109,7 +110,7 @@ function parseFacebookRedirectUrl(url) {
  * Facebook Login for Business requires a Configuration ID from Meta Console.
  * Standard scope-only login fails with "needs at least one supported permission".
  */
-async function loginWithFacebookBusinessConfig(configId) {
+async function loginWithFacebookBusinessConfig(configId, termsAccepted) {
   const appId = String(config.facebookLoginAppId || '').trim();
   const redirectUri = `fb${appId}://authorize`;
   const authUrl =
@@ -140,7 +141,11 @@ async function loginWithFacebookBusinessConfig(configId) {
           finish(reject, new Error('Facebook did not return an access token'));
           return;
         }
-        socialLogin({ provider: 'facebook', accessToken })
+        socialLogin({
+          provider: 'facebook',
+          accessToken,
+          ...(termsAccepted ? { termsAccepted: true } : {}),
+        })
           .then(data => finish(resolve, data))
           .catch(err => finish(reject, err));
       } catch (err) {
@@ -164,7 +169,7 @@ async function loginWithFacebookBusinessConfig(configId) {
   });
 }
 
-async function loginWithFacebookSdkPermissions(requestedPermissions) {
+async function loginWithFacebookSdkPermissions(requestedPermissions, termsAccepted) {
   LoginManager.setLoginBehavior('native_with_fallback');
   const fbPermissions =
     requestedPermissions?.length > 0
@@ -179,10 +184,14 @@ async function loginWithFacebookSdkPermissions(requestedPermissions) {
   if (!accessToken) {
     throw new Error('Facebook did not return an access token');
   }
-  return socialLogin({ provider: 'facebook', accessToken });
+  return socialLogin({
+    provider: 'facebook',
+    accessToken,
+    ...(termsAccepted ? { termsAccepted: true } : {}),
+  });
 }
 
-export async function loginWithFacebook() {
+export async function loginWithFacebook({ termsAccepted } = {}) {
   const appId = String(config.facebookLoginAppId || '').trim();
   const clientToken = String(config.facebookLoginClientToken || '').trim();
   const configId = String(config.facebookLoginConfigId || '').trim();
@@ -202,13 +211,16 @@ export async function loginWithFacebook() {
   Settings.initializeSDK();
 
   if (configId) {
-    return loginWithFacebookBusinessConfig(configId);
+    return loginWithFacebookBusinessConfig(configId, termsAccepted === true);
   }
 
   try {
     // New Meta login apps often lack `email` in Use cases → Permissions until you add it.
     // public_profile alone is enough; API uses fb_{id}@facebook.eatix.app when email is missing.
-    return await loginWithFacebookSdkPermissions(['public_profile']);
+    return await loginWithFacebookSdkPermissions(
+      ['public_profile'],
+      termsAccepted === true,
+    );
   } catch (permErr) {
     const permMsg = String(permErr?.message || permErr || '');
     if (
@@ -227,7 +239,7 @@ export async function loginWithFacebook() {
   }
 }
 
-export async function loginWithApple() {
+export async function loginWithApple({ termsAccepted } = {}) {
   if (Platform.OS !== 'ios') {
     throw new Error('Sign in with Apple is only available on the iPhone app.');
   }
@@ -256,6 +268,7 @@ export async function loginWithApple() {
     idToken: identityToken,
     ...(email ? { email } : {}),
     ...(name ? { name } : {}),
+    ...(termsAccepted ? { termsAccepted: true } : {}),
   });
 }
 

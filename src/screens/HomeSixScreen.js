@@ -39,6 +39,8 @@ import {
   loginWithGoogle,
   normalizeSocialAuthError,
 } from '../services/socialAuthService';
+import TermsAcceptRow from '../components/TermsAcceptRow';
+import { refreshUserSafetyAfterLogin } from '../services/userSafetyService';
 import signupFood from '../assets/img/signupfood.png';
 import decorBowl from '../assets/img/s1.png';
 import decorSkyline from '../assets/img/s2.png';
@@ -74,6 +76,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   useEffect(() => {
     getRolesList()
@@ -120,6 +123,14 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
       return;
     }
 
+    if (!termsAccepted) {
+      Alert.alert(
+        'Terms required',
+        'Please accept the Terms of Use and Community Guidelines to create an account.',
+      );
+      return;
+    }
+
     const roleId = getRoleIdForUserType();
 
     setLoading(true);
@@ -129,6 +140,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         password: password.trim(),
         role: roleName,
         ...(roleId ? { roleId } : {}),
+        termsAccepted: true,
       });
 
       const userData = {
@@ -148,6 +160,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
       };
 
       dispatch(appSetUser(userData));
+      await refreshUserSafetyAfterLogin();
 
       try {
         navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
@@ -174,14 +187,22 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
   };
 
   const handleSocialLogin = async provider => {
+    if (!termsAccepted) {
+      Alert.alert(
+        'Terms required',
+        'Please accept the Terms of Use and Community Guidelines to continue.',
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const data =
         provider === 'facebook'
-          ? await loginWithFacebook()
+          ? await loginWithFacebook({ termsAccepted: true })
           : provider === 'apple'
-            ? await loginWithApple()
-            : await loginWithGoogle();
+            ? await loginWithApple({ termsAccepted: true })
+            : await loginWithGoogle({ termsAccepted: true });
 
       const userData = {
         id: data.user.id,
@@ -203,6 +224,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         token: data.token,
       };
       dispatch(appSetUser(userData));
+      await refreshUserSafetyAfterLogin();
       dispatch(clearBrowseLocation());
       const browseLoc = await resolvePostLoginBrowseLocation({
         ...userData,
@@ -376,6 +398,11 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
                   />
                 </TouchableOpacity>
               </View>
+
+              <TermsAcceptRow
+                accepted={termsAccepted}
+                onToggle={setTermsAccepted}
+              />
 
               <TouchableOpacity
                 style={styles.actionBtnPrimary}

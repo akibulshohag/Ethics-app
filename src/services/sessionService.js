@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { config } from '../../config';
 import { store } from '../redux';
 import { appSetUser } from '../redux/actions/appSlice';
+import { refreshUserSafetyAfterLogin } from './userSafetyService';
 
 let refreshInFlight = null;
 let interceptorInstalled = false;
@@ -58,6 +59,10 @@ export async function ensureSessionOnStartup() {
   const result = await refreshInFlight;
   if (!result.ok && result.reason === 'unauthorized') {
     store.dispatch(appSetUser(null));
+    return;
+  }
+  if (result.ok) {
+    await refreshUserSafetyAfterLogin();
   }
 }
 

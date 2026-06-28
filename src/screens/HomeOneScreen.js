@@ -41,6 +41,7 @@ import {
   isHomeFeedCacheFresh,
 } from '../redux/actions/homeFeedSlice';
 import { buildDiscoveryCacheKey } from '../utils/discoveryCacheKey';
+import { filterBlockedContent } from '../utils/filterBlockedContent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCurrentPositionSafe,
@@ -607,6 +608,7 @@ const HomeOneScreen = () => {
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
   const browseLocation = useSelector(state => state.app?.browseLocation);
+  const blockedUserIds = useSelector(state => state.app?.blockedUserIds || []);
   const authUserId = useMemo(
     () =>
       user?.id ?? user?.userId ?? user?._id ?? user?.uid ?? user?.sub ?? null,
@@ -1328,9 +1330,22 @@ const HomeOneScreen = () => {
     };
   }, [isCuisineFilterScreen, cuisineFilterKey, selectedLocation, user]);
 
+  const withoutBlocked = useCallback(
+    items => filterBlockedContent(items, blockedUserIds),
+    [blockedUserIds],
+  );
+
+  useEffect(() => {
+    setFeedVideos(prev => withoutBlocked(prev));
+    setFeedShorts(prev => withoutBlocked(prev));
+    setPopularShorts(prev => withoutBlocked(prev));
+    setNewShorts(prev => withoutBlocked(prev));
+  }, [withoutBlocked]);
+
   const loadFeaturedAndFeed = useCallback(async () => {
     const voBrowse = resolveViewerLocationOpts(selectedLocation, user);
     if (!voBrowse) return;
+    const dropBlocked = items => filterBlockedContent(items, blockedUserIds);
     const feedCacheKey = buildDiscoveryCacheKey(voBrowse, user?.id);
     const searchTermEarly = searchDebounced?.trim() || undefined;
     const cached = homeFeedCacheRef.current;
@@ -1365,10 +1380,10 @@ const HomeOneScreen = () => {
           ? cached.sponsoredVideo
           : null,
       );
-      setFeedVideos(cachedFeedVideos);
-      setFeedShorts(cachedFeedShorts);
-      setPopularShorts(cachedPopularShorts);
-      setNewShorts(cachedNewShorts);
+      setFeedVideos(dropBlocked(cachedFeedVideos));
+      setFeedShorts(dropBlocked(cachedFeedShorts));
+      setPopularShorts(dropBlocked(cachedPopularShorts));
+      setNewShorts(dropBlocked(cachedNewShorts));
       setMostOrderedRestaurants(cached.mostOrderedRestaurants || []);
       setCuisineOptions(cached.cuisineOptions || []);
       setFeedLoading(false);
@@ -1743,10 +1758,12 @@ const HomeOneScreen = () => {
           .toLowerCase();
         return haystack.includes(q);
       };
-      setFeedVideos(mappedVideosWithMenu.filter(matchesSearch));
-      setFeedShorts(mappedShortsWithMenu.filter(matchesSearch));
-      setPopularShorts(mappedPopularShortsWithMenu.filter(matchesSearch));
-      setNewShorts(mappedNewestShortsWithMenu.filter(matchesSearch));
+      setFeedVideos(dropBlocked(mappedVideosWithMenu.filter(matchesSearch)));
+      setFeedShorts(dropBlocked(mappedShortsWithMenu.filter(matchesSearch)));
+      setPopularShorts(
+        dropBlocked(mappedPopularShortsWithMenu.filter(matchesSearch)),
+      );
+      setNewShorts(dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)));
       const topRestaurants = (topRes?.restaurants || []).map(r => {
         const firstPhoto =
           Array.isArray(r?.photos) && r.photos.length > 0 ? r.photos[0] : null;
@@ -1826,7 +1843,7 @@ const HomeOneScreen = () => {
     } finally {
       setFeedLoading(false);
     }
-  }, [selectedLocation, user, searchDebounced, dispatch]);
+  }, [selectedLocation, user, searchDebounced, dispatch, blockedUserIds]);
 
   const loadContinueWatching = useCallback(async () => {
     if (!user?.id) return;

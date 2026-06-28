@@ -105,6 +105,8 @@ import {
 } from '../../services/menuService';
 import { persistBrowseLocation } from '../../services/userLocationService';
 import { appSetUser, setBrowseLocation } from '../../redux/actions/appSlice';
+import { blockUser } from '../../services/userSafetyService';
+import { isUserBlocked } from '../../utils/filterBlockedContent';
 import { safeImageUri } from '../../utils/helper';
 import MenuItemThumbnail from '../../components/MenuItemThumbnail';
 import { buildPostShareMessage } from '../../utils/contentLinks';
@@ -489,6 +491,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const currentUser = useSelector(state => state.app?.user);
   const browseLocation = useSelector(state => state.app?.browseLocation);
+  const blockedUserIds = useSelector(state => state.app?.blockedUserIds || []);
   const profileUserId = route.params?.userId ?? currentUser?.id;
   const isOwnProfile = profileUserId === currentUser?.id;
 
@@ -1615,6 +1618,54 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     isOwnProfile,
     profile,
     loadProfile,
+  ]);
+
+  const profileIsBlocked = isUserBlocked(blockedUserIds, profileUserId);
+
+  const handleBlockUser = useCallback(() => {
+    if (!currentUser?.id || !profileUserId || isOwnProfile) return;
+    if (profileIsBlocked) {
+      Alert.alert(
+        'User blocked',
+        'You have already blocked this user. Their content is hidden from your feed.',
+      );
+      return;
+    }
+    const displayName =
+      profile?.channelName || profile?.nickname || profile?.name || 'this user';
+    Alert.alert(
+      'Block user?',
+      `You will no longer see videos, posts, or messages from ${displayName}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(profileUserId);
+              Alert.alert(
+                'User blocked',
+                'Their content has been removed from your feed.',
+                [{ text: 'OK', onPress: () => navigation.goBack() }],
+              );
+            } catch (error) {
+              Alert.alert(
+                'Could not block user',
+                error?.message || 'Please try again.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    currentUser?.id,
+    profileUserId,
+    isOwnProfile,
+    profileIsBlocked,
+    profile,
+    navigation,
   ]);
 
   const openVideoDetails = useCallback(
@@ -3053,6 +3104,28 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         }
         subscribeLoading={profileSubscribeLoading}
       />
+
+      {!isOwnProfile && currentUser?.id ? (
+        <TouchableOpacity
+          style={styles.blockUserRow}
+          onPress={handleBlockUser}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons
+            name={profileIsBlocked ? 'account-cancel' : 'account-cancel-outline'}
+            size={18}
+            color={profileIsBlocked ? '#B91C1C' : '#6B7280'}
+          />
+          <Text
+            style={[
+              styles.blockUserText,
+              profileIsBlocked && styles.blockUserTextActive,
+            ]}
+          >
+            {profileIsBlocked ? 'User blocked' : 'Block user'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {isOwnProfile && isOwnerOrVendor ? (
         <View style={styles.profileSocialRow}>
@@ -6085,6 +6158,25 @@ const styles = StyleSheet.create({
   headerContainer: {
     paddingBottom: 0,
     backgroundColor: '#FFFFFF',
+  },
+  blockUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+  },
+  blockUserText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  blockUserTextActive: {
+    color: '#B91C1C',
   },
   profileSocialRow: {
     flexDirection: 'row',

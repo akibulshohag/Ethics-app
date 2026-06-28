@@ -43,6 +43,8 @@ import {
   loginWithGoogle,
   normalizeSocialAuthError,
 } from '../services/socialAuthService';
+import TermsAcceptRow from '../components/TermsAcceptRow';
+import { refreshUserSafetyAfterLogin } from '../services/userSafetyService';
 import signupFood from '../assets/img/signupfood.png';
 import decorBowl from '../assets/img/s1.png';
 import decorSkyline from '../assets/img/s2.png';
@@ -72,6 +74,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const navigateAfterLogin = async userData => {
     const role = String(userData?.role || '').toLowerCase();
@@ -144,6 +147,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       };
 
       dispatch(appSetUser(userData));
+      await refreshUserSafetyAfterLogin();
       await navigateAfterLogin(userData);
     } catch (error) {
       console.error('Login error:', error);
@@ -173,14 +177,22 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   };
 
   const handleSocialLogin = async provider => {
+    if (!termsAccepted) {
+      Alert.alert(
+        'Terms required',
+        'Please accept the Terms of Use and Community Guidelines to sign in with a new account.',
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const data =
         provider === 'facebook'
-          ? await loginWithFacebook()
+          ? await loginWithFacebook({ termsAccepted: true })
           : provider === 'apple'
-            ? await loginWithApple()
-            : await loginWithGoogle();
+            ? await loginWithApple({ termsAccepted: true })
+            : await loginWithGoogle({ termsAccepted: true });
 
       const userData = {
         id: data.user.id,
@@ -204,6 +216,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         token: data.token,
       };
       dispatch(appSetUser(userData));
+      await refreshUserSafetyAfterLogin();
       await navigateAfterLogin(userData);
     } catch (error) {
       const msg = normalizeSocialAuthError(error);
@@ -349,6 +362,11 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
               <Text style={styles.orText}>Or</Text>
               <Text style={styles.signInWithText}>Sign in with</Text>
+              <TermsAcceptRow
+                accepted={termsAccepted}
+                onToggle={setTermsAccepted}
+                compact
+              />
               <View style={styles.socialPill}>
                 <TouchableOpacity
                   style={styles.socialIcon}

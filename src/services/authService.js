@@ -62,19 +62,30 @@ export const login = (email, password) =>
     password: password.trim(),
   });
 
-export const socialLogin = ({ provider, idToken, accessToken }) =>
+export const socialLogin = ({
+  provider,
+  idToken,
+  accessToken,
+  email,
+  name,
+  termsAccepted,
+}) =>
   postJson('/users/social-login', {
     provider: String(provider || '').trim().toLowerCase(),
     ...(idToken ? { idToken: String(idToken) } : {}),
     ...(accessToken ? { accessToken: String(accessToken) } : {}),
+    ...(email ? { email: String(email) } : {}),
+    ...(name ? { name: String(name) } : {}),
+    ...(termsAccepted ? { termsAccepted: true } : {}),
   });
 
-export const register = ({ email, password, roleId, role }) =>
+export const register = ({ email, password, roleId, role, termsAccepted }) =>
   postJson('/users/register', {
     email: normalizeEmail(email),
     password: password.trim(),
     ...(roleId ? { roleId } : {}),
     ...(role ? { role } : {}),
+    ...(termsAccepted ? { termsAccepted: true, policyAccepted: true } : {}),
   });
 
 export const verifyEmailOtp = (email, otp) =>

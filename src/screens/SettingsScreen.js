@@ -6,10 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import { EATWAZE_TERMS_URL } from '../constants/communityTerms';
 
 const SettingsScreen = () => {
   const navigation = useNavigation();
@@ -98,6 +100,7 @@ const SettingsScreen = () => {
         <SettingItem
           icon="account-group-outline"
           label="Community Guidelines"
+          onPress={() => Linking.openURL(EATWAZE_TERMS_URL).catch(() => {})}
         />
         <SettingItem icon="message-text-outline" label="Live Chat" />
         <SettingItem icon="closed-caption-outline" label="Captions" />

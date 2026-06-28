@@ -32,6 +32,8 @@ import PromotionCard from '../../components/PromotionCard';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { safeImageUri } from '../../utils/helper';
+import { blockUser } from '../../services/userSafetyService';
+import { isUserBlocked } from '../../utils/filterBlockedContent';
 import MenuItemThumbnail from '../../components/MenuItemThumbnail';
 import MenuAllergenRow from '../../components/MenuAllergenRow';
 import { mapMenuListRow } from '../../utils/menuListItem';
@@ -336,6 +338,7 @@ const UserViewsScreen = ({ navigation }) => {
   const route = useRoute();
   const currentUser = useSelector(state => state.app?.user);
   const browseLocation = useSelector(state => state.app?.browseLocation);
+  const blockedUserIds = useSelector(state => state.app?.blockedUserIds || []);
   const profileUserId = route.params?.userId || currentUser?.id || null;
   const isOwnProfile =
     !!currentUser?.id &&
@@ -1283,6 +1286,55 @@ const UserViewsScreen = ({ navigation }) => {
     }
   };
 
+  const profileIsBlocked = isUserBlocked(blockedUserIds, profileUserId);
+
+  const handleBlockUser = useCallback(() => {
+    if (requireLogin()) return;
+    if (!profileUserId || !currentUser?.id || isOwnProfile) return;
+    if (profileIsBlocked) {
+      Alert.alert(
+        'User blocked',
+        'You have already blocked this user. Their content is hidden from your feed.',
+      );
+      return;
+    }
+    const displayName =
+      profile?.channelName || profile?.nickname || profile?.name || 'this user';
+    Alert.alert(
+      'Block user?',
+      `You will no longer see videos, posts, or messages from ${displayName}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await blockUser(profileUserId);
+              Alert.alert(
+                'User blocked',
+                'Their content has been removed from your feed.',
+                [{ text: 'OK', onPress: () => navigation.goBack() }],
+              );
+            } catch (error) {
+              Alert.alert(
+                'Could not block user',
+                error?.message || 'Please try again.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [
+    profileUserId,
+    currentUser?.id,
+    isOwnProfile,
+    profileIsBlocked,
+    profile,
+    navigation,
+  ]);
+
   const handleNotificationBellPress = useCallback(() => {
     if (requireLogin()) return;
     if (!currentUser?.id) return;
@@ -1902,6 +1954,28 @@ const UserViewsScreen = ({ navigation }) => {
             : undefined
         }
       />
+
+      {!isOwnProfile && currentUser?.id ? (
+        <TouchableOpacity
+          style={styles.blockUserRow}
+          onPress={handleBlockUser}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons
+            name={profileIsBlocked ? 'account-cancel' : 'account-cancel-outline'}
+            size={18}
+            color={profileIsBlocked ? '#B91C1C' : '#6B7280'}
+          />
+          <Text
+            style={[
+              styles.blockUserText,
+              profileIsBlocked && styles.blockUserTextActive,
+            ]}
+          >
+            {profileIsBlocked ? 'User blocked' : 'Block user'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {renderProfilePromotionCarousel()}
 
@@ -3799,6 +3873,25 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
+  },
+  blockUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E7EB',
+  },
+  blockUserText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  blockUserTextActive: {
+    color: '#B91C1C',
   },
   profileSocialBtn: {
     width: 32,
