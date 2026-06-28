@@ -20,6 +20,7 @@ import DataSavingScreen from '../screens/DataSavingScreen';
 import VideoQualityPreferencesScreen from '../screens/VideoQualityPreferencesScreen';
 import BackgroundDownloadsScreen from '../screens/BackgroundDownloadsScreen';
 import HelpCenterScreen from '../screens/HelpCenterScreen';
+import SecurityScreen from '../screens/SecurityScreen';
 import IncognitoScreen from '../screens/IncognitoScreen';
 import TimeWatchedScreen from '../screens/TimeWatchedScreen';
 import MenuManageScreen from '../screens/MenuManageScreen';
@@ -78,6 +79,7 @@ const LibraryNavigation = () => {
         }
       />
       <LibraryStack.Screen name="SettingsScreen" component={SettingsScreen} />
+      <LibraryStack.Screen name="SecurityScreen" component={SecurityScreen} />
       <LibraryStack.Screen
         name="GeneralSettingsScreen"
         component={GeneralSettingsScreen}

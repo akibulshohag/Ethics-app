@@ -48,7 +48,7 @@ const ProfileScreen = () => {
   };
 
   const navigateToSecurity = () => {
-    navigation.getParent()?.getParent()?.navigate('SecurityScreen');
+    navigation.navigate('SecurityScreen');
   };
 
   const handleLogout = () => {

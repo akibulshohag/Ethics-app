@@ -109,6 +109,16 @@ const SettingsScreen = () => {
           label="Accessibility"
         />
         <SettingItem
+          icon="shield-lock-outline"
+          label="Security"
+          onPress={() => navigation.navigate('SecurityScreen')}
+        />
+        <SettingItem
+          icon="account-remove-outline"
+          label="Delete account"
+          onPress={() => navigation.navigate('SecurityScreen')}
+        />
+        <SettingItem
           icon="dots-horizontal-circle-outline"
           label="About"
           showBorder={false}

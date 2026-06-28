@@ -886,9 +886,20 @@ const LibraryScreen = ({ navigation }) => {
               <Text style={styles.backText}>Back</Text>
             </View>
           </TouchableOpacity>
-          {/* <TouchableOpacity style={styles.moreIcon}>
-            <MaterialCommunityIcons name="dots-vertical" size={24} color="#666" />
-          </TouchableOpacity> */}
+          {currentView === 'library' ? (
+            <TouchableOpacity
+              style={styles.accountButton}
+              onPress={() => navigation?.navigate('ProfileScreen')}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons
+                name="account-circle-outline"
+                size={26}
+                color="#F97507"
+              />
+              <Text style={styles.accountButtonText}>Account</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </>
     );
@@ -1935,6 +1946,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 11,
     fontWeight: '600',
+  },
+  accountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#FFF4E8',
+  },
+  accountButtonText: {
+    color: '#F97507',
+    fontSize: 13,
+    fontWeight: '700',
   },
   moreIcon: {
     padding: 4,
