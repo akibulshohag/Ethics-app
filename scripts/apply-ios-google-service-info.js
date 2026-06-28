@@ -13,6 +13,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const TARGET_PLIST = path.join(ROOT, 'ios/Ethics/GoogleService-Info.plist');
 const INFO_PLIST = path.join(ROOT, 'ios/Ethics/Info.plist');
+const GOOGLE_AUTH_CONFIG = path.join(ROOT, 'googleAuthConfig.js');
 
 function readPlistValues(xml) {
   const pick = key => {
@@ -54,6 +55,19 @@ function upsertGoogleUrlScheme(infoXml, reversedClientId) {
   return infoXml.replace(marker, `${googleBlock}\t</array>\n\t<key>FacebookAppID</key>`);
 }
 
+function upsertGoogleAuthConfigIosIds(clientId, reversedClientId) {
+  let configJs = fs.readFileSync(GOOGLE_AUTH_CONFIG, 'utf8');
+  configJs = configJs.replace(
+    /export const EATIX_GOOGLE_IOS_CLIENT_ID =\s*\n\s*'[^']*';/,
+    `export const EATIX_GOOGLE_IOS_CLIENT_ID =\n  '${clientId}';`,
+  );
+  configJs = configJs.replace(
+    /export const EATIX_GOOGLE_IOS_REVERSED_CLIENT_ID =\s*\n\s*'[^']*';/,
+    `export const EATIX_GOOGLE_IOS_REVERSED_CLIENT_ID =\n  '${reversedClientId}';`,
+  );
+  fs.writeFileSync(GOOGLE_AUTH_CONFIG, configJs);
+}
+
 function main() {
   const source = process.argv[2];
   if (!source) {
@@ -87,6 +101,8 @@ function main() {
   let infoXml = fs.readFileSync(INFO_PLIST, 'utf8');
   infoXml = upsertGoogleUrlScheme(infoXml, values.reversedClientId);
   fs.writeFileSync(INFO_PLIST, infoXml);
+
+  upsertGoogleAuthConfigIosIds(values.clientId, values.reversedClientId);
 
   console.log('Installed GoogleService-Info.plist');
   console.log(`CLIENT_ID: ${values.clientId}`);
