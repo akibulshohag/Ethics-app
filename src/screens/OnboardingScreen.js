@@ -21,51 +21,82 @@ import onboard3 from '../assets/img/b4.png';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const SLIDES = [
-  {
-    key: 'slide-1',
-    image: onboard1,
-    showBack: false,
-    isLast: false,
-  },
-  {
-    key: 'slide-2',
-    image: onboard2,
-    showBack: true,
-    isLast: false,
-  },
-  {
-    key: 'slide-3',
-    image: onboard3,
-    showBack: true,
-    isLast: true,
-  },
+  { key: 'slide-1', image: onboard1, isLast: false },
+  { key: 'slide-2', image: onboard2, isLast: false },
+  { key: 'slide-3', image: onboard3, isLast: true },
 ];
 
-const NextCircleButton = ({ onPress, bottom }) => (
+const ORANGE = '#F97507';
+
+const PrimaryActionButton = ({
+  label,
+  onPress,
+  bottom,
+  left,
+  right,
+  accessibilityLabel,
+}) => (
   <TouchableOpacity
-    style={[styles.nextBtn, { bottom }]}
+    style={[styles.primaryBtn, { bottom, left, right }]}
     onPress={onPress}
     activeOpacity={0.88}
     accessibilityRole="button"
-    accessibilityLabel="Next"
+    accessibilityLabel={accessibilityLabel || label}
   >
-    <Icon name="arrow-right" size={18} color="#111111" />
+    <Text style={styles.primaryBtnText}>{label}</Text>
+    <View style={styles.primaryBtnArrowWrap}>
+      <Icon name="arrow-right" size={22} color={ORANGE} />
+    </View>
   </TouchableOpacity>
 );
 
-const GetStartedButton = ({ onPress, bottom, left, right }) => (
+const GetExploringButton = props => (
+  <PrimaryActionButton label="Get Exploring" {...props} />
+);
+
+const LetsGetStartedButton = props => (
+  <PrimaryActionButton label="Let's Get Started" {...props} />
+);
+
+const PreviousButton = ({ onPress, top, left }) => (
   <TouchableOpacity
-    style={[styles.getStartedBtn, { bottom, left, right }]}
+    style={[styles.prevBtn, { top, left }]}
     onPress={onPress}
-    activeOpacity={0.88}
+    activeOpacity={0.7}
     accessibilityRole="button"
-    accessibilityLabel="Get Started"
+    accessibilityLabel="Previous"
   >
-    <Text style={styles.getStartedText}>Get Started</Text>
-    <View style={styles.getStartedArrowWrap}>
-      <Icon name="arrow-right" size={22} color="#111111" />
-    </View>
+    <Icon name="arrow-left" size={18} color="#FFFFFF" />
+    <Text style={styles.prevText}>Previous</Text>
   </TouchableOpacity>
+);
+
+const SkipButton = ({ onPress, top, right }) => (
+  <TouchableOpacity
+    style={[styles.skipBtn, { top, right }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel="Skip onboarding"
+  >
+    <Text style={styles.skipText}>Skip</Text>
+    <Icon name="arrow-right" size={18} color="#FFFFFF" />
+  </TouchableOpacity>
+);
+
+const OnboardingDots = ({ total, activeCount, bottom }) => (
+  <View style={[styles.dotsRow, { bottom }]} pointerEvents="none">
+    {Array.from({ length: total }).map((_, index) => (
+      <View
+        key={`dot-${index}`}
+        style={[
+          styles.dot,
+          index > 0 && styles.dotSpacing,
+          index < activeCount ? styles.dotActive : styles.dotInactive,
+        ]}
+      />
+    ))}
+  </View>
 );
 
 const OnboardingScreen = () => {
@@ -110,8 +141,14 @@ const OnboardingScreen = () => {
     [currentIndex],
   );
 
-  const bottomInset = insets.bottom + 36;
-  const getStartedBottom = insets.bottom + 28;
+  const handleSkip = useCallback(() => {
+    dispatch(setOnboardingDone(true));
+  }, [dispatch]);
+
+  const actionBottom = insets.bottom + 24;
+  const dotsBottom = insets.bottom + 92;
+  const headerTop = insets.top + 10;
+  const actionHorizontal = 24;
 
   return (
     <View style={styles.container}>
@@ -130,7 +167,7 @@ const OnboardingScreen = () => {
         onMomentumScrollEnd={onScrollEnd}
         scrollEventThrottle={16}
       >
-        {SLIDES.map(slide => (
+        {SLIDES.map((slide, index) => (
           <View key={slide.key} style={styles.slide}>
             <Image
               source={slide.image}
@@ -138,28 +175,40 @@ const OnboardingScreen = () => {
               resizeMode="cover"
             />
 
-            {slide.showBack ? (
-              <TouchableOpacity
-                style={[
-                  styles.backHitArea,
-                  { top: insets.top + 8, left: 16 },
-                ]}
+            {index > 0 ? (
+              <PreviousButton
                 onPress={handleBack}
-                activeOpacity={1}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
+                top={headerTop}
+                left={20}
               />
             ) : null}
 
+            <SkipButton
+              onPress={handleSkip}
+              top={headerTop}
+              right={20}
+            />
+
+            <OnboardingDots
+              total={SLIDES.length}
+              activeCount={index + 1}
+              bottom={dotsBottom}
+            />
+
             {slide.isLast ? (
-              <GetStartedButton
+              <LetsGetStartedButton
                 onPress={handleNext}
-                bottom={getStartedBottom}
-                left={28}
-                right={28}
+                bottom={actionBottom}
+                left={actionHorizontal}
+                right={actionHorizontal}
               />
             ) : (
-              <NextCircleButton onPress={handleNext} bottom={bottomInset} />
+              <GetExploringButton
+                onPress={handleNext}
+                bottom={actionBottom}
+                left={actionHorizontal}
+                right={actionHorizontal}
+              />
             )}
           </View>
         ))}
@@ -181,49 +230,80 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
   },
-  backHitArea: {
+  prevBtn: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    zIndex: 12,
-  },
-  nextBtn: {
-    position: 'absolute',
-    alignSelf: 'center',
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    borderWidth: 5,
-    borderColor: '#232323',
-    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     zIndex: 12,
   },
-  getStartedBtn: {
+  prevText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  skipBtn: {
     position: 'absolute',
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    zIndex: 12,
+  },
+  skipText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  primaryBtn: {
+    position: 'absolute',
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: ORANGE,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingLeft: 28,
-    paddingRight: 8,
+    paddingRight: 6,
     zIndex: 12,
   },
-  getStartedText: {
+  primaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
+    flexShrink: 1,
   },
-  getStartedArrowWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
+  primaryBtnArrowWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#111111',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dotsRow: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotSpacing: {
+    marginLeft: 10,
+  },
+  dotActive: {
+    backgroundColor: ORANGE,
+  },
+  dotInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
 });
 
