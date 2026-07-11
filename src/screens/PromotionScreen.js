@@ -41,7 +41,7 @@ import {
   youtubeOAuthRedirectUri,
 } from '../../config';
 import LinearGradient from 'react-native-linear-gradient';
-import eatixLogo from '../assets/logo.png';
+import appLogo from '../assets/logo.png';
 import UserProfileCard from '../components/UserProfileCard';
 
 import {
@@ -1432,7 +1432,7 @@ const PromotionScreen = ({ onBack }) => {
     const pid = galleryEngagePhoto.id;
     try {
       await Share.share({
-        message: `Photo\neatix://user/${userId}/gallery/${pid}`,
+        message: `Photo\neatwaze://user/${userId}/gallery/${pid}`,
         title: 'Photo',
       });
       await recordGalleryPhotoShare(userId, pid);
@@ -2680,7 +2680,7 @@ const PromotionScreen = ({ onBack }) => {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Image
-            source={eatixLogo}
+            source={appLogo}
             style={styles.promoHeaderLogo}
             resizeMode="contain"
           />

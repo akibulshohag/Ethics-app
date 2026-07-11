@@ -1,26 +1,26 @@
 import googleServices from './android/app/google-services.json';
 
-/** Firebase eatix-17d2a — must match backend GOOGLE_CLIENT_ID and strings.xml default_web_client_id. */
-export const EATIX_GOOGLE_WEB_CLIENT_ID =
+/** Google OAuth — must match backend GOOGLE_CLIENT_ID and strings.xml default_web_client_id. */
+export const EATWAZE_GOOGLE_WEB_CLIENT_ID =
   '236298500212-810ubvv2taqs55m35pgvg0h795so6u68.apps.googleusercontent.com';
 
-export const EATIX_GOOGLE_ANDROID_CLIENT_ID =
+export const EATWAZE_GOOGLE_ANDROID_CLIENT_ID =
   '236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com';
 
 /** iOS OAuth client from Firebase GoogleService-Info.plist (apply-ios-google-service-info.js updates these). */
-export const EATIX_GOOGLE_IOS_CLIENT_ID =
+export const EATWAZE_GOOGLE_IOS_CLIENT_ID =
   '236298500212-s19odpqururn1hls4u3o8ebp79o2b726.apps.googleusercontent.com';
 
-export const EATIX_GOOGLE_IOS_REVERSED_CLIENT_ID =
+export const EATWAZE_GOOGLE_IOS_REVERSED_CLIENT_ID =
   'com.googleusercontent.apps.236298500212-s19odpqururn1hls4u3o8ebp79o2b726';
 
 /** iOS OAuth client from Firebase GoogleService-Info.plist (after apply-ios-google-service-info.js). */
 export function resolveGoogleIosClientId() {
-  return EATIX_GOOGLE_IOS_CLIENT_ID;
+  return EATWAZE_GOOGLE_IOS_CLIENT_ID;
 }
 
 export function resolveGoogleIosReversedClientId() {
-  return EATIX_GOOGLE_IOS_REVERSED_CLIENT_ID;
+  return EATWAZE_GOOGLE_IOS_REVERSED_CLIENT_ID;
 }
 
 /** Web OAuth client from Firebase google-services.json (client_type 3). */
@@ -37,7 +37,7 @@ export function resolveGoogleWebClientId() {
   if (fromOther?.client_id) {
     return String(fromOther.client_id).trim();
   }
-  return EATIX_GOOGLE_WEB_CLIENT_ID;
+  return EATWAZE_GOOGLE_WEB_CLIENT_ID;
 }
 
 export function getFirebaseProjectNumber() {

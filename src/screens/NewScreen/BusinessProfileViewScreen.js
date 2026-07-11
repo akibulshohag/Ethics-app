@@ -32,7 +32,7 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
-import eatixLogo from '../../assets/logo.png';
+import appLogo from '../../assets/logo.png';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -338,7 +338,7 @@ const DEFAULT_OPENING_HOURS = [
 const MOCK_POSTS = [
   {
     id: '1',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe! eatix',
+    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe!',
     channelName: 'Dalchini',
     channelAvatar: 'https://via.placeholder.com/100',
     publishedAt: '5 months ago',
@@ -2430,7 +2430,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     const pid = galleryEngagePhoto.id;
     try {
       await Share.share({
-        message: `Photo\neatix://user/${profileUserId}/gallery/${pid}`,
+        message: `Photo\neatwaze://user/${profileUserId}/gallery/${pid}`,
         title: 'Photo',
       });
       await recordGalleryPhotoShare(profileUserId, pid);
@@ -3961,7 +3961,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             <Text style={styles.topNavBackText}>Back</Text>
           </TouchableOpacity>
           <Image
-            source={eatixLogo}
+            source={appLogo}
             style={styles.promoHeaderLogo}
             resizeMode="contain"
           />
@@ -5279,7 +5279,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   <Text style={styles.facebookMetaHint}>
                     If Facebook shows &quot;App not active&quot; or &quot;Feature
                     unavailable&quot; while the Meta app is in Development mode, add
-                    that person under Meta Developer Console → eatix-update → App
+                    that person under Meta Developer Console → your Eatwaze app → App
                     roles → Roles → Tester. They must accept the invite on Facebook,
                     then retry Verify Facebook.
                     {'\n\n'}

@@ -32,7 +32,7 @@ const postJson = async (path, body) => {
       String(path).includes('social-login')
     ) {
       throw new Error(
-        'The API server needs an update. On the server run: cd /var/www/eatix-backend && git pull && ./deploy-api-update.sh — then try Google/Facebook login again.',
+        'The API server needs an update. Please contact support or try again later.',
       );
     }
     throw new Error(msg);

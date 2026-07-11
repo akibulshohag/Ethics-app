@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(ps -p 10503 -o pid,ppid,etime,command)",
+      "Bash(adb devices *)",
+      "Bash(ps -p 10220,10503 -o pid,etime,pcpu,command)",
+      "Bash(./gradlew --status)",
+      "Bash(adb shell *)",
+      "Bash(sample 10503 2 -mayDie)",
+      "Bash(sample 10503 1 -mayDie)",
+      "Read(//private/var/folders/8m/2ybj9lbj0jn5xsm8z3d8p8vc0000gn/T/cursor-sandbox-cache/dcfe85286a5b85c8bc202ae25d03f3dd/gradle/daemon/8.13/**)",
+      "Bash(kill 10220 10503 10587)"
+    ]
+  }
+}

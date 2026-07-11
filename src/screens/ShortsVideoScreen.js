@@ -1554,6 +1554,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   };
 
   const handleDownloadShort = async () => {
+    if (!user?.id) {
+      navigateToHomeScreen('HomeSevenScreen');
+      return;
+    }
     const t = menuTargetShort();
     const url = t?.videoUrl;
     if (!url || !String(url).trim()) {
@@ -1577,6 +1581,10 @@ const ShortsVideoScreen = ({ navigation }) => {
   };
 
   const handleNotInterestedShort = () => {
+    if (!user?.id) {
+      navigateToHomeScreen('HomeSevenScreen');
+      return;
+    }
     const t = menuTargetShort();
     if (!t?.id) return;
     setVideos(prev => {

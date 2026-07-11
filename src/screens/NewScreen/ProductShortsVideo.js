@@ -805,6 +805,10 @@ const ProductShortsVideo = () => {
   };
 
   const handleDownloadProduct = async () => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
     const t = menuTargetProduct();
     const url = t?.videoUrl;
     if (!url || !String(url).trim()) {
@@ -827,6 +831,10 @@ const ProductShortsVideo = () => {
   };
 
   const handleNotInterestedProduct = () => {
+    if (!user?.id) {
+      navigation.navigate('HomeSevenScreen');
+      return;
+    }
     const t = menuTargetProduct();
     if (!t?.id) return;
     setVideos(prev => {

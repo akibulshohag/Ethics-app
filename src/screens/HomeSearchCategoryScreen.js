@@ -405,20 +405,20 @@ export default function HomeSearchCategoryScreen() {
                 resizeMode="contain"
               />
               <TouchableOpacity
-                style={styles.eatixLocationRow}
+                style={styles.locationRow}
                 activeOpacity={0.85}
                 onPress={openLocationPicker}
               >
                 <Icon name="map-marker-outline" size={17} color="#FFF" />
-                <View style={styles.eatixLocationLabelWrap}>
-                  <Text style={styles.eatixLocationText} numberOfLines={1}>
+                <View style={styles.locationLabelWrap}>
+                  <Text style={styles.locationText} numberOfLines={1}>
                     {primaryLoc}
                   </Text>
                   <Icon
                     name="chevron-down"
                     size={16}
                     color="#FFF"
-                    style={styles.eatixLocationChevron}
+                    style={styles.locationChevron}
                   />
                 </View>
               </TouchableOpacity>
@@ -447,15 +447,15 @@ export default function HomeSearchCategoryScreen() {
       </View>
 
       <View style={styles.body}>
-        <View style={styles.eatixSearchBlock}>
-          <Text style={styles.eatixSearchHint}>
+        <View style={styles.searchBlock}>
+          <Text style={styles.searchHint}>
             Watch what's popular near you, tap to get it
           </Text>
-          <View style={styles.eatixSearchRow}>
-            <View style={styles.eatixSearchInputWrap}>
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputWrap}>
               <Icon name="magnify" size={22} color="#9CA3AF" />
               <TextInput
-                style={styles.eatixSearchInput}
+                style={styles.searchInput}
                 placeholder="Search for restaurants or dishes..."
                 placeholderTextColor="#9CA3AF"
                 value={searchQuery}
@@ -466,7 +466,7 @@ export default function HomeSearchCategoryScreen() {
               />
             </View>
             <TouchableOpacity
-              style={styles.eatixFilterBtn}
+              style={styles.filterBtn}
               activeOpacity={0.85}
               onPress={() =>
                 openFullSearch({ openFilters: true, autoFocus: false })
@@ -631,43 +631,43 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   logoImage: HEADER_LOGO_STYLE,
-  eatixLocationRow: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
-  eatixLocationLabelWrap: {
+  locationLabelWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 1,
     marginLeft: 5,
   },
-  eatixLocationText: {
+  locationText: {
     color: '#FFF',
     fontSize: 15,
     fontWeight: '600',
     flexShrink: 1,
   },
-  eatixLocationChevron: { marginLeft: 2, marginTop: 1 },
-  eatixSearchBlock: {
+  locationChevron: { marginLeft: 2, marginTop: 1 },
+  searchBlock: {
     backgroundColor: '#FFF',
     paddingHorizontal: FEED_HORIZONTAL_PAD,
     paddingTop: 14,
     paddingBottom: 16,
   },
-  eatixSearchHint: {
+  searchHint: {
     fontSize: 13,
     color: '#6B7280',
     marginBottom: 10,
     lineHeight: 18,
   },
-  eatixSearchRow: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  eatixSearchInputWrap: {
+  searchInputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -683,14 +683,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  eatixSearchInput: {
+  searchInput: {
     flex: 1,
     marginLeft: 8,
     fontSize: 14,
     color: '#111827',
     paddingVertical: 0,
   },
-  eatixFilterBtn: {
+  filterBtn: {
     width: 48,
     height: 48,
     borderRadius: 12,

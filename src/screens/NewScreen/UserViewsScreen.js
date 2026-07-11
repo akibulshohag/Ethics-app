@@ -24,7 +24,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import UserProfileCard from '../../components/UserProfileCard';
-import eatixLogo from '../../assets/logo.png';
+import appLogo from '../../assets/logo.png';
 import VideoCard from '../../components/VideoCard';
 import CompactVideoCard from '../../components/CompactVideoCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
@@ -1034,7 +1034,7 @@ const UserViewsScreen = ({ navigation }) => {
     const pid = galleryEngagePhoto.id;
     try {
       await Share.share({
-        message: `Photo\neatix://user/${profileUserId}/gallery/${pid}`,
+        message: `Photo\neatwaze://user/${profileUserId}/gallery/${pid}`,
         title: 'Photo',
       });
       await recordGalleryPhotoShare(profileUserId, pid);
@@ -2549,7 +2549,7 @@ const UserViewsScreen = ({ navigation }) => {
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Image
-            source={eatixLogo}
+            source={appLogo}
             style={styles.promoHeaderLogo}
             resizeMode="contain"
           />

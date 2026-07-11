@@ -7,7 +7,7 @@ import {
 import { AccessToken, LoginManager, Settings } from 'react-native-fbsdk-next';
 import appleAuth from '@invertase/react-native-apple-authentication';
 import { config } from '../../config';
-import { EATIX_GOOGLE_WEB_CLIENT_ID, resolveGoogleIosClientId } from '../../googleAuthConfig';
+import { EATWAZE_GOOGLE_WEB_CLIENT_ID, resolveGoogleIosClientId } from '../../googleAuthConfig';
 import { socialLogin } from './authService';
 
 let googleConfigured = false;
@@ -18,14 +18,12 @@ const readGoogleIdToken = payload =>
 function ensureGoogleConfigured() {
   if (googleConfigured) return;
   const webClientId = String(
-    config.googleClientId || EATIX_GOOGLE_WEB_CLIENT_ID,
+    config.googleClientId || EATWAZE_GOOGLE_WEB_CLIENT_ID,
   ).trim();
   if (!webClientId) {
-    const proj = config.firebaseProjectNumber || 'eatix-17d2a';
     throw new Error(
-      `Google Sign-In is not configured. In Firebase (${proj}): Project settings → ` +
-        `Android app com.eatix.app → add SHA-1 B8:C2:D3:45:... (release) and 5E:8F:16:06:... (debug). ` +
-        `Enable Authentication → Google. Re-download google-services.json, rebuild APK.`,
+      'Google Sign-In is not configured. Add your app SHA-1 in Firebase/Google Cloud, ' +
+        'enable Authentication → Google, re-download google-services.json, and rebuild the app.',
     );
   }
 
@@ -41,9 +39,8 @@ function ensureGoogleConfigured() {
     ).trim();
     if (!iosClientId) {
       throw new Error(
-        'Google Sign-In is not configured for iOS. In Firebase (eatix-17d2a): add iOS app ' +
-          'com.eatwaze.app, download GoogleService-Info.plist, then run ' +
-          'node scripts/apply-ios-google-service-info.js ~/Downloads/GoogleService-Info.plist and rebuild in Xcode.',
+        'Google Sign-In is not configured for iOS. Add iOS app com.eatwaze.app in Firebase, ' +
+          'download GoogleService-Info.plist, run scripts/apply-ios-google-service-info.js, and rebuild in Xcode.',
       );
     }
     configureOptions.iosClientId = iosClientId;
@@ -78,7 +75,7 @@ export async function loginWithGoogle({ termsAccepted } = {}) {
 
   if (!idToken && !accessToken) {
     throw new Error(
-      'Google did not return a sign-in token. Rebuild the APK after Firebase (eatix-17d2a) has your release SHA-1 on com.eatix.app.',
+      'Google did not return a sign-in token. Rebuild the app after Google Sign-In is configured in Firebase.',
     );
   }
   return socialLogin({
@@ -298,7 +295,7 @@ export async function connectYouTubeWithGoogleSignIn(userId) {
     throw new Error('Sign in required to connect YouTube.');
   }
   const webClientId = String(
-    config.googleClientId || EATIX_GOOGLE_WEB_CLIENT_ID,
+    config.googleClientId || EATWAZE_GOOGLE_WEB_CLIENT_ID,
   ).trim();
   if (!webClientId) {
     throw new Error(
@@ -426,20 +423,17 @@ export function normalizeSocialAuthError(error) {
   }
   if (/Google token audience mismatch/i.test(msg)) {
     return (
-      'API server needs update: SSH to eatixapi, run cd /var/www/eatix-backend && git pull && ./deploy-api-update.sh — then try Google login again.'
+      'Google Sign-In server configuration is out of date. Please update the API server and try again.'
     );
   }
   if (/DEVELOPER_ERROR/i.test(msg) || code === '10') {
     if (!config.googleClientId) {
       return (
-        'Firebase google-services.json has no Web OAuth client. Add SHA-1 fingerprints in Firebase ' +
-        '(eatix-17d2a), enable Authentication → Google, re-download google-services.json, rebuild APK.'
+        'Google Sign-In is not configured. Add SHA-1 fingerprints in Firebase, enable Google sign-in, re-download google-services.json, and rebuild.'
       );
     }
     return (
-      'Google Sign-In config mismatch. Use Firebase project eatix-17d2a only: add release SHA-1 ' +
-      'B8:C2:D3:45:EF:A9:E4:10:86:6E:E5:BD:46:D2:C9:59:5F:F0:3F:82 on Android app com.eatix.app, ' +
-      're-download google-services.json, update backend GOOGLE_CLIENT_ID to the same Web client, rebuild.'
+      'Google Sign-In configuration mismatch. Verify Firebase SHA-1, google-services.json, and backend GOOGLE_CLIENT_ID match, then rebuild.'
     );
   }
   if (/key hash|key hashes/i.test(msg)) {

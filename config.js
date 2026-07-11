@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import {
-  EATIX_GOOGLE_WEB_CLIENT_ID,
+  EATWAZE_GOOGLE_WEB_CLIENT_ID,
   getFirebaseProjectNumber,
   googleServicesHasOAuthClients,
   resolveGoogleWebClientId,
@@ -86,7 +86,7 @@ export const config = {
    * Google Sign-In Web client ID — read from android/app/google-services.json when present.
    * Firebase project: eatix-17d2a (236298500212). If empty, finish Firebase setup below.
    */
-  googleClientId: resolveGoogleWebClientId() || EATIX_GOOGLE_WEB_CLIENT_ID,
+  googleClientId: resolveGoogleWebClientId() || EATWAZE_GOOGLE_WEB_CLIENT_ID,
   firebaseProjectNumber: getFirebaseProjectNumber(),
   googleServicesOAuthReady: googleServicesHasOAuthClients(),
 };

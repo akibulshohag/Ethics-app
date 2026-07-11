@@ -58,12 +58,12 @@ function upsertGoogleUrlScheme(infoXml, reversedClientId) {
 function upsertGoogleAuthConfigIosIds(clientId, reversedClientId) {
   let configJs = fs.readFileSync(GOOGLE_AUTH_CONFIG, 'utf8');
   configJs = configJs.replace(
-    /export const EATIX_GOOGLE_IOS_CLIENT_ID =\s*\n\s*'[^']*';/,
-    `export const EATIX_GOOGLE_IOS_CLIENT_ID =\n  '${clientId}';`,
+    /export const EATWAZE_GOOGLE_IOS_CLIENT_ID =\s*\n\s*'[^']*';/,
+    `export const EATWAZE_GOOGLE_IOS_CLIENT_ID =\n  '${clientId}';`,
   );
   configJs = configJs.replace(
-    /export const EATIX_GOOGLE_IOS_REVERSED_CLIENT_ID =\s*\n\s*'[^']*';/,
-    `export const EATIX_GOOGLE_IOS_REVERSED_CLIENT_ID =\n  '${reversedClientId}';`,
+    /export const EATWAZE_GOOGLE_IOS_REVERSED_CLIENT_ID =\s*\n\s*'[^']*';/,
+    `export const EATWAZE_GOOGLE_IOS_REVERSED_CLIENT_ID =\n  '${reversedClientId}';`,
   );
   fs.writeFileSync(GOOGLE_AUTH_CONFIG, configJs);
 }

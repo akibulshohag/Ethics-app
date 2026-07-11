@@ -146,7 +146,7 @@ import { useNotifications } from '../hooks/useNotifications';
 const { width, height } = Dimensions.get('window');
 const FEED_HORIZONTAL_PAD = 15;
 const SHORT_CAROUSEL_GAP = 8;
-/** ~3 full cards + half peek (per eatix home design) */
+/** ~3 full cards + half peek (home feed layout) */
 const SHORT_CAROUSEL_CARD_WIDTH =
   (width - FEED_HORIZONTAL_PAD * 2 - SHORT_CAROUSEL_GAP * 3) / 3.5;
 const SHORT_CAROUSEL_CARD_HEIGHT = Math.round(SHORT_CAROUSEL_CARD_WIDTH * 1.42);
@@ -3175,6 +3175,7 @@ const HomeOneScreen = () => {
   }, [homeMoreTarget, requireLogin, user?.id]);
 
   const onMoreDownload = useCallback(async () => {
+    if (!requireLogin()) return;
     const t = homeMoreTarget;
     if (!t?.videoUrl || !t?.contentId) {
       Alert.alert('Download', 'No video URL available.');
@@ -3198,7 +3199,7 @@ const HomeOneScreen = () => {
       setResDownloadPct(null);
       Alert.alert('Download failed', e?.message || 'Could not download.');
     }
-  }, [homeMoreTarget]);
+  }, [homeMoreTarget, requireLogin]);
 
   const onMoreShare = useCallback(async () => {
     const t = homeMoreTarget;
@@ -3223,11 +3224,12 @@ const HomeOneScreen = () => {
   }, [homeMoreTarget, user?.id]);
 
   const onMoreNotInterested = useCallback(() => {
+    if (!requireLogin()) return;
     Alert.alert(
       'Not interested',
       "We'll try to show you less content like this.",
     );
-  }, []);
+  }, [requireLogin]);
 
   const onMoreEditShort = useCallback(async () => {
     const t = homeMoreTarget;
@@ -4096,20 +4098,20 @@ const HomeOneScreen = () => {
                 resizeMode="contain"
               />
               <TouchableOpacity
-                style={styles.eatixLocationRow}
+                style={styles.locationRow}
                 activeOpacity={0.85}
                 onPress={() => setLocationModalVisible(true)}
               >
                 <Icon name="map-marker-outline" size={17} color="#FFF" />
-                <View style={styles.eatixLocationLabelWrap}>
-                  <Text style={styles.eatixLocationText} numberOfLines={1}>
+                <View style={styles.locationLabelWrap}>
+                  <Text style={styles.locationText} numberOfLines={1}>
                     {primaryLoc}
                   </Text>
                   <Icon
                     name="chevron-down"
                     size={16}
                     color="#FFF"
-                    style={styles.eatixLocationChevron}
+                    style={styles.locationChevron}
                   />
                 </View>
               </TouchableOpacity>
@@ -4184,13 +4186,13 @@ const HomeOneScreen = () => {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.eatixSearchBlock}>
-            <Text style={styles.eatixSearchHint}>
+          <View style={styles.searchBlock}>
+            <Text style={styles.searchHint}>
               Watch what's popular near you, tap to get it
             </Text>
-            <View style={styles.eatixSearchRow}>
+            <View style={styles.searchRow}>
               <TouchableOpacity
-                style={styles.eatixSearchInputWrap}
+                style={styles.searchInputWrap}
                 activeOpacity={0.9}
                 onPress={() =>
                   navigation.navigate('HomeSearchScreen', {
@@ -4208,12 +4210,12 @@ const HomeOneScreen = () => {
                 }
               >
                 <Icon name="magnify" size={22} color="#9CA3AF" />
-                <Text style={styles.eatixSearchPlaceholder}>
+                <Text style={styles.searchPlaceholder}>
                   Search for restaurants or dishes...
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.eatixFilterBtn}
+                style={styles.filterBtn}
                 activeOpacity={0.85}
                 onPress={() =>
                   navigation.navigate('HomeSearchScreen', {
@@ -6437,46 +6439,46 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  eatixLocationRow: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
-  eatixLocationLabelWrap: {
+  locationLabelWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 1,
     marginLeft: 5,
   },
-  eatixLocationText: {
+  locationText: {
     color: '#FFF',
     fontSize: 15,
     fontWeight: '600',
     flexShrink: 1,
   },
-  eatixLocationChevron: {
+  locationChevron: {
     marginLeft: 2,
     marginTop: 1,
   },
-  eatixSearchBlock: {
+  searchBlock: {
     backgroundColor: '#FFF',
     paddingHorizontal: FEED_HORIZONTAL_PAD,
     paddingTop: 14,
     paddingBottom: 16,
   },
-  eatixSearchHint: {
+  searchHint: {
     fontSize: 13,
     color: '#6B7280',
     marginBottom: 10,
     lineHeight: 18,
   },
-  eatixSearchRow: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  eatixSearchInputWrap: {
+  searchInputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -6492,20 +6494,20 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  eatixSearchInput: {
+  searchInput: {
     flex: 1,
     marginLeft: 8,
     fontSize: 14,
     color: '#111827',
     paddingVertical: 0,
   },
-  eatixSearchPlaceholder: {
+  searchPlaceholder: {
     flex: 1,
     marginLeft: 8,
     fontSize: 14,
     color: '#9CA3AF',
   },
-  eatixFilterBtn: {
+  filterBtn: {
     width: 48,
     height: 48,
     borderRadius: 12,

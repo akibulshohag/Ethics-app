@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEY = '@eatix/recent_searches';
+const KEY = '@eatwaze/recent_searches';
 const MAX = 8;
 
 export async function getRecentSearches() {

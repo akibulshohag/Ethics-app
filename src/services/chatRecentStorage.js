@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const RECENT_CHATS_KEY = '@eatix/recent_chat_partners';
+const RECENT_CHATS_KEY = '@eatwaze/recent_chat_partners';
 const MAX_RECENT = 50;
 
 export const normalizeChatUserId = id =>

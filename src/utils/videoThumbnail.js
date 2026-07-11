@@ -68,7 +68,7 @@ export async function generateVideoCoverFrames(
       url: uri,
       timeStamp,
       format: 'jpeg',
-      cacheName: `eatix_cover_${cacheKey}_${i}`,
+      cacheName: `eatwaze_cover_${cacheKey}_${i}`,
       maxWidth,
       maxHeight,
     })
@@ -107,7 +107,7 @@ export async function thumbnailFromVideoFrame(
         url: uri,
         timeStamp: stampsMs[i],
         format: 'jpeg',
-        cacheName: `eatix_thumb_${Date.now()}_${i}`,
+        cacheName: `eatwaze_thumb_${Date.now()}_${i}`,
         maxWidth,
         maxHeight,
       });

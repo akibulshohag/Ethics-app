@@ -1,10 +1,19 @@
-const APP_SCHEME = 'eatix';
-const APP_WEB_HOST = 'eatix.app';
+const APP_SCHEME = 'eatwaze';
+const LEGACY_APP_SCHEME = 'eatix';
+const APP_WEB_HOST = 'eatwaze.app';
+const LEGACY_WEB_HOSTS = ['eatix.app', 'eatwaze.app'];
 
 const normalizeType = type => {
   const t = String(type || '').toLowerCase();
   if (t.startsWith('short')) return 'shorts';
   return 'video';
+};
+
+const isAppWebHost = host => {
+  const h = String(host || '').toLowerCase();
+  return LEGACY_WEB_HOSTS.some(
+    legacy => h === legacy || h.endsWith(`.${legacy}`),
+  );
 };
 
 export const buildContentDeepLink = (type, id) => {
@@ -27,8 +36,6 @@ export const buildPostUniversalLink = id => {
 
 export const buildContentShareMessage = ({ type, id }) => {
   const web = buildContentUniversalLink(type, id);
-  // Share a clean universal link so copy/share behaves like social apps.
-  // Keeping this URL-only prevents Android share sheets from emphasizing plain text.
   return web;
 };
 
@@ -49,7 +56,7 @@ export const parseSharedContentUrl = rawUrl => {
     let type = null;
     let id = null;
 
-    if (scheme === APP_SCHEME) {
+    if (scheme === APP_SCHEME || scheme === LEGACY_APP_SCHEME) {
       const hostPart = String(u.host || '').toLowerCase();
       const firstPath = pathParts[0] || null;
       if (hostPart === 'shorts' || hostPart === 'short') {
@@ -72,7 +79,7 @@ export const parseSharedContentUrl = rawUrl => {
         id = pathParts[1] || null;
       }
     } else if (scheme === 'https' || scheme === 'http') {
-      if (host === APP_WEB_HOST || host.endsWith(`.${APP_WEB_HOST}`)) {
+      if (isAppWebHost(host)) {
         const first = pathParts[0] || null;
         if (first === 'shorts' || first === 'short') {
           type = 'short';
