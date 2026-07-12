@@ -75,9 +75,8 @@ import {
   saveLastLocationToBackend,
   persistBrowseLocation,
   normalizeBrowseLocation,
-  resolveUserBrowseLocation,
+  loadStoredBrowseLocation,
   resolveProfileBrowseLocation,
-  browseLocationFromUserProfile,
 } from '../services/userLocationService';
 import {
   browseAreaLabel,
@@ -125,6 +124,7 @@ import { downloadVideo } from '../services/downloadService';
 import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import { buildContentShareMessage } from '../utils/contentLinks';
+import { shouldShowOrderBookButtons } from '../utils/contentVisibility';
 import { getTopRestaurantsByOrders } from '../services/orderService';
 import { getMenuByUserId } from '../services/menuService';
 import {
@@ -440,8 +440,6 @@ const isFutureScheduledMedia = item => {
 
 const onlyPublishedNow = item => !isFutureScheduledMedia(item);
 
-const LOCATION_KEY = 'USER_LOCATION_SELECTION';
-const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const readCuisineText = value => {
   if (value == null) return '';
   if (typeof value === 'string' || typeof value === 'number')
@@ -640,6 +638,8 @@ const HomeOneScreen = () => {
     null;
   const userRef = useRef(user);
   userRef.current = user;
+  const browseLocationRef = useRef(browseLocation);
+  browseLocationRef.current = browseLocation;
   const userPhotosFetchedRef = useRef(false);
   const [resVideoProgress, setResVideoProgress] = useState({
     currentTime: 0,
@@ -855,6 +855,7 @@ const HomeOneScreen = () => {
         postcode: pc,
       });
       setHomeLocationOverride(areaLabel);
+      setSelectedLocation({ lat: coords.lat, lng: coords.lng });
       if (label) setAddressText(label);
       dispatch(
         setBrowseLocation({
@@ -1125,144 +1126,69 @@ const HomeOneScreen = () => {
         });
         return stopPlaybackOnBlur;
       }
-      // If we don't yet have a location, try to restore from storage. Never redirect to LandingScreen; stay on HomeOneScreen and open location modal if none.
+      // Restore last home browse area (not profile address) when coords are missing.
       if (selectedLocation?.lat == null && selectedLocation?.lng == null) {
         let cancelled = false;
         const restoreLocation = async () => {
           try {
             const u = userRef.current;
-            const profileLoc = browseLocationFromUserProfile(u);
-            if (profileLoc && !cancelled) {
-              setSelectedLocation({ lat: profileLoc.lat, lng: profileLoc.lng });
-              setAddressText(profileLoc.addressText || '');
-              setBrowsePostcode(profileLoc.postcode || '');
-              dispatch(setBrowseLocation(profileLoc));
-              await persistBrowseLocation({
-                userId: u?.id,
-                lat: profileLoc.lat,
-                lng: profileLoc.lng,
-                postcode: profileLoc.postcode || '',
-                addressText: profileLoc.addressText || '',
-                areaLabel: profileLoc.areaLabel || '',
-              });
+
+            const fromRedux = normalizeBrowseLocation(browseLocationRef.current);
+            if (fromRedux && !cancelled) {
+              const areaLabel =
+                String(fromRedux.areaLabel || '').trim() ||
+                formatCityCountryPostcodeLine({
+                  addressText: fromRedux.addressText || '',
+                  postcode: fromRedux.postcode || '',
+                });
+              setSelectedLocation({ lat: fromRedux.lat, lng: fromRedux.lng });
+              setAddressText(fromRedux.addressText || '');
+              setBrowsePostcode(fromRedux.postcode || '');
+              if (areaLabel) setHomeLocationOverride(areaLabel);
               loadFeaturedAndFeed();
               loadContinueWatching();
               return;
             }
 
-            const raw = await AsyncStorage.getItem(LOCATION_KEY);
-            if (!raw) {
-              if (!cancelled) {
-                const profileLocResolved = await resolveProfileBrowseLocation(
-                  u,
-                );
-                if (profileLocResolved) {
-                  setSelectedLocation({
-                    lat: profileLocResolved.lat,
-                    lng: profileLocResolved.lng,
-                  });
-                  setAddressText(profileLocResolved.addressText || '');
-                  setBrowsePostcode(profileLocResolved.postcode || '');
-                  dispatch(setBrowseLocation(profileLocResolved));
-                  loadFeaturedAndFeed();
-                  loadContinueWatching();
-                } else {
-                  setLocationModalVisible(true);
-                }
-              }
-              return;
-            }
-            const saved = JSON.parse(raw);
-            const profileAddress = String(u?.address || '').trim();
-            const savedAddress = String(saved?.addressText || '').trim();
-            if (
-              profileAddress &&
-              savedAddress &&
-              profileAddress !== savedAddress
-            ) {
-              const profileLocResolved = await resolveProfileBrowseLocation(u);
-              if (profileLocResolved && !cancelled) {
-                setSelectedLocation({
-                  lat: profileLocResolved.lat,
-                  lng: profileLocResolved.lng,
+            const fromStored = normalizeBrowseLocation(
+              await loadStoredBrowseLocation(u?.id),
+            );
+            if (fromStored && !cancelled) {
+              const areaLabel =
+                String(fromStored.areaLabel || '').trim() ||
+                formatCityCountryPostcodeLine({
+                  addressText: fromStored.addressText || '',
+                  postcode: fromStored.postcode || '',
                 });
-                setAddressText(profileLocResolved.addressText || '');
-                setBrowsePostcode(profileLocResolved.postcode || '');
-                dispatch(setBrowseLocation(profileLocResolved));
-                await persistBrowseLocation({
-                  userId: u?.id,
-                  lat: profileLocResolved.lat,
-                  lng: profileLocResolved.lng,
-                  postcode: profileLocResolved.postcode || '',
-                  addressText: profileLocResolved.addressText || '',
-                  areaLabel: profileLocResolved.areaLabel || '',
-                });
-                loadFeaturedAndFeed();
-                loadContinueWatching();
-                return;
-              }
-            }
-            const sameUser =
-              saved?.userId == null || !userRef.current?.id
-                ? true
-                : String(saved.userId) === String(userRef.current.id);
-            const fresh =
-              saved?.savedAt && Date.now() - saved.savedAt <= LOCATION_TTL_MS;
-            if (
-              saved?.coords?.lat != null &&
-              saved?.coords?.lng != null &&
-              sameUser &&
-              fresh
-            ) {
-              if (cancelled) return;
-              setSelectedLocation(saved.coords);
-              setAddressText(saved.addressText || '');
-              setBrowsePostcode(saved.postcode || '');
-              dispatch(
-                setBrowseLocation(
-                  normalizeBrowseLocation({
-                    lat: saved.coords.lat,
-                    lng: saved.coords.lng,
-                    postcode: saved.postcode,
-                    addressText: saved.addressText,
-                    areaLabel: saved.areaLabel,
-                  }) || {
-                    lat: saved.coords.lat,
-                    lng: saved.coords.lng,
-                    postcode: saved.postcode || '',
-                    addressText: saved.addressText || '',
-                    areaLabel: saved.areaLabel || '',
-                  },
-                ),
-              );
+              setSelectedLocation({ lat: fromStored.lat, lng: fromStored.lng });
+              setAddressText(fromStored.addressText || '');
+              setBrowsePostcode(fromStored.postcode || '');
+              if (areaLabel) setHomeLocationOverride(areaLabel);
+              dispatch(setBrowseLocation(fromStored));
               loadFeaturedAndFeed();
               loadContinueWatching();
-            } else {
-              const profileLoc = await resolveUserBrowseLocation(
-                userRef.current,
-              );
-              if (profileLoc && !cancelled) {
-                setSelectedLocation({
-                  lat: profileLoc.lat,
-                  lng: profileLoc.lng,
-                });
-                setAddressText(profileLoc.addressText || '');
-                setBrowsePostcode(profileLoc.postcode || '');
-                dispatch(setBrowseLocation(profileLoc));
-                await persistBrowseLocation({
-                  userId: userRef.current?.id,
-                  lat: profileLoc.lat,
-                  lng: profileLoc.lng,
-                  postcode: profileLoc.postcode || '',
-                  addressText: profileLoc.addressText || '',
-                  areaLabel: profileLoc.areaLabel || '',
-                });
-                loadFeaturedAndFeed();
-                loadContinueWatching();
-              } else if (!cancelled) {
-                setLocationModalVisible(true);
-              }
+              return;
             }
+
+            const profileLoc = await resolveProfileBrowseLocation(u);
+            if (profileLoc && !cancelled) {
+              const areaLabel =
+                String(profileLoc.areaLabel || '').trim() ||
+                formatCityCountryPostcodeLine({
+                  addressText: profileLoc.addressText || '',
+                  postcode: profileLoc.postcode || '',
+                });
+              setSelectedLocation({ lat: profileLoc.lat, lng: profileLoc.lng });
+              setAddressText(profileLoc.addressText || '');
+              setBrowsePostcode(profileLoc.postcode || '');
+              if (areaLabel) setHomeLocationOverride(areaLabel);
+              dispatch(setBrowseLocation(profileLoc));
+              loadFeaturedAndFeed();
+              loadContinueWatching();
+              return;
+            }
+
+            if (!cancelled) setLocationModalVisible(true);
           } catch (e) {
             if (!cancelled) setLocationModalVisible(true);
           }
@@ -1913,25 +1839,12 @@ const HomeOneScreen = () => {
 
   useFocusEffect(
     useCallback(() => {
-      if (!browseLocation?.lat || !browseLocation?.lng) return;
-      const expectedLabel =
-        String(browseLocation.areaLabel || '').trim() ||
-        formatCityCountryPostcodeLine({
-          addressText: browseLocation.addressText || '',
-          postcode: browseLocation.postcode || '',
-        });
-      if (!expectedLabel || homeLocationOverride === expectedLabel) return;
-      const browseAddr = String(browseLocation.addressText || '').trim();
-      const profileAddr = String(user?.address || '').trim();
-      if (profileAddr && browseAddr && profileAddr === browseAddr) {
-        applyBrowseLocationToSession(browseLocation);
+      if (isCuisineFilterScreen) return;
+      const loc = normalizeBrowseLocation(browseLocationRef.current);
+      if (loc) {
+        applyBrowseLocationToSession(loc);
       }
-    }, [
-      browseLocation,
-      user?.address,
-      homeLocationOverride,
-      applyBrowseLocationToSession,
-    ]),
+    }, [isCuisineFilterScreen, applyBrowseLocationToSession]),
   );
 
   useEffect(() => {
@@ -4397,6 +4310,10 @@ const HomeOneScreen = () => {
                   onPress={() => handleFeedItemPress(featuredNavItem)}
                   onOrderPress={() => handleSponsoredOrder(featuredNavItem)}
                   onMorePress={() => openHomeMoreForFeedItem(featuredNavItem)}
+                  showOrderBook={shouldShowOrderBookButtons(
+                    featuredNavItem,
+                    user?.id,
+                  )}
                 />
               </>
             ) : null}
@@ -4497,6 +4414,7 @@ const HomeOneScreen = () => {
                         trendingOwnerId != null &&
                         String(user.id) === String(trendingOwnerId)
                       }
+                      showOrderBook={shouldShowOrderBookButtons(video, user?.id)}
                     />
                   );
                 })}
@@ -4888,10 +4806,7 @@ const HomeOneScreen = () => {
                 <Icon name="music" size={18} color="#FFF" />
                 <Text style={styles.audioText}>Original Sound</Text>
               </View>
-              {(selectedItem?.creatorRole === 'owner' ||
-                selectedItem?.user?.role === 'owner' ||
-                selectedItem?.userId ||
-                selectedItem?.user?.id) &&
+              {shouldShowOrderBookButtons(selectedItem, user?.id) &&
                 (!user?.token ? (
                   <TouchableOpacity
                     style={styles.resOrderBtn}
@@ -5017,6 +4932,7 @@ const HomeOneScreen = () => {
           selectedItem?._campaignOwnerUser?.address ||
           selectedItem?._campaignMeta?.areaName ||
           '—';
+        const showOrderBook = shouldShowOrderBookButtons(selectedItem, user?.id);
         return (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -5104,10 +5020,7 @@ const HomeOneScreen = () => {
                   </View>
                 </TouchableOpacity>
               </View>
-              {(selectedItem?.creatorRole === 'owner' ||
-                selectedItem?.user?.role === 'owner' ||
-                selectedItem?.userId ||
-                selectedItem?.user?.id) && (
+              {showOrderBook && (
                 <View style={styles.resOrderBtnWrap}>
                   {!user?.token ? (
                     <TouchableOpacity
@@ -5436,13 +5349,15 @@ const HomeOneScreen = () => {
             })}
           </View> */}
               <View style={styles.resBookGalleryRow}>
-                <TouchableOpacity
-                  style={[styles.resRowBtn, styles.resRowBtnPrimary]}
-                  onPress={() => openBookingForItem(selectedItem)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.resRowBtnTextLight}>Book Now</Text>
-                </TouchableOpacity>
+                {showOrderBook ? (
+                  <TouchableOpacity
+                    style={[styles.resRowBtn, styles.resRowBtnPrimary]}
+                    onPress={() => openBookingForItem(selectedItem)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.resRowBtnTextLight}>Book Now</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   style={[styles.resRowBtn, styles.resRowBtnDark]}
                   onPress={openGalleryModal}
@@ -6040,6 +5955,7 @@ const FeaturedHeroCard = ({
   onPress,
   onOrderPress,
   onMorePress,
+  showOrderBook = true,
 }) => (
   <TouchableOpacity
     style={styles.featuredHeroCard}
@@ -6082,17 +5998,19 @@ const FeaturedHeroCard = ({
           {metaLine}
         </Text>
       </View>
-      <TouchableOpacity
-        style={styles.featuredHeroOrderBtn}
-        activeOpacity={0.88}
-        onPress={e => {
-          e?.stopPropagation?.();
-          onOrderPress?.();
-        }}
-      >
-        <Text style={styles.featuredHeroOrderText}>Order Now</Text>
-        <Icon name="arrow-right" size={16} color="#FFF" />
-      </TouchableOpacity>
+      {showOrderBook ? (
+        <TouchableOpacity
+          style={styles.featuredHeroOrderBtn}
+          activeOpacity={0.88}
+          onPress={e => {
+            e?.stopPropagation?.();
+            onOrderPress?.();
+          }}
+        >
+          <Text style={styles.featuredHeroOrderText}>Order Now</Text>
+          <Icon name="arrow-right" size={16} color="#FFF" />
+        </TouchableOpacity>
+      ) : null}
     </View>
   </TouchableOpacity>
 );
@@ -6151,6 +6069,7 @@ const HomeFeedVideoCard = ({
   subscribeBusy,
   isSubscribed,
   hideSubscribe,
+  showOrderBook = true,
 }) => {
   const displayName = String(channelName || title || 'Restaurant').trim();
   const safeRating = Number.isFinite(Number(rating))
@@ -6184,24 +6103,26 @@ const HomeFeedVideoCard = ({
               <Text style={styles.trendingRatingText}>{safeRating}</Text>
             </View>
           </View>
-          <View style={styles.trendingBtnGroup}>
-            <TouchableOpacity
-              style={styles.trendingOrderBtn}
-              activeOpacity={0.88}
-              onPress={onOrderPress}
-              disabled={!onOrderPress}
-            >
-              <Text style={styles.trendingOrderText}>Order Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.trendingBookBtn}
-              activeOpacity={0.88}
-              onPress={onBookPress}
-              disabled={!onBookPress}
-            >
-              <Text style={styles.trendingBookText}>Book Now</Text>
-            </TouchableOpacity>
-          </View>
+          {showOrderBook ? (
+            <View style={styles.trendingBtnGroup}>
+              <TouchableOpacity
+                style={styles.trendingOrderBtn}
+                activeOpacity={0.88}
+                onPress={onOrderPress}
+                disabled={!onOrderPress}
+              >
+                <Text style={styles.trendingOrderText}>Order Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.trendingBookBtn}
+                activeOpacity={0.88}
+                onPress={onBookPress}
+                disabled={!onBookPress}
+              >
+                <Text style={styles.trendingBookText}>Book Now</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
         <View style={styles.trendingRow2}>
           <View style={styles.trendingMetaRow}>

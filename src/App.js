@@ -24,6 +24,8 @@ import {
   ensureSessionOnStartup,
   setupSessionLifecycle,
 } from './services/sessionService';
+import { StripeProvider } from '@stripe/stripe-react-native';
+import { getPaymentConfig } from './services/paymentService';
 
 const AppContent = () => {
   const { user, onboardingDone } = useSelector(state => state.app);
@@ -138,6 +140,8 @@ const AppContent = () => {
 
 const App = () => {
   const [connected, setConnected] = useState(false);
+  const [stripePublishableKey, setStripePublishableKey] = useState('');
+
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setConnected(state.isConnected);
@@ -146,6 +150,16 @@ const App = () => {
       unsubscribe();
     };
   }, [connected]);
+
+  useEffect(() => {
+    getPaymentConfig()
+      .then(data => {
+        if (data?.publishableKey) {
+          setStripePublishableKey(String(data.publishableKey));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   if (!connected) {
     // return <Offline />;
@@ -166,28 +180,33 @@ const App = () => {
     ),
   };
 
+  const appTree = (
+    <Provider store={store}>
+      <PersistGate persistor={persistor}>
+        <AppContent />
+        <Toast
+          config={toastConfig}
+          position="bottom"
+          visibilityTime={2000}
+        />
+      </PersistGate>
+    </Provider>
+  );
+
   return (
     <GestureHandlerRootView style={styles.gestureView}>
       <SafeAreaProvider>
-        <Provider store={store}>
-          <PersistGate
-            // loading={
-            //   <Loading
-            //     customStyle={styles.loadingView}
-            //     msg="App is loading, Please wait..."
-            //   />
-            // }
-            persistor={persistor}
+        {stripePublishableKey ? (
+          <StripeProvider
+            publishableKey={stripePublishableKey}
+            merchantIdentifier="merchant.com.eatwaze.app"
+            urlScheme="eatwaze"
           >
-            <AppContent />
-
-            <Toast
-              config={toastConfig}
-              position="bottom"
-              visibilityTime={2000}
-            />
-          </PersistGate>
-        </Provider>
+            {appTree}
+          </StripeProvider>
+        ) : (
+          appTree
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

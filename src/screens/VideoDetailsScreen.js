@@ -50,6 +50,10 @@ import {
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
 import { safeImageUri } from '../utils/helper';
+import {
+  isBusinessCreator,
+  shouldShowOrderBookButtons,
+} from '../utils/contentVisibility';
 
 const { width } = Dimensions.get('window');
 
@@ -607,6 +611,13 @@ const VideoDetailsScreen = () => {
     setVideoPaused(p => !p);
   };
 
+  const showOrderBookCta = shouldShowOrderBookButtons(currentVideo, user?.id);
+  const isOwnVideo =
+    user?.id &&
+    currentVideo?.userId &&
+    String(currentVideo.userId) === String(user.id);
+  const showMessageCta = isBusinessCreator(currentVideo) && !isOwnVideo;
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.videoPlayer}>
@@ -868,18 +879,10 @@ const VideoDetailsScreen = () => {
             </View>
           )}
 
-        {/* Order / Message only when viewer is not the owner */}
-        {(currentVideo?.creatorRole === 'owner' ||
-          currentVideo?.user?.role === 'owner' ||
-          currentVideo?.userId ||
-          currentVideo?.user?.id) && (
+        {/* Order / Message only for business creators; hide on own content */}
+        {(showOrderBookCta || showMessageCta) && (
           <View style={styles.ctaButtonsRow}>
-            {/* Hide Order Now if logged-in user owns this video */}
-            {!(
-              user?.id &&
-              currentVideo?.userId &&
-              currentVideo.userId === user.id
-            ) && (
+            {showOrderBookCta ? (
               <TouchableOpacity
                 style={styles.ctaButton}
                 onPress={() => {
@@ -920,7 +923,7 @@ const VideoDetailsScreen = () => {
               >
                 <Text style={styles.ctaButtonText}>Order Now</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
             {/* <TouchableOpacity
               style={styles.ctaButton}
               onPress={() => {
@@ -946,12 +949,7 @@ const VideoDetailsScreen = () => {
             >
               <Text style={styles.ctaButtonText}>Visit Website</Text>
             </TouchableOpacity> */}
-            {/* Hide Message Now if logged-in user owns this video */}
-            {!(
-              user?.id &&
-              currentVideo?.userId &&
-              currentVideo.userId === user.id
-            ) && (
+            {showMessageCta ? (
               <TouchableOpacity
                 style={styles.ctaButton}
                 onPress={() => {
@@ -967,7 +965,7 @@ const VideoDetailsScreen = () => {
               >
                 <Text style={styles.ctaButtonText}>Message Now</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
           </View>
         )}
 

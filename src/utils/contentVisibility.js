@@ -49,3 +49,37 @@ export const filterContentByViewerRole = (items, viewerRole, roleKey = 'role') =
       item?.creatorRole;
     return canViewerSeeCreatorContent(viewerRole, creatorRole);
   });
+
+/** Creator role from a feed / video / campaign item. */
+export const creatorRoleFromItem = item => {
+  const raw =
+    item?.creatorRole ||
+    item?.user?.role ||
+    item?.owner?.role ||
+    item?._campaignOwnerUser?.role ||
+    '';
+  return String(raw).toLowerCase();
+};
+
+export const isBusinessCreator = item => {
+  const role = creatorRoleFromItem(item);
+  return role === 'owner' || role === 'vendor';
+};
+
+/** Order / Book CTAs only for business creators; hidden on own content. */
+export const shouldShowOrderBookButtons = (item, viewerUserId) => {
+  if (!isBusinessCreator(item)) return false;
+  const ownerId =
+    item?.userId ??
+    item?.user?.id ??
+    item?._campaignOwnerUser?.id ??
+    null;
+  if (
+    viewerUserId != null &&
+    ownerId != null &&
+    String(viewerUserId) === String(ownerId)
+  ) {
+    return false;
+  }
+  return true;
+};

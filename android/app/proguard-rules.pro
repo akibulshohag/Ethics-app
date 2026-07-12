@@ -78,6 +78,18 @@
 -keep class com.facebook.** { *; }
 -keepattributes Signature
 
+# @stripe/stripe-react-native (release R8 — push provisioning is optional)
+-keep class com.reactnativestripesdk.** { *; }
+-keepclassmembers class com.stripe.android.pushProvisioning.** { public *; }
+-keepclassmembers class com.google.android.gms.tapandpay.** { public *; }
+-dontwarn com.stripe.android.pushProvisioning.**
+-dontwarn com.google.android.gms.tapandpay.**
+-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivity$f
+-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Args
+-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter$Error
+-dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter
+-dontwarn com.stripe.android.pushProvisioning.PushProvisioningEphemeralKeyProvider
+
 # -------------------------------------------------------
 #  General Optimizations
 # -------------------------------------------------------

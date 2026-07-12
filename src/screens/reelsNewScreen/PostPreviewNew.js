@@ -7,8 +7,9 @@ import {
   Image,
   Dimensions,
   ImageBackground,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
@@ -17,8 +18,15 @@ import { computeOverlayPositionStyle } from '../../constants/overlayTextAnchor';
 import SoundsModal from '../../components/SoundsModal';
 
 const { width, height } = Dimensions.get('window');
-const PREVIEW_REEL_HEIGHT = Math.min(width * 1.08, height * 0.52, 440);
-const PREVIEW_REEL_WIDTH = Math.round((PREVIEW_REEL_HEIGHT * 9) / 16);
+
+function computePreviewReelSize(screenH, topInset, bottomInset) {
+  const reserved =
+    topInset + bottomInset + 72 + 78 + 210 + 96;
+  const maxH = Math.max(220, screenH - reserved);
+  const reelH = Math.min(Math.round(width * 1.08), maxH, 380);
+  const reelW = Math.round((reelH * 9) / 16);
+  return { width: reelW, height: reelH };
+}
 
 function LegacyPreviewOverlayText({ draft, videoW, videoH, s }) {
   const [box, setBox] = React.useState({ w: 0, h: 0 });
@@ -118,6 +126,11 @@ const PreviewReelScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const isFocused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const reelSize = React.useMemo(
+    () => computePreviewReelSize(height, insets.top, insets.bottom),
+    [insets.top, insets.bottom],
+  );
   const draft = route.params?.draft || {};
   const [selectedSound, setSelectedSound] = React.useState(
     draft?.edits?.selectedSound || null,
@@ -283,6 +296,12 @@ const PreviewReelScreen = () => {
         <View style={styles.stepperLine} />
         </View>
 
+        <ScrollView
+          style={styles.scrollBody}
+          contentContainerStyle={styles.scrollBodyContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
         <View style={styles.previewContainer}>
         <ImageBackground
           source={{
@@ -290,7 +309,7 @@ const PreviewReelScreen = () => {
               draft?.thumbnail?.uri ||
               'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=600',
           }}
-          style={styles.mainVideo}
+          style={[styles.mainVideo, { width: reelSize.width, height: reelSize.height }]}
           onLayout={e => {
             const { width: w, height: h } = e.nativeEvent.layout;
             if (w > 0 && h > 0) setVideoBoxSize({ width: w, height: h });
@@ -467,7 +486,13 @@ const PreviewReelScreen = () => {
           />
           <Text style={styles.metaDetail}>0.2 miles | 1.2k views</Text>
         </View>
+        {selectedSound?.title ? (
+          <Text style={styles.rankText}>
+            Sound: {selectedSound.title}
+          </Text>
+        ) : null}
         </View>
+        </ScrollView>
 
         <View style={styles.footer}>
           <TouchableOpacity
@@ -498,11 +523,6 @@ const PreviewReelScreen = () => {
             </Text>
           </View>
         </View>
-        {selectedSound?.title ? (
-          <Text style={styles.rankText}>
-            Sound: {selectedSound.title}
-          </Text>
-        ) : null}
       </View>
       <SoundsModal
         visible={soundsVisible}
@@ -545,9 +565,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: 12,
+    paddingBottom: 14,
     backgroundColor: 'white',
     position: 'relative',
+    zIndex: 2,
+    elevation: 2,
+  },
+  scrollBody: {
+    flex: 1,
+    backgroundColor: '#111',
+  },
+  scrollBodyContent: {
+    flexGrow: 1,
   },
   stepperLine: {
     position: 'absolute',
@@ -576,17 +606,15 @@ const styles = StyleSheet.create({
   activeLabel: { color: '#F5A623', fontWeight: 'bold' },
 
   previewContainer: {
-    flex: 1.55,
     backgroundColor: '#111',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 16,
+    paddingBottom: 12,
     paddingHorizontal: 12,
+    overflow: 'hidden',
   },
   mainVideo: {
-    width: PREVIEW_REEL_WIDTH,
-    height: PREVIEW_REEL_HEIGHT,
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#000',
@@ -696,11 +724,9 @@ const styles = StyleSheet.create({
   },
 
   infoSection: {
-    flex: 0.65,
     backgroundColor: '#222',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    justifyContent: 'center',
   },
   socialRow: { flexDirection: 'row', marginBottom: 15 },
   socialIcon: { width: 36, height: 36, borderRadius: 18, marginRight: 12 },

@@ -1,28 +1,24 @@
-info A dev server is already running for this project on port 8081.
-info Launching emulator...
-error Failed to launch emulator. Reason: It took too long to start and connect with Android emulator: Pixel_9. You can try starting the emulator manually from the terminal with: /Users/pino/Library/Android/sdk/emulator/emulator @Pixel_9.
-warn Please launch an emulator manually or connect a device. Otherwise app may fail to launch.
 info Installing the app...
 > Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
-> Task :gradle-plugin:shared:compileJava NO-SOURCE
 > Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors
+> Task :gradle-plugin:settings-plugin:processResources
+> Task :gradle-plugin:shared:compileKotlin
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
 > Task :gradle-plugin:shared:classes UP-TO-DATE
-> Task :gradle-plugin:shared:jar UP-TO-DATE
-> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:jar
+> Task :gradle-plugin:settings-plugin:compileKotlin
 > Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
-> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
-> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
-> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
-> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:classes
+> Task :gradle-plugin:settings-plugin:jar
 > Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
-> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors
+> Task :gradle-plugin:react-native-gradle-plugin:processResources
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin
 > Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
-> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
-> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
-> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
-> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes
+> Task :gradle-plugin:react-native-gradle-plugin:jar
 
 > Configure project :react-native-nitro-modules
 [NitroModules] 🔥 Your app is boosted by nitro modules!
@@ -43,7 +39,7 @@ buildFromSource: false
 > Configure project :react-native-vision-camera
 [VisionCamera] Thank you for using VisionCamera ❤️
 [VisionCamera] If you enjoy using VisionCamera, please consider sponsoring this project: https://github.com/sponsors/mrousavy
-[VisionCamera] node_modules found at /Users/pino/Documents/github/ethics/Ethics-app/node_modules
+[VisionCamera] node_modules found at /Users/pino/Documents/github/eatix/Ethics-app/node_modules
 [VisionCamera] VisionCamera_enableFrameProcessors is set to true!
 [VisionCamera] react-native-worklets-core not found, Frame Processors are disabled!
 [VisionCamera] VisionCamera_enableCodeScanner is set to false!
@@ -57,12 +53,19 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :app:generateCodegenSchemaFromJavaScript SKIPPED
 > Task :app:generateCodegenArtifactsFromSchema SKIPPED
 > Task :app:generateReactNativeEntryPoint UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:preBuild UP-TO-DATE
 > Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript UP-TO-DATE
 > Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema UP-TO-DATE
 > Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
 > Task :react-native-blob-util:generateCodegenSchemaFromJavaScript UP-TO-DATE
 > Task :react-native-blob-util:generateCodegenArtifactsFromSchema UP-TO-DATE
 > Task :react-native-blob-util:preBuild UP-TO-DATE
+> Task :react-native-clipboard_clipboard:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-clipboard_clipboard:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-clipboard_clipboard:preBuild UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-community_datetimepicker:preBuild UP-TO-DATE
 > Task :react-native-community_geolocation:generateCodegenSchemaFromJavaScript UP-TO-DATE
 > Task :react-native-community_geolocation:generateCodegenArtifactsFromSchema UP-TO-DATE
 > Task :react-native-community_geolocation:preBuild UP-TO-DATE
@@ -74,9 +77,13 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-documents_picker:generateCodegenSchemaFromJavaScript UP-TO-DATE
 > Task :react-native-documents_picker:generateCodegenArtifactsFromSchema UP-TO-DATE
 > Task :react-native-documents_picker:preBuild UP-TO-DATE
+> Task :react-native-fbsdk-next:preBuild UP-TO-DATE
 > Task :react-native-gesture-handler:generateCodegenSchemaFromJavaScript UP-TO-DATE
 > Task :react-native-gesture-handler:generateCodegenArtifactsFromSchema UP-TO-DATE
 > Task :react-native-gesture-handler:preBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preBuild UP-TO-DATE
 > Task :react-native-html-to-pdf:generateCodegenSchemaFromJavaScript UP-TO-DATE
 > Task :react-native-html-to-pdf:generateCodegenArtifactsFromSchema UP-TO-DATE
 > Task :react-native-html-to-pdf:preBuild UP-TO-DATE
@@ -113,10 +120,16 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
 > Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:preDebugBuild UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-async-storage_async-storage:preDebugBuild UP-TO-DATE
 > Task :react-native-async-storage_async-storage:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-blob-util:preDebugBuild UP-TO-DATE
 > Task :react-native-blob-util:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-clipboard_clipboard:preDebugBuild UP-TO-DATE
+> Task :react-native-clipboard_clipboard:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-community_datetimepicker:preDebugBuild UP-TO-DATE
+> Task :react-native-community_datetimepicker:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-community_geolocation:preDebugBuild UP-TO-DATE
 > Task :react-native-community_geolocation:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-community_netinfo:preDebugBuild UP-TO-DATE
@@ -127,8 +140,12 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-create-thumbnail:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-documents_picker:preDebugBuild UP-TO-DATE
 > Task :react-native-documents_picker:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-fbsdk-next:preDebugBuild UP-TO-DATE
+> Task :react-native-fbsdk-next:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-gesture-handler:preDebugBuild UP-TO-DATE
 > Task :react-native-gesture-handler:writeDebugAarMetadata UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preDebugBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-html-to-pdf:preDebugBuild UP-TO-DATE
 > Task :react-native-html-to-pdf:writeDebugAarMetadata UP-TO-DATE
 > Task :react-native-image-crop-picker:preDebugBuild UP-TO-DATE
@@ -157,12 +174,22 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-vision-camera:writeDebugAarMetadata UP-TO-DATE
 > Task :app:checkDebugAarMetadata UP-TO-DATE
 > Task :app:generateDebugResValues UP-TO-DATE
+> Task :app:processDebugGoogleServices UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:generateDebugResValues UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:generateDebugResources UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:packageDebugResources UP-TO-DATE
 > Task :react-native-async-storage_async-storage:generateDebugResValues UP-TO-DATE
 > Task :react-native-async-storage_async-storage:generateDebugResources UP-TO-DATE
 > Task :react-native-async-storage_async-storage:packageDebugResources UP-TO-DATE
 > Task :react-native-blob-util:generateDebugResValues UP-TO-DATE
 > Task :react-native-blob-util:generateDebugResources UP-TO-DATE
 > Task :react-native-blob-util:packageDebugResources UP-TO-DATE
+> Task :react-native-clipboard_clipboard:generateDebugResValues UP-TO-DATE
+> Task :react-native-clipboard_clipboard:generateDebugResources UP-TO-DATE
+> Task :react-native-clipboard_clipboard:packageDebugResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugResValues UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:packageDebugResources UP-TO-DATE
 > Task :react-native-community_geolocation:generateDebugResValues UP-TO-DATE
 > Task :react-native-community_geolocation:generateDebugResources UP-TO-DATE
 > Task :react-native-community_geolocation:packageDebugResources UP-TO-DATE
@@ -178,9 +205,15 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-documents_picker:generateDebugResValues UP-TO-DATE
 > Task :react-native-documents_picker:generateDebugResources UP-TO-DATE
 > Task :react-native-documents_picker:packageDebugResources UP-TO-DATE
+> Task :react-native-fbsdk-next:generateDebugResValues UP-TO-DATE
+> Task :react-native-fbsdk-next:generateDebugResources UP-TO-DATE
+> Task :react-native-fbsdk-next:packageDebugResources UP-TO-DATE
 > Task :react-native-gesture-handler:generateDebugResValues UP-TO-DATE
 > Task :react-native-gesture-handler:generateDebugResources UP-TO-DATE
 > Task :react-native-gesture-handler:packageDebugResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugResValues UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:packageDebugResources UP-TO-DATE
 > Task :react-native-html-to-pdf:generateDebugResValues UP-TO-DATE
 > Task :react-native-html-to-pdf:generateDebugResources UP-TO-DATE
 > Task :react-native-html-to-pdf:packageDebugResources UP-TO-DATE
@@ -227,10 +260,16 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :app:parseDebugLocalResources UP-TO-DATE
 > Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
 > Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:extractDeepLinksDebug UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:processDebugManifest UP-TO-DATE
 > Task :react-native-async-storage_async-storage:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-async-storage_async-storage:processDebugManifest UP-TO-DATE
 > Task :react-native-blob-util:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-blob-util:processDebugManifest UP-TO-DATE
+> Task :react-native-clipboard_clipboard:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-clipboard_clipboard:processDebugManifest UP-TO-DATE
+> Task :react-native-community_datetimepicker:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-community_datetimepicker:processDebugManifest UP-TO-DATE
 > Task :react-native-community_geolocation:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-community_geolocation:processDebugManifest UP-TO-DATE
 > Task :react-native-community_netinfo:extractDeepLinksDebug UP-TO-DATE
@@ -241,8 +280,12 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-create-thumbnail:processDebugManifest UP-TO-DATE
 > Task :react-native-documents_picker:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-documents_picker:processDebugManifest UP-TO-DATE
+> Task :react-native-fbsdk-next:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-fbsdk-next:processDebugManifest UP-TO-DATE
 > Task :react-native-gesture-handler:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-gesture-handler:processDebugManifest UP-TO-DATE
+> Task :react-native-google-signin_google-signin:extractDeepLinksDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:processDebugManifest UP-TO-DATE
 > Task :react-native-html-to-pdf:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-html-to-pdf:processDebugManifest UP-TO-DATE
 > Task :react-native-image-crop-picker:extractDeepLinksDebug UP-TO-DATE
@@ -269,15 +312,27 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-video:processDebugManifest UP-TO-DATE
 > Task :react-native-vision-camera:extractDeepLinksDebug UP-TO-DATE
 > Task :react-native-vision-camera:processDebugManifest UP-TO-DATE
-> Task :app:processDebugMainManifest UP-TO-DATE
-> Task :app:processDebugManifest UP-TO-DATE
-> Task :app:processDebugManifestForPackage UP-TO-DATE
+
+> Task :app:processDebugMainManifest
+/Users/pino/Documents/github/eatix/Ethics-app/android/app/src/main/AndroidManifest.xml Warning:
+	property#android.adservices.AD_SERVICES_CONFIG@android:resource was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
+
+> Task :app:processDebugManifest
+> Task :invertase_react-native-apple-authentication:compileDebugLibraryResources UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:parseDebugLocalResources UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:generateDebugRFile UP-TO-DATE
 > Task :react-native-async-storage_async-storage:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-async-storage_async-storage:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-async-storage_async-storage:generateDebugRFile UP-TO-DATE
 > Task :react-native-blob-util:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-blob-util:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-blob-util:generateDebugRFile UP-TO-DATE
+> Task :react-native-clipboard_clipboard:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-clipboard_clipboard:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-clipboard_clipboard:generateDebugRFile UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-community_datetimepicker:generateDebugRFile UP-TO-DATE
 > Task :react-native-community_geolocation:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-community_geolocation:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-community_geolocation:generateDebugRFile UP-TO-DATE
@@ -293,9 +348,16 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-documents_picker:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-documents_picker:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-documents_picker:generateDebugRFile UP-TO-DATE
+> Task :react-native-fbsdk-next:compileDebugLibraryResources UP-TO-DATE
+> Task :react-native-fbsdk-next:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-fbsdk-next:generateDebugRFile UP-TO-DATE
 > Task :react-native-gesture-handler:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-gesture-handler:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-gesture-handler:generateDebugRFile UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugLibraryResources UP-TO-DATE
+> Task :app:processDebugManifestForPackage
+> Task :react-native-google-signin_google-signin:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateDebugRFile UP-TO-DATE
 > Task :react-native-html-to-pdf:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-html-to-pdf:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-html-to-pdf:generateDebugRFile UP-TO-DATE
@@ -335,7 +397,12 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-vision-camera:compileDebugLibraryResources UP-TO-DATE
 > Task :react-native-vision-camera:parseDebugLocalResources UP-TO-DATE
 > Task :react-native-vision-camera:generateDebugRFile UP-TO-DATE
-> Task :app:processDebugResources UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :invertase_react-native-apple-authentication:generateDebugBuildConfig UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:compileDebugKotlin UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:javaPreCompileDebug UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:compileDebugJavaWithJavac UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:bundleLibCompileToJarDebug UP-TO-DATE
 > Task :react-native-async-storage_async-storage:generateDebugBuildConfig UP-TO-DATE
 > Task :react-native-async-storage_async-storage:javaPreCompileDebug UP-TO-DATE
 > Task :react-native-async-storage_async-storage:compileDebugJavaWithJavac UP-TO-DATE
@@ -344,6 +411,16 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-blob-util:javaPreCompileDebug UP-TO-DATE
 > Task :react-native-blob-util:compileDebugJavaWithJavac UP-TO-DATE
 > Task :react-native-blob-util:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-clipboard_clipboard:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-clipboard_clipboard:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-clipboard_clipboard:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-clipboard_clipboard:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-community_datetimepicker:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-community_datetimepicker:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugKotlin UP-TO-DATE
+> Task :react-native-community_datetimepicker:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-community_datetimepicker:bundleLibCompileToJarDebug UP-TO-DATE
 > Task :react-native-community_geolocation:generateDebugBuildConfig UP-TO-DATE
 > Task :react-native-community_geolocation:javaPreCompileDebug UP-TO-DATE
 > Task :react-native-community_geolocation:compileDebugJavaWithJavac UP-TO-DATE
@@ -366,12 +443,22 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-documents_picker:javaPreCompileDebug UP-TO-DATE
 > Task :react-native-documents_picker:compileDebugJavaWithJavac UP-TO-DATE
 > Task :react-native-documents_picker:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-fbsdk-next:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-fbsdk-next:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-fbsdk-next:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-fbsdk-next:bundleLibCompileToJarDebug UP-TO-DATE
 > Task :react-native-gesture-handler:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :react-native-gesture-handler:generateDebugBuildConfig UP-TO-DATE
 > Task :react-native-gesture-handler:compileDebugKotlin UP-TO-DATE
 > Task :react-native-gesture-handler:javaPreCompileDebug UP-TO-DATE
 > Task :react-native-gesture-handler:compileDebugJavaWithJavac UP-TO-DATE
 > Task :react-native-gesture-handler:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-google-signin_google-signin:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugKotlin UP-TO-DATE
+> Task :react-native-google-signin_google-signin:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibCompileToJarDebug UP-TO-DATE
 > Task :react-native-html-to-pdf:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :react-native-html-to-pdf:generateDebugBuildConfig UP-TO-DATE
 > Task :react-native-html-to-pdf:compileDebugKotlin UP-TO-DATE
@@ -440,13 +527,15 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-vision-camera:javaPreCompileDebug UP-TO-DATE
 > Task :react-native-vision-camera:compileDebugJavaWithJavac UP-TO-DATE
 > Task :react-native-vision-camera:bundleLibCompileToJarDebug UP-TO-DATE
-> Task :app:compileDebugKotlin UP-TO-DATE
 > Task :app:javaPreCompileDebug UP-TO-DATE
-> Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:mergeDebugShaders UP-TO-DATE
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:copyReactNativeVectorIconFonts UP-TO-DATE
 > Task :app:generateDebugAssets UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:mergeDebugShaders UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:compileDebugShaders NO-SOURCE
+> Task :invertase_react-native-apple-authentication:generateDebugAssets UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:mergeDebugAssets UP-TO-DATE
 > Task :react-native-async-storage_async-storage:mergeDebugShaders UP-TO-DATE
 > Task :react-native-async-storage_async-storage:compileDebugShaders NO-SOURCE
 > Task :react-native-async-storage_async-storage:generateDebugAssets UP-TO-DATE
@@ -455,6 +544,14 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-blob-util:compileDebugShaders NO-SOURCE
 > Task :react-native-blob-util:generateDebugAssets UP-TO-DATE
 > Task :react-native-blob-util:mergeDebugAssets UP-TO-DATE
+> Task :react-native-clipboard_clipboard:mergeDebugShaders UP-TO-DATE
+> Task :react-native-clipboard_clipboard:compileDebugShaders NO-SOURCE
+> Task :react-native-clipboard_clipboard:generateDebugAssets UP-TO-DATE
+> Task :react-native-clipboard_clipboard:mergeDebugAssets UP-TO-DATE
+> Task :react-native-community_datetimepicker:mergeDebugShaders UP-TO-DATE
+> Task :react-native-community_datetimepicker:compileDebugShaders NO-SOURCE
+> Task :react-native-community_datetimepicker:generateDebugAssets UP-TO-DATE
+> Task :react-native-community_datetimepicker:mergeDebugAssets UP-TO-DATE
 > Task :react-native-community_geolocation:mergeDebugShaders UP-TO-DATE
 > Task :react-native-community_geolocation:compileDebugShaders NO-SOURCE
 > Task :react-native-community_geolocation:generateDebugAssets UP-TO-DATE
@@ -475,10 +572,18 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-documents_picker:compileDebugShaders NO-SOURCE
 > Task :react-native-documents_picker:generateDebugAssets UP-TO-DATE
 > Task :react-native-documents_picker:mergeDebugAssets UP-TO-DATE
+> Task :react-native-fbsdk-next:mergeDebugShaders UP-TO-DATE
+> Task :react-native-fbsdk-next:compileDebugShaders NO-SOURCE
+> Task :react-native-fbsdk-next:generateDebugAssets UP-TO-DATE
+> Task :react-native-fbsdk-next:mergeDebugAssets UP-TO-DATE
 > Task :react-native-gesture-handler:mergeDebugShaders UP-TO-DATE
 > Task :react-native-gesture-handler:compileDebugShaders NO-SOURCE
 > Task :react-native-gesture-handler:generateDebugAssets UP-TO-DATE
 > Task :react-native-gesture-handler:mergeDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugShaders UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileDebugShaders NO-SOURCE
+> Task :react-native-google-signin_google-signin:generateDebugAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugAssets UP-TO-DATE
 > Task :react-native-html-to-pdf:mergeDebugShaders UP-TO-DATE
 > Task :react-native-html-to-pdf:compileDebugShaders NO-SOURCE
 > Task :react-native-html-to-pdf:generateDebugAssets UP-TO-DATE
@@ -531,9 +636,11 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-vision-camera:compileDebugShaders NO-SOURCE
 > Task :react-native-vision-camera:generateDebugAssets UP-TO-DATE
 > Task :react-native-vision-camera:mergeDebugAssets UP-TO-DATE
-> Task :app:mergeDebugAssets UP-TO-DATE
-> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :invertase_react-native-apple-authentication:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-community_datetimepicker:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-documents_picker:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-gesture-handler:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-html-to-pdf:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-maps:bundleLibRuntimeToJarDebug UP-TO-DATE
@@ -544,28 +651,33 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-video:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-vision-camera:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-clipboard_clipboard:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-community_geolocation:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-community_netinfo:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-community_slider:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-blob-util:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-create-thumbnail:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-fbsdk-next:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-image-crop-picker:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-image-picker:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-linear-gradient:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-print:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :react-native-vector-icons:bundleLibRuntimeToJarDebug UP-TO-DATE
 > Task :app:desugarDebugFileDependencies UP-TO-DATE
-> Task :app:dexBuilderDebug UP-TO-DATE
-> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
-> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:processDebugJavaRes UP-TO-DATE
 > Task :react-native-async-storage_async-storage:processDebugJavaRes NO-SOURCE
 > Task :react-native-blob-util:processDebugJavaRes NO-SOURCE
+> Task :react-native-clipboard_clipboard:processDebugJavaRes NO-SOURCE
+> Task :app:compressDebugAssets
+> Task :react-native-community_datetimepicker:processDebugJavaRes UP-TO-DATE
 > Task :react-native-community_geolocation:processDebugJavaRes NO-SOURCE
 > Task :react-native-community_netinfo:processDebugJavaRes NO-SOURCE
 > Task :react-native-community_slider:processDebugJavaRes NO-SOURCE
 > Task :react-native-create-thumbnail:processDebugJavaRes NO-SOURCE
 > Task :react-native-documents_picker:processDebugJavaRes UP-TO-DATE
+> Task :react-native-fbsdk-next:processDebugJavaRes NO-SOURCE
 > Task :react-native-gesture-handler:processDebugJavaRes UP-TO-DATE
+> Task :react-native-google-signin_google-signin:processDebugJavaRes UP-TO-DATE
 > Task :react-native-html-to-pdf:processDebugJavaRes UP-TO-DATE
 > Task :react-native-image-crop-picker:processDebugJavaRes NO-SOURCE
 > Task :react-native-image-picker:processDebugJavaRes NO-SOURCE
@@ -579,10 +691,12 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-vector-icons:processDebugJavaRes NO-SOURCE
 > Task :react-native-video:processDebugJavaRes UP-TO-DATE
 > Task :react-native-vision-camera:processDebugJavaRes UP-TO-DATE
-> Task :app:mergeDebugJavaResource UP-TO-DATE
 > Task :app:checkDebugDuplicateClasses UP-TO-DATE
 > Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-community_datetimepicker:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-documents_picker:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-gesture-handler:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-html-to-pdf:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-maps:bundleLibRuntimeToDirDebug UP-TO-DATE
@@ -593,19 +707,28 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-video:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-vision-camera:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-async-storage_async-storage:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-clipboard_clipboard:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-community_geolocation:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-community_netinfo:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-community_slider:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-blob-util:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-create-thumbnail:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :react-native-fbsdk-next:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-image-crop-picker:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-image-picker:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-linear-gradient:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-print:bundleLibRuntimeToDirDebug UP-TO-DATE
 > Task :react-native-vector-icons:bundleLibRuntimeToDirDebug UP-TO-DATE
-> Task :app:mergeProjectDexDebug UP-TO-DATE
+> Task :app:processDebugResources
 > Task :react-native-nitro-modules:configureCMakeDebug[arm64-v8a]
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:dexBuilderDebug UP-TO-DATE
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:mergeDebugJavaResource UP-TO-DATE
 > Task :app:mergeLibDexDebug UP-TO-DATE
+> Task :app:mergeProjectDexDebug UP-TO-DATE
 > Task :react-native-nitro-modules:buildCMakeDebug[arm64-v8a]
 > Task :react-native-nitro-modules:configureCMakeDebug[armeabi-v7a]
 > Task :react-native-nitro-modules:buildCMakeDebug[armeabi-v7a]
@@ -638,12 +761,21 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :app:configureCMakeDebug[x86_64]
 > Task :app:buildCMakeDebug[x86_64]
 > Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:mergeDebugJniLibFolders UP-TO-DATE
+> Task :invertase_react-native-apple-authentication:mergeDebugNativeLibs NO-SOURCE
+> Task :invertase_react-native-apple-authentication:copyDebugJniLibsProjectOnly UP-TO-DATE
 > Task :react-native-async-storage_async-storage:mergeDebugJniLibFolders UP-TO-DATE
 > Task :react-native-async-storage_async-storage:mergeDebugNativeLibs NO-SOURCE
 > Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectOnly UP-TO-DATE
 > Task :react-native-blob-util:mergeDebugJniLibFolders UP-TO-DATE
 > Task :react-native-blob-util:mergeDebugNativeLibs NO-SOURCE
 > Task :react-native-blob-util:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-clipboard_clipboard:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-clipboard_clipboard:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-clipboard_clipboard:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-community_datetimepicker:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-community_datetimepicker:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-community_datetimepicker:copyDebugJniLibsProjectOnly UP-TO-DATE
 > Task :react-native-community_geolocation:mergeDebugJniLibFolders UP-TO-DATE
 > Task :react-native-community_geolocation:mergeDebugNativeLibs NO-SOURCE
 > Task :react-native-community_geolocation:copyDebugJniLibsProjectOnly UP-TO-DATE
@@ -659,6 +791,9 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-documents_picker:mergeDebugJniLibFolders UP-TO-DATE
 > Task :react-native-documents_picker:mergeDebugNativeLibs NO-SOURCE
 > Task :react-native-documents_picker:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-fbsdk-next:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-fbsdk-next:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-fbsdk-next:copyDebugJniLibsProjectOnly UP-TO-DATE
 > Task :react-native-gesture-handler:configureCMakeDebug[arm64-v8a]
 > Task :react-native-gesture-handler:buildCMakeDebug[arm64-v8a]
 > Task :react-native-gesture-handler:configureCMakeDebug[armeabi-v7a]
@@ -670,6 +805,9 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :react-native-gesture-handler:mergeDebugJniLibFolders UP-TO-DATE
 > Task :react-native-gesture-handler:mergeDebugNativeLibs UP-TO-DATE
 > Task :react-native-gesture-handler:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugJniLibFolders UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeDebugNativeLibs NO-SOURCE
+> Task :react-native-google-signin_google-signin:copyDebugJniLibsProjectOnly UP-TO-DATE
 > Task :react-native-html-to-pdf:mergeDebugJniLibFolders UP-TO-DATE
 > Task :react-native-html-to-pdf:mergeDebugNativeLibs NO-SOURCE
 > Task :react-native-html-to-pdf:copyDebugJniLibsProjectOnly UP-TO-DATE
@@ -730,196 +868,24 @@ To suppress this warning, remove "buildToolsVersion '31.0.0'" from your build.gr
 > Task :app:validateSigningDebug UP-TO-DATE
 > Task :app:writeDebugAppMetadata UP-TO-DATE
 > Task :app:writeDebugSigningConfigVersions UP-TO-DATE
-> Task :app:packageDebug UP-TO-DATE
+> Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect UP-TO-DATE
 
 > Task :app:installDebug
-Skipping device 'emulator-5556' (emulator-5556): Device is OFFLINE.
 Installing APK 'app-debug.apk' on 'Pixel_9(AVD) - 16' for :app:debug
+Installed on 1 device.
 
-> Task :app:installDebug FAILED
-
-[Incubating] Problems report is available at: file:///Users/pino/Documents/github/ethics/Ethics-app/android/build/reports/problems/problems-report.html
+[Incubating] Problems report is available at: file:///Users/pino/Documents/github/eatix/Ethics-app/android/build/reports/problems/problems-report.html
 
 Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
 
 You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
 
 For more on this, please refer to https://docs.gradle.org/8.13/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
-558 actionable tasks: 52 executed, 506 up-to-date
 
-info 💡 Tip: Make sure that you have set up your development environment correctly, by running npx react-native doctor. To read more about doctor command visit: https://github.com/react-native-community/cli/blob/main/packages/cli-doctor/README.md#doctor 
-
-Unable to install /Users/pino/Documents/github/ethics/Ethics-app/android/app/build/outputs/apk/debug/app-debug.apk
-com.android.ddmlib.InstallException: Unknown failure: cmd: Can't find service: package
-	at com.android.ddmlib.IDeviceSharedImpl.installRemotePackage(IDeviceSharedImpl.java:344)
-	at com.android.ddmlib.IDeviceSharedImpl.installPackage(IDeviceSharedImpl.java:367)
-	at com.android.ddmlib.internal.DeviceImpl.lambda$installPackage$33(DeviceImpl.java:1470)
-	at com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833)
-	at com.android.ddmlib.internal.DeviceImpl.installPackage(DeviceImpl.java:1467)
-	at com.android.ddmlib.internal.DeviceImpl.lambda$installPackage$32(DeviceImpl.java:1447)
-	at com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833)
-	at com.android.ddmlib.internal.DeviceImpl.installPackage(DeviceImpl.java:1443)
-	at com.android.ddmlib.internal.DeviceImpl.lambda$installPackage$31(DeviceImpl.java:1433)
-	at com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833)
-	at com.android.ddmlib.internal.DeviceImpl.installPackage(DeviceImpl.java:1431)
-	at com.android.build.gradle.internal.testing.ConnectedDevice.installPackage(ConnectedDevice.java:129)
-	at com.android.build.gradle.internal.tasks.InstallVariantTask.installPackages(InstallVariantTask.java:214)
-	at com.android.build.gradle.internal.tasks.InstallVariantTask.install(InstallVariantTask.java:187)
-	at com.android.build.gradle.internal.tasks.InstallVariantTask.lambda$doTaskAction$1(InstallVariantTask.java:124)
-	at com.android.builder.testing.api.DeviceProvider.use(DeviceProvider.java:55)
-	at com.android.build.gradle.internal.tasks.InstallVariantTask.doTaskAction(InstallVariantTask.java:109)
-	at com.android.build.gradle.internal.tasks.NonIncrementalTask$taskAction$$inlined$recordTaskAction$1.invoke(BaseTask.kt:60)
-	at com.android.build.gradle.internal.tasks.Blocks.recordSpan(Blocks.java:51)
-	at com.android.build.gradle.internal.tasks.NonIncrementalTask.taskAction(NonIncrementalTask.kt:78)
-	at java.base@17.0.17/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
-	at java.base@17.0.17/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
-	at java.base@17.0.17/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
-	at java.base@17.0.17/java.lang.reflect.Method.invoke(Method.java:569)
-	at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:125)
-	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.doExecute(StandardTaskAction.java:58)
-	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:51)
-	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:29)
-	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:244)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
-	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
-	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
-	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
-	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
-	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
-	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
-	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
-	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
-	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
-	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
-	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
-	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
-	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
-	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
-	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
-	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
-	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
-	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
-	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
-	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
-	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
-	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
-	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
-	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
-	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75)
-	at org.gradle.internal.Either$Right.fold(Either.java:175)
-	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
-	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
-	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
-	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
-	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
-	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
-	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
-	at java.base@17.0.17/java.util.Optional.orElseGet(Optional.java:364)
-	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
-	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
-	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
-	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
-	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
-	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
-	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
-	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
-	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
-	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
-	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
-	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
-	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
-	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
-	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
-	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:56)
-	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
-	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
-	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
-	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
-	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
-	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
-	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
-	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
-	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
-	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
-	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
-	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
-	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
-	at java.base@17.0.17/java.util.Optional.orElseGet(Optional.java:364)
-	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
-	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
-	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
-	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
-	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
-	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
-	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61)
-	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
-	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
-	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:40)
-	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
-	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
-	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
-	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
-	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
-	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
-	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
-	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
-	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
-	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
-	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
-	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
-	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
-	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
-	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
-	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
-	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
-	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
-	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
-	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
-	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
-	at java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
-	at java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
-	at java.base@17.0.17/java.lang.Thread.run(Thread.java:840)
-
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Execution failed for task ':app:installDebug'.
-> java.util.concurrent.ExecutionException: com.android.builder.testing.api.DeviceException: com.android.ddmlib.InstallException: Unknown failure: cmd: Can't find service: package
-
-* Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to get full insights.
-> Get more help at https://help.gradle.org.
-
-BUILD FAILED in 1m 31s
-error Failed to install the app. Command failed with exit code 1: ./gradlew app:installDebug -PreactNativeDevServerPort=8081
-Unable to install /Users/pino/Documents/github/ethics/Ethics-app/android/app/build/outputs/apk/debug/app-debug.apk
-com.android.ddmlib.InstallException: Unknown failure: cmd: Can't find service: package at com.android.ddmlib.IDeviceSharedImpl.installRemotePackage(IDeviceSharedImpl.java:344) at com.android.ddmlib.IDeviceSharedImpl.installPackage(IDeviceSharedImpl.java:367) at com.android.ddmlib.internal.DeviceImpl.lambda$installPackage$33(DeviceImpl.java:1470) at com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833) at com.android.ddmlib.internal.DeviceImpl.installPackage(DeviceImpl.java:1467) at com.android.ddmlib.internal.DeviceImpl.lambda$installPackage$32(DeviceImpl.java:1447) at com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833) at com.android.ddmlib.internal.DeviceImpl.installPackage(DeviceImpl.java:1443) at com.android.ddmlib.internal.DeviceImpl.lambda$installPackage$31(DeviceImpl.java:1433) at com.android.ddmlib.internal.DeviceImpl.logRun3(DeviceImpl.java:1833) at com.android.ddmlib.internal.DeviceImpl.installPackage(DeviceImpl.java:1431) at com.android.build.gradle.internal.testing.ConnectedDevice.installPackage(ConnectedDevice.java:129) at com.android.build.gradle.internal.tasks.InstallVariantTask.installPackages(InstallVariantTask.java:214) at com.android.build.gradle.internal.tasks.InstallVariantTask.install(InstallVariantTask.java:187) at com.android.build.gradle.internal.tasks.InstallVariantTask.lambda$doTaskAction$1(InstallVariantTask.java:124) at com.android.builder.testing.api.DeviceProvider.use(DeviceProvider.java:55) at com.android.build.gradle.internal.tasks.InstallVariantTask.doTaskAction(InstallVariantTask.java:109) at com.android.build.gradle.internal.tasks.NonIncrementalTask$taskAction$$inlined$recordTaskAction$1.invoke(BaseTask.kt:60) at com.android.build.gradle.internal.tasks.Blocks.recordSpan(Blocks.java:51) at com.android.build.gradle.internal.tasks.NonIncrementalTask.taskAction(NonIncrementalTask.kt:78) at java.base@17.0.17/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) at java.base@17.0.17/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) at java.base@17.0.17/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) at java.base@17.0.17/java.lang.reflect.Method.invoke(Method.java:569) at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:125) at org.gradle.api.internal.project.taskfactory.StandardTaskAction.doExecute(StandardTaskAction.java:58) at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:51) at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:29) at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:244) at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30) at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27) at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67) at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60) at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167) at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60) at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48) at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229) at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212) at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195) at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162) at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105) at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44) at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59) at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56) at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210) at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205) at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67) at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60) at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167) at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60) at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54) at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56) at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44) at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42) at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75) at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55) at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50) at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28) at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67) at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37) at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61) at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26) at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69) at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46) at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40) at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29) at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189) at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:75) at org.gradle.internal.Either$Right.fold(Either.java:175) at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62) at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73) at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48) at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46) at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35) at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75) at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53) at java.base@17.0.17/java.util.Optional.orElseGet(Optional.java:364) at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53) at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35) at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37) at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27) at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49) at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27) at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71) at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39) at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65) at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36) at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107) at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56) at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64) at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43) at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125) at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:56) at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36) at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38) at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36) at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23) at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75) at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41) at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35) at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289) at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31) at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22) at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40) at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23) at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67) at java.base@17.0.17/java.util.Optional.orElseGet(Optional.java:364) at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67) at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39) at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46) at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34) at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48) at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35) at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:61) at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127) at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116) at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:40) at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46) at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51) at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57) at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74) at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36) at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77) at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55) at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52) at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210) at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205) at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67) at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60) at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167) at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60) at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54) at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52) at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42) at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331) at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318) at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314) at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85) at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314) at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303) at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459) at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376) at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64) at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48) at java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) at java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) at java.base@17.0.17/java.lang.Thread.run(Thread.java:840) FAILURE: Build failed with an exception. * What went wrong:
-Execution failed for task ':app:installDebug'.
-> java.util.concurrent.ExecutionException: com.android.builder.testing.api.DeviceException: com.android.ddmlib.InstallException: Unknown failure: cmd: Can't find service: package * Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to get full insights.
-> Get more help at https://help.gradle.org. BUILD FAILED in 1m 31s.
-info Run CLI with --verbose flag for more details.
+BUILD SUCCESSFUL in 1m 37s
+666 actionable tasks: 69 executed, 597 up-to-date
+info Connecting to the development server...
+8081
+info Starting the app on "emulator-5554"...
+Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] cmp=com.eatix.app/.MainActivity }

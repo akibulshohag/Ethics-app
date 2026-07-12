@@ -10,7 +10,10 @@
       "Bash(sample 10503 2 -mayDie)",
       "Bash(sample 10503 1 -mayDie)",
       "Read(//private/var/folders/8m/2ybj9lbj0jn5xsm8z3d8p8vc0000gn/T/cursor-sandbox-cache/dcfe85286a5b85c8bc202ae25d03f3dd/gradle/daemon/8.13/**)",
-      "Bash(kill 10220 10503 10587)"
+      "Bash(kill 10220 10503 10587)",
+      "Skill(run)",
+      "Bash(npx react-native *)",
+      "Bash(tee /Users/pino/Documents/github/eatix/Ethics-app/android_run.log)"
     ]
   }
 }

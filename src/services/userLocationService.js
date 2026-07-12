@@ -5,6 +5,7 @@ import { formatCityCountryPostcodeLine } from '../utils/locationFormat';
 import { geocodeAddress } from '../utils/geolocation';
 
 export const LOCATION_STORAGE_KEY = 'USER_LOCATION_SELECTION';
+export const ORDER_DELIVERY_STORAGE_KEY = 'ORDER_DELIVERY_ADDRESS';
 export const LOCATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function hasValidCoords(loc) {
@@ -209,6 +210,54 @@ export async function loadStoredBrowseLocation(userId) {
       postcode: saved.postcode || '',
       addressText: saved.addressText || '',
       areaLabel: saved.areaLabel || '',
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Last delivery address used at checkout — separate from profile / home browse. */
+export async function persistOrderDeliveryAddress({
+  userId,
+  addressText,
+  postcode = '',
+  lat,
+  lng,
+}) {
+  const addr = String(addressText || '').trim();
+  if (!addr) return null;
+  const payload = {
+    userId: userId || null,
+    addressText: addr,
+    postcode: String(postcode || '').trim(),
+    ...(lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+      ? { lat: Number(lat), lng: Number(lng) }
+      : {}),
+    savedAt: Date.now(),
+  };
+  try {
+    await AsyncStorage.setItem(ORDER_DELIVERY_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_) {}
+  return payload;
+}
+
+export async function loadOrderDeliveryAddress(userId) {
+  try {
+    const raw = await AsyncStorage.getItem(ORDER_DELIVERY_STORAGE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    const addr = String(saved?.addressText || '').trim();
+    if (!addr) return null;
+    const sameUser =
+      saved?.userId == null || userId == null
+        ? true
+        : String(saved.userId) === String(userId);
+    if (!sameUser) return null;
+    return {
+      addressText: addr,
+      postcode: String(saved?.postcode || '').trim(),
+      lat: saved?.lat != null ? Number(saved.lat) : null,
+      lng: saved?.lng != null ? Number(saved.lng) : null,
     };
   } catch (_) {
     return null;

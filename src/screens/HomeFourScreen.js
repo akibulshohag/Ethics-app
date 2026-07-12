@@ -10,7 +10,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
   CommonActions,
@@ -21,6 +21,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import Toast from 'react-native-toast-message';
 import { appSetUser } from '../redux/actions/appSlice';
 import { createRestaurantOrder } from '../services/orderService';
+import {
+  createPaymentIntent,
+  getPaymentConfig,
+} from '../services/paymentService';
+import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
 import { getPromotionsByUser } from '../services/promotionService';
 import { getChannelProfile } from '../services/channelService';
 import MapLocationPicker from '../components/MapLocationPicker';
@@ -37,6 +42,10 @@ import {
   adjustVendorItemQty,
 } from '../utils/vendorOrderLimits';
 import { browseAreaLabel, normalizeUkPostcode } from '../utils/ukPostcode';
+import {
+  loadOrderDeliveryAddress,
+  persistOrderDeliveryAddress,
+} from '../services/userLocationService';
 import {
   formatUkPhoneDisplay,
   normalizeUkPhone,
@@ -60,6 +69,7 @@ const ORDER_NOTE_MARKER = '||NOTE||';
 const HomeFourScreen = ({ onBack }) => {
   const navigation = useNavigation();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user) || {};
   const browseLocation = useSelector(state => state.app?.browseLocation);
@@ -99,11 +109,17 @@ const HomeFourScreen = ({ onBack }) => {
   const [deliveryPostcode, setDeliveryPostcode] = useState(
     String(user?.postcode || browseLocation?.postcode || '').trim(),
   );
-  const [saveAddressToProfile, setSaveAddressToProfile] = useState(true);
+  const [saveAddressToProfile, setSaveAddressToProfile] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
   const [ownerProfile, setOwnerProfile] = useState(null);
   const [ownerProfileLoading, setOwnerProfileLoading] = useState(false);
   const [fulfillmentType, setFulfillmentType] = useState('delivery');
+  const [paymentConfig, setPaymentConfig] = useState({
+    enabled: false,
+    publishableKey: '',
+    currency: 'gbp',
+    merchantCountryCode: 'GB',
+  });
 
   const isPickup = fulfillmentType === 'collection';
   const isDelivery = fulfillmentType === 'delivery';
@@ -185,22 +201,49 @@ const HomeFourScreen = ({ onBack }) => {
     String(user?.postcode || browseLocation?.postcode || '').trim();
 
   useEffect(() => {
-    if (!customDeliveryAddress && !profileAddress && browseFallback) {
-      setCustomDeliveryAddress(browseFallback);
-      if (
-        browseLocation?.lat != null &&
-        browseLocation?.lng != null &&
-        Number.isFinite(Number(browseLocation.lat)) &&
-        Number.isFinite(Number(browseLocation.lng))
-      ) {
-        setDeliveryCoords({
-          lat: Number(browseLocation.lat),
-          lng: Number(browseLocation.lng),
-        });
+    let cancelled = false;
+    const seedDeliveryAddress = async () => {
+      const stored = user?.id
+        ? await loadOrderDeliveryAddress(user.id)
+        : null;
+      if (cancelled) return;
+      if (stored?.addressText) {
+        setCustomDeliveryAddress(stored.addressText);
+        if (stored.postcode) setDeliveryPostcode(stored.postcode);
+        if (
+          stored.lat != null &&
+          stored.lng != null &&
+          Number.isFinite(Number(stored.lat)) &&
+          Number.isFinite(Number(stored.lng))
+        ) {
+          setDeliveryCoords({
+            lat: Number(stored.lat),
+            lng: Number(stored.lng),
+          });
+        }
+        return;
       }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once from browse/home location
-  }, []);
+      if (!profileAddress && browseFallback) {
+        setCustomDeliveryAddress(browseFallback);
+        if (
+          browseLocation?.lat != null &&
+          browseLocation?.lng != null &&
+          Number.isFinite(Number(browseLocation.lat)) &&
+          Number.isFinite(Number(browseLocation.lng))
+        ) {
+          setDeliveryCoords({
+            lat: Number(browseLocation.lat),
+            lng: Number(browseLocation.lng),
+          });
+        }
+      }
+    };
+    seedDeliveryAddress();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per checkout open
+  }, [user?.id]);
 
   useEffect(() => {
     if (!ownerId) {
@@ -241,6 +284,25 @@ const HomeFourScreen = ({ onBack }) => {
       cancelled = true;
     };
   }, [ownerId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPaymentConfig()
+      .then(data => {
+        if (!cancelled && data) {
+          setPaymentConfig({
+            enabled: !!data.enabled,
+            publishableKey: String(data.publishableKey || ''),
+            currency: data.currency || 'gbp',
+            merchantCountryCode: data.merchantCountryCode || 'GB',
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const ownerDeliveryTime = String(ownerProfile?.deliveryTime || '').trim();
   const ownerDeliveryAreaKm = getOwnerAreaKm(ownerProfile, 'delivery');
@@ -511,9 +573,18 @@ const HomeFourScreen = ({ onBack }) => {
       } else {
         setCustomDeliveryAddress(addr);
       }
+      if (user?.id) {
+        persistOrderDeliveryAddress({
+          userId: user.id,
+          addressText: addr,
+          postcode: pc,
+          lat,
+          lng,
+        }).catch(() => {});
+      }
       return true;
     },
-    [isAddressEditing],
+    [isAddressEditing, user?.id],
   );
 
   const handleUseMyLocation = useCallback(() => {
@@ -578,6 +649,48 @@ const HomeFourScreen = ({ onBack }) => {
     [contactPhone],
   );
   const hasValidPhone = validUkPhoneNumber(contactPhone);
+  const hasDeliveryLocation = hasDeliveryAddress || !!customerLatLng;
+  const placeOrderBlockReason = useMemo(() => {
+    if (placing) return 'Please wait…';
+    if (!items.length) return 'Add items from the menu first.';
+    if (!ownerId) return 'Restaurant not found.';
+    if (isDelivery && !!user?.token && !hasDeliveryLocation) {
+      return 'Tap My location or Pick on map to set your delivery address.';
+    }
+    if (!!user?.token && !hasValidPhone) {
+      return 'Enter a valid UK mobile number in Contact details.';
+    }
+    if (isDelivery && isOutsideDeliveryArea) {
+      return 'Your location is outside this restaurant delivery area.';
+    }
+    if (isPickup && isOutsidePickupArea) {
+      return 'Your location is outside this restaurant pickup area.';
+    }
+    return null;
+  }, [
+    placing,
+    items.length,
+    ownerId,
+    isDelivery,
+    user?.token,
+    hasDeliveryLocation,
+    hasValidPhone,
+    isOutsideDeliveryArea,
+    isPickup,
+    isOutsidePickupArea,
+  ]);
+
+  const onPlaceOrderPress = () => {
+    if (placeOrderBlockReason) {
+      Toast.show({
+        type: 'error',
+        text1: 'Cannot place order',
+        text2: placeOrderBlockReason,
+      });
+      return;
+    }
+    handlePlaceOrder();
+  };
   const phoneError =
     phoneTouched && contactPhone.trim() && !hasValidPhone
       ? 'Enter a valid UK phone number (e.g. 07xxx xxxxxx)'
@@ -604,6 +717,18 @@ const HomeFourScreen = ({ onBack }) => {
     }
     setCustomDeliveryAddress(next);
     setIsAddressEditing(false);
+
+    if (user?.id) {
+      await persistOrderDeliveryAddress({
+        userId: user.id,
+        addressText: next,
+        postcode: displayPostcode
+          ? normalizeUkPostcode(displayPostcode) || displayPostcode
+          : '',
+        lat: deliveryCoords?.lat,
+        lng: deliveryCoords?.lng,
+      });
+    }
 
     if (saveAddressToProfile && user?.token && user?.id) {
       setSavingAddress(true);
@@ -651,6 +776,17 @@ const HomeFourScreen = ({ onBack }) => {
     setCustomDeliveryAddress('');
     setAddressDraft('');
     setIsAddressEditing(false);
+    setDeliveryPostcode(String(user?.postcode || browseLocation?.postcode || '').trim());
+    const lat = Number(user?.latitude);
+    const lng = Number(user?.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      setDeliveryCoords({ lat, lng });
+    } else if (browseLocation?.lat != null && browseLocation?.lng != null) {
+      setDeliveryCoords({
+        lat: Number(browseLocation.lat),
+        lng: Number(browseLocation.lng),
+      });
+    }
   };
 
   const handlePlaceOrder = async () => {
@@ -684,7 +820,12 @@ const HomeFourScreen = ({ onBack }) => {
 
     let deliveryAddressPayload = '';
     if (isDelivery) {
-      const addressText = String(selectedDeliveryAddress || '').trim();
+      let addressText = String(selectedDeliveryAddress || '').trim();
+      if (!addressText && customerLatLng) {
+        addressText = displayPostcode
+          ? `Delivery — ${displayPostcode}`
+          : `Delivery location (${customerLatLng.lat.toFixed(5)}, ${customerLatLng.lng.toFixed(5)})`;
+      }
       if (!addressText) {
         Alert.alert(
           'Delivery address required',
@@ -738,7 +879,7 @@ const HomeFourScreen = ({ onBack }) => {
 
     setPlacing(true);
     try {
-      await createRestaurantOrder(user.token, {
+      const orderBody = {
         ownerId,
         items: items.map(i => ({
           menuItemId: i.menuItemId,
@@ -759,6 +900,52 @@ const HomeFourScreen = ({ onBack }) => {
           !appliedPromotion && {
             promotionId: autoAmountDiscount.id,
           }),
+      };
+
+      let paymentIntentId;
+      if (paymentConfig.enabled && total > 0) {
+        if (!paymentConfig.publishableKey) {
+          throw new Error(
+            'Payment is still loading. Close this screen, reopen checkout, and try again.',
+          );
+        }
+        const intent = await createPaymentIntent(user.token, orderBody);
+        if (intent?.requiresPayment) {
+          if (!intent.clientSecret) {
+            throw new Error('Could not start payment. Please try again.');
+          }
+          const { error: initError } = await initPaymentSheet({
+            paymentIntentClientSecret: intent.clientSecret,
+            merchantDisplayName: 'Eatwaze',
+            googlePay: {
+              merchantCountryCode: paymentConfig.merchantCountryCode || 'GB',
+              currencyCode: String(intent.currency || 'gbp').toUpperCase(),
+              testEnv: !String(paymentConfig.publishableKey || '').startsWith(
+                'pk_live_',
+              ),
+            },
+            applePay: {
+              merchantCountryCode: paymentConfig.merchantCountryCode || 'GB',
+            },
+          });
+          if (initError) {
+            throw new Error(initError.message || 'Could not open payment');
+          }
+
+          const { error: presentError } = await presentPaymentSheet();
+          if (presentError) {
+            if (presentError.code === 'Canceled') {
+              throw new Error('Payment cancelled');
+            }
+            throw new Error(presentError.message || 'Payment failed');
+          }
+          paymentIntentId = intent.paymentIntentId;
+        }
+      }
+
+      await createRestaurantOrder(user.token, {
+        ...orderBody,
+        ...(paymentIntentId ? { paymentIntentId } : {}),
       });
       dispatch(appSetUser({ ...user, phone }));
       Toast.show({ type: 'success', text1: 'Order placed successfully' });
@@ -1092,7 +1279,8 @@ const HomeFourScreen = ({ onBack }) => {
             ) : null}
           </View>
           <Text style={styles.deliveryAddressSub}>
-            {addressSourceLabel}. Required so your order can be delivered.
+            {addressSourceLabel}. Only for this order — your profile address stays
+            unchanged unless you tick save below.
           </Text>
 
           {!isAddressEditing ? (
@@ -1365,36 +1553,24 @@ const HomeFourScreen = ({ onBack }) => {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
         <View style={styles.paymentMethod}>
           <TouchableOpacity style={styles.payUsingBtn}>
             <Text style={styles.payUsingLabel}>Pay Using</Text>
             <Icon name="menu-up" size={24} color="#666" />
           </TouchableOpacity>
-          <Text style={styles.methodName}>Credit Card</Text>
+          <Text style={styles.methodName}>
+            {paymentConfig.enabled ? 'Google Pay / Card' : 'Pay at checkout'}
+          </Text>
         </View>
 
         <TouchableOpacity
           style={[
             styles.placeOrderBtn,
-            (!hasItems ||
-              !ownerId ||
-              (isDelivery && !!user?.token && !hasDeliveryAddress) ||
-              (!!user?.token && !hasValidPhone) ||
-              (isDelivery && isOutsideDeliveryArea) ||
-              (isPickup && isOutsidePickupArea)) &&
-              styles.placeOrderBtnDisabled,
+            placeOrderBlockReason && styles.placeOrderBtnDisabled,
           ]}
-          onPress={handlePlaceOrder}
-          disabled={
-            placing ||
-            !hasItems ||
-            !ownerId ||
-            (isDelivery && !!user?.token && !hasDeliveryAddress) ||
-            (!!user?.token && !hasValidPhone) ||
-            (isDelivery && isOutsideDeliveryArea) ||
-            (isPickup && isOutsidePickupArea)
-          }
+          onPress={onPlaceOrderPress}
+          activeOpacity={0.88}
         >
           <View>
             <Text style={styles.footerPrice}>
@@ -1405,7 +1581,9 @@ const HomeFourScreen = ({ onBack }) => {
           {placing ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.placeOrderText}>Place Order</Text>
+            <Text style={styles.placeOrderText}>
+              {paymentConfig.enabled && total > 0 ? 'Pay & Place Order' : 'Place Order'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>

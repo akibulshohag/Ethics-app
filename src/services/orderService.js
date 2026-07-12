@@ -68,6 +68,9 @@ function buildOrderPayload(body, { legacyApi = false } = {}) {
     if (body.fulfillmentType) {
       payload.fulfillmentType = String(body.fulfillmentType);
     }
+    if (body.paymentIntentId) {
+      payload.paymentIntentId = String(body.paymentIntentId);
+    }
   }
 
   return payload;
