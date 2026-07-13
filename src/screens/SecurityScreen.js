@@ -72,10 +72,18 @@ const SecurityScreen = () => {
 
           <SecurityOption
             iconName="fingerprint"
-            title="Fingerprint"
-            subtitle="Enable or disable fingerprint authentication"
+            title="Fingerprint & Face lock"
+            subtitle="Unlock with fingerprint or face unlock"
             iconColor="#4CAF50"
             onPress={() => navigation.navigate('SetFingerprint')}
+          />
+
+          <SecurityOption
+            iconName="printer-wireless"
+            title="WiFi printer"
+            subtitle="Configure thermal printer for invoices"
+            iconColor="#2196F3"
+            onPress={() => navigation.navigate('PrinterSettingsScreen')}
           />
 
           <SecurityOption

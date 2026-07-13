@@ -31,7 +31,10 @@ import {
 } from '../services/orderService';
 import { getChannelProfile } from '../services/channelService';
 import {
-  orderStatusLabel,
+  autoPrintInvoiceIfEnabled,
+  printReceiptOverWifi,
+} from '../services/wifiPrinterService';
+import {
   orderStatusColor,
   customerOrderStatusLabel,
   customerOrderStatusColor,
@@ -159,6 +162,17 @@ export default function OrderDetailsScreen() {
           }
         }
         setOrder(nextOrder);
+        try {
+          await autoPrintInvoiceIfEnabled({
+            ...nextOrder,
+            ownerName: nextOrder?.owner?.name || nextOrder?.ownerName,
+            customerName: nextOrder?.user?.name || user?.name,
+            customerPhone: nextOrder?.customerPhone || nextOrder?.user?.phone,
+            items: nextOrder?.items || nextOrder?.orderItems,
+          });
+        } catch (_) {
+          // optional auto-print when printer not configured
+        }
       })
       .catch(() => {
         if (!cancelled && !orderParam) setOrder(null);
@@ -892,6 +906,14 @@ export default function OrderDetailsScreen() {
       `;
   };
 
+  const getInvoicePdfFileName = () => {
+    const raw = String(order?.id || 'order')
+      .trim()
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/\s+/g, '_');
+    return `eatwaze_invoice_${raw || 'order'}.pdf`;
+  };
+
   const generateInvoicePdfPath = async () => {
     const hasNativePdfModule =
       !!NativeModules?.RNHTMLtoPDF || !!NativeModules?.HtmlToPdf;
@@ -913,44 +935,126 @@ export default function OrderDetailsScreen() {
       throw new Error('PDF module generate method unavailable.');
     }
     const html = buildInvoiceHtml();
-    const baseName = `eatwaze_invoice_${String(order?.id || 'order')}`;
+    const fileName = getInvoicePdfFileName();
     const file = await generatePDF({
       html,
-      fileName: baseName,
-      directory: 'Documents',
+      fileName: fileName.replace(/\.pdf$/i, ''),
+      directory: Platform.OS === 'ios' ? 'Documents' : 'Cache',
     });
     if (!file?.filePath) {
       throw new Error('Could not create invoice PDF.');
     }
+    return { sourcePath: file.filePath, fileName };
+  };
 
-    let finalPath = file.filePath;
-    if (Platform.OS === 'android') {
+  const saveInvoicePdfToDownloads = async (sourcePath, fileName) => {
+    if (Platform.OS === 'ios') {
+      const targetPath = `${ReactNativeBlobUtil.fs.dirs.DocumentDir}/${fileName}`;
       try {
-        const { fs } = ReactNativeBlobUtil;
-        const downloadDir = fs.dirs?.DownloadDir;
-        if (downloadDir) {
-          const targetPath = `${downloadDir}/${baseName}.pdf`;
-          try {
-            const exists = await fs.exists(targetPath);
-            if (exists) await fs.unlink(targetPath);
-          } catch (_) {}
-          await fs.cp(file.filePath, targetPath);
-          finalPath = targetPath;
-        }
-      } catch (_) {
-        // keep documents path
-      }
+        const exists = await ReactNativeBlobUtil.fs.exists(targetPath);
+        if (exists) await ReactNativeBlobUtil.fs.unlink(targetPath);
+      } catch (_) {}
+      await ReactNativeBlobUtil.fs.cp(sourcePath, targetPath);
+      return { fileName, openUri: targetPath };
     }
-    return finalPath;
+
+    const downloadPath = `${ReactNativeBlobUtil.fs.dirs.DownloadDir}/${fileName}`;
+    try {
+      try {
+        const exists = await ReactNativeBlobUtil.fs.exists(downloadPath);
+        if (exists) await ReactNativeBlobUtil.fs.unlink(downloadPath);
+      } catch (_) {}
+      await ReactNativeBlobUtil.fs.cp(sourcePath, downloadPath);
+      await ReactNativeBlobUtil.fs.scanFile([
+        { path: downloadPath, mime: 'application/pdf' },
+      ]);
+      await ReactNativeBlobUtil.android.addCompleteDownload({
+        title: fileName,
+        description: 'Eatwaze invoice',
+        mime: 'application/pdf',
+        path: downloadPath,
+        showNotification: true,
+      });
+      const saved = await ReactNativeBlobUtil.fs.exists(downloadPath);
+      if (!saved) throw new Error('File save verification failed');
+      return { fileName, openUri: `file://${downloadPath}` };
+    } catch (downloadErr) {
+      const mediaStoreUri =
+        await ReactNativeBlobUtil.MediaCollection.copyToMediaStore(
+          {
+            name: fileName,
+            parentFolder: 'Download',
+            mimeType: 'application/pdf',
+          },
+          'Download',
+          sourcePath,
+        );
+      await ReactNativeBlobUtil.android.addCompleteDownload({
+        title: fileName,
+        description: 'Eatwaze invoice',
+        mime: 'application/pdf',
+        path: downloadPath,
+        showNotification: true,
+      });
+      return {
+        fileName,
+        openUri: mediaStoreUri || `file://${downloadPath}`,
+      };
+    }
   };
 
   const handleDownloadInvoice = async () => {
     try {
-      const path = await generateInvoicePdfPath();
+      const { sourcePath, fileName } = await generateInvoicePdfPath();
+      const saved = await saveInvoicePdfToDownloads(sourcePath, fileName);
       setInvoiceOptionsVisible(false);
-      Alert.alert('Invoice downloaded', `Saved invoice PDF to:\n${path}`);
+      Alert.alert(
+        'Invoice downloaded',
+        Platform.OS === 'android'
+          ? `Saved to Downloads as ${saved.fileName}`
+          : `Saved in Files as ${saved.fileName}`,
+        [
+          { text: 'OK', style: 'cancel' },
+          ...(Platform.OS === 'android'
+            ? [
+                {
+                  text: 'Open',
+                  onPress: async () => {
+                    try {
+                      await ReactNativeBlobUtil.android.actionViewIntent(
+                        saved.openUri,
+                        'application/pdf',
+                      );
+                    } catch (_) {
+                      Alert.alert(
+                        'Info',
+                        'Please open it from your Downloads folder.',
+                      );
+                    }
+                  },
+                },
+              ]
+            : []),
+        ],
+      );
     } catch (e) {
       Alert.alert('Invoice error', e?.message || 'Failed to generate invoice.');
+    }
+  };
+
+  const handleWifiPrintInvoice = async () => {
+    try {
+      await printReceiptOverWifi({
+        ...order,
+        ownerName: order?.owner?.name || order?.ownerName,
+        customerName: order?.user?.name || user?.name,
+        customerPhone: order?.customerPhone || order?.user?.phone,
+        items: order?.items || order?.orderItems,
+      });
+      setInvoiceOptionsVisible(false);
+      Alert.alert('Printed', 'Invoice sent to WiFi printer.');
+    } catch (e) {
+      Alert.alert('WiFi print error', e?.message || 'Failed to print over WiFi.');
     }
   };
 
@@ -967,8 +1071,8 @@ export default function OrderDetailsScreen() {
       if (!RNPrint?.print) {
         throw new Error('Print module is not available.');
       }
-      const path = await generateInvoicePdfPath();
-      await RNPrint.print({ filePath: path });
+      const { sourcePath } = await generateInvoicePdfPath();
+      await RNPrint.print({ filePath: sourcePath });
       setInvoiceOptionsVisible(false);
     } catch (e) {
       Alert.alert('Print error', e?.message || 'Failed to print invoice.');
@@ -1383,6 +1487,25 @@ export default function OrderDetailsScreen() {
             >
               <Icon name="download" size={18} color="#1A1C1E" />
               <Text style={styles.invoiceOptionText}>Download PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.invoiceOptionBtn}
+              onPress={handleWifiPrintInvoice}
+              activeOpacity={0.85}
+            >
+              <Icon name="printer-wireless" size={18} color="#1A1C1E" />
+              <Text style={styles.invoiceOptionText}>Print on WiFi printer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.invoiceOptionBtn}
+              onPress={() => {
+                setInvoiceOptionsVisible(false);
+                navigation.navigate('PrinterSettingsScreen');
+              }}
+              activeOpacity={0.85}
+            >
+              <Icon name="cog-outline" size={18} color="#1A1C1E" />
+              <Text style={styles.invoiceOptionText}>Printer settings</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.invoiceOptionBtn}

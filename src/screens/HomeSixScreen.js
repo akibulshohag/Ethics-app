@@ -143,6 +143,14 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         termsAccepted: true,
       });
 
+      if (data?.requiresEmailVerification) {
+        navigation.navigate('OtpVerification', {
+          email: email.trim(),
+          mode: 'signup',
+        });
+        return;
+      }
+
       const userData = {
         id: data.user.id,
         name: data.user.name || 'New User',

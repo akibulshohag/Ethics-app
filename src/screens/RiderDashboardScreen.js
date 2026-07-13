@@ -25,6 +25,7 @@ import {
   listRiderReviews,
 } from '../services/orderService';
 import { appSetUser, clearBrowseLocation } from '../redux/actions/appSlice';
+import { asyncStorageKeysToRemoveOnLogout } from '../utils/logoutStorage';
 import { getChannelProfile } from '../services/channelService';
 import { safeImageUri } from '../utils/helper';
 import {
@@ -324,9 +325,7 @@ export default function RiderDashboardScreen() {
             dispatch(appSetUser(null));
             dispatch(clearBrowseLocation());
             const allKeys = await AsyncStorage.getAllKeys();
-            const toRemove = allKeys.filter(
-              k => k !== 'USER_LOCATION_SELECTION',
-            );
+            const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
             if (toRemove.length > 0) {
               await AsyncStorage.multiRemove(toRemove);
             }

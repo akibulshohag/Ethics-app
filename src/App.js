@@ -10,7 +10,8 @@ import NetInfo from '@react-native-community/netinfo';
 import { Offline } from './components/Offline';
 import Toast, { BaseToast } from 'react-native-toast-message';
 import colors from './constants/colors';
-import { Alert, BackHandler, View, StyleSheet, Linking } from 'react-native';
+import { Alert, AppState, BackHandler, View, StyleSheet, Linking } from 'react-native';
+import FaceUnlockCameraHost from './components/FaceUnlockCameraHost';
 // import Loading from './components/Loading';
 import RootStack from './navigation/RootStack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -49,6 +50,7 @@ const AppContent = () => {
     }
     return () => disconnectNotificationSocket();
   }, [user?.id]);
+
   const backAction = () => {
     if (!navigationRef.current || !navigationRef.current.isReady()) {
       return false;
@@ -151,7 +153,7 @@ const App = () => {
     };
   }, [connected]);
 
-  useEffect(() => {
+  const refreshStripeKey = React.useCallback(() => {
     getPaymentConfig()
       .then(data => {
         if (data?.publishableKey) {
@@ -160,6 +162,19 @@ const App = () => {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    refreshStripeKey();
+  }, [refreshStripeKey]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        refreshStripeKey();
+      }
+    });
+    return () => sub.remove();
+  }, [refreshStripeKey]);
 
   if (!connected) {
     // return <Offline />;
@@ -184,6 +199,7 @@ const App = () => {
     <Provider store={store}>
       <PersistGate persistor={persistor}>
         <AppContent />
+        <FaceUnlockCameraHost />
         <Toast
           config={toastConfig}
           position="bottom"

@@ -32,6 +32,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appSetUser, clearBrowseLocation } from '../redux/actions/appSlice';
 import { deleteMyAccount } from '../services/userSafetyService';
 import { LOCATION_STORAGE_KEY } from '../services/userLocationService';
+import { asyncStorageKeysToRemoveOnLogout } from '../utils/logoutStorage';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -420,7 +421,7 @@ const LibraryScreen = ({ navigation }) => {
               dispatch(appSetUser(null));
               dispatch(clearBrowseLocation());
               const allKeys = await AsyncStorage.getAllKeys();
-              const toRemove = allKeys.filter(k => k !== LOCATION_STORAGE_KEY);
+              const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
               if (toRemove.length > 0) {
                 await AsyncStorage.multiRemove(toRemove);
               }
@@ -469,7 +470,7 @@ const LibraryScreen = ({ navigation }) => {
     dispatch(appSetUser(null));
     dispatch(clearBrowseLocation());
     const allKeys = await AsyncStorage.getAllKeys();
-    const toRemove = allKeys.filter(k => k !== LOCATION_STORAGE_KEY);
+    const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
     if (toRemove.length > 0) {
       await AsyncStorage.multiRemove(toRemove);
     }

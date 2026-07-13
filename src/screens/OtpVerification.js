@@ -11,7 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { forgotPassword, verifyOtp } from '../services/authService';
+import { forgotPassword, verifyOtp, verifyEmailOtp, resendEmailVerificationOtp } from '../services/authService';
+import { useDispatch } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { refreshUserSafetyAfterLogin } from '../services/userSafetyService';
+import { navigationRef } from '../utils/helper';
 import {
   COLORS,
   FONTS,
@@ -23,8 +27,10 @@ import {
 const OtpVerification = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const dispatch = useDispatch();
   const email = route.params?.email || '';
   const method = route.params?.method || 'email';
+  const mode = route.params?.mode || 'reset';
   const [timer, setTimer] = useState(55);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +63,30 @@ const OtpVerification = () => {
 
     setLoading(true);
     try {
+      if (mode === 'signup') {
+        const data = await verifyEmailOtp(email, otp.trim());
+        const userData = {
+          id: data.user.id,
+          name: data.user.name || 'New User',
+          email: data.user.email,
+          phone: data.user.phone || '',
+          nickname: data.user.nickname || '',
+          gender: data.user.gender || 'others',
+          role: data.user.role,
+          roleId: data.user.roleId,
+          address: data.user.address,
+          token: data.token,
+        };
+        dispatch(appSetUser(userData));
+        await refreshUserSafetyAfterLogin();
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Account');
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+        }
+        return;
+      }
+
       const data = await verifyOtp(email, otp.trim());
       navigation.navigate('CreateNewPassword', {
         email,
@@ -73,7 +103,11 @@ const OtpVerification = () => {
     if (!email || timer > 0) return;
     setResending(true);
     try {
-      await forgotPassword(email, method);
+      if (mode === 'signup') {
+        await resendEmailVerificationOtp(email);
+      } else {
+        await forgotPassword(email, method);
+      }
       setTimer(55);
       Alert.alert('Success', 'A new OTP has been sent to your email');
     } catch (error) {

@@ -90,6 +90,15 @@
 -dontwarn com.stripe.android.pushProvisioning.PushProvisioningActivityStarter
 -dontwarn com.stripe.android.pushProvisioning.PushProvisioningEphemeralKeyProvider
 
+# react-native-keychain + react-native-biometrics (release APK)
+-keep class com.oblador.keychain.** { *; }
+-keep class androidx.biometric.** { *; }
+-keep class com.rnbiometrics.** { *; }
+-keep class com.eatix.app.EatixBiometricModule { *; }
+-keep class com.eatix.app.EatixBiometricPackage { *; }
+-dontwarn com.oblador.keychain.**
+-dontwarn androidx.biometric.**
+
 # -------------------------------------------------------
 #  General Optimizations
 # -------------------------------------------------------

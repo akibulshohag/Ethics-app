@@ -19,13 +19,22 @@ function formatPaymentError(err, fallback = 'Payment failed') {
   return fallback;
 }
 
+export const normalizePaymentConfig = data => ({
+  enabled: !!data?.enabled,
+  publishableKey: String(data?.publishableKey || ''),
+  currency: data?.currency || 'gbp',
+  merchantCountryCode: data?.merchantCountryCode || 'GB',
+  keysMatch: data?.keysMatch !== false,
+  stripeMode: data?.stripeMode || 'unknown',
+});
+
 /** Public Stripe config (enabled, publishableKey, currency). */
 export const getPaymentConfig = async () => {
   const res = await fetch(`${API_URL}/config`);
   if (!res.ok) {
-    return { enabled: false, publishableKey: '', currency: 'gbp', merchantCountryCode: 'GB' };
+    return normalizePaymentConfig(null);
   }
-  return res.json();
+  return normalizePaymentConfig(await res.json());
 };
 
 /**

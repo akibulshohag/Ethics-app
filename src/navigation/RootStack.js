@@ -31,6 +31,8 @@ import PostEditNew from '../screens/reelsNewScreen/PostEditNew';
 import PostCaptionNew from '../screens/reelsNewScreen/PostCaptionNew';
 import PostPreviewNew from '../screens/reelsNewScreen/PostPreviewNew';
 import PostScheduleNew from '../screens/reelsNewScreen/PostScheduleNew';
+import PrinterSettingsScreen from '../screens/PrinterSettingsScreen';
+import PhoneAuthScreen from '../screens/PhoneAuthScreen';
 
 const Root = createStackNavigator();
 
@@ -52,6 +54,8 @@ const RootStack = () => {
       <Root.Screen name="CreatePin" component={CreatePinScreen} />
       <Root.Screen name="SetFingerprint" component={SetFingerprint} />
       <Root.Screen name="ChooseInterests" component={ChooseInterests} />
+      <Root.Screen name="PrinterSettingsScreen" component={PrinterSettingsScreen} />
+      <Root.Screen name="PhoneAuthScreen" component={PhoneAuthScreen} />
       <Root.Screen name="MenuManageScreen" component={MenuManageScreen} />
       <Root.Screen name="ChatScreen" component={ChatScreen} />
       <Root.Screen name="DetailedChatScreen" component={DetailedChatScreen} />

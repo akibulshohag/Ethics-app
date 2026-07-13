@@ -37,6 +37,7 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import BusinessProfileCard from '../../components/BusinessProfileCard';
+import BiometricLockToggle from '../../components/BiometricLockToggle';
 import PromotionCard from '../../components/PromotionCard';
 import BusinessVideoCard from '../../components/BusinessVideoCard';
 import BusinessVideoTabCard from '../../components/BusinessVideoTabCard';
@@ -5235,6 +5236,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   </Text>
                 </TouchableOpacity>
               </View>
+              {isOwnProfile ? (
+                <BiometricLockToggle variant="modal" />
+              ) : null}
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Social links
               </Text>

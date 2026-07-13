@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -24,6 +24,7 @@ import {
   useNavigation,
   useRoute,
   CommonActions,
+  useFocusEffect,
 } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import {
@@ -36,7 +37,13 @@ import {
   homeRouteForBrowseLocation,
   persistBrowseLocation,
 } from '../services/userLocationService';
-import { login, isAccountInactiveError } from '../services/authService';
+import { login, isAccountInactiveError, isEmailNotVerifiedError } from '../services/authService';
+import {
+  getBiometricSupport,
+  tryBiometricLogin,
+  biometricLoginButtonLabel,
+  syncBiometricSessionForUser,
+} from '../services/biometricService';
 import {
   loginWithApple,
   loginWithFacebook,
@@ -45,6 +52,7 @@ import {
 } from '../services/socialAuthService';
 import TermsAcceptRow from '../components/TermsAcceptRow';
 import { refreshUserSafetyAfterLogin } from '../services/userSafetyService';
+import { config } from '../../config';
 import signupFood from '../assets/img/signupfood.png';
 import decorBowl from '../assets/img/s1.png';
 import decorSkyline from '../assets/img/s2.png';
@@ -75,6 +83,28 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [biometricReady, setBiometricReady] = useState(false);
+  const [biometricType, setBiometryType] = useState(null);
+  const [faceAvailable, setFaceAvailable] = useState(false);
+  const [fingerprintAvailable, setFingerprintAvailable] = useState(false);
+
+  const refreshBiometricState = React.useCallback(async () => {
+    const support = await getBiometricSupport();
+    setBiometricReady(!!support.available);
+    setBiometryType(support.biometryType);
+    setFaceAvailable(!!support.faceAvailable);
+    setFingerprintAvailable(!!support.fingerprintAvailable);
+  }, []);
+
+  useEffect(() => {
+    refreshBiometricState();
+  }, [refreshBiometricState]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshBiometricState();
+    }, [refreshBiometricState]),
+  );
 
   const navigateAfterLogin = async userData => {
     const role = String(userData?.role || '').toLowerCase();
@@ -142,12 +172,16 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         channelAbout: data.user.channelAbout,
         socialLinks: data.user.socialLinks,
         savedLastLocation: data.user.savedLastLocation,
+        fingerprintEnabled: data.user.fingerprintEnabled || false,
         rememberMe: rememberMe,
         token: data.token,
       };
 
       dispatch(appSetUser(userData));
       await refreshUserSafetyAfterLogin();
+      if (userData.fingerprintEnabled) {
+        await syncBiometricSessionForUser(userData);
+      }
       await navigateAfterLogin(userData);
     } catch (error) {
       console.error('Login error:', error);
@@ -168,9 +202,63 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         return;
       }
 
+      if (isEmailNotVerifiedError(msg)) {
+        Alert.alert(
+          'Email not verified',
+          'Please verify your email before logging in.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Verify now',
+              onPress: () =>
+                navigation.navigate('OtpVerification', {
+                  email: email.trim(),
+                  mode: 'signup',
+                }),
+            },
+          ],
+        );
+        return;
+      }
+
       setTimeout(() => {
         Alert.alert('Error', msg || 'Login failed. Please try again.');
       }, 100);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async (method = 'any') => {
+    setLoading(true);
+    try {
+      const session = await tryBiometricLogin(method);
+      const res = await fetch(`${config.apiBaseUrl}/users/refresh-session`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.message || 'Biometric session expired. Log in with password.');
+      }
+      const userData = {
+        ...(data.user || {}),
+        token: data.token || session.token,
+        rememberMe: true,
+      };
+      dispatch(appSetUser(userData));
+      await refreshUserSafetyAfterLogin();
+      await navigateAfterLogin(userData);
+    } catch (e) {
+      const msg = e?.message || 'Could not unlock';
+      if (msg.includes('not set up')) {
+        Alert.alert(
+          'Biometric login',
+          'Enable Fingerprint & Face login from your profile (Edit Profile → Security), then try again.',
+        );
+      } else {
+        Alert.alert('Biometric login', msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -359,6 +447,50 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
               >
                 <Text style={styles.secondaryBtnText}>Sign Up</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionBtnSecondary}
+                onPress={() => navigation.navigate('PhoneAuthScreen')}
+                disabled={loading}
+              >
+                <Text style={styles.secondaryBtnText}>Continue with phone</Text>
+              </TouchableOpacity>
+
+              {biometricReady && faceAvailable ? (
+                <TouchableOpacity
+                  style={styles.actionBtnSecondary}
+                  onPress={() => handleBiometricLogin('face')}
+                  disabled={loading}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    Unlock with {biometricLoginButtonLabel(biometricType, 'face')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {biometricReady && fingerprintAvailable ? (
+                <TouchableOpacity
+                  style={styles.actionBtnSecondary}
+                  onPress={() => handleBiometricLogin('fingerprint')}
+                  disabled={loading}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    Unlock with {biometricLoginButtonLabel(biometricType, 'fingerprint')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {biometricReady && !faceAvailable && !fingerprintAvailable ? (
+                <TouchableOpacity
+                  style={styles.actionBtnSecondary}
+                  onPress={() => handleBiometricLogin('any')}
+                  disabled={loading}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    Unlock with {biometricLoginButtonLabel(biometricType)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
 
               <Text style={styles.orText}>Or</Text>
               <Text style={styles.signInWithText}>Sign in with</Text>

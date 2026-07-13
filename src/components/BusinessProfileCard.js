@@ -17,6 +17,7 @@ import { safeImageUri } from '../utils/helper';
 import { formatShortProfileLocationLine, formatCityCountryPostcodeLine } from '../utils/locationFormat';
 import { getConversations } from '../services/chatService';
 import UserProfileCard from './UserProfileCard';
+import BiometricLockToggle from './BiometricLockToggle';
 
 const CARD_INSET = 12;
 const SHEET_OVERLAP = 88;
@@ -127,6 +128,7 @@ const BusinessProfileCard = ({
       <UserProfileCard
         profile={profile}
         canEdit={!!isOwnProfile}
+        onEditProfile={isOwnProfile ? onEditProfile : undefined}
         onAvatarPress={isOwnProfile ? onAvatarPress : undefined}
         showSubscribe={!isOwnProfile}
         onSubscribe={onSubscribe}
@@ -272,6 +274,8 @@ const BusinessProfileCard = ({
               <Text style={styles.profileStatLabel}>MSG</Text>
             </TouchableOpacity>
           </View>
+
+          <BiometricLockToggle variant="embedded" />
 
           <LinearGradient
             colors={BIO_SECTION_GRADIENT.colors}

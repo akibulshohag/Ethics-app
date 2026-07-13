@@ -71,6 +71,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Eatwaze uses Face ID to unlock the app and sign you in securely.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Eatwaze uses your camera so you can record short food videos and take photos to post on your restaurant profile or menu.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

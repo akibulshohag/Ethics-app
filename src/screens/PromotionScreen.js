@@ -43,6 +43,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import appLogo from '../assets/logo.png';
 import UserProfileCard from '../components/UserProfileCard';
+import BiometricLockToggle from '../components/BiometricLockToggle';
 
 import {
   getChannelProfile,
@@ -4132,6 +4133,9 @@ const PromotionScreen = ({ onBack }) => {
                   </Text>
                 </TouchableOpacity>
               </View>
+              {isOwnProfile ? (
+                <BiometricLockToggle variant="modal" />
+              ) : null}
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Social links
               </Text>

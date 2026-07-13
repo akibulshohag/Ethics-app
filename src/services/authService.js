@@ -137,6 +137,16 @@ export const changePassword = (userId, currentPassword, newPassword) =>
     newPassword,
   });
 
+export const phoneLogin = ({ idToken, phone, termsAccepted = true }) =>
+  postJson('/users/phone-login', {
+    idToken: String(idToken || ''),
+    phone: String(phone || '').trim(),
+    termsAccepted,
+  });
+
+export const isEmailNotVerifiedError = message =>
+  String(message || '').includes('EMAIL_NOT_VERIFIED');
+
 export const isAccountInactiveError = message =>
   String(message || '').includes('ACCOUNT_INACTIVE');
 

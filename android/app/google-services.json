@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "236298500212-6u8h4a10g6rc60rm3n4o3p6sivjnnrll.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.eatix.app",
+            "certificate_hash": "517049a793d90a907182cd90c58aaf985a258f15"
+          }
+        },
+        {
           "client_id": "236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -37,6 +45,13 @@
             {
               "client_id": "236298500212-810ubvv2taqs55m35pgvg0h795so6u68.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "236298500212-s19odpqururn1hls4u3o8ebp79o2b726.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.eatwaze.app"
+              }
             }
           ]
         }

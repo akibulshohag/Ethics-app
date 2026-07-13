@@ -72,6 +72,32 @@ def enableProguardInReleaseBuilds = true
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def uploadStoreFile = (
+    keystoreProperties['MYAPP_UPLOAD_STORE_FILE']
+        ?: project.findProperty('MYAPP_UPLOAD_STORE_FILE')
+        ?: 'my-upload-key.keystore'
+).toString()
+def uploadKeyAlias = (
+    keystoreProperties['MYAPP_UPLOAD_KEY_ALIAS']
+        ?: project.findProperty('MYAPP_UPLOAD_KEY_ALIAS')
+        ?: 'my-key-alias'
+).toString()
+def uploadStorePassword = (
+    keystoreProperties['MYAPP_UPLOAD_STORE_PASSWORD']
+        ?: project.findProperty('MYAPP_UPLOAD_STORE_PASSWORD')
+)?.toString()?.trim()
+def uploadKeyPassword = (
+    keystoreProperties['MYAPP_UPLOAD_KEY_PASSWORD']
+        ?: project.findProperty('MYAPP_UPLOAD_KEY_PASSWORD')
+        ?: uploadStorePassword
+)?.toString()?.trim()
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -93,12 +119,11 @@ android {
             keyPassword 'android'
         }
         release {
-            def uploadPassword = project.findProperty('MYAPP_UPLOAD_STORE_PASSWORD')?.toString()?.trim()
-            if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE') && uploadPassword) {
-                storeFile file(MYAPP_UPLOAD_STORE_FILE)
-                storePassword MYAPP_UPLOAD_STORE_PASSWORD
-                keyAlias MYAPP_UPLOAD_KEY_ALIAS
-                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            if (uploadStorePassword) {
+                storeFile file(uploadStoreFile)
+                storePassword uploadStorePassword
+                keyAlias uploadKeyAlias
+                keyPassword uploadKeyPassword
             } else {
                 storeFile file('debug.keystore')
                 storePassword 'android'
@@ -129,6 +154,7 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.android:facebook-android-sdk:18.+")
+    implementation("androidx.biometric:biometric:1.1.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

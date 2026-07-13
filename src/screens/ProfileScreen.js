@@ -18,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { deleteMyAccount } from '../services/userSafetyService';
+import { asyncStorageKeysToRemoveOnLogout } from '../utils/logoutStorage';
 import {
   COLORS,
   FONTS,
@@ -55,9 +56,8 @@ const ProfileScreen = () => {
 
   const resetToLogin = async () => {
     dispatch(appSetUser(null));
-    const KEEP_KEYS = ['USER_LOCATION_SELECTION', DARK_MODE_KEY];
     const allKeys = await AsyncStorage.getAllKeys();
-    const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+    const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
     if (toRemove.length > 0) {
       await AsyncStorage.multiRemove(toRemove);
     }
@@ -146,10 +146,8 @@ const ProfileScreen = () => {
                 // Clear user data from Redux
                 dispatch(appSetUser(null));
 
-                // Clear AsyncStorage but NEVER remove location (so after re-login, 24h skip Landing still works)
-                const KEEP_KEYS = ['USER_LOCATION_SELECTION', DARK_MODE_KEY];
                 const allKeys = await AsyncStorage.getAllKeys();
-                const toRemove = allKeys.filter(k => !KEEP_KEYS.includes(k));
+                const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
                 if (toRemove.length > 0) {
                   await AsyncStorage.multiRemove(toRemove);
                 }

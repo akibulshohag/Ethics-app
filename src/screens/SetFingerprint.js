@@ -7,14 +7,22 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import { config } from '../../config';
 import SuccessModal from './SuccessModal';
+import BiometricMethodIcon from '../components/BiometricMethodIcon';
+import {
+  biometricUnlockDescription,
+  chooseBiometricMethodOnEnable,
+  getBiometricSupport,
+  syncBiometricSessionForUser,
+  updateFingerprintEnabled,
+} from '../services/biometricService';
 import {
   COLORS,
   FONTS,
@@ -32,6 +40,17 @@ const SetFingerprint = () => {
   const [loading, setLoading] = useState(false);
   const [isUpdateMode, setIsUpdateMode] = useState(false);
   const [fingerprintEnabled, setFingerprintEnabled] = useState(false);
+  const [biometryType, setBiometryType] = useState(null);
+  const [faceAvailable, setFaceAvailable] = useState(false);
+  const [fingerprintAvailable, setFingerprintAvailable] = useState(false);
+
+  useEffect(() => {
+    getBiometricSupport().then(s => {
+      setBiometryType(s.biometryType);
+      setFaceAvailable(!!s.faceAvailable);
+      setFingerprintAvailable(!!s.fingerprintAvailable);
+    });
+  }, []);
 
   useEffect(() => {
     // Check if user already has fingerprint enabled
@@ -57,51 +76,59 @@ const SetFingerprint = () => {
     return () => clearTimeout(timeoutId);
   }, [showSuccess]);
 
-  const handleFingerprintPress = async () => {
+  const applyBiometricChange = async (nextEnabled, method) => {
     setLoading(true);
     try {
-      // Call API to enable/disable fingerprint
-      const response = await fetch(
-        `${config.apiBaseUrl}/users/set-fingerprint`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${user.token}`,
-          },
-          body: JSON.stringify({
-            userId: user.id,
-            fingerprintEnabled: !fingerprintEnabled,
-          }),
-        },
-      );
+      await updateFingerprintEnabled(user, nextEnabled, { method });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to update fingerprint setting');
-      }
-
-      // Update Redux store
       const updatedUser = {
         ...user,
-        fingerprintEnabled: !fingerprintEnabled,
+        fingerprintEnabled: nextEnabled,
       };
 
       dispatch(appSetUser(updatedUser));
-      setFingerprintEnabled(!fingerprintEnabled);
+      if (nextEnabled) {
+        await syncBiometricSessionForUser(updatedUser);
+      }
+      setFingerprintEnabled(nextEnabled);
       setShowSuccess(true);
     } catch (error) {
       console.error('Fingerprint error:', error);
       setTimeout(() => {
         Alert.alert(
           'Error',
-          error.message || 'Failed to update fingerprint. Please try again.',
+          error.message || 'Failed to update biometric settings. Please try again.',
         );
       }, 100);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEnablePress = async method => {
+    if (fingerprintEnabled) {
+      await applyBiometricChange(false);
+      return;
+    }
+    await applyBiometricChange(true, method);
+  };
+
+  const handleMainPress = async () => {
+    if (fingerprintEnabled) {
+      await applyBiometricChange(false);
+      return;
+    }
+    if (Platform.OS === 'android' && faceAvailable && fingerprintAvailable) {
+      const method = await chooseBiometricMethodOnEnable({
+        faceAvailable,
+        fingerprintAvailable,
+      });
+      if (!method) return;
+      await applyBiometricChange(true, method);
+      return;
+    }
+    const method = faceAvailable ? 'face' : fingerprintAvailable ? 'fingerprint' : 'any';
+    await applyBiometricChange(true, method);
   };
 
   const handleSkip = () => {
@@ -132,38 +159,62 @@ const SetFingerprint = () => {
           <Icon name="arrow-left" size={28} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {isUpdateMode ? 'Update Fingerprint' : 'Set Your Fingerprint'}
+          {isUpdateMode ? 'Biometric login' : 'Set biometric login'}
         </Text>
       </View>
 
       <View style={styles.content}>
         <Text style={styles.description}>
           {fingerprintEnabled
-            ? 'Fingerprint is currently enabled. Tap to disable.'
-            : 'Add a fingerprint to make your account more secure.'}
+            ? 'Fingerprint & face login is on. Tap to turn off.'
+            : biometricUnlockDescription(biometryType, false)}
         </Text>
 
         <TouchableOpacity
           style={styles.iconContainer}
-          onPress={handleFingerprintPress}
+          onPress={handleMainPress}
           activeOpacity={0.7}
           disabled={loading}
         >
           {loading ? (
             <ActivityIndicator size="large" color={COLORS.primaryOrange} />
           ) : (
-            <Icon
-              name="fingerprint"
-              size={250}
+            <BiometricMethodIcon
+              biometryType={biometryType}
+              available
+              size={120}
               color={fingerprintEnabled ? COLORS.success : COLORS.primaryOrange}
             />
           )}
         </TouchableOpacity>
 
+        {!fingerprintEnabled && Platform.OS === 'android' && faceAvailable ? (
+          <View style={styles.methodRow}>
+            <TouchableOpacity
+              style={styles.methodBtn}
+              onPress={() => handleEnablePress('face')}
+              disabled={loading}
+            >
+              <Icon name="face-recognition" size={22} color={COLORS.primaryOrange} />
+              <Text style={styles.methodBtnText}>Enable Face (camera)</Text>
+            </TouchableOpacity>
+            {fingerprintAvailable ? (
+              <TouchableOpacity
+                style={styles.methodBtn}
+                onPress={() => handleEnablePress('fingerprint')}
+                disabled={loading}
+              >
+                <Icon name="fingerprint" size={22} color={COLORS.primaryOrange} />
+                <Text style={styles.methodBtnText}>Enable Fingerprint</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
         <Text style={styles.instruction}>
           {fingerprintEnabled
-            ? 'Tap the fingerprint icon to disable biometric authentication'
-            : 'Please put your finger on the fingerprint scanner to get started.'}
+            ? 'Tap the icon to disable fingerprint / face login'
+            : 'Scan your fingerprint or face to enable quick login'}
         </Text>
       </View>
 
@@ -231,6 +282,32 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginVertical: SPACING.xxl,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
+  },
+  methodBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F6D7A8',
+    backgroundColor: '#FFFBF5',
+    minWidth: 130,
+  },
+  methodBtnText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#92400E',
+    textAlign: 'center',
   },
   instruction: {
     fontSize: FONTS.base,

@@ -9,11 +9,13 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {
   CommonActions,
+  useFocusEffect,
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
@@ -24,13 +26,19 @@ import { createRestaurantOrder } from '../services/orderService';
 import {
   createPaymentIntent,
   getPaymentConfig,
+  normalizePaymentConfig,
 } from '../services/paymentService';
-import { initPaymentSheet, presentPaymentSheet } from '@stripe/stripe-react-native';
+import {
+  initPaymentSheet,
+  initStripe,
+  presentPaymentSheet,
+} from '@stripe/stripe-react-native';
 import { getPromotionsByUser } from '../services/promotionService';
 import { getChannelProfile } from '../services/channelService';
 import MapLocationPicker from '../components/MapLocationPicker';
 import { distanceKmBetween, formatDistanceKm, resolveTaxChargeForDistanceKm } from '../utils/geoDistance';
 import { getOwnerAreaKm } from '../utils/promotionUtils';
+import { ensureProfileForAction } from '../utils/profileGate';
 import { config } from '../../config';
 import {
   getCurrentPositionSafe,
@@ -114,12 +122,19 @@ const HomeFourScreen = ({ onBack }) => {
   const [ownerProfile, setOwnerProfile] = useState(null);
   const [ownerProfileLoading, setOwnerProfileLoading] = useState(false);
   const [fulfillmentType, setFulfillmentType] = useState('delivery');
-  const [paymentConfig, setPaymentConfig] = useState({
-    enabled: false,
-    publishableKey: '',
-    currency: 'gbp',
-    merchantCountryCode: 'GB',
-  });
+  const [paymentConfig, setPaymentConfig] = useState(() =>
+    normalizePaymentConfig(null),
+  );
+
+  const refreshPaymentConfig = useCallback(async () => {
+    try {
+      const data = await getPaymentConfig();
+      setPaymentConfig(data);
+      return data;
+    } catch (_) {
+      return normalizePaymentConfig(null);
+    }
+  }, []);
 
   const isPickup = fulfillmentType === 'collection';
   const isDelivery = fulfillmentType === 'delivery';
@@ -285,24 +300,11 @@ const HomeFourScreen = ({ onBack }) => {
     };
   }, [ownerId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    getPaymentConfig()
-      .then(data => {
-        if (!cancelled && data) {
-          setPaymentConfig({
-            enabled: !!data.enabled,
-            publishableKey: String(data.publishableKey || ''),
-            currency: data.currency || 'gbp',
-            merchantCountryCode: data.merchantCountryCode || 'GB',
-          });
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      refreshPaymentConfig();
+    }, [refreshPaymentConfig]),
+  );
 
   const ownerDeliveryTime = String(ownerProfile?.deliveryTime || '').trim();
   const ownerDeliveryAreaKm = getOwnerAreaKm(ownerProfile, 'delivery');
@@ -790,6 +792,9 @@ const HomeFourScreen = ({ onBack }) => {
   };
 
   const handlePlaceOrder = async () => {
+    if (!ensureProfileForAction(navigation, user, 'place an order')) {
+      return;
+    }
     if (!user?.token) {
       navigation.navigate('HomeSevenScreen');
       return;
@@ -903,29 +908,44 @@ const HomeFourScreen = ({ onBack }) => {
       };
 
       let paymentIntentId;
-      if (paymentConfig.enabled && total > 0) {
-        if (!paymentConfig.publishableKey) {
+      const freshPaymentConfig = await refreshPaymentConfig();
+      if (freshPaymentConfig.enabled && total > 0) {
+        if (!freshPaymentConfig.publishableKey) {
           throw new Error(
-            'Payment is still loading. Close this screen, reopen checkout, and try again.',
+            'Online payment is not ready yet. Check your connection and try again.',
           );
         }
+        if (!freshPaymentConfig.keysMatch) {
+          throw new Error(
+            'Payment keys are misconfigured on the server. Contact support.',
+          );
+        }
+
         const intent = await createPaymentIntent(user.token, orderBody);
         if (intent?.requiresPayment) {
           if (!intent.clientSecret) {
             throw new Error('Could not start payment. Please try again.');
           }
+
+          const stripeInitParams = {
+            publishableKey: freshPaymentConfig.publishableKey,
+            urlScheme: 'eatwaze',
+          };
+          if (Platform.OS === 'ios') {
+            stripeInitParams.merchantIdentifier = 'merchant.com.eatwaze.app';
+          }
+          await initStripe(stripeInitParams);
+
           const { error: initError } = await initPaymentSheet({
             paymentIntentClientSecret: intent.clientSecret,
             merchantDisplayName: 'Eatwaze',
             googlePay: {
-              merchantCountryCode: paymentConfig.merchantCountryCode || 'GB',
+              merchantCountryCode: freshPaymentConfig.merchantCountryCode || 'GB',
               currencyCode: String(intent.currency || 'gbp').toUpperCase(),
-              testEnv: !String(paymentConfig.publishableKey || '').startsWith(
-                'pk_live_',
-              ),
+              testEnv: freshPaymentConfig.stripeMode !== 'live',
             },
             applePay: {
-              merchantCountryCode: paymentConfig.merchantCountryCode || 'GB',
+              merchantCountryCode: freshPaymentConfig.merchantCountryCode || 'GB',
             },
           });
           if (initError) {
@@ -1560,7 +1580,7 @@ const HomeFourScreen = ({ onBack }) => {
             <Icon name="menu-up" size={24} color="#666" />
           </TouchableOpacity>
           <Text style={styles.methodName}>
-            {paymentConfig.enabled ? 'Google Pay / Card' : 'Pay at checkout'}
+            {paymentConfig.enabled ? 'Card / Google Pay' : 'Pay at checkout'}
           </Text>
         </View>
 

@@ -13,6 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import profileCardBg from '../assets/img/bg.png';
 import { safeImageUri } from '../utils/helper';
 import { formatShortProfileLocationLine, formatCityCountryPostcodeLine } from '../utils/locationFormat';
+import BiometricLockToggle from './BiometricLockToggle';
 
 /** Figma fill 351px on ~375 → 12px side inset */
 const CARD_INSET = 12;
@@ -94,6 +95,7 @@ const UserProfileCard = ({
   showPromotionsButton = false,
   onPromotionsPress,
   subscribeInExplorerBar = false,
+  showBiometricLock = true,
 }) => {
   const displayName =
     profile?.channelName || profile?.nickname || profile?.name || 'User';
@@ -426,6 +428,10 @@ const UserProfileCard = ({
               <Text style={styles.profileStatLabel}>MSG</Text>
             </TouchableOpacity>
           </View>
+
+          {showSelfEditHero && showBiometricLock ? (
+            <BiometricLockToggle variant="embedded" />
+          ) : null}
 
           <LinearGradient
             colors={BIO_SECTION_GRADIENT.colors}

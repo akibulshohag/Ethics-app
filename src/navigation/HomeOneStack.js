@@ -23,6 +23,9 @@ import OrderNowBrowseScreen from '../screens/OrderNowBrowseScreen';
 import VideoDetailsScreen from '../screens/VideoDetailsScreen';
 import HomeSearchScreen from '../screens/HomeSearchScreen';
 import HomeSearchCategoryScreen from '../screens/HomeSearchCategoryScreen';
+import OtpVerification from '../screens/OtpVerification';
+import PhoneAuthScreen from '../screens/PhoneAuthScreen';
+import PrinterSettingsScreen from '../screens/PrinterSettingsScreen';
 
 const HomeOneStack = createStackNavigator();
 
@@ -121,6 +124,18 @@ const HomeOneNavigation = () => {
       <HomeOneStack.Screen
         name="HomeSearchCategoryScreen"
         component={HomeSearchCategoryScreen}
+      />
+      <HomeOneStack.Screen
+        name="OtpVerification"
+        component={OtpVerification}
+      />
+      <HomeOneStack.Screen
+        name="PhoneAuthScreen"
+        component={PhoneAuthScreen}
+      />
+      <HomeOneStack.Screen
+        name="PrinterSettingsScreen"
+        component={PrinterSettingsScreen}
       />
     </HomeOneStack.Navigator>
   );
