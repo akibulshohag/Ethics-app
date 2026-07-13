@@ -480,18 +480,48 @@ const ProductShortsVideo = () => {
     let cancelled = false;
 
     const run = async () => {
-      setLoading(true);
-      try {
-        const currentNormalized = initialItem
-          ? normalizeShort({
-              ...initialItem,
-              user: initialItem.user ?? {
-                id: ownerId,
-                nickname: initialItem.title?.toLowerCase().replace(/\s+/g, ''),
-              },
-            })
-          : null;
+      const currentNormalized = initialItem
+        ? normalizeShort({
+            ...initialItem,
+            user: initialItem.user ?? {
+              id: ownerId,
+              nickname: initialItem.title?.toLowerCase().replace(/\s+/g, ''),
+            },
+          })
+        : null;
 
+      if (currentNormalized) {
+        setVideos([currentNormalized]);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
+      if (currentShortId) {
+        try {
+          const freshRes = await shortsService.getShortById(
+            currentShortId,
+            user?.id,
+            String(user?.role || '').toLowerCase() || undefined,
+          );
+          const fresh = extractShortPayload(freshRes);
+          if (!cancelled && fresh) {
+            const freshNorm = normalizeShort({
+              ...initialItem,
+              ...fresh,
+              user: fresh.user || initialItem?.user,
+            });
+            setVideos(prev => {
+              if (!prev.length) return [freshNorm];
+              return prev.map(v =>
+                String(v.id) === String(currentShortId) ? freshNorm : v,
+              );
+            });
+          }
+        } catch (_) {}
+      }
+
+      try {
         if (!ownerId && !initialItem) {
           const res = await shortsService.getShorts({
             page: 1,
@@ -537,8 +567,14 @@ const ProductShortsVideo = () => {
           const others = feedEnriched
             .filter(s => !seen.has(String(s.id)))
             .map(normalizeShort);
-          if (!cancelled)
-            setVideos([currentNormalized, ...sameUserOther, ...others]);
+          if (!cancelled) {
+            setVideos(prev => {
+              const primary =
+                prev.find(v => String(v.id) === String(currentShortId)) ||
+                currentNormalized;
+              return [primary, ...sameUserOther, ...others];
+            });
+          }
           return;
         }
 
@@ -556,7 +592,14 @@ const ProductShortsVideo = () => {
           const others = enriched
             .filter(s => String(s.id) !== String(currentShortId))
             .map(normalizeShort);
-          if (!cancelled) setVideos([currentNormalized, ...others]);
+          if (!cancelled) {
+            setVideos(prev => {
+              const primary =
+                prev.find(v => String(v.id) === String(currentShortId)) ||
+                currentNormalized;
+              return [primary, ...others];
+            });
+          }
           return;
         }
 
@@ -627,17 +670,31 @@ const ProductShortsVideo = () => {
     });
   }, []);
 
-  /** Optimistic +1 on every visible event (including revisits). */
   const recordShortViewAndBumpUI = useCallback(
     shortId => {
       if (!shortId) return;
       const sid = String(shortId);
-      applyViewIncrement(sid);
+      setVideos(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(v => {
+          if (String(v.id) !== sid) return v;
+          const newCount = (v.viewCount ?? 0) + 1;
+          shortsService.publishShortEngagement(sid, { viewCount: newCount });
+          return { ...v, viewCount: newCount, views: formatCount(newCount) };
+        });
+      });
       shortsService.recordView(sid, user?.id || null, 0, false).catch(() => {
-        applyViewDecrement(sid);
+        setVideos(prev =>
+          prev.map(v => {
+            if (String(v.id) !== sid) return v;
+            const newCount = Math.max(0, (v.viewCount ?? 0) - 1);
+            shortsService.publishShortEngagement(sid, { viewCount: newCount });
+            return { ...v, viewCount: newCount, views: formatCount(newCount) };
+          }),
+        );
       });
     },
-    [user?.id, applyViewIncrement, applyViewDecrement],
+    [user?.id],
   );
 
   /** Each double tap should also increment view count (not deduped). */
@@ -690,6 +747,11 @@ const ProductShortsVideo = () => {
           }),
         );
         await shortsService.toggleLike(item.id, user.id);
+        const newCount = Math.max(0, (item.likeCount ?? 0) + delta);
+        shortsService.publishShortEngagement(item.id, {
+          isLiked: nextLiked,
+          likeCount: newCount,
+        });
       } catch (_) {
         setVideos(prev =>
           prev.map(v => {

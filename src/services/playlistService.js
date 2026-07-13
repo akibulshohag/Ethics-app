@@ -28,6 +28,29 @@ export const getPlaylistStatus = async (userId, contentType, contentId) => {
 };
 
 /**
+ * Library tab counts (watch later, liked, favorites).
+ * Falls back to null when /summary is not deployed (404) — caller should use list APIs.
+ */
+export const getPlaylistSummary = async userId => {
+  try {
+    const response = await axios.get(`${API_URL}/summary`, {
+      params: { userId },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    const status = error?.response?.status;
+    if (status !== 404) {
+      console.warn(
+        'Playlist summary unavailable:',
+        status || error?.message || error,
+      );
+    }
+    return null;
+  }
+};
+
+/**
  * Add or remove from playlist
  */
 export const setPlaylist = async (userId, playlistType, contentType, contentId, add) => {

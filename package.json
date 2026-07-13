@@ -1,6 +1,6 @@
 {
   "name": "eatwaze",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
@@ -9,7 +9,9 @@
     "start": "react-native start",
     "test": "jest",
     "generate-icons": "bash scripts/generate-app-icons.sh",
-    "apk:prod": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/build/intermediates/res/merged/release/ && cd android && ./gradlew assembleRelease && cd .."
+    "apk:prod": "cd android && ./gradlew assembleRelease && cd ..",
+    "aab:prod": "cd android && ./gradlew bundleRelease && cd ..",
+    "android:release": "npm run aab:prod"
   },
   "dependencies": {
     "@invertase/react-native-apple-authentication": "^2.5.1",

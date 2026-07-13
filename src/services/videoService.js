@@ -308,6 +308,23 @@ export const deleteComment = async (commentId, userId) => {
 };
 
 /**
+ * Edit own comment or reply
+ */
+export const updateComment = async (commentId, userId, content) => {
+  try {
+    const response = await axios.post(`${API_URL}/comment/update`, {
+      commentId,
+      userId,
+      content,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    throw error;
+  }
+};
+
+/**
  * Dislike/Undislike comment
  */
 export const toggleCommentDislike = async (commentId, userId) => {

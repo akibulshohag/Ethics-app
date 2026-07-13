@@ -435,3 +435,20 @@ export const deletePostComment = async (commentId, userId) => {
     throw error;
   }
 };
+
+/**
+ * Edit own post comment
+ */
+export const updatePostComment = async (commentId, userId, content) => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/comment/update`,
+      { commentId, userId, content },
+      { headers: getAuthHeaders() },
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error updating post comment:', error);
+    throw error;
+  }
+};

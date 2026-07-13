@@ -13,7 +13,25 @@
       "Bash(kill 10220 10503 10587)",
       "Skill(run)",
       "Bash(npx react-native *)",
-      "Bash(tee /Users/pino/Documents/github/eatix/Ethics-app/android_run.log)"
+      "Bash(tee /Users/pino/Documents/github/eatix/Ethics-app/android_run.log)",
+      "Bash(emulator -list-avds)",
+      "Bash(~/Library/Android/sdk/emulator/emulator -list-avds)",
+      "Bash(nohup ~/Library/Android/sdk/emulator/emulator -avd Pixel_9 -netdelay none -netspeed full)",
+      "Bash(disown)",
+      "Bash(echo \"emulator launching, pid $!\")",
+      "Bash(tee /private/tmp/claude-501/-Users-pino-Documents-live-company-savassachi-eatix-Ethics-app/581577f1-b74e-4f80-8316-d8d0c8e578c1/scratchpad/android_run.log)",
+      "Bash(rm -rf android/app/build/kotlin)",
+      "Bash(rm -rf node_modules/react-native-nitro-modules/android/.cxx)",
+      "Bash(rm -rf node_modules/react-native-vision-camera/android/.cxx)",
+      "Bash(rm -rf android/.gradle/noVersion/buildLogic.lock)",
+      "Bash(tee /private/tmp/claude-501/-Users-pino-Documents-live-company-savassachi-eatix-Ethics-app/581577f1-b74e-4f80-8316-d8d0c8e578c1/scratchpad/android_run2.log)",
+      "Bash(adb pull *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(rm -rf android/build/generated/autolinking)",
+      "Bash(rm -rf android/app/build/generated/autolinking)",
+      "Bash(rm -rf android/app/.cxx)",
+      "Bash(rm -rf node_modules/@react-native-firebase/app/android/.cxx node_modules/@react-native-firebase/auth/android/.cxx)",
+      "Bash(tee /private/tmp/claude-501/-Users-pino-Documents-live-company-savassachi-eatix-Ethics-app/581577f1-b74e-4f80-8316-d8d0c8e578c1/scratchpad/android_run3.log)"
     ]
   }
 }

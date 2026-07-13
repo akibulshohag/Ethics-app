@@ -51,6 +51,7 @@ import {
 import {
   getWatchLater,
   getFavorites,
+  getPlaylistSummary,
   listCustomPlaylists,
   createCustomPlaylist,
 } from '../services/playlistService';
@@ -829,47 +830,6 @@ const LibraryScreen = ({ navigation }) => {
     setHistoryRefreshing(false);
   }, [currentUser?.id, loadHistory]);
 
-  const loadPlaylistCounts = useCallback(async () => {
-    if (!currentUser?.id) {
-      setWatchLaterCount(0);
-      setLikedCount(0);
-      setFavoritesCount(0);
-      return;
-    }
-    setPlaylistCountsLoading(true);
-    try {
-      const [watchLaterRes, likedVRes, likedSRes, favoritesRes] =
-        await Promise.all([
-          getWatchLater(currentUser.id, 1, 500),
-          getLikedVideos(currentUser.id, 1, 500),
-          shortsService.getLikedShorts(currentUser.id, 1, 500),
-          getFavorites(currentUser.id, 1, 500),
-        ]);
-      const wlV = watchLaterRes?.videos?.length ?? 0;
-      const wlS = watchLaterRes?.shorts?.length ?? 0;
-      setWatchLaterCount(wlV + wlS);
-      const lv = likedVRes?.videos?.length ?? 0;
-      const ls = likedSRes?.shorts?.length ?? 0;
-      setLikedCount(lv + ls);
-      const fv = favoritesRes?.videos?.length ?? 0;
-      const fs = favoritesRes?.shorts?.length ?? 0;
-      setFavoritesCount(fv + fs);
-    } catch (e) {
-      console.error('Failed to load playlist counts:', e);
-      setWatchLaterCount(0);
-      setLikedCount(0);
-      setFavoritesCount(0);
-    } finally {
-      setPlaylistCountsLoading(false);
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    if (currentView === 'library' && currentUser?.id) {
-      loadPlaylistCounts();
-    }
-  }, [currentView, currentUser?.id, loadPlaylistCounts]);
-
   const loadCustomPlaylists = useCallback(async () => {
     if (!currentUser?.id) {
       setCustomPlaylists([]);
@@ -886,11 +846,65 @@ const LibraryScreen = ({ navigation }) => {
     }
   }, [currentUser?.id]);
 
-  useEffect(() => {
-    if (currentView === 'library' && currentUser?.id) {
-      loadCustomPlaylists();
+  const loadPlaylistCounts = useCallback(async () => {
+    if (!currentUser?.id) {
+      setWatchLaterCount(0);
+      setLikedCount(0);
+      setFavoritesCount(0);
+      return;
     }
-  }, [currentView, currentUser?.id, loadCustomPlaylists]);
+    setPlaylistCountsLoading(true);
+    try {
+      const countItems = res => {
+        const items = Array.isArray(res?.items) ? res.items.length : 0;
+        const videos = Array.isArray(res?.videos) ? res.videos.length : 0;
+        const shorts = Array.isArray(res?.shorts) ? res.shorts.length : 0;
+        return items > 0 ? items : videos + shorts;
+      };
+
+      const [summary, watchLaterRes, likedVRes, likedSRes, favoritesRes] =
+        await Promise.all([
+          getPlaylistSummary(currentUser.id),
+          getWatchLater(currentUser.id, 1, 500),
+          getLikedVideos(currentUser.id, 1, 500),
+          shortsService.getLikedShorts(currentUser.id, 1, 500),
+          getFavorites(currentUser.id, 1, 500),
+        ]);
+
+      if (
+        summary &&
+        (summary.watchLaterCount != null ||
+          summary.likedCount != null ||
+          summary.favoritesCount != null)
+      ) {
+        setWatchLaterCount(Math.max(0, Number(summary.watchLaterCount) || 0));
+        setLikedCount(Math.max(0, Number(summary.likedCount) || 0));
+        setFavoritesCount(Math.max(0, Number(summary.favoritesCount) || 0));
+      } else {
+        setWatchLaterCount(countItems(watchLaterRes));
+        setLikedCount(countItems(likedVRes) + countItems(likedSRes));
+        setFavoritesCount(countItems(favoritesRes));
+      }
+    } catch (e) {
+      console.warn('Failed to load playlist counts:', e?.message || e);
+      setWatchLaterCount(0);
+      setLikedCount(0);
+      setFavoritesCount(0);
+    } finally {
+      setPlaylistCountsLoading(false);
+    }
+  }, [currentUser?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser?.id) {
+        loadPlaylistCounts();
+        if (currentView === 'library') {
+          loadCustomPlaylists();
+        }
+      }
+    }, [currentUser?.id, currentView, loadPlaylistCounts, loadCustomPlaylists]),
+  );
 
   const renderHeader = () => {
     const isLibrary = currentView === 'library';

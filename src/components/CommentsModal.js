@@ -20,6 +20,7 @@ import {
   toggleCommentLike,
   toggleCommentDislike,
   deleteComment,
+  updateComment,
 } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
 import {
@@ -28,6 +29,7 @@ import {
   togglePostCommentLike,
   togglePostCommentDislike,
   deletePostComment,
+  updatePostComment,
 } from '../services/postService';
 import {
   getGalleryPhotoComments,
@@ -138,12 +140,19 @@ const ReplyItem = ({
   item,
   onLike,
   onDislike,
-  onDelete,
+  onMenu,
   isOwnComment,
   canInteract = true,
-  canDelete = true,
+  canEdit = true,
+  editingCommentId,
+  editingText,
+  onEditingTextChange,
+  onSaveEdit,
+  onCancelEdit,
+  savingEdit,
 }) => {
   const avatarUri = safeImageUri(item.user?.avatar, DEFAULT_AVATAR);
+  const isEditing = editingCommentId === item.id;
   return (
   <View style={styles.replyItem}>
     <Image source={{ uri: avatarUri }} style={styles.replyAvatar} />
@@ -153,9 +162,9 @@ const ReplyItem = ({
           {item.user.name}{' '}
           <Text style={styles.commentTime}>• {item.time}</Text>
         </Text>
-        {isOwnComment && canDelete ? (
+        {isOwnComment && canEdit ? (
           <TouchableOpacity
-            onPress={() => onDelete?.(item)}
+            onPress={() => onMenu?.(item)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MaterialCommunityIcons
@@ -168,7 +177,33 @@ const ReplyItem = ({
           <View style={{ width: 24, height: 24 }} />
         )}
       </View>
-      <Text style={styles.commentText}>{item.text}</Text>
+      {isEditing ? (
+        <View style={styles.editBox}>
+          <TextInput
+            style={styles.editInput}
+            value={editingText}
+            onChangeText={onEditingTextChange}
+            multiline
+            autoFocus
+          />
+          <View style={styles.editActions}>
+            <TouchableOpacity onPress={onCancelEdit} style={styles.editCancelBtn}>
+              <Text style={styles.editCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onSaveEdit}
+              style={styles.editSaveBtn}
+              disabled={savingEdit || !String(editingText || '').trim()}
+            >
+              <Text style={styles.editSaveText}>
+                {savingEdit ? 'Saving...' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.commentText}>{item.text}</Text>
+      )}
       <View style={styles.commentActions}>
         <TouchableOpacity
           style={styles.actionItem}
@@ -206,12 +241,18 @@ const CommentItem = ({
   onSubmitReply,
   onLike,
   onDislike,
-  onDelete,
+  onMenu,
   canReply,
   canInteract,
-  canDelete = true,
+  canEdit = true,
   isOwnComment,
   currentUserId,
+  editingCommentId,
+  editingText,
+  onEditingTextChange,
+  onSaveEdit,
+  onCancelEdit,
+  savingEdit,
 }) => {
   const [showReplies, setShowReplies] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
@@ -232,6 +273,7 @@ const CommentItem = ({
   };
 
   const replyCount = item.repliesList?.length || 0;
+  const isEditing = editingCommentId === item.id;
 
   const avatarUri = safeImageUri(item.user?.avatar, DEFAULT_AVATAR);
   return (
@@ -243,9 +285,9 @@ const CommentItem = ({
             {item.user.name}{' '}
             <Text style={styles.commentTime}>• {item.time}</Text>
           </Text>
-          {isOwnComment && canDelete ? (
+          {isOwnComment && canEdit ? (
             <TouchableOpacity
-              onPress={() => onDelete?.(item)}
+              onPress={() => onMenu?.(item)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <MaterialCommunityIcons
@@ -258,11 +300,40 @@ const CommentItem = ({
             <View style={{ width: 24, height: 24 }} />
           )}
         </View>
-        <CommentExpandableBody
-          text={item.text}
-          textStyle={styles.commentText}
-          viewMoreStyle={styles.commentViewMore}
-        />
+        {isEditing ? (
+          <View style={styles.editBox}>
+            <TextInput
+              style={styles.editInput}
+              value={editingText}
+              onChangeText={onEditingTextChange}
+              multiline
+              autoFocus
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity
+                onPress={onCancelEdit}
+                style={styles.editCancelBtn}
+              >
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={onSaveEdit}
+                style={styles.editSaveBtn}
+                disabled={savingEdit || !String(editingText || '').trim()}
+              >
+                <Text style={styles.editSaveText}>
+                  {savingEdit ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <CommentExpandableBody
+            text={item.text}
+            textStyle={styles.commentText}
+            viewMoreStyle={styles.commentViewMore}
+          />
+        )}
 
         <View style={styles.commentActions}>
           <TouchableOpacity
@@ -388,10 +459,16 @@ const CommentItem = ({
                 item={reply}
                 onLike={onLike}
                 onDislike={onDislike}
-                onDelete={onDelete}
+                onMenu={onMenu}
                 isOwnComment={currentUserId ? String(reply.userId) === String(currentUserId) : false}
                 canInteract={canInteract}
-                canDelete={canDelete}
+                canEdit={canEdit}
+                editingCommentId={editingCommentId}
+                editingText={editingText}
+                onEditingTextChange={onEditingTextChange}
+                onSaveEdit={onSaveEdit}
+                onCancelEdit={onCancelEdit}
+                savingEdit={savingEdit}
               />
             ))}
       </View>
@@ -431,6 +508,9 @@ const CommentsModal = ({
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingText, setEditingText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   /** Total from list API (pagination.total etc.); fixes header when parent post.commentCount is stale or 0. */
   const [fetchedCommentTotal, setFetchedCommentTotal] = useState(null);
 
@@ -534,7 +614,12 @@ const CommentsModal = ({
   }, [visible, contentIdResolved, galleryChannelUserId, isGalleryPhoto]);
 
   useEffect(() => {
-    if (!visible) setFetchedCommentTotal(null);
+    if (!visible) {
+      setFetchedCommentTotal(null);
+      setEditingCommentId(null);
+      setEditingText('');
+      setSavingEdit(false);
+    }
   }, [visible]);
 
   const handleAddComment = async () => {
@@ -701,6 +786,10 @@ const CommentsModal = ({
                   const replyCount = comment.repliesList?.length ?? 0;
                   onCommentDeleted?.(res?.wasTopLevel ?? !comment.parentId, 1 + replyCount);
                 }
+                if (editingCommentId === comment.id) {
+                  setEditingCommentId(null);
+                  setEditingText('');
+                }
                 loadComments(true);
               } catch {
                 Alert.alert('Error', 'Could not delete comment');
@@ -710,7 +799,75 @@ const CommentsModal = ({
         ],
       );
     },
-    [user?.id, isPost, isGalleryPhoto, loadComments, onCommentDeleted],
+    [user?.id, isPost, isGalleryPhoto, isShort, loadComments, onCommentDeleted, editingCommentId],
+  );
+
+  const handleSaveEdit = useCallback(async () => {
+    const trimmed = String(editingText || '').trim();
+    if (!user?.id || !editingCommentId || !trimmed || savingEdit) return;
+    if (isGalleryPhoto) return;
+    setSavingEdit(true);
+    try {
+      if (isPost) {
+        await updatePostComment(editingCommentId, user.id, trimmed);
+      } else if (isShort) {
+        await shortsService.updateComment(editingCommentId, user.id, trimmed);
+      } else {
+        await updateComment(editingCommentId, user.id, trimmed);
+      }
+      setComments(prev =>
+        prev.map(c => {
+          if (c.id === editingCommentId) return { ...c, text: trimmed };
+          return {
+            ...c,
+            repliesList: (c.repliesList || []).map(r =>
+              r.id === editingCommentId ? { ...r, text: trimmed } : r,
+            ),
+          };
+        }),
+      );
+      setEditingCommentId(null);
+      setEditingText('');
+    } catch {
+      Alert.alert('Error', 'Could not update comment');
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [
+    editingCommentId,
+    editingText,
+    user?.id,
+    isPost,
+    isShort,
+    isGalleryPhoto,
+    savingEdit,
+  ]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingCommentId(null);
+    setEditingText('');
+  }, []);
+
+  const handleCommentMenu = useCallback(
+    comment => {
+      if (!user?.id) return;
+      Alert.alert('Comment', undefined, [
+        {
+          text: 'Edit',
+          onPress: () => {
+            setEditingCommentId(comment.id);
+            setEditingText(comment.text || '');
+          },
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleDeleteComment(comment),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    },
+    [user?.id, handleDeleteComment],
   );
 
   return (
@@ -817,16 +974,22 @@ const CommentsModal = ({
                       onSubmitReply={handleSubmitReply}
                       onLike={handleCommentLike}
                       onDislike={handleCommentDislike}
-                      onDelete={handleDeleteComment}
+                      onMenu={handleCommentMenu}
                       canReply={!!user?.id && !isGalleryPhoto}
                       canInteract={!!user?.id && supportsCommentLikeDislike}
-                      canDelete={!isShort}
+                      canEdit={!isGalleryPhoto}
                       isOwnComment={
                         user?.id
                           ? String(item.userId) === String(user.id)
                           : false
                       }
                       currentUserId={user?.id}
+                      editingCommentId={editingCommentId}
+                      editingText={editingText}
+                      onEditingTextChange={setEditingText}
+                      onSaveEdit={handleSaveEdit}
+                      onCancelEdit={handleCancelEdit}
+                      savingEdit={savingEdit}
                     />
                   )}
                   contentContainerStyle={styles.listContent}
@@ -1111,6 +1274,49 @@ const styles = StyleSheet.create({
   submitReplyText: {
       fontWeight: '600',
       fontSize: 14,
+  },
+  editBox: {
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  editInput: {
+    backgroundColor: '#FAFAFA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#212121',
+    minHeight: 44,
+    textAlignVertical: 'top',
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 12,
+  },
+  editCancelBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  editCancelText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  editSaveBtn: {
+    backgroundColor: '#F97507',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+  },
+  editSaveText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
 

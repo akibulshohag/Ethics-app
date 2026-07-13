@@ -1400,6 +1400,11 @@ const ShortsVideoScreen = ({ navigation }) => {
         }),
       );
       await shortsService.toggleLike(item.id, user.id);
+      const newCount = Math.max(0, (item._likeCount ?? 0) + delta);
+      shortsService.publishShortEngagement(item.id, {
+        isLiked: nextLiked,
+        likeCount: newCount,
+      });
     } catch (e) {
       setVideos(prev =>
         prev.map(v => {

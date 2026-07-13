@@ -4,6 +4,7 @@ import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import GoogleSignIn
 import FBSDKCoreKit
+import FirebaseCore
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -16,10 +17,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    // Firebase must configure before phone OTP / Google services init
+    if FirebaseApp.app() == nil {
+      FirebaseApp.configure()
+    }
+
     ApplicationDelegate.shared.application(
       application,
       didFinishLaunchingWithOptions: launchOptions
     )
+
+    // Silent push used by Firebase phone number verification on iOS
+    application.registerForRemoteNotifications()
 
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
@@ -58,6 +67,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     return false
+  }
+
+  func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    // RNFirebase Auth picks this up for silent phone verification when available
+  }
+
+  func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    // Phone auth can fall back to reCAPTCHA verification in the browser
+    NSLog("APNs registration failed: \(error.localizedDescription)")
   }
 }
 

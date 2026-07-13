@@ -84,6 +84,7 @@ import {
   extractUkPostcodeFromText,
 } from '../utils/ukPostcode';
 import MapLocationPicker from '../components/MapLocationPicker';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import RestaurantBookingModal from '../components/RestaurantBookingModal';
 import logo from '../assets/logo.png';
 import { HEADER_LOGO_STYLE } from '../constants/headerLogo';
@@ -800,28 +801,87 @@ const HomeOneScreen = () => {
   }, [cuisineOptions]);
 
   useEffect(() => {
+    const patchShortEngagement = (s, updated) => {
+      if (String(s?.id) !== String(updated?.id || '').trim()) return s;
+      const viewCount =
+        updated.viewCount != null
+          ? Math.max(0, Number(updated.viewCount) || 0)
+          : s.viewCount;
+      const likeCount =
+        updated.likeCount != null
+          ? Math.max(0, Number(updated.likeCount) || 0)
+          : s.likeCount;
+      const commentCount =
+        updated.commentCount != null
+          ? Math.max(0, Number(updated.commentCount) || 0)
+          : s.commentCount;
+      const isLiked =
+        updated.isLiked != null
+          ? !!updated.isLiked
+          : updated.liked != null
+          ? !!updated.liked
+          : s.isLiked;
+      const viewsStr =
+        viewCount >= 1000
+          ? `${(viewCount / 1000).toFixed(1)}K views`
+          : `${viewCount} views`;
+      return {
+        ...s,
+        isLiked,
+        viewCount,
+        views: viewsStr,
+        viewsCompact: formatCount(viewCount),
+        likeCount,
+        commentCount,
+      };
+    };
+
     const sub = shortsService.onShortUpdated?.(updated => {
       const sid = String(updated?.id || '').trim();
       if (!sid) return;
-      const mergeShort = s => ({
-        ...s,
-        title: updated?.title ?? s.title,
-        description: updated?.description ?? s.description,
-        img: updated?.thumbnailUrl ?? updated?.coverUrl ?? s.img,
-        thumbnailUrl:
-          updated?.thumbnailUrl ?? updated?.coverUrl ?? s.thumbnailUrl,
-        coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? s.coverUrl,
-        videoUrl: updated?.videoUrl ?? s.videoUrl,
-        mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? s.mediaUrl,
-        visibility: updated?.visibility ?? s.visibility,
-        commentSetting: updated?.commentSetting ?? s.commentSetting,
-        scheduledPublishAt: updated?.scheduledPublishAt ?? s.scheduledPublishAt,
-        scheduleAt: updated?.scheduleAt ?? s.scheduleAt,
-        scheduleDate: updated?.scheduleDate ?? s.scheduleDate,
-        scheduledAt: updated?.scheduledAt ?? s.scheduledAt,
-        publishedAt: updated?.publishedAt ?? s.publishedAt,
-      });
+      if (updated?._deleted) {
+        const drop = prev => (prev || []).filter(x => String(x?.id) !== sid);
+        setFeedShorts(drop);
+        setPopularShorts(drop);
+        setNewShorts(drop);
+        return;
+      }
+      const mergeShort = s => {
+        const merged = patchShortEngagement(s, updated);
+        if (merged === s) {
+          return {
+            ...s,
+            title: updated?.title ?? s.title,
+            description: updated?.description ?? s.description,
+            img: updated?.thumbnailUrl ?? updated?.coverUrl ?? s.img,
+            thumbnailUrl:
+              updated?.thumbnailUrl ?? updated?.coverUrl ?? s.thumbnailUrl,
+            coverUrl: updated?.coverUrl ?? updated?.thumbnailUrl ?? s.coverUrl,
+            videoUrl: updated?.videoUrl ?? s.videoUrl,
+            mediaUrl: updated?.videoUrl ?? updated?.mediaUrl ?? s.mediaUrl,
+            visibility: updated?.visibility ?? s.visibility,
+            commentSetting: updated?.commentSetting ?? s.commentSetting,
+            scheduledPublishAt:
+              updated?.scheduledPublishAt ?? s.scheduledPublishAt,
+            scheduleAt: updated?.scheduleAt ?? s.scheduleAt,
+            scheduleDate: updated?.scheduleDate ?? s.scheduleDate,
+            scheduledAt: updated?.scheduledAt ?? s.scheduledAt,
+            publishedAt: updated?.publishedAt ?? s.publishedAt,
+          };
+        }
+        return merged;
+      };
       setFeedShorts(prev =>
+        prev
+          .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
+          .filter(onlyPublishedNow),
+      );
+      setPopularShorts(prev =>
+        prev
+          .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
+          .filter(onlyPublishedNow),
+      );
+      setNewShorts(prev =>
         prev
           .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
           .filter(onlyPublishedNow),
@@ -1133,7 +1193,9 @@ const HomeOneScreen = () => {
           try {
             const u = userRef.current;
 
-            const fromRedux = normalizeBrowseLocation(browseLocationRef.current);
+            const fromRedux = normalizeBrowseLocation(
+              browseLocationRef.current,
+            );
             if (fromRedux && !cancelled) {
               const areaLabel =
                 String(fromRedux.areaLabel || '').trim() ||
@@ -1354,6 +1416,7 @@ const HomeOneScreen = () => {
     };
 
     try {
+      const needExtraShortLists = !!searchTerm;
       const [
         featuredRes,
         sponsoredRes,
@@ -1367,18 +1430,22 @@ const HomeOneScreen = () => {
         getSponsored().catch(() => ({ sponsored: [] })),
         getVideos(videoParams),
         shortsService.getShorts(shortParams),
-        shortsService.getShorts({
-          ...shortParams,
-          sort: 'trending',
-          page: 1,
-          limit: 16,
-        }),
-        shortsService.getShorts({
-          ...shortParams,
-          sort: 'newest',
-          page: 1,
-          limit: 16,
-        }),
+        needExtraShortLists
+          ? shortsService.getShorts({
+              ...shortParams,
+              sort: 'trending',
+              page: 1,
+              limit: 16,
+            })
+          : Promise.resolve({ shorts: [] }),
+        needExtraShortLists
+          ? shortsService.getShorts({
+              ...shortParams,
+              sort: 'newest',
+              page: 1,
+              limit: 16,
+            })
+          : Promise.resolve({ shorts: [] }),
         getTopRestaurantsByOrders({
           page: 1,
           limit: 100,
@@ -1439,7 +1506,7 @@ const HomeOneScreen = () => {
             .filter(Boolean)
             .map(String),
         ),
-      );
+      ).slice(0, 10);
       const ownerProfileById = {};
       await Promise.allSettled(
         missingOwnerIds.map(async oid => {
@@ -1496,15 +1563,55 @@ const HomeOneScreen = () => {
         );
       };
       const mappedShorts = rawShorts.map(mapShortWithOwnerPatch);
-      const mappedPopularShorts = (popularShortsRes?.shorts || [])
-        .filter(s => s?.videoUrl && String(s.videoUrl).trim())
-        .map(mapShortWithOwnerPatch);
-      const mappedNewestShorts = (newestShortsRes?.shorts || [])
-        .filter(s => s?.videoUrl && String(s.videoUrl).trim())
-        .map(mapShortWithOwnerPatch);
+      const mappedPopularShorts = needExtraShortLists
+        ? (popularShortsRes?.shorts || [])
+            .filter(s => s?.videoUrl && String(s.videoUrl).trim())
+            .map(mapShortWithOwnerPatch)
+        : [...mappedShorts]
+            .slice()
+            .sort(
+              (a, b) => Number(b?.viewCount ?? 0) - Number(a?.viewCount ?? 0),
+            )
+            .slice(0, 16);
+      const mappedNewestShorts = needExtraShortLists
+        ? (newestShortsRes?.shorts || [])
+            .filter(s => s?.videoUrl && String(s.videoUrl).trim())
+            .map(mapShortWithOwnerPatch)
+        : [...mappedShorts]
+            .slice()
+            .sort(
+              (a, b) =>
+                new Date(b?.publishedAt || b?.createdAt || 0).getTime() -
+                new Date(a?.publishedAt || a?.createdAt || 0).getTime(),
+            )
+            .slice(0, 16);
       const q = String(searchTerm || '')
         .toLowerCase()
         .trim();
+      const matchesSearchEarly = item => {
+        if (!q) return true;
+        const haystack = [
+          item?.title,
+          item?.description,
+          item?.channelName,
+          item?.location,
+          item?.creatorAddress,
+          item?.user?.nickname,
+          item?.user?.name,
+          item?.user?.address,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(q);
+      };
+      setFeedVideos(dropBlocked(mappedVideos.filter(matchesSearchEarly)));
+      setFeedShorts(dropBlocked(mappedShorts.filter(matchesSearchEarly)));
+      setPopularShorts(
+        dropBlocked(mappedPopularShorts.filter(matchesSearchEarly)),
+      );
+      setNewShorts(dropBlocked(mappedNewestShorts.filter(matchesSearchEarly)));
+      setFeedLoading(false);
       const allMappedMedia = [
         ...mappedVideos,
         ...mappedShorts,
@@ -1539,7 +1646,7 @@ const HomeOneScreen = () => {
           ...topRestaurantOwnerIds,
           ...promoOwnerIds,
         ]),
-      );
+      ).slice(0, 30);
       if (allOwnerIdsForMenus.length > 0) {
         await Promise.allSettled(
           allOwnerIdsForMenus.map(async oid => {
@@ -1689,7 +1796,9 @@ const HomeOneScreen = () => {
       setPopularShorts(
         dropBlocked(mappedPopularShortsWithMenu.filter(matchesSearch)),
       );
-      setNewShorts(dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)));
+      setNewShorts(
+        dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)),
+      );
       const topRestaurants = (topRes?.restaurants || []).map(r => {
         const firstPhoto =
           Array.isArray(r?.photos) && r.photos.length > 0 ? r.photos[0] : null;
@@ -2924,7 +3033,7 @@ const HomeOneScreen = () => {
         partnerName,
       )}&background=111&color=fff`,
     );
-    navigation.navigate('DetailedChatScreen', {
+    navigation.navigate('ChatScreen', {
       partnerId,
       partnerName,
       partnerAvatar,
@@ -4414,7 +4523,10 @@ const HomeOneScreen = () => {
                         trendingOwnerId != null &&
                         String(user.id) === String(trendingOwnerId)
                       }
-                      showOrderBook={shouldShowOrderBookButtons(video, user?.id)}
+                      showOrderBook={shouldShowOrderBookButtons(
+                        video,
+                        user?.id,
+                      )}
                     />
                   );
                 })}
@@ -4862,40 +4974,42 @@ const HomeOneScreen = () => {
   const renderRestaurantDetail = () => (
     <View style={styles.resContainer}>
       {(() => {
-        const avgRaw =
-          selectedItem?.user?.averageRating ??
-          selectedItem?.user?.ratingAverage ??
-          selectedItem?.user?.ratingAvg ??
-          selectedItem?.user?.rating ??
-          selectedItem?.averageRating ??
-          selectedItem?.ratingAverage ??
-          selectedItem?.ratingAvg ??
-          selectedItem?.rating;
-        const reviewRaw =
-          selectedItem?.user?.reviewCount ??
-          selectedItem?.user?.reviewsCount ??
-          selectedItem?.user?.totalReviews ??
-          selectedItem?.user?.ratingCount ??
-          selectedItem?.reviewCount ??
-          selectedItem?.reviewsCount ??
-          selectedItem?.totalReviews ??
-          selectedItem?.ratingCount;
-        const avg = Number.isFinite(Number(avgRaw))
-          ? Math.max(0, Math.min(5, Number(avgRaw)))
-          : 0;
-        const reviews = Number.isFinite(Number(reviewRaw))
-          ? Math.max(0, Math.floor(Number(reviewRaw)))
-          : 0;
-        const avgDisplay =
-          resDetailRating.average > 0 ? resDetailRating.average : avg;
-        const reviewsDisplay =
-          resDetailRating.reviewCount > 0
-            ? resDetailRating.reviewCount
-            : reviews;
-        const rounded = Math.round(avgDisplay);
-        const viewCountRaw =
-          selectedItem?.viewCount ?? selectedItem?._count?.views ?? 0;
-        const viewsLabel = formatVideoViewsLabel(viewCountRaw);
+        const locationDisplay =
+          formatCityCountryPostcodeLine({
+            address:
+              selectedItem?.location ||
+              selectedItem?.creatorAddress ||
+              selectedItem?.user?.address ||
+              selectedItem?._campaignOwnerUser?.address ||
+              '',
+            postcode:
+              selectedItem?.user?.postcode ||
+              selectedItem?._campaignOwnerUser?.postcode ||
+              '',
+            areaLabel: selectedItem?._campaignMeta?.areaName || '',
+          }) || '—';
+        const socialLinks = (
+          selectedItem?.user?.socialLinks ||
+          selectedItem?.creatorSocialLinks ||
+          []
+        ).filter(l => String(l?.url || '').trim());
+        const websiteUrlRaw =
+          socialLinks.find(
+            s => String(s?.type || '').toLowerCase() === 'website',
+          )?.url || '';
+        const websiteDisplay = String(websiteUrlRaw || '')
+          .trim()
+          .replace(/^https?:\/\//i, '')
+          .replace(/^www\./i, 'www.');
+        const mapLat = Number(selectedItem?.creatorLatitude);
+        const mapLng = Number(selectedItem?.creatorLongitude);
+        const hasMapCoords =
+          Number.isFinite(mapLat) &&
+          Number.isFinite(mapLng) &&
+          mapLat >= -90 &&
+          mapLat <= 90 &&
+          mapLng >= -180 &&
+          mapLng <= 180;
         const likeDisplayCount = Math.max(
           Number(selectedItem?.likeCount ?? 0),
           Number(selectedItem?._count?.likes ?? 0),
@@ -4932,7 +5046,10 @@ const HomeOneScreen = () => {
           selectedItem?._campaignOwnerUser?.address ||
           selectedItem?._campaignMeta?.areaName ||
           '—';
-        const showOrderBook = shouldShowOrderBookButtons(selectedItem, user?.id);
+        const showOrderBook = shouldShowOrderBookButtons(
+          selectedItem,
+          user?.id,
+        );
         return (
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -4948,7 +5065,7 @@ const HomeOneScreen = () => {
                 activeOpacity={0.7}
                 hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               >
-                <Icon name="chevron-left" size={24} color="#1A1A1A" />
+                <Icon name="chevron-left" size={24} color="#FFFFFF" />
                 <Text style={styles.resBackText}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -4993,30 +5110,9 @@ const HomeOneScreen = () => {
                         selectedItem?.title ||
                         '—'}
                     </Text>
-                    <View style={styles.resMetaRow}>
-                      <Icon name="eye-outline" size={15} color="#606060" />
-                      <Text style={styles.resViewsText}>{viewsLabel}</Text>
-                      {(String(
-                        selectedItem?.creatorRole || '',
-                      ).toLowerCase() === 'owner' ||
-                        String(selectedItem?.user?.role || '').toLowerCase() ===
-                          'owner') && (
-                        <View style={styles.resRatingRow}>
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <Icon
-                              key={`res-rating-${star}`}
-                              name={star <= rounded ? 'star' : 'star-outline'}
-                              size={13}
-                              color={star <= rounded ? '#FFE082' : '#C7C7C7'}
-                            />
-                          ))}
-                          <Text style={styles.resRatingText}>
-                            ({reviewsDisplay}{' '}
-                            {reviewsDisplay === 1 ? 'review' : 'reviews'})
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text style={styles.resLocationText}>
+                      {locationDisplay}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -5237,32 +5333,13 @@ const HomeOneScreen = () => {
               >
                 <Icon
                   name={selectedItem?.isLiked ? 'thumb-up' : 'thumb-up-outline'}
-                  size={21}
+                  size={22}
                   color="#333"
                 />
                 <Text style={styles.resActionText}>
                   {formatCount(likeDisplayCount)}
                 </Text>
               </TouchableOpacity>
-
-              {/* <TouchableOpacity
-                style={styles.resActionItem}
-                onPress={handleRestaurantDislike}
-                activeOpacity={0.7}
-              >
-                <Icon
-                  name={
-                    selectedItem?.isDisliked
-                      ? 'thumb-down'
-                      : 'thumb-down-outline'
-                  }
-                  size={21}
-                  color="#333"
-                />
-                <Text style={styles.resActionText}>
-                  {formatCount(selectedItem?.dislikeCount ?? 0)}
-                </Text>
-              </TouchableOpacity> */}
 
               <TouchableOpacity
                 style={styles.resActionItem}
@@ -5277,27 +5354,34 @@ const HomeOneScreen = () => {
                 activeOpacity={0.7}
                 disabled={!selectedItem?.id}
               >
-                <Icon name="comment-text-outline" size={21} color="#333" />
+                <Icon name="comment-text-outline" size={22} color="#333" />
                 <Text style={styles.resActionText}>
                   {formatCount(commentDisplayCount)}
                 </Text>
               </TouchableOpacity>
 
-              {/* <TouchableOpacity
+              <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={handleRestaurantChat}
                 activeOpacity={0.7}
               >
-                <Icon name="chat-outline" size={21} color="#333" />
+                <Icon
+                  name="message-processing-outline"
+                  size={22}
+                  color="#333"
+                />
                 <Text style={styles.resActionText}>Chat</Text>
-              </TouchableOpacity> */}
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.resActionItem}
                 onPress={handleRestaurantDownload}
                 activeOpacity={0.7}
               >
-                <Icon name="download-outline" size={21} color="#333" />
-                <Text style={styles.resActionText}>Download</Text>
+                <Icon name="tray-arrow-down" size={22} color="#333" />
+                <Text style={styles.resActionText} numberOfLines={1}>
+                  Download
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -5305,8 +5389,10 @@ const HomeOneScreen = () => {
                 onPress={handleRestaurantShare}
                 activeOpacity={0.7}
               >
-                <Icon name="share-outline" size={21} color="#333" />
-                <Text style={styles.resActionText}>Share</Text>
+                <Icon name="share-outline" size={22} color="#333" />
+                <Text style={styles.resActionText} numberOfLines={1}>
+                  Share
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -5314,44 +5400,59 @@ const HomeOneScreen = () => {
                 onPress={handleRestaurantSave}
                 activeOpacity={0.7}
               >
-                <Icon name="bookmark-outline" size={21} color="#333" />
-                <Text style={styles.resActionText}>Save</Text>
+                <Icon name="playlist-plus" size={22} color="#333" />
+                <Text style={styles.resActionText} numberOfLines={1}>
+                  Save
+                </Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.resSocialRow}>
-              {/* <View style={styles.resIconGroup}>
-            {[
-              { type: 'instagram', icon: 'instagram' },
-              { type: 'facebook', icon: 'facebook' },
-              { type: 'x', icon: 'twitter' },
-              { type: 'website', icon: 'web' },
-            ].map(({ type, icon }) => {
-              const link = (
-                selectedItem?.user?.socialLinks ||
-                selectedItem?.creatorSocialLinks ||
-                []
-              ).find(s => (s.type || '').toLowerCase() === type.toLowerCase());
-              const url = link?.url || null;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  onPress={() => url && Linking.openURL(url)}
-                  style={styles.socialIconWrap}
-                >
-                  <Icon
-                    name={icon}
-                    size={28}
-                    color={url ? '#333' : '#000'}
-                    style={styles.socialIcon}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View> */}
-              <View style={styles.resBookGalleryRow}>
+
+            <View style={styles.resSocialActionsRow}>
+              <View style={styles.resSocialLeft}>
+                <View style={styles.resIconGroup}>
+                  {[
+                    { type: 'instagram', icon: 'instagram' },
+                    { type: 'facebook', icon: 'facebook' },
+                    { type: 'x', icon: 'twitter' },
+                    { type: 'google_email', icon: 'google' },
+                    { type: 'website', icon: 'web' },
+                  ].map(({ type, icon }) => {
+                    const link = socialLinks.find(
+                      s => String(s?.type || '').toLowerCase() === type,
+                    );
+                    const url = String(link?.url || '').trim();
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        onPress={() => {
+                          if (!url) return;
+                          Linking.openURL(
+                            url.startsWith('http') ? url : `https://${url}`,
+                          );
+                        }}
+                        style={styles.socialIconWrap}
+                        activeOpacity={url ? 0.7 : 1}
+                      >
+                        <Icon
+                          name={icon}
+                          size={26}
+                          color={url ? '#333' : '#B0B0B0'}
+                          style={styles.socialIcon}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {websiteDisplay ? (
+                  <Text style={styles.webText} numberOfLines={2}>
+                    {websiteDisplay}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.resActionBtnsCol}>
                 {showOrderBook ? (
                   <TouchableOpacity
-                    style={[styles.resRowBtn, styles.resRowBtnPrimary]}
+                    style={[styles.resStackBtn, styles.resRowBtnPrimary]}
                     onPress={() => openBookingForItem(selectedItem)}
                     activeOpacity={0.85}
                   >
@@ -5359,115 +5460,64 @@ const HomeOneScreen = () => {
                   </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity
-                  style={[styles.resRowBtn, styles.resRowBtnDark]}
+                  style={[styles.resStackBtn, styles.resRowBtnDark]}
                   onPress={openGalleryModal}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.resRowBtnTextLight}>Gallery</Text>
                 </TouchableOpacity>
-                {showSubscribeBtn ? (
-                  <TouchableOpacity
-                    style={[
-                      styles.resRowBtn,
-                      resDetailSubscribe.isSubscribed
-                        ? styles.resRowBtnSubscribed
-                        : styles.resRowBtnSubscribeOutline,
-                    ]}
-                    onPress={handleRestaurantSubscribe}
-                    activeOpacity={0.85}
-                    disabled={
-                      resDetailSubscribe.loading || resDetailSubscribe.toggling
-                    }
-                  >
-                    {resDetailSubscribe.loading ||
-                    resDetailSubscribe.toggling ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={
-                          resDetailSubscribe.isSubscribed ? '#555' : '#F5A623'
-                        }
-                      />
-                    ) : (
-                      <Text
-                        style={
-                          resDetailSubscribe.isSubscribed
-                            ? styles.resRowBtnTextMuted
-                            : styles.resRowBtnTextOrange
-                        }
-                      >
-                        {resDetailSubscribe.isSubscribed
-                          ? 'Subscribed'
-                          : 'Subscribe'}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ) : null}
               </View>
             </View>
-            {/* <Text style={styles.webText}>
-          {(
-            selectedItem?.user?.socialLinks ||
-            selectedItem?.creatorSocialLinks ||
-            []
-          ).find(s => (s.type || '').toLowerCase() === 'website')?.url ||
-            (selectedItem?.user?.businessName
-              ? `www.${String(selectedItem.user.businessName)
-                  .toLowerCase()
-                  .replace(/\s+/g, '')}.com`
-              : null) ||
-            '—'}
-        </Text> */}
 
-            <View style={styles.resGlassCard}>
-              <View style={styles.descContainer}>
-                <Text style={styles.sectionTitle}>Description</Text>
+            <View style={styles.resDescSection}>
+              <Text style={styles.sectionTitle}>Description</Text>
+              <View style={styles.resDescBox}>
                 <Text style={styles.descText}>{descDisplay}</Text>
               </View>
             </View>
 
-            <View style={styles.resGlassCard}>
-              <View style={styles.contactContainer}>
-                <Text style={styles.contactSectionLabel}>Contact</Text>
-                <View style={styles.contactRow}>
-                  <Icon name="phone-outline" size={18} color="#888" />
-                  <Text style={styles.contactRowText}>{contactPhone}</Text>
-                </View>
-                <View style={styles.contactRow}>
-                  <Icon name="email-outline" size={18} color="#888" />
-                  <Text style={styles.contactRowText} numberOfLines={2}>
-                    {contactEmail}
-                  </Text>
-                </View>
-                <View style={styles.contactDivider} />
-                <View style={[styles.contactRow, styles.contactRowLast]}>
-                  <Icon name="map-marker-outline" size={18} color="#888" />
-                  <Text style={styles.contactRowText}>{contactAddress}</Text>
-                </View>
-                {selectedItem?.creatorLatitude != null &&
-                selectedItem?.creatorLongitude != null &&
-                Number.isFinite(Number(selectedItem.creatorLatitude)) &&
-                Number.isFinite(Number(selectedItem.creatorLongitude)) ? (
-                  <TouchableOpacity
-                    onPress={() =>
-                      Linking.openURL(
-                        `https://www.google.com/maps?q=${Number(
-                          selectedItem.creatorLatitude,
-                        )},${Number(selectedItem.creatorLongitude)}`,
-                      )
-                    }
-                    activeOpacity={0.85}
-                    style={styles.contactMapRow}
-                  >
-                    <Icon name="map-search-outline" size={18} color="#1565C0" />
-                    <Text style={styles.contactMapLink}>
-                      Open in Maps ·{' '}
-                      {Number(selectedItem.creatorLatitude).toFixed(5)},{' '}
-                      {Number(selectedItem.creatorLongitude).toFixed(5)}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+            <View style={styles.resContactSection}>
+              <Text style={styles.resContactLine}>
+                Contact : {contactPhone}
+              </Text>
+              <Text style={styles.resContactLine}>{contactEmail}</Text>
+              <Text style={styles.resContactLine}>
+                Address :{contactAddress}
+              </Text>
             </View>
+
+            {hasMapCoords ? (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() =>
+                  Linking.openURL(
+                    `https://www.google.com/maps?q=${mapLat},${mapLng}`,
+                  )
+                }
+                style={styles.resMapWrap}
+              >
+                <MapView
+                  provider={PROVIDER_GOOGLE}
+                  style={styles.resMap}
+                  initialRegion={{
+                    latitude: mapLat,
+                    longitude: mapLng,
+                    latitudeDelta: 0.008,
+                    longitudeDelta: 0.008,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
+                  pitchEnabled={false}
+                  rotateEnabled={false}
+                  mapType="standard"
+                  pointerEvents="none"
+                >
+                  <Marker
+                    coordinate={{ latitude: mapLat, longitude: mapLng }}
+                  />
+                </MapView>
+              </TouchableOpacity>
+            ) : null}
           </ScrollView>
         );
       })()}
@@ -7428,25 +7478,24 @@ const styles = StyleSheet.create({
   resBackBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#333333',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 0,
     minHeight: 44,
     ...Platform.select({
       android: { elevation: 2 },
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
+        shadowOpacity: 0.12,
         shadowRadius: 3,
       },
     }),
   },
   resBackText: {
-    color: '#1A1A1A',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
     marginLeft: 2,
@@ -7464,7 +7513,7 @@ const styles = StyleSheet.create({
   resTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 16,
     marginBottom: 16,
     gap: 12,
@@ -7484,6 +7533,12 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   resMainTitle: { fontSize: 22, fontWeight: '700', color: '#111' },
+  resLocationText: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#888',
+    fontWeight: '500',
+  },
   resRatingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -7607,13 +7662,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  resEngagementBlock: {
+    paddingHorizontal: 16,
+    marginBottom: 18,
+  },
+  resEngagementMain: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  resEngagementLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  resSocialActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 18,
+    gap: 14,
+  },
+  resSocialLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  resActionBtnsCol: {
+    width: 118,
+    flexShrink: 0,
+    gap: 8,
+  },
+  resStackBtn: {
+    width: '100%',
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+  },
   resSocialRow: {
     flexDirection: 'column',
     paddingHorizontal: 16,
     alignItems: 'stretch',
   },
-  resIconGroup: { flexDirection: 'row', flexWrap: 'wrap', width: '60%' },
-  socialIconWrap: { marginRight: 15, marginBottom: 10 },
+  resIconGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: 0,
+    marginBottom: 6,
+    gap: 14,
+  },
+  socialIconWrap: { marginRight: 0, marginBottom: 0 },
   socialIcon: {},
   resBookGalleryRow: {
     flexDirection: 'row',
@@ -7677,23 +7778,23 @@ const styles = StyleSheet.create({
   },
   galleryText: { color: '#FFF', fontWeight: 'bold', textAlign: 'center' },
   webText: {
-    paddingHorizontal: 15,
     color: '#666',
     fontSize: 13,
-    marginBottom: 20,
+    marginTop: 2,
   },
   resActionsRowWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     marginBottom: 14,
+    marginHorizontal: 0,
+    gap: 0,
     backgroundColor: 'transparent',
     borderWidth: 0,
     borderColor: 'transparent',
     borderRadius: 0,
-    marginHorizontal: 16,
     ...Platform.select({
       android: { elevation: 0 },
       ios: {
@@ -7705,17 +7806,18 @@ const styles = StyleSheet.create({
     }),
   },
   resActionItem: {
+    width: (width - 32) / 6,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 2,
-    minWidth: 44,
+    justifyContent: 'flex-start',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
   resActionText: {
     marginTop: 4,
     fontSize: 11,
     color: '#4B5563',
     fontWeight: '600',
+    textAlign: 'center',
   },
   resGlassCard: {
     marginHorizontal: 16,
@@ -7734,6 +7836,39 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  resDescSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  resDescBox: {
+    backgroundColor: '#F5F0E6',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  resContactSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  resContactLine: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  resMapWrap: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 14,
+    overflow: 'hidden',
+    height: 180,
+    backgroundColor: '#E8E8E8',
+  },
+  resMap: {
+    width: '100%',
+    height: '100%',
+  },
   descContainer: {
     paddingHorizontal: 14,
     paddingTop: 12,
@@ -7743,9 +7878,9 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 10,
+    marginBottom: 0,
   },
-  descText: { fontSize: 14, color: '#4B5563', lineHeight: 20, marginTop: 1 },
+  descText: { fontSize: 14, color: '#4B5563', lineHeight: 22, marginTop: 0 },
   contactContainer: {
     paddingHorizontal: 14,
     paddingTop: 12,

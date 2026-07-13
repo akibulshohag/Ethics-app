@@ -41,7 +41,6 @@ import { login, isAccountInactiveError, isEmailNotVerifiedError } from '../servi
 import {
   getBiometricSupport,
   tryBiometricLogin,
-  biometricLoginButtonLabel,
   syncBiometricSessionForUser,
 } from '../services/biometricService';
 import {
@@ -448,49 +447,72 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
                 <Text style={styles.secondaryBtnText}>Sign Up</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.actionBtnSecondary}
-                onPress={() => navigation.navigate('PhoneAuthScreen')}
-                disabled={loading}
-              >
-                <Text style={styles.secondaryBtnText}>Continue with phone</Text>
-              </TouchableOpacity>
-
-              {biometricReady && faceAvailable ? (
+              <View style={styles.quickAuthRow}>
                 <TouchableOpacity
-                  style={styles.actionBtnSecondary}
+                  style={styles.quickAuthIconBtn}
+                  onPress={() => navigation.navigate('PhoneAuthScreen')}
+                  disabled={loading}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Continue with phone"
+                >
+                  <Icon name="cellphone" size={28} color={ORANGE} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.quickAuthIconBtn,
+                    (!biometricReady || !faceAvailable) &&
+                      styles.quickAuthIconBtnDisabled,
+                  ]}
                   onPress={() => handleBiometricLogin('face')}
-                  disabled={loading}
+                  disabled={loading || !biometricReady || !faceAvailable}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Unlock with Face"
                 >
-                  <Text style={styles.secondaryBtnText}>
-                    Unlock with {biometricLoginButtonLabel(biometricType, 'face')}
-                  </Text>
+                  <Icon
+                    name="face-recognition"
+                    size={28}
+                    color={biometricReady && faceAvailable ? ORANGE : '#D0C4B4'}
+                  />
                 </TouchableOpacity>
-              ) : null}
 
-              {biometricReady && fingerprintAvailable ? (
                 <TouchableOpacity
-                  style={styles.actionBtnSecondary}
+                  style={[
+                    styles.quickAuthIconBtn,
+                    (!biometricReady || !fingerprintAvailable) &&
+                      styles.quickAuthIconBtnDisabled,
+                  ]}
                   onPress={() => handleBiometricLogin('fingerprint')}
-                  disabled={loading}
+                  disabled={loading || !biometricReady || !fingerprintAvailable}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Unlock with Fingerprint"
                 >
-                  <Text style={styles.secondaryBtnText}>
-                    Unlock with {biometricLoginButtonLabel(biometricType, 'fingerprint')}
-                  </Text>
+                  <Icon
+                    name="fingerprint"
+                    size={28}
+                    color={
+                      biometricReady && fingerprintAvailable ? ORANGE : '#D0C4B4'
+                    }
+                  />
                 </TouchableOpacity>
-              ) : null}
 
-              {biometricReady && !faceAvailable && !fingerprintAvailable ? (
                 <TouchableOpacity
-                  style={styles.actionBtnSecondary}
+                  style={[
+                    styles.quickAuthIconBtn,
+                    !biometricReady && styles.quickAuthIconBtnDisabled,
+                  ]}
                   onPress={() => handleBiometricLogin('any')}
-                  disabled={loading}
+                  disabled={loading || !biometricReady}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Biometric unlock"
                 >
-                  <Text style={styles.secondaryBtnText}>
-                    Unlock with {biometricLoginButtonLabel(biometricType)}
-                  </Text>
+                  <Icon
+                    name="lock-outline"
+                    size={28}
+                    color={biometricReady ? ORANGE : '#D0C4B4'}
+                  />
                 </TouchableOpacity>
-              ) : null}
+              </View>
 
               <Text style={styles.orText}>Or</Text>
               <Text style={styles.signInWithText}>Sign in with</Text>
@@ -676,7 +698,28 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: ORANGE,
     backgroundColor: '#FFF',
-    marginBottom: 20,
+    marginBottom: 14,
+  },
+  quickAuthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+    gap: 10,
+  },
+  quickAuthIconBtn: {
+    flex: 1,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: ORANGE,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAuthIconBtnDisabled: {
+    borderColor: '#E5D9CC',
+    backgroundColor: '#FFFBF7',
   },
   btnText: { color: '#FFF', fontSize: 18, fontWeight: '700' },
   secondaryBtnText: { color: ORANGE, fontSize: 18, fontWeight: '700' },

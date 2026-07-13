@@ -473,6 +473,15 @@ export const shortsService = {
     return DeviceEventEmitter.addListener(SHORT_UPDATED_EVENT, callback);
   },
 
+  publishShortEngagement(shortId, patch = {}) {
+    const id = String(shortId || '').trim();
+    if (!id) return;
+    DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
+      id,
+      ...patch,
+    });
+  },
+
   /**
    * Delete short
    */
@@ -500,7 +509,15 @@ export const shortsService = {
     }, {
       headers: getAuthHeaders(),
     });
-    return response.data;
+    const data = response.data || {};
+    if (typeof data.liked === 'boolean') {
+      DeviceEventEmitter.emit(SHORT_UPDATED_EVENT, {
+        id: String(shortId),
+        isLiked: data.liked,
+        liked: data.liked,
+      });
+    }
+    return data;
   },
 
   /**
@@ -567,6 +584,18 @@ export const shortsService = {
     }, {
       headers: getAuthHeaders(),
     });
+    return response.data;
+  },
+
+  /**
+   * Edit own comment or reply
+   */
+  async updateComment(commentId, userId, content) {
+    const response = await axios.post(
+      `${API_URL}/comment/update`,
+      { commentId, userId, content },
+      { headers: getAuthHeaders() },
+    );
     return response.data;
   },
 

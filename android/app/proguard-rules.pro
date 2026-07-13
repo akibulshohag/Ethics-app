@@ -99,6 +99,13 @@
 -dontwarn com.oblador.keychain.**
 -dontwarn androidx.biometric.**
 
+# Firebase Auth / phone OTP (release R8)
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.internal.** { *; }
+-dontwarn com.google.firebase.**
+-keep class io.invertase.firebase.** { *; }
+-dontwarn io.invertase.firebase.**
+
 # -------------------------------------------------------
 #  General Optimizations
 # -------------------------------------------------------
