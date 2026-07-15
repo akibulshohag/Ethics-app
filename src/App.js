@@ -10,7 +10,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Offline } from './components/Offline';
 import Toast, { BaseToast } from 'react-native-toast-message';
 import colors from './constants/colors';
-import { Alert, AppState, BackHandler, View, StyleSheet, Linking } from 'react-native';
+import { Alert, AppState, BackHandler, View, StyleSheet, Linking, InteractionManager } from 'react-native';
 import FaceUnlockCameraHost from './components/FaceUnlockCameraHost';
 // import Loading from './components/Loading';
 import RootStack from './navigation/RootStack';
@@ -28,6 +28,19 @@ import {
 import { StripeProvider } from '@stripe/stripe-react-native';
 import { getPaymentConfig } from './services/paymentService';
 
+/** Mount camera host after first interactions so home TTI stays light. */
+const DeferredFaceHost = () => {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setReady(true);
+    });
+    return () => handle?.cancel?.();
+  }, []);
+  if (!ready) return null;
+  return <FaceUnlockCameraHost />;
+};
+
 const AppContent = () => {
   const { user, onboardingDone } = useSelector(state => state.app);
 
@@ -38,17 +51,27 @@ const AppContent = () => {
 
   useEffect(() => {
     if (user?.id && user?.token) {
-      ensureSessionOnStartup();
+      const handle = InteractionManager.runAfterInteractions(() => {
+        ensureSessionOnStartup();
+      });
+      return () => handle?.cancel?.();
     }
+    return undefined;
   }, [user?.id, user?.token]);
 
   useEffect(() => {
-    if (user?.id) {
-      connectNotificationSocket(user.id);
-    } else {
+    if (!user?.id) {
       disconnectNotificationSocket();
+      return undefined;
     }
-    return () => disconnectNotificationSocket();
+    // Don't compete with home feed right as the app becomes interactive.
+    const handle = InteractionManager.runAfterInteractions(() => {
+      connectNotificationSocket(user.id);
+    });
+    return () => {
+      handle?.cancel?.();
+      disconnectNotificationSocket();
+    };
   }, [user?.id]);
 
   const backAction = () => {
@@ -141,17 +164,21 @@ const AppContent = () => {
 };
 
 const App = () => {
-  const [connected, setConnected] = useState(false);
+  // null = unknown; only show offline UX when NetInfo says disconnected.
+  const [connected, setConnected] = useState(null);
   const [stripePublishableKey, setStripePublishableKey] = useState('');
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setConnected(state.isConnected);
     });
+    NetInfo.fetch()
+      .then(state => setConnected(state.isConnected))
+      .catch(() => setConnected(true));
     return () => {
       unsubscribe();
     };
-  }, [connected]);
+  }, []);
 
   const refreshStripeKey = React.useCallback(() => {
     getPaymentConfig()
@@ -164,23 +191,27 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    refreshStripeKey();
+    const handle = InteractionManager.runAfterInteractions(() => {
+      refreshStripeKey();
+    });
+    return () => handle?.cancel?.();
   }, [refreshStripeKey]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') {
-        refreshStripeKey();
+        InteractionManager.runAfterInteractions(() => {
+          refreshStripeKey();
+        });
       }
     });
     return () => sub.remove();
   }, [refreshStripeKey]);
 
-  if (!connected) {
-    // return <Offline />;
+  if (connected === false) {
     return (
-      <View>
-        <Text>No Internet Connection</Text>
+      <View style={styles.offlineWrap}>
+        <Text style={styles.offlineText}>No Internet Connection</Text>
       </View>
     );
   }
@@ -199,7 +230,7 @@ const App = () => {
     <Provider store={store}>
       <PersistGate persistor={persistor}>
         <AppContent />
-        <FaceUnlockCameraHost />
+        <DeferredFaceHost />
         <Toast
           config={toastConfig}
           position="bottom"
@@ -250,6 +281,18 @@ const styles = StyleSheet.create({
   },
   loadingView: {
     backgroundColor: colors.white,
+  },
+  offlineWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF',
+    padding: 24,
+  },
+  offlineText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '600',
   },
 });
 

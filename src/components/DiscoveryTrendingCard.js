@@ -1,10 +1,18 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const DEFAULT_IMG =
   'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600';
 
+/** Matches home trending CTAs: Order / Book / Subscribe for owner|vendor only. */
 export default function DiscoveryTrendingCard({
   name,
   subtitle,
@@ -13,6 +21,12 @@ export default function DiscoveryTrendingCard({
   rating,
   onPress,
   onOrderPress,
+  onBookPress,
+  onSubscribePress,
+  subscribeBusy,
+  isSubscribed,
+  hideSubscribe,
+  showOrderBook = false,
   featured,
   showPlayIcon = true,
 }) {
@@ -39,7 +53,11 @@ export default function DiscoveryTrendingCard({
         ) : null}
         {showPlayIcon ? (
           <View style={styles.playWrap} pointerEvents="none">
-            <Icon name="play-circle-outline" size={52} color="rgba(255,255,255,0.9)" />
+            <Icon
+              name="play-circle-outline"
+              size={52}
+              color="rgba(255,255,255,0.9)"
+            />
           </View>
         ) : null}
       </TouchableOpacity>
@@ -59,21 +77,61 @@ export default function DiscoveryTrendingCard({
               </Text>
             ) : null}
           </View>
-          <TouchableOpacity
-            style={styles.orderBtn}
-            activeOpacity={0.88}
-            onPress={onOrderPress}
-          >
-            <Text style={styles.orderText}>Order Now</Text>
-            <Icon name="arrow-right" size={16} color="#FFF" />
-          </TouchableOpacity>
+          {showOrderBook ? (
+            <View style={styles.btnGroup}>
+              <TouchableOpacity
+                style={styles.orderBtn}
+                activeOpacity={0.88}
+                onPress={onOrderPress}
+                disabled={!onOrderPress}
+              >
+                <Text style={styles.orderText}>Order Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bookBtn}
+                activeOpacity={0.88}
+                onPress={onBookPress}
+                disabled={!onBookPress}
+              >
+                <Text style={styles.bookText}>Book Now</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
-        {viewsLabel ? (
-          <View style={styles.metaRow}>
-            <Icon name="eye-outline" size={14} color="#9CA3AF" />
-            <Text style={styles.metaText}>{viewsLabel}</Text>
-          </View>
-        ) : null}
+        <View style={styles.row2}>
+          {viewsLabel ? (
+            <View style={styles.metaRow}>
+              <Icon name="eye-outline" size={14} color="#9CA3AF" />
+              <Text style={styles.metaText}>{viewsLabel}</Text>
+            </View>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          {showOrderBook && !hideSubscribe ? (
+            <TouchableOpacity
+              style={[
+                styles.subscribeBtn,
+                isSubscribed && styles.subscribeBtnActive,
+              ]}
+              activeOpacity={0.88}
+              onPress={onSubscribePress}
+              disabled={!onSubscribePress || !!subscribeBusy}
+            >
+              {subscribeBusy ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text
+                  style={[
+                    styles.subscribeText,
+                    isSubscribed && styles.subscribeTextActive,
+                  ]}
+                >
+                  {isSubscribed ? 'Subscribed' : 'Subscribe'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -114,24 +172,58 @@ const styles = StyleSheet.create({
   },
   titleBlock: { flex: 1, minWidth: 0 },
   name: { fontSize: 17, fontWeight: '700', color: '#111' },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  ratingText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  orderBtn: {
+  ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F5A623',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
+    marginTop: 2,
   },
-  orderText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  ratingText: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  btnGroup: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
+  orderBtn: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  orderText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
+  bookBtn: {
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
+    borderColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 8.5,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  bookText: { color: '#F5A623', fontWeight: '700', fontSize: 12 },
+  row2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    gap: 8,
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 8,
+    flex: 1,
   },
   metaText: { fontSize: 13, color: '#9CA3AF' },
+  subscribeBtn: {
+    backgroundColor: '#F8F1E3',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5D9C0',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 88,
+    alignItems: 'center',
+  },
+  subscribeBtnActive: { backgroundColor: '#EEE' },
+  subscribeText: { color: '#4B5563', fontSize: 12, fontWeight: '600' },
+  subscribeTextActive: { color: '#6B7280' },
 });

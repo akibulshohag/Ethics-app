@@ -10,10 +10,19 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Android 13+ media access -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <!-- Legacy storage (Android 12 and below) -->
+    <!--
+      Play Photo/Video Permissions policy (targetSdk 33+):
+      Do NOT request READ_MEDIA_IMAGES / READ_MEDIA_VIDEO.
+      Use the system Photo Picker / document picker instead.
+      Force-remove if any dependency tries to merge them in.
+    -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <!-- Legacy storage (Android 12 and below) for crop-picker / older devices -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />

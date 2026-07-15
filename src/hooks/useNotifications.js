@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { InteractionManager } from 'react-native';
 import {
   getNotificationsByUserId,
   markNotificationRead,
@@ -27,9 +28,17 @@ export function useNotifications(userId) {
   }, [userId]);
 
   useEffect(() => {
+    if (!userId) {
+      setNotifications([]);
+      setLoading(false);
+      return undefined;
+    }
     setLoading(true);
-    loadNotifications();
-  }, [loadNotifications]);
+    const handle = InteractionManager.runAfterInteractions(() => {
+      loadNotifications();
+    });
+    return () => handle?.cancel?.();
+  }, [loadNotifications, userId]);
 
   useEffect(() => {
     if (!userId) return undefined;

@@ -34,30 +34,68 @@ print_keystore() {
 print_keystore "DEBUG (local dev / default release if upload password empty)" \
   "$APP_DIR/debug.keystore" "androiddebugkey" "android" "android"
 
-if [[ -f "$APP_DIR/my-upload-key.keystore" ]]; then
-  STORE_PASS="${MYAPP_UPLOAD_STORE_PASSWORD:-}"
-  KEY_PASS="${MYAPP_UPLOAD_KEY_PASSWORD:-$STORE_PASS}"
-  if [[ -z "$STORE_PASS" ]]; then
-    echo "---------- RELEASE (my-upload-key.keystore) ----------"
-    echo "Set passwords then re-run:"
-    echo "  MYAPP_UPLOAD_STORE_PASSWORD='***' MYAPP_UPLOAD_KEY_PASSWORD='***' $0"
-    echo "Or add to android/gradle.properties:"
-    echo "  MYAPP_UPLOAD_STORE_PASSWORD=..."
-    echo "  MYAPP_UPLOAD_KEY_PASSWORD=..."
-    echo ""
-  else
-    print_keystore "RELEASE (Play Store / signed APK)" \
-      "$APP_DIR/my-upload-key.keystore" "my-key-alias" "$STORE_PASS" "$KEY_PASS"
-  fi
+# Prefer passwords from android/keystore.properties (gitignored)
+PROPS="$ROOT/android/keystore.properties"
+if [[ -f "$PROPS" ]]; then
+  # shellcheck disable=SC1090
+  set -a
+  # Export KEY=VALUE lines only
+  while IFS='=' read -r k v; do
+    [[ -z "${k:-}" || "$k" =~ ^# ]] && continue
+    export "$k=$v"
+  done < "$PROPS"
+  set +a
 fi
 
-echo "=== Where to paste these ==="
-echo "Facebook: https://developers.facebook.com/apps/1714809253015158/settings/basic/"
-echo "  → Android → Key hashes (add EVERY hash from above + from logcat on device)"
+STORE_FILE="${MYAPP_UPLOAD_STORE_FILE:-eatwaze-upload.keystore}"
+KEY_ALIAS="${MYAPP_UPLOAD_KEY_ALIAS:-eatwaze-upload}"
+STORE_PASS="${MYAPP_UPLOAD_STORE_PASSWORD:-}"
+KEY_PASS="${MYAPP_UPLOAD_KEY_PASSWORD:-$STORE_PASS}"
+RELEASE_KS="$APP_DIR/$STORE_FILE"
+
+if [[ -f "$RELEASE_KS" ]]; then
+  if [[ -z "$STORE_PASS" || "$STORE_PASS" == "REPLACE_ME" || "$STORE_PASS" == "your_store_password" ]]; then
+    echo "---------- RELEASE ($STORE_FILE) ----------"
+    echo "Set real passwords in android/keystore.properties then re-run."
+    echo "  MYAPP_UPLOAD_STORE_FILE=$STORE_FILE"
+    echo "  MYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+    echo ""
+  else
+    print_keystore "RELEASE (Play Store upload key)" \
+      "$RELEASE_KS" "$KEY_ALIAS" "$STORE_PASS" "$KEY_PASS"
+  fi
+else
+  echo "[RELEASE] Keystore not found: $RELEASE_KS"
+  echo ""
+fi
+
+# Legacy keystore (previous releases) — only if still present
+if [[ -f "$APP_DIR/my-upload-key.keystore" && "$STORE_FILE" != "my-upload-key.keystore" ]]; then
+  echo "---------- LEGACY (my-upload-key.keystore) ----------"
+  echo "Present on disk. Only needed if Play Console still expects the old upload key."
+  echo ""
+fi
+
+echo "=== Upload certificate (public PEM — no password) ==="
+PEM="$APP_DIR/upload_certificate.pem"
+if [[ -f "$PEM" ]]; then
+  openssl x509 -in "$PEM" -fingerprint -sha1 -noout
+  openssl x509 -in "$PEM" -fingerprint -sha256 -noout
+else
+  echo "upload_certificate.pem not found"
+fi
 echo ""
-echo "Google: https://console.cloud.google.com/apis/credentials (project 366684605140)"
-echo "  → Create OAuth client → Android → package com.eatix.app + SHA-1"
-echo "  → Firebase: Project settings → Your apps → Add SHA-1 if using Firebase"
+
+echo "=== Where to paste these ==="
+echo "Play Console → App integrity → Upload key certificate"
+echo "  → Use android/app/upload_certificate.pem if registering this upload key"
+echo ""
+echo "Facebook Login app: https://developers.facebook.com/apps/1020637567080925/settings/basic/"
+echo "  → Android → package com.eatix.app + Key hashes"
+echo ""
+echo "Firebase (eatix-17d2a) → Project settings → Android app com.eatix.app"
+echo "  → Add SHA-1 / SHA-256 from RELEASE keystore above"
+echo "  → After Play App Signing is on, ALSO add Play Console 'App signing key' SHA-1"
 echo ""
 echo "Installed APK (most accurate for the build on your phone):"
 echo "  adb logcat -s EatixSigningKeys"

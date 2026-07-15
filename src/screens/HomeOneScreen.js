@@ -24,6 +24,7 @@ import {
   Share,
   BackHandler,
   Platform,
+  InteractionManager,
 } from 'react-native';
 import Video from 'react-native-video';
 import LinearGradient from 'react-native-linear-gradient';
@@ -39,7 +40,9 @@ import { fetchDiscoveryData } from '../redux/actions/discoverySlice';
 import {
   setHomeFeedCache,
   isHomeFeedCacheFresh,
+  clearHomeFeedCache,
 } from '../redux/actions/homeFeedSlice';
+import { clearDiscoveryCache } from '../redux/actions/discoverySlice';
 import { buildDiscoveryCacheKey } from '../utils/discoveryCacheKey';
 import { filterBlockedContent } from '../utils/filterBlockedContent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -125,7 +128,10 @@ import { downloadVideo } from '../services/downloadService';
 import { setPlaylist } from '../services/playlistService';
 import { submitReport } from '../services/reportService';
 import { buildContentShareMessage } from '../utils/contentLinks';
-import { shouldShowOrderBookButtons } from '../utils/contentVisibility';
+import {
+  shouldShowOrderBookButtons,
+  normalizeCreatorRole,
+} from '../utils/contentVisibility';
 import { getTopRestaurantsByOrders } from '../services/orderService';
 import { getMenuByUserId } from '../services/menuService';
 import {
@@ -399,7 +405,10 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
         typeof u.isSubscribed === 'boolean' ? u.isSubscribed : !!v.isSubscribed,
     },
     userId: v.userId || u.id,
-    creatorRole: u.role != null ? String(u.role).toLowerCase() : undefined,
+    creatorRole:
+      normalizeCreatorRole(
+        u.role ?? v.creatorRole ?? v.userRole ?? v.role,
+      ) || undefined,
     channelName,
     channelAvatar,
     views: viewsStr,
@@ -535,10 +544,19 @@ const normalizePromoName = (...values) => {
 
 const HomeOneScreen = () => {
   const insets = useSafeAreaInsets();
+  const bootBrowseLocation = useSelector(state => state.app?.browseLocation);
+  const bootHomeFeed = useSelector(state => state.homeFeed);
   const [isVideoDetail, setIsVideoDetail] = useState(false);
   const [isRestaurantDetail, setIsRestaurantDetail] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedLocation, setSelectedLocation] = useState(() => {
+    const lat =
+      bootBrowseLocation?.lat != null ? Number(bootBrowseLocation.lat) : null;
+    const lng =
+      bootBrowseLocation?.lng != null ? Number(bootBrowseLocation.lng) : null;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    return null;
+  });
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [locationInput, setLocationInput] = useState('');
   const [locationModalLoading, setLocationModalLoading] = useState(false);
@@ -553,8 +571,12 @@ const HomeOneScreen = () => {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryError, setGalleryError] = useState(null);
   const [locationMapVisible, setLocationMapVisible] = useState(false);
-  const [addressText, setAddressText] = useState('');
-  const [browsePostcode, setBrowsePostcode] = useState('');
+  const [addressText, setAddressText] = useState(
+    () => String(bootBrowseLocation?.addressText || ''),
+  );
+  const [browsePostcode, setBrowsePostcode] = useState(
+    () => String(bootBrowseLocation?.postcode || ''),
+  );
   const [homeLocationOverride, setHomeLocationOverride] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -566,8 +588,33 @@ const HomeOneScreen = () => {
   const cuisineScrollXRef = useRef(0);
   const cuisineContentWidthRef = useRef(0);
   const cuisineLayoutWidthRef = useRef(0);
-  const [featuredVideo, setFeaturedVideo] = useState(null);
-  const [sponsoredVideo, setSponsoredVideo] = useState(null);
+  // Disk-persisted feed — only seed if it matches this browse location (not another area).
+  const bootFeedCacheKey = (() => {
+    const lat =
+      bootBrowseLocation?.lat != null ? Number(bootBrowseLocation.lat) : null;
+    const lng =
+      bootBrowseLocation?.lng != null ? Number(bootBrowseLocation.lng) : null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
+    return buildDiscoveryCacheKey(
+      { viewerLat: lat, viewerLng: lng },
+      null, // user id not needed for location match on first paint
+    );
+  })();
+  // Compare lat/lng portion only (strip trailing _guest/_userid).
+  const bootFeedMatchesLocation = (() => {
+    const saved = String(bootHomeFeed?.cacheKey || '');
+    if (!bootFeedCacheKey || !saved) return false;
+    const savedLoc = saved.split('_').slice(0, 2).join('_');
+    const bootLoc = bootFeedCacheKey.split('_').slice(0, 2).join('_');
+    return savedLoc === bootLoc && (bootHomeFeed?.feedVideos?.length > 0 || bootHomeFeed?.feedShorts?.length > 0);
+  })();
+  const persistedHomeFeed = bootFeedMatchesLocation ? bootHomeFeed : null;
+  const [featuredVideo, setFeaturedVideo] = useState(
+    () => persistedHomeFeed?.featuredVideo ?? null,
+  );
+  const [sponsoredVideo, setSponsoredVideo] = useState(
+    () => persistedHomeFeed?.sponsoredVideo ?? null,
+  );
   const [featuredChannelMeta, setFeaturedChannelMeta] = useState(null);
   /** Same source as restaurant detail: GET channel-profile (sponsored list omits rating + subscribe). */
   const [sponsoredChannelMeta, setSponsoredChannelMeta] = useState(null);
@@ -584,12 +631,42 @@ const HomeOneScreen = () => {
   /** Owners the user toggled on Trending — skip bulk hydrate for their cards */
   const subscribeTouchedOwnersRef = useRef(new Set());
   const [selectedCuisine, setSelectedCuisine] = useState('');
-  const [cuisineOptions, setCuisineOptions] = useState([]);
-  const [feedVideos, setFeedVideos] = useState([]);
-  const [feedShorts, setFeedShorts] = useState([]);
-  const [popularShorts, setPopularShorts] = useState([]);
-  const [newShorts, setNewShorts] = useState([]);
-  const [mostOrderedRestaurants, setMostOrderedRestaurants] = useState([]);
+  const [cuisineOptions, setCuisineOptions] = useState(
+    () =>
+      Array.isArray(persistedHomeFeed?.cuisineOptions)
+        ? persistedHomeFeed.cuisineOptions
+        : [],
+  );
+  const [feedVideos, setFeedVideos] = useState(
+    () =>
+      Array.isArray(persistedHomeFeed?.feedVideos)
+        ? persistedHomeFeed.feedVideos
+        : [],
+  );
+  const [feedShorts, setFeedShorts] = useState(
+    () =>
+      Array.isArray(persistedHomeFeed?.feedShorts)
+        ? persistedHomeFeed.feedShorts
+        : [],
+  );
+  const [popularShorts, setPopularShorts] = useState(
+    () =>
+      Array.isArray(persistedHomeFeed?.popularShorts)
+        ? persistedHomeFeed.popularShorts
+        : [],
+  );
+  const [newShorts, setNewShorts] = useState(
+    () =>
+      Array.isArray(persistedHomeFeed?.newShorts)
+        ? persistedHomeFeed.newShorts
+        : [],
+  );
+  const [mostOrderedRestaurants, setMostOrderedRestaurants] = useState(
+    () =>
+      Array.isArray(persistedHomeFeed?.mostOrderedRestaurants)
+        ? persistedHomeFeed.mostOrderedRestaurants
+        : [],
+  );
   const [categoryBrowseRows, setCategoryBrowseRows] = useState([]);
   const [categoryBrowseLoading, setCategoryBrowseLoading] = useState(false);
   const [continueData, setContinueData] = useState([]);
@@ -757,9 +834,31 @@ const HomeOneScreen = () => {
     browsePostcode,
   ]);
 
-  const homeFeedCache = useSelector(state => state.homeFeed);
+  const homeFeedCache = bootHomeFeed || {
+    cacheKey: '',
+    fetchedAt: 0,
+    feedVideos: [],
+    feedShorts: [],
+    popularShorts: [],
+    newShorts: [],
+    mostOrderedRestaurants: [],
+    cuisineOptions: [],
+    featuredVideo: null,
+    sponsoredVideo: null,
+  };
   const homeFeedCacheRef = useRef(homeFeedCache);
   homeFeedCacheRef.current = homeFeedCache;
+  const feedLoadGenRef = useRef(0);
+  const feedInFlightKeyRef = useRef(null);
+  const feedInFlightPromiseRef = useRef(null);
+  const loadFeaturedAndFeedRef = useRef(null);
+  const loadContinueWatchingRef = useRef(null);
+  const blockedUserIdsRef = useRef(blockedUserIds);
+  blockedUserIdsRef.current = blockedUserIds;
+  const selectedLocationRef = useRef(selectedLocation);
+  selectedLocationRef.current = selectedLocation;
+  const searchDebouncedRef = useRef(searchDebounced);
+  searchDebouncedRef.current = searchDebounced;
   const displayedCuisineOptions = useMemo(() => {
     if (!Array.isArray(cuisineOptions)) return [];
     const mapped = cuisineOptions
@@ -914,6 +1013,14 @@ const HomeOneScreen = () => {
         addressText: label || '',
         postcode: pc,
       });
+      const prevLat = selectedLocation?.lat;
+      const prevLng = selectedLocation?.lng;
+      const locationChanged =
+        prevLat == null ||
+        prevLng == null ||
+        Math.abs(Number(prevLat) - Number(coords.lat)) > 0.0005 ||
+        Math.abs(Number(prevLng) - Number(coords.lng)) > 0.0005;
+
       setHomeLocationOverride(areaLabel);
       setSelectedLocation({ lat: coords.lat, lng: coords.lng });
       if (label) setAddressText(label);
@@ -927,6 +1034,26 @@ const HomeOneScreen = () => {
         }),
       );
       if (pc) setBrowsePostcode(pc);
+
+      // New area → drop old feed so customer never sees previous city/cards.
+      if (locationChanged) {
+        setFeaturedVideo(null);
+        setSponsoredVideo(null);
+        setFeedVideos([]);
+        setFeedShorts([]);
+        setPopularShorts([]);
+        setNewShorts([]);
+        setMostOrderedRestaurants([]);
+        setCuisineOptions([]);
+        setContinueData([]);
+        setFeedLoading(true);
+        dispatch(clearHomeFeedCache());
+        dispatch(clearDiscoveryCache());
+        feedInFlightKeyRef.current = null;
+        feedInFlightPromiseRef.current = null;
+        feedLoadGenRef.current += 1;
+      }
+
       await persistBrowseLocation({
         userId: userRef.current?.id,
         lat: coords.lat,
@@ -936,7 +1063,7 @@ const HomeOneScreen = () => {
         areaLabel,
       });
     },
-    [dispatch, browsePostcode],
+    [dispatch, browsePostcode, selectedLocation?.lat, selectedLocation?.lng],
   );
 
   // Debounced address suggestions in the location modal
@@ -1207,8 +1334,6 @@ const HomeOneScreen = () => {
               setAddressText(fromRedux.addressText || '');
               setBrowsePostcode(fromRedux.postcode || '');
               if (areaLabel) setHomeLocationOverride(areaLabel);
-              loadFeaturedAndFeed();
-              loadContinueWatching();
               return;
             }
 
@@ -1227,8 +1352,6 @@ const HomeOneScreen = () => {
               setBrowsePostcode(fromStored.postcode || '');
               if (areaLabel) setHomeLocationOverride(areaLabel);
               dispatch(setBrowseLocation(fromStored));
-              loadFeaturedAndFeed();
-              loadContinueWatching();
               return;
             }
 
@@ -1245,8 +1368,6 @@ const HomeOneScreen = () => {
               setBrowsePostcode(profileLoc.postcode || '');
               if (areaLabel) setHomeLocationOverride(areaLabel);
               dispatch(setBrowseLocation(profileLoc));
-              loadFeaturedAndFeed();
-              loadContinueWatching();
               return;
             }
 
@@ -1261,10 +1382,22 @@ const HomeOneScreen = () => {
           stopPlaybackOnBlur();
         };
       }
-      // Refresh feed when returning to home so shorts cards show updated view counts
+      // Soft refresh only if home cache is stale — avoid dual full reloads on focus.
       if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
-        loadFeaturedAndFeed();
-        loadContinueWatching();
+        const vo = resolveViewerLocationOpts(selectedLocation, userRef.current);
+        const key = vo
+          ? buildDiscoveryCacheKey(vo, userRef.current?.id)
+          : '';
+        const cached = homeFeedCacheRef.current || {};
+        const fresh =
+          key &&
+          isHomeFeedCacheFresh(cached.fetchedAt, cached.cacheKey, key);
+        if (!fresh) {
+          loadFeaturedAndFeedRef.current?.();
+        }
+        InteractionManager.runAfterInteractions(() => {
+          loadContinueWatchingRef.current?.();
+        });
       }
       return stopPlaybackOnBlur;
     }, [
@@ -1275,9 +1408,6 @@ const HomeOneScreen = () => {
       user?.role,
       selectedLocation?.lat,
       selectedLocation?.lng,
-      viewerLocationOpts,
-      loadFeaturedAndFeed,
-      loadContinueWatching,
     ]),
   );
 
@@ -1336,8 +1466,9 @@ const HomeOneScreen = () => {
     const dropBlocked = items => filterBlockedContent(items, blockedUserIds);
     const feedCacheKey = buildDiscoveryCacheKey(voBrowse, user?.id);
     const searchTermEarly = searchDebounced?.trim() || undefined;
-    const cached = homeFeedCacheRef.current;
+    const cached = homeFeedCacheRef.current || {};
     const hasHomeCacheData =
+      !!cached.cacheKey &&
       cached.cacheKey === feedCacheKey &&
       (cached.feedVideos?.length > 0 ||
         cached.feedShorts?.length > 0 ||
@@ -1375,26 +1506,26 @@ const HomeOneScreen = () => {
       setMostOrderedRestaurants(cached.mostOrderedRestaurants || []);
       setCuisineOptions(cached.cuisineOptions || []);
       setFeedLoading(false);
-      dispatch(
-        fetchDiscoveryData({
-          currentUserId: user?.id || null,
-          cacheKey: feedCacheKey,
-          locationOpts: voBrowse,
-          force: false,
-        }),
-      );
       if (homeCacheFresh) {
         return;
       }
     }
 
+    if (
+      feedInFlightKeyRef.current === feedCacheKey &&
+      feedInFlightPromiseRef.current
+    ) {
+      return feedInFlightPromiseRef.current;
+    }
+    feedInFlightKeyRef.current = feedCacheKey;
+    const run = (async () => {
     setFeedLoading(true);
     const lat = voBrowse.viewerLat;
     const lng = voBrowse.viewerLng;
     const role = viewerRole(user);
     const baseParams = {
       page: 1,
-      limit: 50,
+      limit: 20,
       sort: 'latest',
       viewerRole: role,
     };
@@ -1448,7 +1579,7 @@ const HomeOneScreen = () => {
           : Promise.resolve({ shorts: [] }),
         getTopRestaurantsByOrders({
           page: 1,
-          limit: 100,
+          limit: 20,
           nearbyLat: lat,
           nearbyLng: lng,
           radiusKm: UK_DEFAULT_RADIUS_KM,
@@ -1498,26 +1629,8 @@ const HomeOneScreen = () => {
           (typeof p0 === 'string' ? p0 : p0?.src)
         );
       };
-      const missingOwnerIds = Array.from(
-        new Set(
-          rawShorts
-            .filter(s => !hasShortAvatar(s))
-            .map(s => s?.userId || s?.user?.id)
-            .filter(Boolean)
-            .map(String),
-        ),
-      ).slice(0, 10);
+      // Skip avatar profile waits on first paint — patch in background later.
       const ownerProfileById = {};
-      await Promise.allSettled(
-        missingOwnerIds.map(async oid => {
-          try {
-            const p = await getChannelProfile(oid, user?.id);
-            ownerProfileById[String(oid)] = p || null;
-          } catch (_) {
-            ownerProfileById[String(oid)] = null;
-          }
-        }),
-      );
       const mapShortWithOwnerPatch = s => {
         const oid = String(s?.userId || s?.user?.id || '');
         const p = oid ? ownerProfileById[oid] : null;
@@ -1612,6 +1725,21 @@ const HomeOneScreen = () => {
       );
       setNewShorts(dropBlocked(mappedNewestShorts.filter(matchesSearchEarly)));
       setFeedLoading(false);
+      // Prefetch first screen images so scroll feels instant.
+      try {
+        [pickedFeatured, pickedSponsored, ...mappedVideos, ...mappedShorts]
+          .slice(0, 8)
+          .forEach(item => {
+            const uri =
+              item?.img ||
+              item?.video?.thumbnailUrl ||
+              item?.thumbnailUrl ||
+              '';
+            if (uri && /^https?:\/\//i.test(String(uri))) {
+              Image.prefetch(String(uri)).catch(() => {});
+            }
+          });
+      } catch (_) {}
       const allMappedMedia = [
         ...mappedVideos,
         ...mappedShorts,
@@ -1646,7 +1774,7 @@ const HomeOneScreen = () => {
           ...topRestaurantOwnerIds,
           ...promoOwnerIds,
         ]),
-      ).slice(0, 30);
+      ).slice(0, 8);
       if (allOwnerIdsForMenus.length > 0) {
         await Promise.allSettled(
           allOwnerIdsForMenus.map(async oid => {
@@ -1860,14 +1988,19 @@ const HomeOneScreen = () => {
           sponsoredVideo: pickedSponsored,
         }),
       );
-      dispatch(
-        fetchDiscoveryData({
-          currentUserId: user?.id || null,
-          cacheKey: feedCacheKey,
-          locationOpts: voBrowse,
-          force: false,
-        }),
-      );
+      // Defer discovery so home taps stay responsive after relaunch.
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => {
+          dispatch(
+            fetchDiscoveryData({
+              currentUserId: user?.id || null,
+              cacheKey: feedCacheKey,
+              locationOpts: voBrowse,
+              force: false,
+            }),
+          );
+        }, 1500);
+      });
     } catch (e) {
       console.error('HomeOne load feed:', e);
       setFeedVideos([]);
@@ -1877,8 +2010,26 @@ const HomeOneScreen = () => {
       setMostOrderedRestaurants([]);
     } finally {
       setFeedLoading(false);
+      if (feedInFlightKeyRef.current === feedCacheKey) {
+        feedInFlightKeyRef.current = null;
+        feedInFlightPromiseRef.current = null;
+      }
     }
-  }, [selectedLocation, user, searchDebounced, dispatch, blockedUserIds]);
+    })();
+    feedInFlightPromiseRef.current = run;
+    return run;
+  }, [
+    selectedLocation?.lat,
+    selectedLocation?.lng,
+    user?.id,
+    user?.role,
+    user?.latitude,
+    user?.longitude,
+    searchDebounced,
+    dispatch,
+  ]);
+
+  loadFeaturedAndFeedRef.current = loadFeaturedAndFeed;
 
   const loadContinueWatching = useCallback(async () => {
     if (!user?.id) return;
@@ -1904,6 +2055,7 @@ const HomeOneScreen = () => {
       setContinueData([]);
     }
   }, [user?.id, viewerLocationOpts]);
+  loadContinueWatchingRef.current = loadContinueWatching;
 
   const lastBrowseSyncRef = useRef(Number(browseLocation?.updatedAt || 0));
 
@@ -1930,10 +2082,8 @@ const HomeOneScreen = () => {
     if (!updatedAt || updatedAt <= lastBrowseSyncRef.current) return;
     if (browseLocation?.lat == null || browseLocation?.lng == null) return;
     lastBrowseSyncRef.current = updatedAt;
-    if (applyBrowseLocationToSession(browseLocation)) {
-      loadFeaturedAndFeed();
-      loadContinueWatching();
-    }
+    applyBrowseLocationToSession(browseLocation);
+    // selectedLocation change triggers feed load once via effect below.
   }, [
     browseLocation?.updatedAt,
     browseLocation?.lat,
@@ -1942,8 +2092,6 @@ const HomeOneScreen = () => {
     browseLocation?.postcode,
     browseLocation?.areaLabel,
     applyBrowseLocationToSession,
-    loadFeaturedAndFeed,
-    loadContinueWatching,
   ]);
 
   useFocusEffect(
@@ -1968,21 +2116,23 @@ const HomeOneScreen = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (resolveViewerLocationOpts(selectedLocation, user)) {
-      loadFeaturedAndFeed();
-    }
+    if (!resolveViewerLocationOpts(selectedLocation, userRef.current)) return;
+    loadFeaturedAndFeedRef.current?.();
   }, [
     selectedLocation?.lat,
     selectedLocation?.lng,
     user?.latitude,
     user?.longitude,
     searchDebounced,
-    loadFeaturedAndFeed,
   ]);
 
   useEffect(() => {
-    loadContinueWatching();
-  }, [loadContinueWatching]);
+    if (!user?.id) return;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      loadContinueWatchingRef.current?.();
+    });
+    return () => handle?.cancel?.();
+  }, [user?.id]);
 
   useEffect(() => {
     setFeaturedChannelMeta(null);
@@ -2078,14 +2228,6 @@ const HomeOneScreen = () => {
     sponsoredVideo?.video?.user?.id,
     user?.id,
   ]);
-
-  // TEMP DEBUG: inspect featured payload + mapped card data.
-  useEffect(() => {
-    try {
-      console.log('[HomeOneScreen][featuredVideo raw]', featuredVideo);
-      console.log('[HomeOneScreen][featuredItem mapped]', featuredItem);
-    } catch (_) {}
-  }, [featuredVideo, featuredItem]);
 
   // When logged in but Redux user has no photos (e.g. old session), fetch channel profile and update so header shows avatar
   useEffect(() => {
@@ -2653,7 +2795,7 @@ const HomeOneScreen = () => {
   }, [feedVideos]);
 
   useEffect(() => {
-    if (!user?.id || trendingTopVideosForHydrate.length === 0) return;
+    if (trendingTopVideosForHydrate.length === 0) return;
     const byOwner = new Map();
     for (const v of trendingTopVideosForHydrate) {
       const oid = getSponsoredOwnerId(v);
@@ -2666,10 +2808,36 @@ const HomeOneScreen = () => {
     let cancelled = false;
     (async () => {
       for (const [ownerKey, videos] of byOwner) {
-        if (subscribeTouchedOwnersRef.current.has(ownerKey)) continue;
+        const needsRole = videos.some(v => !normalizeCreatorRole(v?.creatorRole || v?.user?.role));
+        const skipSubscribe =
+          !user?.id || subscribeTouchedOwnersRef.current.has(ownerKey);
+        if (!needsRole && skipSubscribe) continue;
         try {
-          const p = await getChannelProfile(ownerKey, user.id);
+          const p = await getChannelProfile(ownerKey, user?.id);
           if (cancelled) return;
+          const role = normalizeCreatorRole(p?.role);
+          if (role) {
+            setFeedVideos(prev =>
+              (prev || []).map(entry => {
+                const oid = getSponsoredOwnerId(entry);
+                if (oid == null || String(oid) !== ownerKey) return entry;
+                if (normalizeCreatorRole(entry?.creatorRole || entry?.user?.role)) {
+                  return entry;
+                }
+                return {
+                  ...entry,
+                  creatorRole: role,
+                  user: {
+                    ...(entry.user && typeof entry.user === 'object'
+                      ? entry.user
+                      : {}),
+                    role,
+                  },
+                };
+              }),
+            );
+          }
+          if (skipSubscribe) continue;
           const sub = !!p?.isSubscribed;
           setChannelSubscribeByOwnerId(prev => ({
             ...prev,
@@ -4356,6 +4524,20 @@ const HomeOneScreen = () => {
                             r.matchingItemCount === 1 ? '' : 'es'
                           }`
                         : r.address || '';
+                    const browseFeedItem = {
+                      id: r?.mediaId || r?.id,
+                      userId: r?.id,
+                      creatorRole: r?.role || r?.creatorRole || 'owner',
+                      user: {
+                        id: r?.id,
+                        role: r?.role || r?.creatorRole || 'owner',
+                      },
+                    };
+                    const showOrderBook = shouldShowOrderBookButtons(
+                      browseFeedItem,
+                      user?.id,
+                    );
+                    const ownerKey = String(r?.id ?? '');
                     return (
                       <DiscoveryTrendingCard
                         key={`cat-browse-${r.id}`}
@@ -4377,6 +4559,41 @@ const HomeOneScreen = () => {
                         onOrderPress={() =>
                           openCategoryRestaurant(r, selectedCuisine)
                         }
+                        onBookPress={() =>
+                          openBookingForItem({
+                            ...browseFeedItem,
+                            channelName: r.name,
+                            location: r.address,
+                            user: {
+                              id: r.id,
+                              nickname: r.name,
+                              address: r.address,
+                            },
+                          })
+                        }
+                        onSubscribePress={() =>
+                          handleSponsoredSubscribe({
+                            id: r.mediaId || r.id,
+                            userId: r.id,
+                            user: { id: r.id, isSubscribed: false },
+                          })
+                        }
+                        isSubscribed={
+                          !!channelSubscribeByOwnerId[ownerKey] ||
+                          !!trendingSubscribeByVideoId[
+                            String(r?.mediaId ?? '')
+                          ]
+                        }
+                        subscribeBusy={
+                          subscribeTogglingVideoId ===
+                          String(r?.mediaId || r?.id || '')
+                        }
+                        hideSubscribe={
+                          !!user?.id &&
+                          ownerKey &&
+                          String(user.id) === ownerKey
+                        }
+                        showOrderBook={showOrderBook}
                       />
                     );
                   })
@@ -6005,7 +6222,7 @@ const FeaturedHeroCard = ({
   onPress,
   onOrderPress,
   onMorePress,
-  showOrderBook = true,
+  showOrderBook = false,
 }) => (
   <TouchableOpacity
     style={styles.featuredHeroCard}
@@ -6119,7 +6336,7 @@ const HomeFeedVideoCard = ({
   subscribeBusy,
   isSubscribed,
   hideSubscribe,
-  showOrderBook = true,
+  showOrderBook = false,
 }) => {
   const displayName = String(channelName || title || 'Restaurant').trim();
   const safeRating = Number.isFinite(Number(rating))

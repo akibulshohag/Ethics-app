@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -25,6 +26,7 @@ export function CategoryFeaturedHeroCard({
   showPlayIcon = true,
   onPress,
   onOrderPress,
+  showOrderBook = false,
 }) {
   return (
     <TouchableOpacity
@@ -63,22 +65,25 @@ export function CategoryFeaturedHeroCard({
             </Text>
           ) : null}
         </View>
-        <TouchableOpacity
-          style={styles.featuredOrderBtn}
-          activeOpacity={0.88}
-          onPress={e => {
-            e?.stopPropagation?.();
-            onOrderPress?.();
-          }}
-        >
-          <Text style={styles.featuredOrderText}>Order Now</Text>
-          <Icon name="arrow-right" size={16} color="#FFF" />
-        </TouchableOpacity>
+        {showOrderBook ? (
+          <TouchableOpacity
+            style={styles.featuredOrderBtn}
+            activeOpacity={0.88}
+            onPress={e => {
+              e?.stopPropagation?.();
+              onOrderPress?.();
+            }}
+          >
+            <Text style={styles.featuredOrderText}>Order Now</Text>
+            <Icon name="arrow-right" size={16} color="#FFF" />
+          </TouchableOpacity>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
 }
 
+/** Same CTA pattern as home trending: Order Now + Book Now + Subscribe. */
 export function CategoryTrendingCard({
   channelName,
   img,
@@ -88,6 +93,12 @@ export function CategoryTrendingCard({
   showPlayIcon = true,
   onPress,
   onOrderPress,
+  onBookPress,
+  onSubscribePress,
+  subscribeBusy,
+  isSubscribed,
+  hideSubscribe,
+  showOrderBook = false,
 }) {
   const safeRating = Number.isFinite(Number(rating))
     ? Number(rating).toFixed(1)
@@ -122,33 +133,72 @@ export function CategoryTrendingCard({
               <Text style={styles.trendingRatingText}>{safeRating}</Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.trendingOrderBtn}
-            activeOpacity={0.88}
-            onPress={onOrderPress}
-          >
-            <Text style={styles.trendingOrderText}>Order Now</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.trendingMetaRow}>
-          {locationLabel ? (
-            <>
-              <Icon name="map-marker" size={14} color="#F5A623" />
-              <Text style={styles.trendingMetaText} numberOfLines={1}>
-                {locationLabel}
-              </Text>
-            </>
+          {showOrderBook ? (
+            <View style={styles.trendingBtnGroup}>
+              <TouchableOpacity
+                style={styles.trendingOrderBtn}
+                activeOpacity={0.88}
+                onPress={onOrderPress}
+                disabled={!onOrderPress}
+              >
+                <Text style={styles.trendingOrderText}>Order Now</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.trendingBookBtn}
+                activeOpacity={0.88}
+                onPress={onBookPress}
+                disabled={!onBookPress}
+              >
+                <Text style={styles.trendingBookText}>Book Now</Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
-          {views ? (
-            <>
-              <Icon
-                name="eye-outline"
-                size={14}
-                color="#9CA3AF"
-                style={locationLabel ? styles.metaEye : null}
-              />
-              <Text style={styles.trendingMetaText}>{views}</Text>
-            </>
+        </View>
+        <View style={styles.trendingRow2}>
+          <View style={styles.trendingMetaRow}>
+            {locationLabel ? (
+              <>
+                <Icon name="map-marker" size={14} color="#F5A623" />
+                <Text style={styles.trendingMetaText} numberOfLines={1}>
+                  {locationLabel}
+                </Text>
+              </>
+            ) : null}
+            {views ? (
+              <>
+                <Icon
+                  name="eye-outline"
+                  size={14}
+                  color="#9CA3AF"
+                  style={locationLabel ? styles.metaEye : null}
+                />
+                <Text style={styles.trendingMetaText}>{views}</Text>
+              </>
+            ) : null}
+          </View>
+          {showOrderBook && !hideSubscribe ? (
+            <TouchableOpacity
+              style={[
+                styles.trendingSubscribeBtn,
+                isSubscribed && styles.trendingSubscribeBtnActive,
+              ]}
+              activeOpacity={0.88}
+              onPress={onSubscribePress}
+              disabled={!onSubscribePress || !!subscribeBusy}
+            >
+              {subscribeBusy ? (
+                <ActivityIndicator size="small" color="#555" />
+              ) : (
+                <Text
+                  style={[
+                    styles.trendingSubscribeText,
+                    isSubscribed && styles.trendingSubscribeTextActive,
+                  ]}
+                >
+                  {isSubscribed ? 'Subscribed' : 'Subscribe'}
+                </Text>
+              )}
+            </TouchableOpacity>
           ) : null}
         </View>
       </View>
@@ -264,20 +314,69 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
   },
-  trendingOrderBtn: {
-    backgroundColor: '#F5A623',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+  trendingBtnGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flexShrink: 0,
   },
-  trendingOrderText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  trendingOrderBtn: {
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  trendingOrderText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  trendingBookBtn: {
+    backgroundColor: '#FFF',
+    borderWidth: 1.5,
+    borderColor: '#F5A623',
+    paddingHorizontal: 10,
+    paddingVertical: 6.5,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  trendingBookText: { color: '#F5A623', fontSize: 11, fontWeight: '700' },
+  trendingRow2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    gap: 8,
+  },
   trendingMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    flex: 1,
+    minWidth: 0,
     flexWrap: 'wrap',
   },
-  trendingMetaText: { fontSize: 12, color: '#6B7280', marginLeft: 4, flexShrink: 1 },
+  trendingMetaText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+    flexShrink: 1,
+  },
   metaEye: { marginLeft: 10 },
+  trendingSubscribeBtn: {
+    backgroundColor: '#F8F1E3',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5D9C0',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 88,
+    alignItems: 'center',
+  },
+  trendingSubscribeBtnActive: {
+    backgroundColor: '#EEE',
+  },
+  trendingSubscribeText: {
+    color: '#4B5563',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  trendingSubscribeTextActive: {
+    color: '#6B7280',
+  },
 });

@@ -52,11 +52,131 @@ const shortLocation = (profile, fallbackAddress) => {
   return raw.split(',')[0]?.trim() || raw;
 };
 
+/** Map top-restaurant rows without N+1 profile/menu/video fan-out (cold start safe). */
+function mapRestaurantLite(r) {
+  const ownerId = r?.id ? String(r.id) : '';
+  if (!ownerId) return null;
+  const photo =
+    safeUri(r?.channelAvatar) ||
+    safeUri(r?.photo) ||
+    safeUri(r?.imageUrl) ||
+    DEFAULT_IMG;
+  return {
+    id: ownerId,
+    name: r?.nickname || r?.name || 'Restaurant',
+    address: r?.address || 'Near you',
+    postcode: r?.postcode || '',
+    latitude: r?.latitude ?? null,
+    longitude: r?.longitude ?? null,
+    distanceKm: r?.distanceKm ?? null,
+    shortAddress: shortLocation(r, r?.address),
+    rating: r?.averageRating ?? r?.ratingAverage ?? r?.rating ?? 0,
+    reviewCount: r?.reviewCount ?? r?.reviewsCount ?? r?.ratingCount ?? 0,
+    orderCount: toNum(r?.orderCount),
+    role: r?.role || 'owner',
+    menu: [],
+    mediaType: 'none',
+    mediaId: '',
+    mediaUrl: '',
+    mediaThumb: photo,
+    totalViews: 0,
+  };
+}
+
+/** Optional full enrichment — only for screens that explicitly need media/menu. */
+async function enrichRestaurant(
+  r,
+  currentUserId,
+) {
+  const ownerId = r?.id ? String(r.id) : '';
+  if (!ownerId) return null;
+  let profile = null;
+  let menu = [];
+  let videos = [];
+  let shorts = [];
+
+  try {
+    profile = await getChannelProfile(ownerId, currentUserId);
+  } catch (_) {}
+  try {
+    const m = await getMenuByUserId(ownerId);
+    menu = Array.isArray(m?.menu) ? m.menu : [];
+  } catch (_) {}
+  try {
+    const [vRes, sRes] = await Promise.all([
+      getUserVideos(ownerId, 1, 8),
+      shortsService.getUserShorts(ownerId, 1, 8),
+    ]);
+    videos = Array.isArray(vRes?.videos) ? vRes.videos : [];
+    shorts = Array.isArray(sRes?.shorts) ? sRes.shorts : [];
+  } catch (_) {}
+
+  const p0 = Array.isArray(profile?.photos) ? profile.photos[0] : null;
+  const profilePhoto =
+    safeUri(typeof p0 === 'string' ? p0 : p0?.src) ||
+    safeUri(profile?.channelAvatar) ||
+    DEFAULT_IMG;
+
+  const firstShort = shorts.find(s => safeUri(s?.videoUrl));
+  const firstVideo = videos.find(v => safeUri(v?.videoUrl));
+  const mediaType = firstShort ? 'short' : firstVideo ? 'video' : 'none';
+  const mediaId = String(firstShort?.id || firstVideo?.id || '').trim();
+  const mediaUrl = safeUri(firstShort?.videoUrl || firstVideo?.videoUrl);
+  const mediaThumb = firstShort
+    ? safeUri(firstShort?.thumbnailUrl) ||
+      safeUri(firstShort?.coverUrl) ||
+      profilePhoto
+    : safeUri(firstVideo?.thumbnailUrl) || profilePhoto;
+
+  const totalViews =
+    videos.reduce((sum, v) => sum + toNum(v?.viewCount), 0) +
+    shorts.reduce((sum, s) => sum + toNum(s?.viewCount), 0);
+
+  return {
+    id: ownerId,
+    name:
+      profile?.nickname ||
+      profile?.name ||
+      r?.nickname ||
+      r?.name ||
+      'Restaurant',
+    address: profile?.address || r?.address || 'Near you',
+    postcode: profile?.postcode || r?.postcode || '',
+    latitude: profile?.latitude ?? r?.latitude ?? null,
+    longitude: profile?.longitude ?? r?.longitude ?? null,
+    distanceKm: r?.distanceKm ?? null,
+    shortAddress: shortLocation(profile, profile?.address || r?.address),
+    rating:
+      profile?.averageRating ??
+      profile?.ratingAverage ??
+      profile?.rating ??
+      0,
+    reviewCount:
+      profile?.reviewCount ??
+      profile?.reviewsCount ??
+      profile?.ratingCount ??
+      0,
+    orderCount: toNum(r?.orderCount),
+    menu,
+    mediaType,
+    mediaId,
+    mediaUrl,
+    mediaThumb,
+    totalViews,
+  };
+}
+
+/**
+ * Load discovery restaurants near the viewer.
+ * Default is lightweight (1 API) so home boot is not blocked by ~160 N+1 calls.
+ * Pass enrich: true only when a discovery UI needs menu/media per restaurant.
+ */
 export async function loadDiscoveryRestaurants({
   currentUserId = null,
   page = 1,
-  limit = 40,
+  limit = 20,
   locationOpts = null,
+  enrich = false,
 } = {}) {
   const lat = locationOpts?.viewerLat ?? locationOpts?.lat;
   const lng = locationOpts?.viewerLng ?? locationOpts?.lng;
@@ -78,85 +198,11 @@ export async function loadDiscoveryRestaurants({
       : {}),
   });
   const base = Array.isArray(top?.restaurants) ? top.restaurants : [];
+  if (!enrich) {
+    return base.map(mapRestaurantLite).filter(Boolean);
+  }
   const enriched = await Promise.all(
-    base.map(async r => {
-      const ownerId = r?.id ? String(r.id) : '';
-      if (!ownerId) return null;
-      let profile = null;
-      let menu = [];
-      let videos = [];
-      let shorts = [];
-
-      try {
-        profile = await getChannelProfile(ownerId, currentUserId);
-      } catch (_) {}
-      try {
-        const m = await getMenuByUserId(ownerId);
-        menu = Array.isArray(m?.menu) ? m.menu : [];
-      } catch (_) {}
-      try {
-        const [vRes, sRes] = await Promise.all([
-          getUserVideos(ownerId, 1, 8),
-          shortsService.getUserShorts(ownerId, 1, 8),
-        ]);
-        videos = Array.isArray(vRes?.videos) ? vRes.videos : [];
-        shorts = Array.isArray(sRes?.shorts) ? sRes.shorts : [];
-      } catch (_) {}
-
-      const p0 = Array.isArray(profile?.photos) ? profile.photos[0] : null;
-      const profilePhoto =
-        safeUri(typeof p0 === 'string' ? p0 : p0?.src) ||
-        safeUri(profile?.channelAvatar) ||
-        DEFAULT_IMG;
-
-      const firstShort = shorts.find(s => safeUri(s?.videoUrl));
-      const firstVideo = videos.find(v => safeUri(v?.videoUrl));
-      const mediaType = firstShort ? 'short' : firstVideo ? 'video' : 'none';
-      const mediaId = String(firstShort?.id || firstVideo?.id || '').trim();
-      const mediaUrl = safeUri(firstShort?.videoUrl || firstVideo?.videoUrl);
-      const mediaThumb = firstShort
-        ? safeUri(firstShort?.thumbnailUrl) ||
-          safeUri(firstShort?.coverUrl) ||
-          profilePhoto
-        : safeUri(firstVideo?.thumbnailUrl) || profilePhoto;
-
-      const totalViews =
-        videos.reduce((sum, v) => sum + toNum(v?.viewCount), 0) +
-        shorts.reduce((sum, s) => sum + toNum(s?.viewCount), 0);
-
-      return {
-        id: ownerId,
-        name:
-          profile?.nickname ||
-          profile?.name ||
-          r?.nickname ||
-          r?.name ||
-          'Restaurant',
-        address: profile?.address || r?.address || 'Near you',
-        postcode: profile?.postcode || r?.postcode || '',
-        latitude: profile?.latitude ?? r?.latitude ?? null,
-        longitude: profile?.longitude ?? r?.longitude ?? null,
-        distanceKm: r?.distanceKm ?? null,
-        shortAddress: shortLocation(profile, profile?.address || r?.address),
-        rating:
-          profile?.averageRating ??
-          profile?.ratingAverage ??
-          profile?.rating ??
-          0,
-        reviewCount:
-          profile?.reviewCount ??
-          profile?.reviewsCount ??
-          profile?.ratingCount ??
-          0,
-        orderCount: toNum(r?.orderCount),
-        menu,
-        mediaType,
-        mediaId,
-        mediaUrl,
-        mediaThumb,
-        totalViews,
-      };
-    }),
+    base.map(r => enrichRestaurant(r, currentUserId)),
   );
   return enriched.filter(Boolean);
 }

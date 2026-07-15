@@ -13,7 +13,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import TermsAcceptRow from '../components/TermsAcceptRow';
 import {
   confirmPhoneOtp,
   normalizeUkPhoneInput,
@@ -31,7 +30,6 @@ const PhoneAuthScreen = () => {
   const [code, setCode] = useState('');
   const [step, setStep] = useState('phone');
   const [loading, setLoading] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const finishLogin = async data => {
     const userData = {
@@ -65,15 +63,14 @@ const PhoneAuthScreen = () => {
   };
 
   const handleSendCode = async () => {
-    if (!termsAccepted) {
-      Alert.alert('Terms required', 'Please accept the Terms of Use to continue.');
-      return;
-    }
     setLoading(true);
     try {
       await sendPhoneOtp(phone);
       setStep('code');
-      Alert.alert('Code sent', `Verification code sent to ${normalizeUkPhoneInput(phone)}`);
+      Alert.alert(
+        'Code sent',
+        `Verification code sent to ${normalizeUkPhoneInput(phone)}`,
+      );
     } catch (e) {
       Alert.alert('Error', e?.message || 'Could not send verification code');
     } finally {
@@ -118,13 +115,16 @@ const PhoneAuthScreen = () => {
               value={phone}
               onChangeText={setPhone}
             />
-            <TermsAcceptRow
-              accepted={termsAccepted}
-              onToggle={setTermsAccepted}
-              compact
-            />
-            <TouchableOpacity style={styles.btn} onPress={handleSendCode} disabled={loading}>
-              {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Send code</Text>}
+            <TouchableOpacity
+              style={styles.btn}
+              onPress={handleSendCode}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.btnText}>Send code</Text>
+              )}
             </TouchableOpacity>
           </>
         ) : (
@@ -137,10 +137,21 @@ const PhoneAuthScreen = () => {
               value={code}
               onChangeText={setCode}
             />
-            <TouchableOpacity style={styles.btn} onPress={handleVerify} disabled={loading}>
-              {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnText}>Verify & continue</Text>}
+            <TouchableOpacity
+              style={styles.btn}
+              onPress={handleVerify}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.btnText}>Verify & continue</Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setStep('phone')} style={styles.linkBtn}>
+            <TouchableOpacity
+              onPress={() => setStep('phone')}
+              style={styles.linkBtn}
+            >
               <Text style={styles.linkText}>Change number</Text>
             </TouchableOpacity>
           </>
@@ -151,9 +162,21 @@ const PhoneAuthScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.primaryOrange },
-  header: { flexDirection: 'row', alignItems: 'center', padding: SPACING.xl },
-  headerTitle: { color: COLORS.white, fontSize: FONTS.xl, fontWeight: FONTS.bold, marginLeft: SPACING.lg },
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.primaryOrange,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  headerTitle: {
+    color: COLORS.white,
+    fontSize: FONTS.xl,
+    fontWeight: FONTS.bold,
+    marginLeft: SPACING.lg,
+  },
   sheet: {
     flex: 1,
     backgroundColor: COLORS.white,
@@ -161,27 +184,39 @@ const styles = StyleSheet.create({
     borderTopRightRadius: BORDER_RADIUS.xxl,
     padding: SPACING.xl,
   },
-  info: { color: COLORS.textSecondary, marginBottom: SPACING.xl, lineHeight: 22 },
+  info: {
+    color: COLORS.gray,
+    marginBottom: SPACING.lg,
+    lineHeight: 20,
+  },
   input: {
     borderWidth: 1,
-    borderColor: '#E5E5E5',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 52,
+    borderColor: COLORS.lightGray,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     marginBottom: SPACING.lg,
-    fontSize: FONTS.lg,
+    fontSize: FONTS.md,
   },
   btn: {
-    backgroundColor: '#2B1A00',
-    height: 52,
-    borderRadius: 14,
+    backgroundColor: COLORS.primaryOrange,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: SPACING.lg,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: SPACING.md,
   },
-  btnText: { color: '#FFF', fontWeight: FONTS.bold, fontSize: FONTS.lg },
-  linkBtn: { marginTop: SPACING.lg, alignItems: 'center' },
-  linkText: { color: COLORS.primaryOrange, fontWeight: FONTS.bold },
+  btnText: {
+    color: COLORS.white,
+    fontWeight: FONTS.bold,
+    fontSize: FONTS.md,
+  },
+  linkBtn: {
+    marginTop: SPACING.lg,
+    alignItems: 'center',
+  },
+  linkText: {
+    color: COLORS.primaryOrange,
+    fontWeight: FONTS.medium,
+  },
 });
 
 export default PhoneAuthScreen;

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
   TouchableOpacity,
+  InteractionManager,
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
@@ -90,6 +91,7 @@ const BottomNaivgation = () => {
       return;
     }
     let cancelled = false;
+    let timer = null;
     const loadCounts = () => {
       getRestaurantOrderCounts(user.token)
         .then(counts => {
@@ -99,11 +101,16 @@ const BottomNaivgation = () => {
           if (!cancelled) setOrdersBadge(0);
         });
     };
-    loadCounts();
-    const timer = setInterval(loadCounts, 45000);
+    // Don't compete with home first paint.
+    const handle = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      loadCounts();
+      timer = setInterval(loadCounts, 45000);
+    });
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      handle?.cancel?.();
+      if (timer) clearInterval(timer);
     };
   }, [user?.token, user?.role]);
   const isAdmin =
@@ -141,14 +148,14 @@ const BottomNaivgation = () => {
   const getReturnToFromState = () => {
     const state = tabState;
     if (!state?.routes?.length) {
-      return { tab: 'Home1', screen: 'LandingScreen' };
+      return { tab: 'Home1', screen: 'HomeOneScreen' };
     }
     const currentRoute = state.routes[state.index || 0];
     const tabName = currentRoute?.name;
     if (!tabName || tabName === 'Create')
       return { tab: 'Home1', screen: 'HomeOneScreen' };
     const screenName = getFocusedRouteNameFromRoute(currentRoute);
-    const defaults = { Home1: 'LandingScreen', Library: 'LibraryScreen' };
+    const defaults = { Home1: 'HomeOneScreen', Library: 'LibraryScreen' };
     return {
       tab: tabName,
       screen: screenName || defaults[tabName] || 'HomeOneScreen',
@@ -206,8 +213,9 @@ const BottomNaivgation = () => {
             listeners={({ navigation: tabNav, route }) => ({
               tabPress: e => {
                 const routeName =
-                  getFocusedRouteNameFromRoute(route) ?? 'LandingScreen';
-                if (routeName === 'LandingScreen') return;
+                  getFocusedRouteNameFromRoute(route) ?? 'HomeOneScreen';
+                if (routeName === 'LandingScreen' || routeName === 'HomeOneScreen')
+                  return;
                 if (
                   routeName === 'HomeOneScreen' ||
                   routeName === 'HomeOneCuisineScreen'

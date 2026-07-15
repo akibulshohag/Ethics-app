@@ -1,5 +1,6 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useSelector } from 'react-redux';
 import LandingScreen from '../screens/LandingScreen';
 import HomeOneScreen from '../screens/HomeOneScreen';
 import ProductShortsVideo from '../screens/NewScreen/ProductShortsVideo';
@@ -30,10 +31,20 @@ import PrinterSettingsScreen from '../screens/PrinterSettingsScreen';
 const HomeOneStack = createStackNavigator();
 
 const HomeOneNavigation = () => {
+  const browseLocation = useSelector(state => state.app?.browseLocation);
+  const lat = browseLocation?.lat != null ? Number(browseLocation.lat) : null;
+  const lng = browseLocation?.lng != null ? Number(browseLocation.lng) : null;
+  const hasSavedBrowse = Number.isFinite(lat) && Number.isFinite(lng);
+  // Lock initial route once — changing it after setBrowseLocation was remounting
+  // the stack and could crash when leaving Landing for Home.
+  const initialRouteNameRef = React.useRef(
+    hasSavedBrowse ? 'HomeOneScreen' : 'LandingScreen',
+  );
+
   return (
     <HomeOneStack.Navigator
       screenOptions={{ headerShown: false }}
-      initialRouteName="LandingScreen"
+      initialRouteName={initialRouteNameRef.current}
     >
       <HomeOneStack.Screen name="LandingScreen" component={LandingScreen} />
       <HomeOneStack.Screen name="HomeOneScreen" component={HomeOneScreen} />

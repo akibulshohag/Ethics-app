@@ -11,7 +11,13 @@ export const fetchDiscoveryData = createAsyncThunk(
   'discovery/fetch',
   async ({ currentUserId, cacheKey, locationOpts }, { signal }) => {
     const [rows, apiPopular] = await Promise.all([
-      loadDiscoveryRestaurants({ currentUserId, limit: 40, locationOpts }),
+      // Lightweight list only — full N+1 enrich was freezing home cold start.
+      loadDiscoveryRestaurants({
+        currentUserId,
+        limit: 20,
+        locationOpts,
+        enrich: false,
+      }),
       fetchPopularMenuItemsFromApi(10),
     ]);
     if (signal.aborted) {

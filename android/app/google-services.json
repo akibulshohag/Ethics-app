@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "236298500212-9vab28bimn5j91r9u1llfk7v6drc3joo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.eatix.app",
+            "certificate_hash": "ceeac0cc464b2aa18a630bc545551865b8f3565e"
+          }
+        },
+        {
           "client_id": "236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

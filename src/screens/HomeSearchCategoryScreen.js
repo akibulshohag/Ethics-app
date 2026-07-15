@@ -28,6 +28,13 @@ import {
 import { matchRestaurantQuery } from '../services/discoveryService';
 import { openDiscoveryMedia } from '../utils/openDiscoveryMedia';
 import { safeImageUri } from '../utils/helper';
+import { shouldShowOrderBookButtons } from '../utils/contentVisibility';
+import RestaurantBookingModal from '../components/RestaurantBookingModal';
+import {
+  getChannelProfile,
+  subscribeToChannel,
+  unsubscribeFromChannel,
+} from '../services/channelService';
 import {
   resolveCategoryChipNavigation,
   resolveDiscoveryCategoryFromFilter,
@@ -114,6 +121,7 @@ const parseGlobalFeatured = raw => {
     id: ownerId,
     name: owner.nickname || owner.name || 'Featured',
     address: owner.address || campaign.areaName || '',
+    role: owner.role || video.user?.role || 'owner',
     mediaType: 'video',
     mediaId: String(video.id || ''),
     mediaUrl: video.videoUrl || '',
@@ -123,6 +131,17 @@ const parseGlobalFeatured = raw => {
     reviewCount: Number(owner.reviewCount ?? owner.ratingCount ?? 0),
   };
 };
+
+/** Same shape HomeOne uses for Order/Book/Subscribe visibility. */
+const rowAsFeedItem = row => ({
+  id: row?.mediaId || row?.id,
+  userId: row?.id,
+  creatorRole: row?.role || row?.creatorRole || 'owner',
+  user: {
+    id: row?.id,
+    role: row?.role || row?.creatorRole || 'owner',
+  },
+});
 
 const getProfileImageUri = u => {
   const firstPhoto =
@@ -197,6 +216,11 @@ export default function HomeSearchCategoryScreen() {
   const [searchQuery, setSearchQuery] = useState(
     String(route.params?.initialQuery || '').trim(),
   );
+  const [bookingModalVisible, setBookingModalVisible] = useState(false);
+  const [bookingTarget, setBookingTarget] = useState(null);
+  const [subscribeByOwnerId, setSubscribeByOwnerId] = useState({});
+  const [subscribeTogglingOwnerId, setSubscribeTogglingOwnerId] =
+    useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,6 +324,99 @@ export default function HomeSearchCategoryScreen() {
     },
     [navigation, user?.token, categoryLabel, categoryKey],
   );
+
+  const openRestaurantBook = useCallback(
+    row => {
+      if (!row?.id) return;
+      if (!user?.token || !user?.id) {
+        navigation.navigate('HomeSevenScreen');
+        return;
+      }
+      setBookingTarget({
+        ownerId: row.id,
+        ownerName: row.name || 'Restaurant',
+        address: row.address || '',
+      });
+      setBookingModalVisible(true);
+    },
+    [navigation, user?.token, user?.id],
+  );
+
+  const handleRowSubscribe = useCallback(
+    async row => {
+      const ownerId = row?.id;
+      if (!ownerId) return;
+      if (!user?.token || !user?.id) {
+        navigation.navigate('HomeSevenScreen');
+        return;
+      }
+      if (String(ownerId) === String(user.id)) return;
+      const ownerKey = String(ownerId);
+      if (subscribeTogglingOwnerId === ownerKey) return;
+      const wasSubscribed = !!subscribeByOwnerId[ownerKey];
+      setSubscribeTogglingOwnerId(ownerKey);
+      try {
+        if (wasSubscribed) {
+          await unsubscribeFromChannel(user.id, ownerId);
+        } else {
+          await subscribeToChannel(user.id, ownerId);
+        }
+        setSubscribeByOwnerId(prev => ({
+          ...prev,
+          [ownerKey]: !wasSubscribed,
+        }));
+      } catch (e) {
+        /* keep prior state */
+      } finally {
+        setSubscribeTogglingOwnerId(null);
+      }
+    },
+    [
+      user?.token,
+      user?.id,
+      navigation,
+      subscribeByOwnerId,
+      subscribeTogglingOwnerId,
+    ],
+  );
+
+  // Hydrate subscribe flags for visible owners (same idea as home trending).
+  useEffect(() => {
+    if (!user?.id) return;
+    const ids = [];
+    if (globalFeatured?.id) ids.push(String(globalFeatured.id));
+    trendingRows.slice(0, 12).forEach(r => {
+      if (r?.id) ids.push(String(r.id));
+    });
+    const unique = [...new Set(ids)].filter(
+      id =>
+        id &&
+        String(id) !== String(user.id) &&
+        !Object.prototype.hasOwnProperty.call(subscribeByOwnerId, id),
+    );
+    if (unique.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const oid of unique) {
+        try {
+          const p = await getChannelProfile(oid, user.id);
+          if (cancelled) return;
+          setSubscribeByOwnerId(prev => ({
+            ...prev,
+            [oid]: !!p?.isSubscribed,
+          }));
+        } catch (_) {
+          if (!cancelled) {
+            setSubscribeByOwnerId(prev => ({ ...prev, [oid]: false }));
+          }
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once per owner list snapshot
+  }, [user?.id, globalFeatured?.id, trendingRows]);
 
   const openMedia = useCallback(
     row => {
@@ -545,6 +662,10 @@ export default function HomeSearchCategoryScreen() {
                 showPlayIcon
                 onPress={() => onRowPress(globalFeatured)}
                 onOrderPress={() => openRestaurantOrder(globalFeatured)}
+                showOrderBook={shouldShowOrderBookButtons(
+                  rowAsFeedItem(globalFeatured),
+                  user?.id,
+                )}
               />
             </>
           ) : null}
@@ -577,23 +698,50 @@ export default function HomeSearchCategoryScreen() {
                   </Text>
                 </View>
               </View>
-              {trendingRows.map(row => (
-                <CategoryTrendingCard
-                  key={row.id}
-                  channelName={row.name}
-                  img={row.mediaThumb}
-                  views={rowViewsLabel(row)}
-                  locationLabel={rowLocationLabel(row)}
-                  rating={row.rating}
-                  showPlayIcon={rowHasVideo(row)}
-                  onPress={() => onRowPress(row)}
-                  onOrderPress={() => openRestaurantOrder(row)}
-                />
-              ))}
+              {trendingRows.map(row => {
+                const ownerKey = String(row?.id ?? '');
+                const showOrderBook = shouldShowOrderBookButtons(
+                  rowAsFeedItem(row),
+                  user?.id,
+                );
+                return (
+                  <CategoryTrendingCard
+                    key={row.id}
+                    channelName={row.name}
+                    img={row.mediaThumb}
+                    views={rowViewsLabel(row)}
+                    locationLabel={rowLocationLabel(row)}
+                    rating={row.rating}
+                    showPlayIcon={rowHasVideo(row)}
+                    onPress={() => onRowPress(row)}
+                    onOrderPress={() => openRestaurantOrder(row)}
+                    onBookPress={() => openRestaurantBook(row)}
+                    onSubscribePress={() => handleRowSubscribe(row)}
+                    subscribeBusy={
+                      !!ownerKey && subscribeTogglingOwnerId === ownerKey
+                    }
+                    isSubscribed={!!subscribeByOwnerId[ownerKey]}
+                    hideSubscribe={
+                      !!user?.id &&
+                      ownerKey &&
+                      String(user.id) === ownerKey
+                    }
+                    showOrderBook={showOrderBook}
+                  />
+                );
+              })}
             </>
           ) : null}
         </ScrollView>
       </View>
+      <RestaurantBookingModal
+        visible={bookingModalVisible}
+        onClose={() => setBookingModalVisible(false)}
+        ownerId={bookingTarget?.ownerId}
+        ownerName={bookingTarget?.ownerName}
+        currentUser={user}
+        defaultAddress={user?.address || bookingTarget?.address || ''}
+      />
     </SafeAreaView>
   );
 }

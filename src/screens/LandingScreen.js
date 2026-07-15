@@ -59,6 +59,7 @@ const LandingScreen = () => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
   const [addressText, setAddressText] = useState('');
   const [postcodeInput, setPostcodeInput] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState([]);
@@ -66,11 +67,41 @@ const LandingScreen = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [mapVisible, setMapVisible] = useState(false);
   const debounceTimerRef = useRef(null);
+  const autoEnteredHomeRef = useRef(false);
 
   useEffect(() => {
+    if (autoEnteredHomeRef.current) return;
     let cancelled = false;
+    const goHome = browse => {
+      if (cancelled || !browse) return;
+      const lat = Number(browse.lat);
+      const lng = Number(browse.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      autoEnteredHomeRef.current = true;
+      navigation.replace('HomeOneScreen', {
+        selectedLocation: { lat, lng },
+        addressText: browse.addressText || '',
+        postcode: browse.postcode || '',
+      });
+    };
+
     const checkSavedLocation = async () => {
       try {
+        // Fast path: Redux already has browse location after login / relaunch.
+        const reduxLat =
+          browseLocation?.lat != null ? Number(browseLocation.lat) : null;
+        const reduxLng =
+          browseLocation?.lng != null ? Number(browseLocation.lng) : null;
+        if (Number.isFinite(reduxLat) && Number.isFinite(reduxLng)) {
+          goHome({
+            lat: reduxLat,
+            lng: reduxLng,
+            postcode: browseLocation.postcode || '',
+            addressText: browseLocation.addressText || '',
+          });
+          return;
+        }
+
         const raw = await AsyncStorage.getItem(LOCATION_STORAGE_KEY);
         if (!raw) return;
         const saved = JSON.parse(raw);
@@ -102,17 +133,15 @@ const LandingScreen = () => {
           areaLabel: saved.areaLabel || browseAreaLabel(saved),
         };
         dispatch(setBrowseLocation(browse));
-        navigation.replace('HomeOneScreen', {
-          selectedLocation: { lat, lng },
-          addressText: browse.addressText,
-          postcode: browse.postcode,
-        });
+        goHome(browse);
       } catch (_) {}
     };
     checkSavedLocation();
     return () => {
       cancelled = true;
     };
+    // Only auto-enter home once on first mount / login — not when user returns to change location.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation, user?.id, dispatch]);
 
   useEffect(() => {
@@ -298,7 +327,7 @@ const LandingScreen = () => {
               </View>
 
               <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
-                Enter UK postcode
+                Enter UK Area
               </Text>
               <View style={styles.inputRow}>
                 <Icon

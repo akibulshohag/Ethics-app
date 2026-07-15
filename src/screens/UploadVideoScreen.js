@@ -11,8 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  NativeModules,
-  PermissionsAndroid,
   Modal,
   ScrollView,
 } from 'react-native';
@@ -33,40 +31,6 @@ const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - SPACING.lg * 3) / 2;
 const IN_APP_GALLERY_NUM_COLUMNS = 3;
 const IN_APP_TILE_SIZE = (width - SPACING.md * (IN_APP_GALLERY_NUM_COLUMNS + 1)) / IN_APP_GALLERY_NUM_COLUMNS;
-
-// Android 13+ granular media permissions so gallery picker sees all videos
-const ANDROID_MEDIA_PERMISSIONS =
-  Platform.OS === 'android' && Platform.Version >= 33
-    ? [
-        PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
-        PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-      ]
-    : [];
-
-const GALLERY_REFRESH_DELAY_MS = 1200;
-
-async function ensureMediaPermissionsAndRefreshGallery() {
-  if (Platform.OS !== 'android') return;
-  try {
-    if (ANDROID_MEDIA_PERMISSIONS.length > 0) {
-      const result = await PermissionsAndroid.requestMultiple(ANDROID_MEDIA_PERMISSIONS);
-      const allGranted = ANDROID_MEDIA_PERMISSIONS.every(
-        p => result[p] === PermissionsAndroid.RESULTS.GRANTED,
-      );
-      if (!allGranted) {
-        // User denied; picker may still work with limited access
-      }
-    }
-    const { MediaScannerRefresh } = NativeModules;
-    if (MediaScannerRefresh?.refreshVideoDirectories) {
-      await MediaScannerRefresh.refreshVideoDirectories();
-      // Give MediaStore time to update so the system picker shows latest videos
-      await new Promise(r => setTimeout(r, GALLERY_REFRESH_DELAY_MS));
-    }
-  } catch (e) {
-    // Non-fatal: open picker anyway
-  }
-}
 
 // Helper function to format duration from seconds to MM:SS
 const formatDuration = seconds => {
@@ -154,41 +118,7 @@ const UploadVideoScreen = () => {
       console.error('Subscription check error:', e);
     }
 
-    // Refresh MediaStore and ensure READ_MEDIA_VIDEO (Android)
-    if (Platform.OS === 'android') setRefreshingGallery(true);
-    try {
-      await ensureMediaPermissionsAndRefreshGallery();
-    } finally {
-      setRefreshingGallery(false);
-    }
-
-    // On Android: show in-app gallery (MediaStore, newest first) so latest videos always appear
-    if (Platform.OS === 'android') {
-      const { MediaScannerRefresh } = NativeModules;
-      if (MediaScannerRefresh?.getVideoList) {
-        setLoadingDeviceVideos(true);
-        try {
-          const list = await MediaScannerRefresh.getVideoList(80);
-          if (list && list.length > 0) {
-            setDeviceVideos(list);
-            setInAppGalleryVisible(true);
-            return;
-          }
-        } catch (e) {
-          console.warn('In-app gallery failed, using system picker:', e);
-        } finally {
-          setLoadingDeviceVideos(false);
-        }
-      }
-    }
-
-    // Android fallback: avoid limited system Photo Picker; open file browser instead
-    if (Platform.OS === 'android') {
-      await pickVideoFromFiles();
-      return;
-    }
-
-    // iOS fallback: use system image picker
+    // Use system Photo Picker / image picker (Play-compliant; no READ_MEDIA_*).
     const options = {
       mediaType: 'video',
       quality: 1,

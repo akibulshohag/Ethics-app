@@ -50,6 +50,22 @@ export const filterContentByViewerRole = (items, viewerRole, roleKey = 'role') =
     return canViewerSeeCreatorContent(viewerRole, creatorRole);
   });
 
+/** Normalize diner/user aliases to `user`. */
+export const normalizeCreatorRole = role => {
+  const r = String(role || '').toLowerCase().trim();
+  if (!r) return '';
+  if (
+    r === 'user' ||
+    r === 'dinner' ||
+    r === 'dynner' ||
+    r === 'diner' ||
+    r === 'customer'
+  ) {
+    return 'user';
+  }
+  return r;
+};
+
 /** Creator role from a feed / video / campaign item. */
 export const creatorRoleFromItem = item => {
   const raw =
@@ -57,8 +73,9 @@ export const creatorRoleFromItem = item => {
     item?.user?.role ||
     item?.owner?.role ||
     item?._campaignOwnerUser?.role ||
+    item?.role ||
     '';
-  return String(raw).toLowerCase();
+  return normalizeCreatorRole(raw);
 };
 
 export const isBusinessCreator = item => {

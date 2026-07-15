@@ -95,7 +95,7 @@ const UserProfileCard = ({
   showPromotionsButton = false,
   onPromotionsPress,
   subscribeInExplorerBar = false,
-  showBiometricLock = true,
+  showBiometricLock = false,
 }) => {
   const displayName =
     profile?.channelName || profile?.nickname || profile?.name || 'User';

@@ -49,7 +49,6 @@ import {
   loginWithGoogle,
   normalizeSocialAuthError,
 } from '../services/socialAuthService';
-import TermsAcceptRow from '../components/TermsAcceptRow';
 import { refreshUserSafetyAfterLogin } from '../services/userSafetyService';
 import { config } from '../../config';
 import signupFood from '../assets/img/signupfood.png';
@@ -81,7 +80,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   const [rememberMe, setRememberMe] = useState(true);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
   const [biometricReady, setBiometricReady] = useState(false);
   const [biometricType, setBiometryType] = useState(null);
   const [faceAvailable, setFaceAvailable] = useState(false);
@@ -264,14 +262,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
   };
 
   const handleSocialLogin = async provider => {
-    if (!termsAccepted) {
-      Alert.alert(
-        'Terms required',
-        'Please accept the Terms of Use and Community Guidelines to sign in with a new account.',
-      );
-      return;
-    }
-
     setLoading(true);
     try {
       const data =
@@ -516,11 +506,6 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
 
               <Text style={styles.orText}>Or</Text>
               <Text style={styles.signInWithText}>Sign in with</Text>
-              <TermsAcceptRow
-                accepted={termsAccepted}
-                onToggle={setTermsAccepted}
-                compact
-              />
               <View style={styles.socialPill}>
                 <TouchableOpacity
                   style={styles.socialIcon}

@@ -1,7 +1,24 @@
 import auth from '@react-native-firebase/auth';
+import { Platform } from 'react-native';
 import { phoneLogin } from './authService';
 
 let confirmationResult = null;
+let recaptchaFlowReady = false;
+
+/**
+ * Play Store builds use Google's App Signing key. When Play Integrity rejects
+ * the package/SHA-256 pair, Firebase throws auth/app-not-authorized.
+ * Force the reCAPTCHA verification path on Android so phone OTP still works.
+ */
+function ensureAndroidPhoneVerificationFlow() {
+  if (Platform.OS !== 'android' || recaptchaFlowReady) return;
+  try {
+    auth().settings.forceRecaptchaFlowForTesting = true;
+    recaptchaFlowReady = true;
+  } catch (e) {
+    console.warn('forceRecaptchaFlowForTesting unavailable', e);
+  }
+}
 
 export function normalizeUkPhoneInput(value) {
   const raw = String(value || '').trim().replace(/\s/g, '');
@@ -17,6 +34,7 @@ export async function sendPhoneOtp(phoneInput) {
   if (!phone || phone.length < 10) {
     throw new Error('Enter a valid mobile number');
   }
+  ensureAndroidPhoneVerificationFlow();
   confirmationResult = await auth().signInWithPhoneNumber(phone);
   return { phone };
 }
