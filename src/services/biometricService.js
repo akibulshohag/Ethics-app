@@ -156,7 +156,7 @@ export async function promptBiometric(
   if (persistMethod && method) {
     await saveBiometricPreferredMethod(method);
   }
-
+  //test
   try {
     if (isEatixBiometricNativeAvailable()) {
       if (promptMethod === 'face' && Platform.OS === 'android') {
