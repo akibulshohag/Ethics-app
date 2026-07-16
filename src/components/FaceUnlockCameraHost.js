@@ -17,34 +17,57 @@ const FaceUnlockCameraHost = () => {
   const [visible, setVisible] = useState(false);
   const [title, setTitle] = useState('Face unlock');
   const [subtitle, setSubtitle] = useState('Look at the front camera');
+  const [requireConfirm, setRequireConfirm] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const pendingRef = useRef(null);
 
   const dismiss = useCallback(() => {
     setVisible(false);
+    setCameraReady(false);
+    setRequireConfirm(false);
   }, []);
 
   const cancel = useCallback(() => {
     setVisible(false);
+    setCameraReady(false);
+    setRequireConfirm(false);
     pendingRef.current?.reject?.(new Error('Face unlock cancelled'));
     pendingRef.current = null;
   }, []);
 
   const finishOpen = useCallback(() => {
+    setCameraReady(true);
+    if (!pendingRef.current?.requireConfirm) {
+      pendingRef.current?.resolve?.();
+      pendingRef.current = null;
+    }
+  }, []);
+
+  const confirmFace = useCallback(() => {
     pendingRef.current?.resolve?.();
     pendingRef.current = null;
+    setVisible(false);
+    setCameraReady(false);
+    setRequireConfirm(false);
   }, []);
 
   useEffect(() => {
     registerFaceUnlockCameraHost({
-      open: ({ title: nextTitle, subtitle: nextSubtitle } = {}) =>
+      open: ({
+        title: nextTitle,
+        subtitle: nextSubtitle,
+        requireConfirm: needsConfirm = false,
+      } = {}) =>
         new Promise((resolve, reject) => {
           if (Platform.OS !== 'android') {
             resolve();
             return;
           }
-          pendingRef.current = { resolve, reject };
+          pendingRef.current = { resolve, reject, requireConfirm: !!needsConfirm };
           setTitle(nextTitle || 'Face unlock');
           setSubtitle(nextSubtitle || 'Look at the front camera');
+          setRequireConfirm(!!needsConfirm);
+          setCameraReady(false);
           setVisible(true);
         }),
       dismiss,
@@ -67,6 +90,15 @@ const FaceUnlockCameraHost = () => {
             isActive={visible}
             onReady={finishOpen}
           />
+          {requireConfirm ? (
+            <TouchableOpacity
+              style={[styles.confirmBtn, !cameraReady && styles.confirmBtnDisabled]}
+              onPress={confirmFace}
+              disabled={!cameraReady}
+            >
+              <Text style={styles.confirmText}>Confirm face</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.cancelBtn} onPress={cancel}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
@@ -109,8 +141,24 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginTop: 14,
   },
-  cancelBtn: {
+  confirmBtn: {
     marginTop: 14,
+    width: '100%',
+    backgroundColor: '#F5A623',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmBtnDisabled: {
+    opacity: 0.5,
+  },
+  confirmText: {
+    color: '#111827',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  cancelBtn: {
+    marginTop: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
   },

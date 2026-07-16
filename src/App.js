@@ -12,6 +12,7 @@ import Toast, { BaseToast } from 'react-native-toast-message';
 import colors from './constants/colors';
 import { Alert, AppState, BackHandler, View, StyleSheet, Linking, InteractionManager } from 'react-native';
 import FaceUnlockCameraHost from './components/FaceUnlockCameraHost';
+import BiometricMethodPickerHost from './components/BiometricMethodPickerHost';
 // import Loading from './components/Loading';
 import RootStack from './navigation/RootStack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -38,7 +39,12 @@ const DeferredFaceHost = () => {
     return () => handle?.cancel?.();
   }, []);
   if (!ready) return null;
-  return <FaceUnlockCameraHost />;
+  return (
+    <>
+      <FaceUnlockCameraHost />
+      <BiometricMethodPickerHost />
+    </>
+  );
 };
 
 const AppContent = () => {

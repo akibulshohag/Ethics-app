@@ -1,6 +1,9 @@
 package com.eatix.app
 
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -15,10 +18,17 @@ import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.bridge.WritableMap
 
 /**
- * Android biometric prompts with explicit face (camera) vs fingerprint support.
+ * Android biometric prompts with explicit face vs fingerprint support.
+ *
+ * Important: BiometricManager.BIOMETRIC_WEAK succeeds for fingerprint alone.
+ * Treating WEAK as "face available" makes Vivo/OPPO show face copy + fingerprint
+ * sensor hints together (no Samsung-style Fingerprint|Face switcher).
+ * We require FEATURE_FACE / FEATURE_FINGERPRINT for accurate availability.
  */
 class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
+
+  private val mainHandler = Handler(Looper.getMainLooper())
 
   override fun getName(): String = "EatixBiometric"
 
@@ -26,19 +36,33 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
   fun getCapabilities(promise: Promise) {
     try {
       val biometricManager = BiometricManager.from(reactContext)
+      val pm = reactContext.packageManager
+      val hasFingerprintHardware =
+        pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
+      val hasFaceHardware =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+          pm.hasSystemFeature(PackageManager.FEATURE_FACE)
+
       val strongStatus =
         biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
       val weakStatus =
         biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
 
-      val fingerprintAvailable = strongStatus == BiometricManager.BIOMETRIC_SUCCESS
-      val faceAvailable = weakStatus == BiometricManager.BIOMETRIC_SUCCESS
+      // Fingerprint ≈ Class 3 (STRONG). Require fingerprint hardware.
+      val fingerprintAvailable =
+        hasFingerprintHardware && strongStatus == BiometricManager.BIOMETRIC_SUCCESS
+      // Face unlock ≈ often WEAK. Require face hardware so FP-only phones
+      // (e.g. Vivo side-sensor) are not mislabeled as face-capable.
+      val faceAvailable =
+        hasFaceHardware && weakStatus == BiometricManager.BIOMETRIC_SUCCESS
       val available = fingerprintAvailable || faceAvailable
 
       val map: WritableMap = Arguments.createMap()
       map.putBoolean("available", available)
       map.putBoolean("fingerprintAvailable", fingerprintAvailable)
       map.putBoolean("faceAvailable", faceAvailable)
+      map.putBoolean("hasFingerprintHardware", hasFingerprintHardware)
+      map.putBoolean("hasFaceHardware", hasFaceHardware)
       map.putString(
         "biometryType",
         when {
@@ -95,17 +119,21 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
         val includesDeviceCredential =
           (authenticators and BiometricManager.Authenticators.DEVICE_CREDENTIAL) != 0
 
+        // One subtitle only — never stack face description on fingerprint prompts
+        // (Vivo OriginOS renders that as glowing / conflicting instructions).
+        val subtitle =
+          when (method) {
+            "face" -> "Confirm with face unlock"
+            "fingerprint" -> "Touch the fingerprint sensor to continue"
+            else -> promptMessage
+          }
+
         val builder =
           BiometricPrompt.PromptInfo.Builder()
             .setTitle(PROMPT_TITLE)
-            .setSubtitle(promptMessage)
+            .setSubtitle(subtitle)
             .setAllowedAuthenticators(authenticators)
 
-        if (method == "face") {
-          builder.setDescription("Use your enrolled face to continue")
-        }
-
-        // Android requires a non-empty negative button unless DEVICE_CREDENTIAL is allowed.
         if (!includesDeviceCredential) {
           val negativeText = cancelButtonText.trim().ifEmpty { "Cancel" }
           builder.setNegativeButtonText(negativeText)
@@ -139,12 +167,26 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
               }
 
               override fun onAuthenticationFailed() {
-                // User can retry; wait for another success/error callback.
+                // User can retry.
               }
             },
           )
 
-        biometricPrompt.authenticate(builder.build())
+        val promptInfo = builder.build()
+        mainHandler.postDelayed(
+          {
+            try {
+              if (activity.isFinishing || activity.isDestroyed) {
+                promise.reject("NO_ACTIVITY", "Activity not available")
+                return@postDelayed
+              }
+              biometricPrompt.authenticate(promptInfo)
+            } catch (e: Exception) {
+              promise.reject("PROMPT_ERROR", e)
+            }
+          },
+          PROMPT_SHOW_DELAY_MS,
+        )
       } catch (e: Exception) {
         promise.reject("PROMPT_ERROR", e)
       }
@@ -153,40 +195,55 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
 
   private fun resolveAuthenticators(method: String, allowDeviceCredentials: Boolean): Int {
     val biometricManager = BiometricManager.from(reactContext)
+    val pm = reactContext.packageManager
+    val hasFingerprintHardware =
+      pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
+    val hasFaceHardware =
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+        pm.hasSystemFeature(PackageManager.FEATURE_FACE)
 
     when (method) {
       "face" -> {
+        // System face unlock only (BIOMETRIC_WEAK). Real OS face match required.
+        if (!hasFaceHardware) return 0
         val weakStatus =
           biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-        if (weakStatus == BiometricManager.BIOMETRIC_SUCCESS) {
-          return BiometricManager.Authenticators.BIOMETRIC_WEAK
-        }
-        val strongStatus =
-          biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        return if (strongStatus == BiometricManager.BIOMETRIC_SUCCESS) {
-          BiometricManager.Authenticators.BIOMETRIC_STRONG
+        return if (weakStatus == BiometricManager.BIOMETRIC_SUCCESS) {
+          BiometricManager.Authenticators.BIOMETRIC_WEAK
         } else {
           0
         }
       }
       "fingerprint" -> {
+        if (!hasFingerprintHardware) return 0
         val strongStatus =
           biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         return if (strongStatus == BiometricManager.BIOMETRIC_SUCCESS) {
+          // STRONG only — never OR with WEAK (that brings face copy on Samsung
+          // and conflicting hints on Vivo).
           BiometricManager.Authenticators.BIOMETRIC_STRONG
         } else {
           0
         }
       }
       else -> {
-        var authenticators: Int =
-          BiometricManager.Authenticators.BIOMETRIC_STRONG or
-            BiometricManager.Authenticators.BIOMETRIC_WEAK
-        if (allowDeviceCredentials && Build.VERSION.SDK_INT > Build.VERSION_CODES.Q) {
-          authenticators = authenticators or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        // Prefer a single authenticator class when possible.
+        val strongStatus =
+          biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        if (hasFingerprintHardware && strongStatus == BiometricManager.BIOMETRIC_SUCCESS) {
+          var authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
+          if (allowDeviceCredentials && Build.VERSION.SDK_INT > Build.VERSION_CODES.Q) {
+            authenticators =
+              authenticators or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+          }
+          return authenticators
         }
-        val status = biometricManager.canAuthenticate(authenticators)
-        return if (status == BiometricManager.BIOMETRIC_SUCCESS) authenticators else 0
+        val weakStatus =
+          biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+        if (hasFaceHardware && weakStatus == BiometricManager.BIOMETRIC_SUCCESS) {
+          return BiometricManager.Authenticators.BIOMETRIC_WEAK
+        }
+        return 0
       }
     }
   }
@@ -194,5 +251,6 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
   private companion object {
     const val PROMPT_TITLE = "Eatwaze"
     const val MAX_PROMPT_MESSAGE_LENGTH = 60
+    const val PROMPT_SHOW_DELAY_MS = 180L
   }
 }

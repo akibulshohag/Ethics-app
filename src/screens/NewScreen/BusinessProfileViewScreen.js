@@ -25,6 +25,7 @@ import {
   Platform,
   Linking,
   Pressable,
+  BackHandler,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
@@ -1680,6 +1681,21 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     },
     [openOwnerMediaPlayer],
   );
+
+  useEffect(() => {
+    if (!editProfileVisible) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (savingProfile) return true;
+      setEditProfileVisible(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [editProfileVisible, savingProfile]);
+
+  const runAwayFromReactModal = useCallback(async work => {
+    await new Promise(resolve => setTimeout(resolve, 120));
+    await work();
+  }, []);
 
   const openEditProfile = () => {
     setEditName(
@@ -5099,17 +5115,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </SafeAreaView>
       </Modal>
 
-      <Modal
-        visible={editProfileVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => !savingProfile && setEditProfileVisible(false)}
-      >
+      {/* Edit Profile sheet — in-window overlay (not RN Modal) for OEM biometric UI. */}
+      {editProfileVisible ? (
+        <View style={styles.editModalRoot} pointerEvents="box-none">
         <KeyboardAvoidingView
           style={styles.editModalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.editModalBackdrop} />
+          <TouchableOpacity
+            style={styles.editModalBackdrop}
+            activeOpacity={1}
+            onPress={() => !savingProfile && setEditProfileVisible(false)}
+          />
           <View style={styles.editModalBox}>
             <View style={styles.editModalHeader}>
               <Text style={styles.editModalTitle}>Edit Profile</Text>
@@ -5237,7 +5254,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 </TouchableOpacity>
               </View>
               {isOwnProfile ? (
-                <BiometricLockToggle variant="modal" />
+                <BiometricLockToggle
+                  variant="modal"
+                  runAwayFromReactModal={runAwayFromReactModal}
+                />
               ) : null}
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Social links
@@ -5696,7 +5716,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      ) : null}
 
       <Modal
         visible={addRiderModalVisible}
@@ -6737,6 +6758,11 @@ const styles = StyleSheet.create({
     color: '#888',
     paddingVertical: 32,
     paddingHorizontal: 16,
+  },
+  editModalRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2000,
+    elevation: 2000,
   },
   editModalOverlay: {
     flex: 1,

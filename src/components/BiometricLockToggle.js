@@ -27,7 +27,17 @@ import {
 } from '../services/secureStorageService';
 import { COLORS } from '../constants/theme';
 
-const BiometricLockToggle = ({ variant = 'profile' }) => {
+/**
+ * @param {object} props
+ * @param {'profile'|'embedded'|'modal'} [props.variant]
+ * @param {(work: () => Promise<void>) => Promise<void>} [props.runAwayFromReactModal]
+ *   Android: host should dismiss any RN Modal before running `work` (BiometricPrompt),
+ *   then restore. Prevents glowing/doubled text on Vivo/OPPO over Edit Profile Modal.
+ */
+const BiometricLockToggle = ({
+  variant = 'profile',
+  runAwayFromReactModal,
+} = {}) => {
   const dispatch = useDispatch();
   const user = useSelector(state => state.app?.user);
   const [loading, setLoading] = useState(false);
@@ -37,6 +47,20 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
   const [fingerprintAvailable, setFingerprintAvailable] = useState(false);
   const [preferredMethod, setPreferredMethod] = useState(null);
   const enabled = !!user?.fingerprintEnabled;
+
+  const runBiometricWork = useCallback(
+    async work => {
+      if (
+        Platform.OS === 'android' &&
+        typeof runAwayFromReactModal === 'function'
+      ) {
+        await runAwayFromReactModal(work);
+        return;
+      }
+      await work();
+    },
+    [runAwayFromReactModal],
+  );
 
   const refreshState = useCallback(async () => {
     const support = await getBiometricSupport();
@@ -76,7 +100,7 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
 
       if (nextValue) {
         let method = preferredMethod;
-        if (Platform.OS === 'android' && faceAvailable && fingerprintAvailable && !method) {
+        if (Platform.OS === 'android' && faceAvailable && fingerprintAvailable) {
           method = await chooseBiometricMethodOnEnable({
             faceAvailable,
             fingerprintAvailable,
@@ -89,9 +113,14 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
         }
         setLoading(true);
         try {
-          await updateFingerprintEnabled(user, true, { method });
-          dispatch(appSetUser({ ...user, fingerprintEnabled: true }));
-          await syncBiometricSessionForUser({ ...user, fingerprintEnabled: true });
+          await runBiometricWork(async () => {
+            await updateFingerprintEnabled(user, true, { method });
+            dispatch(appSetUser({ ...user, fingerprintEnabled: true }));
+            await syncBiometricSessionForUser({
+              ...user,
+              fingerprintEnabled: true,
+            });
+          });
           setPreferredMethod(method || preferredMethod);
         } catch (e) {
           Alert.alert('Biometric login', e?.message || 'Could not update biometric settings');
@@ -119,6 +148,7 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
       fingerprintAvailable,
       loading,
       preferredMethod,
+      runBiometricWork,
       user,
     ],
   );
@@ -128,7 +158,12 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
       if (!enabled || loading) return;
       setLoading(true);
       try {
-        await promptBiometric('Confirm biometric login', { method, persistMethod: true });
+        await runBiometricWork(async () => {
+          await promptBiometric('Confirm biometric login', {
+            method,
+            persistMethod: true,
+          });
+        });
         setPreferredMethod(method);
       } catch (e) {
         Alert.alert('Biometric login', e?.message || 'Could not verify biometrics');
@@ -136,7 +171,7 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
         setLoading(false);
       }
     },
-    [enabled, loading],
+    [enabled, loading, runBiometricWork],
   );
 
   const title = 'Fingerprint & Face login';
@@ -168,28 +203,50 @@ const BiometricLockToggle = ({ variant = 'profile' }) => {
 
   const methodPicker =
     enabled && Platform.OS === 'android' && faceAvailable && fingerprintAvailable ? (
-      <View style={styles.methodRow}>
+      <View style={styles.segmentWrap}>
         <TouchableOpacity
           style={[
-            styles.methodBtn,
-            preferredMethod === 'face' && styles.methodBtnActive,
-          ]}
-          onPress={() => runQuickUnlock('face')}
-          disabled={loading}
-        >
-          <Icon name="face-recognition" size={16} color={COLORS.primaryOrange} />
-          <Text style={styles.methodBtnText}>Face (camera)</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.methodBtn,
-            preferredMethod === 'fingerprint' && styles.methodBtnActive,
+            styles.segmentBtn,
+            preferredMethod === 'fingerprint' && styles.segmentBtnActive,
           ]}
           onPress={() => runQuickUnlock('fingerprint')}
           disabled={loading}
         >
-          <Icon name="fingerprint" size={16} color={COLORS.primaryOrange} />
-          <Text style={styles.methodBtnText}>Fingerprint</Text>
+          <Icon
+            name="fingerprint"
+            size={15}
+            color={preferredMethod === 'fingerprint' ? '#0B1220' : COLORS.primaryOrange}
+          />
+          <Text
+            style={[
+              styles.segmentBtnText,
+              preferredMethod === 'fingerprint' && styles.segmentBtnTextActive,
+            ]}
+          >
+            Fingerprint
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.segmentBtn,
+            preferredMethod === 'face' && styles.segmentBtnActive,
+          ]}
+          onPress={() => runQuickUnlock('face')}
+          disabled={loading}
+        >
+          <Icon
+            name="face-recognition"
+            size={15}
+            color={preferredMethod === 'face' ? '#0B1220' : COLORS.primaryOrange}
+          />
+          <Text
+            style={[
+              styles.segmentBtnText,
+              preferredMethod === 'face' && styles.segmentBtnTextActive,
+            ]}
+          >
+            Face
+          </Text>
         </TouchableOpacity>
       </View>
     ) : null;
@@ -387,6 +444,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#92400E',
     fontWeight: '600',
+  },
+  segmentWrap: {
+    flexDirection: 'row',
+    marginTop: 8,
+    backgroundColor: '#1F2937',
+    borderRadius: 10,
+    padding: 3,
+    gap: 3,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  segmentBtnActive: {
+    backgroundColor: '#5EEAD4',
+  },
+  segmentBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FDE68A',
+  },
+  segmentBtnTextActive: {
+    color: '#0B1220',
   },
 });
 

@@ -1,16 +1,17 @@
 {
   "name": "eatwaze",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "android:clean": "cd android && ./gradlew clean && cd .. && react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
     "generate-icons": "bash scripts/generate-app-icons.sh",
-    "apk:prod": "cd android && ./gradlew assembleRelease && cd ..",
-    "aab:prod": "cd android && ./gradlew bundleRelease && cd ..",
+    "apk:prod": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output /tmp/eatwaze-index.android.bundle --assets-dest android/app/src/main/res/ && cp /tmp/eatwaze-index.android.bundle android/app/src/main/assets/index.android.bundle && cd android && ./gradlew clean assembleRelease && cd .. && rm -f android/app/src/main/assets/index.android.bundle /tmp/eatwaze-index.android.bundle",
+    "aab:prod": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output /tmp/eatwaze-index.android.bundle --assets-dest android/app/src/main/res/ && cp /tmp/eatwaze-index.android.bundle android/app/src/main/assets/index.android.bundle && cd android && ./gradlew clean bundleRelease && cd .. && rm -f android/app/src/main/assets/index.android.bundle /tmp/eatwaze-index.android.bundle",
     "android:release": "npm run aab:prod"
   },
   "dependencies": {

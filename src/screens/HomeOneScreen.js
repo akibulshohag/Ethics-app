@@ -851,6 +851,7 @@ const HomeOneScreen = () => {
   const feedLoadGenRef = useRef(0);
   const feedInFlightKeyRef = useRef(null);
   const feedInFlightPromiseRef = useRef(null);
+  const lastPaintedFeedCacheKeyRef = useRef(null);
   const loadFeaturedAndFeedRef = useRef(null);
   const loadContinueWatchingRef = useRef(null);
   const blockedUserIdsRef = useRef(blockedUserIds);
@@ -1454,11 +1455,15 @@ const HomeOneScreen = () => {
   );
 
   useEffect(() => {
-    setFeedVideos(prev => withoutBlocked(prev));
-    setFeedShorts(prev => withoutBlocked(prev));
-    setPopularShorts(prev => withoutBlocked(prev));
-    setNewShorts(prev => withoutBlocked(prev));
-  }, [withoutBlocked]);
+    if (!blockedUserIds?.length) return undefined;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setFeedVideos(prev => withoutBlocked(prev));
+      setFeedShorts(prev => withoutBlocked(prev));
+      setPopularShorts(prev => withoutBlocked(prev));
+      setNewShorts(prev => withoutBlocked(prev));
+    });
+    return () => handle?.cancel?.();
+  }, [withoutBlocked, blockedUserIds?.length]);
 
   const loadFeaturedAndFeed = useCallback(async () => {
     const voBrowse = resolveViewerLocationOpts(selectedLocation, user);
@@ -1467,15 +1472,21 @@ const HomeOneScreen = () => {
     const feedCacheKey = buildDiscoveryCacheKey(voBrowse, user?.id);
     const searchTermEarly = searchDebounced?.trim() || undefined;
     const cached = homeFeedCacheRef.current || {};
+    const cachedKey = String(cached.cacheKey || '');
+    const cachedLoc = cachedKey.split('_').slice(0, 2).join('_');
+    const feedLoc = feedCacheKey.split('_').slice(0, 2).join('_');
+    // After login, userId changes the cache key — still reuse same-location feed
+    // for instant first paint, then refresh in background.
     const hasHomeCacheData =
-      !!cached.cacheKey &&
-      cached.cacheKey === feedCacheKey &&
+      !!cachedKey &&
+      cachedLoc === feedLoc &&
       (cached.feedVideos?.length > 0 ||
         cached.feedShorts?.length > 0 ||
         cached.popularShorts?.length > 0);
     const homeCacheFresh =
       !searchTermEarly &&
       hasHomeCacheData &&
+      cached.cacheKey === feedCacheKey &&
       isHomeFeedCacheFresh(cached.fetchedAt, cached.cacheKey, feedCacheKey);
 
     if (!searchTermEarly && hasHomeCacheData) {
@@ -1724,210 +1735,7 @@ const HomeOneScreen = () => {
         dropBlocked(mappedPopularShorts.filter(matchesSearchEarly)),
       );
       setNewShorts(dropBlocked(mappedNewestShorts.filter(matchesSearchEarly)));
-      setFeedLoading(false);
-      // Prefetch first screen images so scroll feels instant.
-      try {
-        [pickedFeatured, pickedSponsored, ...mappedVideos, ...mappedShorts]
-          .slice(0, 8)
-          .forEach(item => {
-            const uri =
-              item?.img ||
-              item?.video?.thumbnailUrl ||
-              item?.thumbnailUrl ||
-              '';
-            if (uri && /^https?:\/\//i.test(String(uri))) {
-              Image.prefetch(String(uri)).catch(() => {});
-            }
-          });
-      } catch (_) {}
-      const allMappedMedia = [
-        ...mappedVideos,
-        ...mappedShorts,
-        ...mappedPopularShorts,
-        ...mappedNewestShorts,
-      ];
-      const uniqueOwnerIds = Array.from(
-        new Set(
-          allMappedMedia
-            .map(m => m?.userId ?? m?.user?.id)
-            .filter(Boolean)
-            .map(String),
-        ),
-      );
-      const topRestaurantOwnerIds = (topRes?.restaurants || [])
-        .map(r => r?.id)
-        .filter(Boolean)
-        .map(String);
-      const promoOwnerIds = [pickedFeatured, pickedSponsored]
-        .map(
-          item =>
-            item?.userId ??
-            item?.user?.id ??
-            item?.video?.userId ??
-            item?.video?.user?.id,
-        )
-        .filter(Boolean)
-        .map(String);
-      const allOwnerIdsForMenus = Array.from(
-        new Set([
-          ...uniqueOwnerIds,
-          ...topRestaurantOwnerIds,
-          ...promoOwnerIds,
-        ]),
-      ).slice(0, 8);
-      if (allOwnerIdsForMenus.length > 0) {
-        await Promise.allSettled(
-          allOwnerIdsForMenus.map(async oid => {
-            try {
-              const res = await getMenuByUserId(oid);
-              const rows = Array.isArray(res?.menu)
-                ? res.menu.map(m => ({
-                    id: m?.id,
-                    itemName: String(m?.itemName || '').trim(),
-                    description: String(m?.description || '').trim(),
-                    categoryName: readCuisineText(
-                      m?.category?.name ?? m?.categoryName ?? m?.category,
-                    ).trim(),
-                    tags: Array.isArray(m?.tags) ? m.tags : [],
-                  }))
-                : [];
-              const categories = Array.isArray(res?.categories)
-                ? res.categories
-                    .map(c =>
-                      readCuisineText(
-                        c?.name ?? c?.label ?? c?.title ?? c,
-                      ).trim(),
-                    )
-                    .filter(Boolean)
-                : [];
-              ownerMenuSearchCacheRef.current[oid] = rows;
-              ownerCategoryCacheRef.current[oid] = categories;
-            } catch (_) {
-              ownerMenuSearchCacheRef.current[oid] = [];
-              ownerCategoryCacheRef.current[oid] = [];
-            }
-          }),
-        );
-      }
-      const menuCacheSnapshot = {};
-      allOwnerIdsForMenus.forEach(oid => {
-        menuCacheSnapshot[oid] =
-          ownerMenuSearchCacheRef.current[String(oid)] || [];
-      });
-      const discoveryOptions =
-        buildDiscoveryCategoriesFromMenuCaches(menuCacheSnapshot);
-      const discoveryKeys = new Set(discoveryOptions.map(o => o.key));
-      const rawCuisineSet = new Set();
-      allOwnerIdsForMenus.forEach(oid => {
-        const rows = ownerMenuSearchCacheRef.current[String(oid)] || [];
-        const categories = ownerCategoryCacheRef.current[String(oid)] || [];
-        categories.forEach(cat => {
-          const c = normalizeCuisine(cat);
-          if (!isValidCuisineKey(c)) return;
-          if (!discoveryKeys.has(c) && !resolveDiscoveryCategoryFromFilter(c)) {
-            rawCuisineSet.add(c);
-          }
-        });
-        rows.forEach(m => {
-          const c = normalizeCuisine(m?.categoryName);
-          if (!isValidCuisineKey(c)) return;
-          if (!discoveryKeys.has(c) && !resolveDiscoveryCategoryFromFilter(c)) {
-            rawCuisineSet.add(c);
-          }
-        });
-      });
-      const rawOptions = Array.from(rawCuisineSet)
-        .map(key => ({
-          key,
-          label: cuisineLabelFromKey(key) || 'Menu',
-          icon: cuisineIconFromKey(key),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label));
-      const dynamicOptions = [...discoveryOptions, ...rawOptions];
-      setCuisineOptions(dynamicOptions);
-      const withMenuSearchMeta = item => {
-        const ownerId = item?.userId ?? item?.user?.id;
-        if (!ownerId) return item;
-        const menuRows = ownerMenuSearchCacheRef.current[String(ownerId)] || [];
-        if (!Array.isArray(menuRows) || menuRows.length === 0) return item;
-        const menuBlob = menuRows
-          .map(m =>
-            [
-              m?.itemName,
-              m?.description,
-              ...(Array.isArray(m?.tags) ? m.tags : []),
-            ]
-              .filter(Boolean)
-              .join(' '),
-          )
-          .join(' ')
-          .toLowerCase();
-        const matchedMenuItems =
-          q && q.length > 0
-            ? menuRows
-                .filter(m =>
-                  [
-                    m?.itemName,
-                    m?.description,
-                    ...(Array.isArray(m?.tags) ? m.tags : []),
-                  ]
-                    .filter(Boolean)
-                    .join(' ')
-                    .toLowerCase()
-                    .includes(q),
-                )
-                .slice(0, 8)
-            : [];
-        return {
-          ...item,
-          _menuSearchBlob: menuBlob,
-          _menuTagsLower: buildMenuCuisineTags(
-            menuRows,
-            ownerCategoryCacheRef.current[String(ownerId)] || [],
-          ),
-          _matchedMenuItems: matchedMenuItems,
-          _menuSearchKeyword: q,
-        };
-      };
-      const mappedVideosWithMenu = mappedVideos
-        .filter(onlyPublishedNow)
-        .map(withMenuSearchMeta);
-      const mappedShortsWithMenu = mappedShorts
-        .filter(onlyPublishedNow)
-        .map(withMenuSearchMeta);
-      const mappedPopularShortsWithMenu = mappedPopularShorts
-        .filter(onlyPublishedNow)
-        .map(withMenuSearchMeta);
-      const mappedNewestShortsWithMenu = mappedNewestShorts
-        .filter(onlyPublishedNow)
-        .map(withMenuSearchMeta);
-      const matchesSearch = item => {
-        if (!q) return true;
-        const haystack = [
-          item?.title,
-          item?.description,
-          item?.channelName,
-          item?.location,
-          item?.creatorAddress,
-          item?.user?.nickname,
-          item?.user?.name,
-          item?.user?.address,
-          item?._menuSearchBlob,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(q);
-      };
-      setFeedVideos(dropBlocked(mappedVideosWithMenu.filter(matchesSearch)));
-      setFeedShorts(dropBlocked(mappedShortsWithMenu.filter(matchesSearch)));
-      setPopularShorts(
-        dropBlocked(mappedPopularShortsWithMenu.filter(matchesSearch)),
-      );
-      setNewShorts(
-        dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)),
-      );
-      const topRestaurants = (topRes?.restaurants || []).map(r => {
+      const topRestaurantsQuick = (topRes?.restaurants || []).map(r => {
         const firstPhoto =
           Array.isArray(r?.photos) && r.photos.length > 0 ? r.photos[0] : null;
         const photo =
@@ -1968,22 +1776,36 @@ const HomeOneScreen = () => {
             'https://images.unsplash.com/photo-1552566626-52f8b828add9',
           orderCount: oc,
           views: `${oc} order${oc === 1 ? '' : 's'}`,
-          _menuTagsLower: buildMenuCuisineTags(
-            ownerMenuSearchCacheRef.current[String(r?.id)] || [],
-            ownerCategoryCacheRef.current[String(r?.id)] || [],
-          ),
+          _menuTagsLower: [],
         };
       });
-      setMostOrderedRestaurants(topRestaurants);
+      setMostOrderedRestaurants(topRestaurantsQuick);
+      setFeedLoading(false);
+      lastPaintedFeedCacheKeyRef.current = feedCacheKey;
+      // Prefetch first screen images so scroll feels instant.
+      try {
+        [pickedFeatured, pickedSponsored, ...mappedVideos, ...mappedShorts]
+          .slice(0, 8)
+          .forEach(item => {
+            const uri =
+              item?.img ||
+              item?.video?.thumbnailUrl ||
+              item?.thumbnailUrl ||
+              '';
+            if (uri && /^https?:\/\//i.test(String(uri))) {
+              Image.prefetch(String(uri)).catch(() => {});
+            }
+          });
+      } catch (_) {}
       dispatch(
         setHomeFeedCache({
           cacheKey: feedCacheKey,
-          feedVideos: mappedVideosWithMenu.filter(matchesSearch),
-          feedShorts: mappedShortsWithMenu.filter(matchesSearch),
-          popularShorts: mappedPopularShortsWithMenu.filter(matchesSearch),
-          newShorts: mappedNewestShortsWithMenu.filter(matchesSearch),
-          mostOrderedRestaurants: topRestaurants,
-          cuisineOptions: dynamicOptions,
+          feedVideos: mappedVideos.filter(matchesSearchEarly),
+          feedShorts: mappedShorts.filter(matchesSearchEarly),
+          popularShorts: mappedPopularShorts.filter(matchesSearchEarly),
+          newShorts: mappedNewestShorts.filter(matchesSearchEarly),
+          mostOrderedRestaurants: topRestaurantsQuick,
+          cuisineOptions: [],
           featuredVideo: pickedFeatured,
           sponsoredVideo: pickedSponsored,
         }),
@@ -2000,6 +1822,241 @@ const HomeOneScreen = () => {
             }),
           );
         }, 1500);
+      });
+
+      // Menus / cuisine chips — NOT on first-paint critical path (was freezing
+      // taps for 30s+ on slow networks after login).
+      const allMappedMedia = [
+        ...mappedVideos,
+        ...mappedShorts,
+        ...mappedPopularShorts,
+        ...mappedNewestShorts,
+      ];
+      const uniqueOwnerIds = Array.from(
+        new Set(
+          allMappedMedia
+            .map(m => m?.userId ?? m?.user?.id)
+            .filter(Boolean)
+            .map(String),
+        ),
+      );
+      const topRestaurantOwnerIds = (topRes?.restaurants || [])
+        .map(r => r?.id)
+        .filter(Boolean)
+        .map(String);
+      const promoOwnerIds = [pickedFeatured, pickedSponsored]
+        .map(
+          item =>
+            item?.userId ??
+            item?.user?.id ??
+            item?.video?.userId ??
+            item?.video?.user?.id,
+        )
+        .filter(Boolean)
+        .map(String);
+      const allOwnerIdsForMenus = Array.from(
+        new Set([
+          ...uniqueOwnerIds,
+          ...topRestaurantOwnerIds,
+          ...promoOwnerIds,
+        ]),
+      ).slice(0, 8);
+
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(async () => {
+          if (lastPaintedFeedCacheKeyRef.current !== feedCacheKey) {
+            return;
+          }
+          try {
+            if (allOwnerIdsForMenus.length > 0) {
+              await Promise.allSettled(
+                allOwnerIdsForMenus.map(async oid => {
+                  try {
+                    const res = await getMenuByUserId(oid);
+                    const rows = Array.isArray(res?.menu)
+                      ? res.menu.map(m => ({
+                          id: m?.id,
+                          itemName: String(m?.itemName || '').trim(),
+                          description: String(m?.description || '').trim(),
+                          categoryName: readCuisineText(
+                            m?.category?.name ?? m?.categoryName ?? m?.category,
+                          ).trim(),
+                          tags: Array.isArray(m?.tags) ? m.tags : [],
+                        }))
+                      : [];
+                    const categories = Array.isArray(res?.categories)
+                      ? res.categories
+                          .map(c =>
+                            readCuisineText(
+                              c?.name ?? c?.label ?? c?.title ?? c,
+                            ).trim(),
+                          )
+                          .filter(Boolean)
+                      : [];
+                    ownerMenuSearchCacheRef.current[oid] = rows;
+                    ownerCategoryCacheRef.current[oid] = categories;
+                  } catch (_) {
+                    ownerMenuSearchCacheRef.current[oid] = [];
+                    ownerCategoryCacheRef.current[oid] = [];
+                  }
+                }),
+              );
+            }
+            const menuCacheSnapshot = {};
+            allOwnerIdsForMenus.forEach(oid => {
+              menuCacheSnapshot[oid] =
+                ownerMenuSearchCacheRef.current[String(oid)] || [];
+            });
+            const discoveryOptions =
+              buildDiscoveryCategoriesFromMenuCaches(menuCacheSnapshot);
+            const discoveryKeys = new Set(discoveryOptions.map(o => o.key));
+            const rawCuisineSet = new Set();
+            allOwnerIdsForMenus.forEach(oid => {
+              const rows = ownerMenuSearchCacheRef.current[String(oid)] || [];
+              const categories = ownerCategoryCacheRef.current[String(oid)] || [];
+              categories.forEach(cat => {
+                const c = normalizeCuisine(cat);
+                if (!isValidCuisineKey(c)) return;
+                if (
+                  !discoveryKeys.has(c) &&
+                  !resolveDiscoveryCategoryFromFilter(c)
+                ) {
+                  rawCuisineSet.add(c);
+                }
+              });
+              rows.forEach(m => {
+                const c = normalizeCuisine(m?.categoryName);
+                if (!isValidCuisineKey(c)) return;
+                if (
+                  !discoveryKeys.has(c) &&
+                  !resolveDiscoveryCategoryFromFilter(c)
+                ) {
+                  rawCuisineSet.add(c);
+                }
+              });
+            });
+            const rawOptions = Array.from(rawCuisineSet)
+              .map(key => ({
+                key,
+                label: cuisineLabelFromKey(key) || 'Menu',
+                icon: cuisineIconFromKey(key),
+              }))
+              .sort((a, b) => a.label.localeCompare(b.label));
+            const dynamicOptions = [...discoveryOptions, ...rawOptions];
+            if (lastPaintedFeedCacheKeyRef.current !== feedCacheKey) {
+              return;
+            }
+            setCuisineOptions(dynamicOptions);
+            const withMenuSearchMeta = item => {
+              const ownerId = item?.userId ?? item?.user?.id;
+              if (!ownerId) return item;
+              const menuRows =
+                ownerMenuSearchCacheRef.current[String(ownerId)] || [];
+              if (!Array.isArray(menuRows) || menuRows.length === 0) return item;
+              const menuBlob = menuRows
+                .map(m =>
+                  [
+                    m?.itemName,
+                    m?.description,
+                    ...(Array.isArray(m?.tags) ? m.tags : []),
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
+                )
+                .join(' ')
+                .toLowerCase();
+              const matchedMenuItems =
+                q && q.length > 0
+                  ? menuRows
+                      .filter(m =>
+                        [
+                          m?.itemName,
+                          m?.description,
+                          ...(Array.isArray(m?.tags) ? m.tags : []),
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
+                          .toLowerCase()
+                          .includes(q),
+                      )
+                      .slice(0, 8)
+                  : [];
+              return {
+                ...item,
+                _menuSearchBlob: menuBlob,
+                _menuTagsLower: buildMenuCuisineTags(
+                  menuRows,
+                  ownerCategoryCacheRef.current[String(ownerId)] || [],
+                ),
+                _matchedMenuItems: matchedMenuItems,
+                _menuSearchKeyword: q,
+              };
+            };
+            const mappedVideosWithMenu = mappedVideos
+              .filter(onlyPublishedNow)
+              .map(withMenuSearchMeta);
+            const mappedShortsWithMenu = mappedShorts
+              .filter(onlyPublishedNow)
+              .map(withMenuSearchMeta);
+            const mappedPopularShortsWithMenu = mappedPopularShorts
+              .filter(onlyPublishedNow)
+              .map(withMenuSearchMeta);
+            const mappedNewestShortsWithMenu = mappedNewestShorts
+              .filter(onlyPublishedNow)
+              .map(withMenuSearchMeta);
+            const matchesSearch = item => {
+              if (!q) return true;
+              const haystack = [
+                item?.title,
+                item?.description,
+                item?.channelName,
+                item?.location,
+                item?.creatorAddress,
+                item?.user?.nickname,
+                item?.user?.name,
+                item?.user?.address,
+                item?._menuSearchBlob,
+              ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+              return haystack.includes(q);
+            };
+            setFeedVideos(
+              dropBlocked(mappedVideosWithMenu.filter(matchesSearch)),
+            );
+            setFeedShorts(
+              dropBlocked(mappedShortsWithMenu.filter(matchesSearch)),
+            );
+            setPopularShorts(
+              dropBlocked(mappedPopularShortsWithMenu.filter(matchesSearch)),
+            );
+            setNewShorts(
+              dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)),
+            );
+            const topRestaurants = topRestaurantsQuick.map(r => ({
+              ...r,
+              _menuTagsLower: buildMenuCuisineTags(
+                ownerMenuSearchCacheRef.current[String(r?.id)] || [],
+                ownerCategoryCacheRef.current[String(r?.id)] || [],
+              ),
+            }));
+            setMostOrderedRestaurants(topRestaurants);
+            dispatch(
+              setHomeFeedCache({
+                cacheKey: feedCacheKey,
+                feedVideos: mappedVideosWithMenu.filter(matchesSearch),
+                feedShorts: mappedShortsWithMenu.filter(matchesSearch),
+                popularShorts: mappedPopularShortsWithMenu.filter(matchesSearch),
+                newShorts: mappedNewestShortsWithMenu.filter(matchesSearch),
+                mostOrderedRestaurants: topRestaurants,
+                cuisineOptions: dynamicOptions,
+                featuredVideo: pickedFeatured,
+                sponsoredVideo: pickedSponsored,
+              }),
+            );
+          } catch (_) {}
+        }, 50);
       });
     } catch (e) {
       console.error('HomeOne load feed:', e);
@@ -2142,37 +2199,40 @@ const HomeOneScreen = () => {
       featuredVideo?.video?.user?.id;
     if (ownerId == null || String(ownerId).trim() === '') return;
     let cancelled = false;
-    getChannelProfile(String(ownerId), user?.id)
-      .then(p => {
-        if (cancelled) return;
-        const avgRaw =
-          p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
-        const countRaw =
-          p?.reviewCount ??
-          p?.reviewsCount ??
-          p?.totalReviews ??
-          p?.ratingCount;
-        const avg = Number(avgRaw);
-        const count = Number(countRaw);
-        setFeaturedChannelMeta({
-          rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
-          reviewCount: Number.isFinite(count)
-            ? Math.max(0, Math.floor(count))
-            : 0,
-          phone:
-            p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
-          email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
-          address: p?.address ?? null,
-          channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
-          latitude: p?.latitude ?? p?.lat ?? null,
-          longitude: p?.longitude ?? p?.lng ?? null,
+    const handle = InteractionManager.runAfterInteractions(() => {
+      getChannelProfile(String(ownerId), user?.id)
+        .then(p => {
+          if (cancelled) return;
+          const avgRaw =
+            p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
+          const countRaw =
+            p?.reviewCount ??
+            p?.reviewsCount ??
+            p?.totalReviews ??
+            p?.ratingCount;
+          const avg = Number(avgRaw);
+          const count = Number(countRaw);
+          setFeaturedChannelMeta({
+            rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
+            reviewCount: Number.isFinite(count)
+              ? Math.max(0, Math.floor(count))
+              : 0,
+            phone:
+              p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
+            email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
+            address: p?.address ?? null,
+            channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
+            latitude: p?.latitude ?? p?.lat ?? null,
+            longitude: p?.longitude ?? p?.lng ?? null,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setFeaturedChannelMeta(null);
         });
-      })
-      .catch(() => {
-        if (!cancelled) setFeaturedChannelMeta(null);
-      });
+    });
     return () => {
       cancelled = true;
+      handle?.cancel?.();
     };
   }, [
     featuredVideo?.user?.id,
@@ -2189,38 +2249,41 @@ const HomeOneScreen = () => {
       sponsoredVideo?.video?.user?.id;
     if (ownerId == null || String(ownerId).trim() === '') return;
     let cancelled = false;
-    getChannelProfile(String(ownerId), user?.id)
-      .then(p => {
-        if (cancelled) return;
-        const avgRaw =
-          p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
-        const countRaw =
-          p?.reviewCount ??
-          p?.reviewsCount ??
-          p?.totalReviews ??
-          p?.ratingCount;
-        const avg = Number(avgRaw);
-        const count = Number(countRaw);
-        setSponsoredChannelMeta({
-          rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
-          reviewCount: Number.isFinite(count)
-            ? Math.max(0, Math.floor(count))
-            : 0,
-          isSubscribed: !!p?.isSubscribed,
-          phone:
-            p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
-          email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
-          address: p?.address ?? null,
-          channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
-          latitude: p?.latitude ?? p?.lat ?? null,
-          longitude: p?.longitude ?? p?.lng ?? null,
+    const handle = InteractionManager.runAfterInteractions(() => {
+      getChannelProfile(String(ownerId), user?.id)
+        .then(p => {
+          if (cancelled) return;
+          const avgRaw =
+            p?.averageRating ?? p?.ratingAverage ?? p?.ratingAvg ?? p?.rating;
+          const countRaw =
+            p?.reviewCount ??
+            p?.reviewsCount ??
+            p?.totalReviews ??
+            p?.ratingCount;
+          const avg = Number(avgRaw);
+          const count = Number(countRaw);
+          setSponsoredChannelMeta({
+            rating: Number.isFinite(avg) ? Math.max(0, Math.min(5, avg)) : 0,
+            reviewCount: Number.isFinite(count)
+              ? Math.max(0, Math.floor(count))
+              : 0,
+            isSubscribed: !!p?.isSubscribed,
+            phone:
+              p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
+            email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
+            address: p?.address ?? null,
+            channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
+            latitude: p?.latitude ?? p?.lat ?? null,
+            longitude: p?.longitude ?? p?.lng ?? null,
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setSponsoredChannelMeta(null);
         });
-      })
-      .catch(() => {
-        if (!cancelled) setSponsoredChannelMeta(null);
-      });
+    });
     return () => {
       cancelled = true;
+      handle?.cancel?.();
     };
   }, [
     sponsoredVideo?.user?.id,

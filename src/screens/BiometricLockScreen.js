@@ -6,12 +6,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import FaceUnlockCameraPreview from '../components/FaceUnlockCameraPreview';
 import { appSetUser } from '../redux/actions/appSlice';
 import {
   biometricLoginButtonLabel,
@@ -30,24 +28,11 @@ const BiometricLockScreen = ({ onUnlocked }) => {
   const [faceAvailable, setFaceAvailable] = useState(false);
   const [fingerprintAvailable, setFingerprintAvailable] = useState(false);
   const [preferredMethod, setPreferredMethod] = useState(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraActive, setCameraActive] = useState(true);
-
-  const releasePreviewCamera = () =>
-    new Promise(resolve => {
-      setCameraActive(false);
-      setTimeout(resolve, 500);
-    });
 
   const unlock = async (method = 'any') => {
     setLoading(true);
     try {
-      if (method === 'face' && Platform.OS === 'android' && faceAvailable) {
-        await releasePreviewCamera();
-      }
-      const session = await tryBiometricLogin(method, {
-        skipFaceCameraPreview: method === 'face',
-      });
+      const session = await tryBiometricLogin(method);
       const res = await fetch(`${config.apiBaseUrl}/users/refresh-session`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.token}` },
@@ -61,12 +46,11 @@ const BiometricLockScreen = ({ onUnlocked }) => {
         token: data.token || session.token,
       };
       dispatch(appSetUser(userData));
-      await refreshUserSafetyAfterLogin();
+      refreshUserSafetyAfterLogin().catch(() => {});
       onUnlocked?.();
     } catch (e) {
       Alert.alert('Unlock failed', e?.message || 'Could not unlock with biometrics');
     } finally {
-      setCameraActive(true);
       setLoading(false);
     }
   };
@@ -82,67 +66,67 @@ const BiometricLockScreen = ({ onUnlocked }) => {
     })();
   }, []);
 
-  const showFaceCamera = Platform.OS === 'android' && faceAvailable;
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
+        <Icon name="shield-lock-outline" size={56} color={COLORS.primaryOrange} />
         <Text style={styles.title}>Eatwaze is locked</Text>
+        <Text style={styles.subtitle}>
+          Use{' '}
+          {biometricLoginButtonLabel(
+            biometryType,
+            preferredMethod || 'any',
+          ).toLowerCase()}{' '}
+          to continue. Your phone must verify your face or fingerprint — the
+          camera alone cannot unlock the app.
+        </Text>
 
-        {showFaceCamera ? (
-          <>
-            <FaceUnlockCameraPreview
-              style={styles.cameraPreview}
-              isActive={cameraActive && !loading}
-              onReady={() => setCameraReady(true)}
-            />
-            <Text style={styles.subtitle}>
-              {loading
-                ? 'Starting face scan…'
-                : cameraReady
-                  ? 'Tap below — camera closes, then face scan starts'
-                  : 'Opening front camera…'}
-            </Text>
-            <TouchableOpacity
-              style={[styles.btn, styles.faceBtn]}
-              onPress={() => unlock('face')}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Icon name="face-recognition" size={20} color="#FFF" style={styles.btnIcon} />
-                  <Text style={styles.btnText}>Unlock with Face</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </>
-        ) : (
-          <Text style={styles.subtitle}>
-            Tap below and use{' '}
-            {biometricLoginButtonLabel(biometryType, preferredMethod || 'any').toLowerCase()} to
-            continue
-          </Text>
-        )}
+        {faceAvailable ? (
+          <TouchableOpacity
+            style={[styles.btn, styles.faceBtn]}
+            onPress={() => unlock('face')}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Icon
+                  name="face-recognition"
+                  size={20}
+                  color="#FFF"
+                  style={styles.btnIcon}
+                />
+                <Text style={styles.btnText}>Unlock with Face</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        ) : null}
 
         {fingerprintAvailable ? (
           <TouchableOpacity
-            style={[styles.btn, showFaceCamera ? styles.secondaryBtn : styles.faceBtn]}
+            style={[
+              styles.btn,
+              faceAvailable ? styles.secondaryBtn : styles.faceBtn,
+            ]}
             onPress={() => unlock('fingerprint')}
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color={showFaceCamera ? COLORS.primaryOrange : '#FFF'} />
+              <ActivityIndicator
+                color={faceAvailable ? COLORS.primaryOrange : '#FFF'}
+              />
             ) : (
               <>
                 <Icon
                   name="fingerprint"
                   size={20}
-                  color={showFaceCamera ? COLORS.primaryOrange : '#FFF'}
+                  color={faceAvailable ? COLORS.primaryOrange : '#FFF'}
                   style={styles.btnIcon}
                 />
-                <Text style={[styles.btnText, showFaceCamera && styles.secondaryBtnText]}>
+                <Text
+                  style={[styles.btnText, faceAvailable && styles.secondaryBtnText]}
+                >
                   Unlock with Fingerprint
                 </Text>
               </>
@@ -151,7 +135,11 @@ const BiometricLockScreen = ({ onUnlocked }) => {
         ) : null}
 
         {!faceAvailable && !fingerprintAvailable ? (
-          <TouchableOpacity style={styles.btn} onPress={() => unlock('any')} disabled={loading}>
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={() => unlock('any')}
+            disabled={loading}
+          >
             {loading ? (
               <ActivityIndicator color="#FFF" />
             ) : (
@@ -175,20 +163,14 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
     gap: 12,
   },
-  title: { fontSize: FONTS.xxl, fontWeight: FONTS.bold },
-  cameraPreview: {
-    width: '100%',
-    maxWidth: 320,
-    height: 340,
-    borderRadius: 16,
-    marginTop: SPACING.md,
-  },
+  title: { fontSize: FONTS.xxl, fontWeight: FONTS.bold, marginTop: 8 },
   subtitle: {
     color: COLORS.textSecondary,
     marginTop: SPACING.sm,
-    marginBottom: SPACING.sm,
+    marginBottom: SPACING.md,
     textAlign: 'center',
     paddingHorizontal: SPACING.lg,
+    lineHeight: 20,
   },
   btn: {
     backgroundColor: '#2B1A00',

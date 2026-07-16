@@ -1,4 +1,4 @@
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, InteractionManager } from 'react-native';
 import ReactNativeBiometrics, { BiometryTypes } from 'react-native-biometrics';
 import { config } from '../../config';
 import {
@@ -8,9 +8,9 @@ import {
 } from './eatixBiometricNative';
 import {
   dismissFaceUnlockCamera,
-  openFaceUnlockCamera,
   releaseCameraBeforeFaceUnlock,
 } from './faceUnlockCameraBridge';
+import { openBiometricMethodPicker } from './biometricMethodPickerBridge';
 import {
   clearBiometricSession,
   getBiometricPreferredMethod,
@@ -23,6 +23,15 @@ import {
 const rnBiometrics = new ReactNativeBiometrics({
   allowDeviceCredentials: true,
 });
+
+/** Wait for RN Modal teardown / animations before system BiometricPrompt (OEM UI bugs). */
+function waitForUiIdle(ms = 320) {
+  return new Promise(resolve => {
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(resolve, ms);
+    });
+  });
+}
 
 export async function getBiometricSupport() {
   try {
@@ -117,22 +126,26 @@ export async function syncBiometricSessionForUser(user) {
 }
 
 function resolvePromptMethod(explicitMethod, support) {
-  if (
-    explicitMethod === 'face' ||
-    explicitMethod === 'fingerprint' ||
-    explicitMethod === 'any'
-  ) {
+  if (explicitMethod === 'face' || explicitMethod === 'fingerprint') {
     return explicitMethod;
   }
   if (support?.faceAvailable && !support?.fingerprintAvailable) return 'face';
   if (support?.fingerprintAvailable && !support?.faceAvailable)
     return 'fingerprint';
+  if (support?.fingerprintAvailable && support?.faceAvailable) {
+    // Android: never request combined STRONG+WEAK authenticators. Samsung
+    // renders that as a clean Fingerprint/Face switcher, but Vivo/OPPO OEM
+    // skins stack both hint lines full-screen with no switcher — looks broken.
+    // Fall back to a single concrete method instead of 'any' (also applies
+    // to a stale/legacy 'any' explicitMethod persisted before this fix).
+    return Platform.OS === 'android' ? 'fingerprint' : 'any';
+  }
   return 'any';
 }
 
 export async function promptBiometric(
   message = 'Confirm your identity',
-  { method, persistMethod = false, skipFaceCameraPreview = false } = {},
+  { method, persistMethod = false } = {},
 ) {
   const support = await getBiometricSupport();
   if (!support.available) {
@@ -140,14 +153,36 @@ export async function promptBiometric(
   }
 
   const storedMethod = await getBiometricPreferredMethod();
-  const promptMethod = resolvePromptMethod(method || storedMethod, support);
+  let promptMethod = resolvePromptMethod(method || storedMethod, support);
 
-  if (method === 'face' && !support.faceAvailable) {
+  // Stale preference after capability fix (e.g. old "face" on FP-only Vivo).
+  if (promptMethod === 'face' && !support.faceAvailable) {
+    if (support.fingerprintAvailable) promptMethod = 'fingerprint';
+    else {
+      throw new Error(
+        'Face unlock is not set up. Add face unlock in phone Settings.',
+      );
+    }
+  }
+  if (promptMethod === 'fingerprint' && !support.fingerprintAvailable) {
+    if (support.faceAvailable) promptMethod = 'face';
+    else {
+      throw new Error(
+        'Fingerprint is not set up. Add fingerprint in phone Settings.',
+      );
+    }
+  }
+
+  if (method === 'face' && !support.faceAvailable && !support.fingerprintAvailable) {
     throw new Error(
       'Face unlock is not set up. Add face unlock in phone Settings.',
     );
   }
-  if (method === 'fingerprint' && !support.fingerprintAvailable) {
+  if (
+    method === 'fingerprint' &&
+    !support.fingerprintAvailable &&
+    !support.faceAvailable
+  ) {
     throw new Error(
       'Fingerprint is not set up. Add fingerprint in phone Settings.',
     );
@@ -156,26 +191,28 @@ export async function promptBiometric(
   if (persistMethod && method) {
     await saveBiometricPreferredMethod(method);
   }
-  //test
+
+  if (Platform.OS === 'android') {
+    await waitForUiIdle(280);
+  }
+
   try {
     if (isEatixBiometricNativeAvailable()) {
+      // Face unlock must use the OS biometric prompt (real face match).
+      // Never treat "camera open + Confirm" as login — that was insecure.
+      // Release any leftover preview camera first so the system face sensor can run.
       if (promptMethod === 'face' && Platform.OS === 'android') {
-        if (!skipFaceCameraPreview) {
-          await openFaceUnlockCamera({
-            title: 'Face unlock',
-            subtitle: 'Position your face in the circle',
-          });
-        }
-        // System face unlock needs exclusive camera access — close ours first.
-        await releaseCameraBeforeFaceUnlock();
+        dismissFaceUnlockCamera();
+        await releaseCameraBeforeFaceUnlock(200);
       }
 
       try {
         const { success, error } = await eatixBiometricPrompt({
           promptMessage: message,
           cancelButtonText: 'Cancel',
-          biometricMethod: promptMethod,
-          allowDeviceCredentials: promptMethod === 'any',
+          biometricMethod:
+            promptMethod === 'any' ? 'fingerprint' : promptMethod,
+          allowDeviceCredentials: false,
         });
         if (!success) {
           throw new Error(error || 'Biometric authentication cancelled');
@@ -277,10 +314,7 @@ export async function disableBiometricLogin() {
   await saveBiometricPreferredMethod(null);
 }
 
-export async function tryBiometricLogin(
-  method,
-  { skipFaceCameraPreview = false } = {},
-) {
+export async function tryBiometricLogin(method) {
   const exists = await hasBiometricSession();
   if (!exists) {
     throw new Error('Biometric login is not set up');
@@ -297,7 +331,6 @@ export async function tryBiometricLogin(
 
   await promptBiometric(unlockMessage, {
     method: unlockMethod,
-    skipFaceCameraPreview,
   });
   const session = await getBiometricSession();
   if (!session?.token || !session?.userId) {
@@ -312,6 +345,18 @@ export async function chooseBiometricMethodOnEnable(support) {
     if (support?.fingerprintAvailable) return 'fingerprint';
     return 'any';
   }
+
+  if (Platform.OS === 'android') {
+    const picked = await openBiometricMethodPicker({
+      title: 'Eatwaze',
+      subtitle: 'Enable biometric login for Eatwaze',
+      faceAvailable: true,
+      fingerprintAvailable: true,
+      initialMethod: 'fingerprint',
+    });
+    return picked;
+  }
+
   return new Promise(resolve => {
     Alert.alert(
       'Choose unlock method',

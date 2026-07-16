@@ -10,18 +10,6 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!--
-      Play Photo/Video Permissions policy (targetSdk 33+):
-      Do NOT request READ_MEDIA_IMAGES / READ_MEDIA_VIDEO.
-      Use the system Photo Picker / document picker instead.
-      Force-remove if any dependency tries to merge them in.
-    -->
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        tools:node="remove" />
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_VIDEO"
-        tools:node="remove" />
     <!-- Legacy storage (Android 12 and below) for crop-picker / older devices -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -52,6 +40,10 @@
       <meta-data
         android:name="com.google.android.geo.API_KEY"
         android:value="AIzaSyDdAoHeCNbd81rqwMApCne-bB5qYVwCaqk"/>
+      <!-- Required for Stripe PaymentSheet Google Pay -->
+      <meta-data
+        android:name="com.google.android.gms.wallet.api.enabled"
+        android:value="true" />
       <activity
         android:name="com.facebook.FacebookActivity"
         android:configChanges=

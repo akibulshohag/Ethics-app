@@ -24,12 +24,13 @@ import { useDispatch } from 'react-redux';
 import {
   appSetUser,
   setBrowseLocation,
-  clearBrowseLocation,
 } from '../redux/actions/appSlice';
 import {
   resolvePostLoginBrowseLocation,
+  resolveProfileBrowseLocation,
   homeRouteForBrowseLocation,
   persistBrowseLocation,
+  shouldBackgroundGeocodeProfile,
 } from '../services/userLocationService';
 import { getRolesList } from '../services/roleService';
 import { register, validatePasswordStrength } from '../services/authService';
@@ -168,7 +169,7 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
       };
 
       dispatch(appSetUser(userData));
-      await refreshUserSafetyAfterLogin();
+      refreshUserSafetyAfterLogin().catch(() => {});
 
       try {
         navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
@@ -232,27 +233,50 @@ const HomeSixScreen = ({ onBack, onLoginPress }) => {
         token: data.token,
       };
       dispatch(appSetUser(userData));
-      await refreshUserSafetyAfterLogin();
-      dispatch(clearBrowseLocation());
+      refreshUserSafetyAfterLogin().catch(() => {});
       const browseLoc = await resolvePostLoginBrowseLocation({
         ...userData,
         savedLastLocation: data.user?.savedLastLocation,
       });
       if (browseLoc) {
         dispatch(setBrowseLocation(browseLoc));
-        await persistBrowseLocation({
+        persistBrowseLocation({
           userId: userData?.id,
           lat: browseLoc.lat,
           lng: browseLoc.lng,
           postcode: browseLoc.postcode || '',
           addressText: browseLoc.addressText || '',
           areaLabel: browseLoc.areaLabel || '',
-        });
+        }).catch(() => {});
       }
       navigation.reset({
         index: 0,
         routes: [homeRouteForBrowseLocation(browseLoc)],
       });
+      if (
+        shouldBackgroundGeocodeProfile(
+          { ...userData, savedLastLocation: data.user?.savedLastLocation },
+          browseLoc,
+        )
+      ) {
+        resolveProfileBrowseLocation({
+          ...userData,
+          savedLastLocation: data.user?.savedLastLocation,
+        })
+          .then(loc => {
+            if (!loc) return;
+            dispatch(setBrowseLocation(loc));
+            persistBrowseLocation({
+              userId: userData?.id,
+              lat: loc.lat,
+              lng: loc.lng,
+              postcode: loc.postcode || '',
+              addressText: loc.addressText || '',
+              areaLabel: loc.areaLabel || '',
+            }).catch(() => {});
+          })
+          .catch(() => {});
+      }
     } catch (error) {
       const msg = normalizeSocialAuthError(error);
       if (msg !== 'Sign-in cancelled') {

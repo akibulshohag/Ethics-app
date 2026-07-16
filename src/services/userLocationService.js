@@ -136,17 +136,27 @@ export async function resolveUserBrowseLocation(userData) {
 }
 
 /**
- * After login/sign-up: always prefer the user's saved profile address first,
- * then fall back to last browse pick only when profile has no address.
+ * After login/sign-up: prefer profile coords / saved browse pick.
+ * Does NOT await geocoding — that can take tens of seconds and blocks home.
+ * Use resolveProfileBrowseLocation() in the background when this returns null
+ * but the user still has an address/postcode.
  */
 export async function resolvePostLoginBrowseLocation(userData) {
-  const profileLoc = await resolveProfileBrowseLocation(userData);
-  if (profileLoc) return profileLoc;
+  const fromProfile = buildBrowseLocationFromUserProfile(userData);
+  if (fromProfile) return fromProfile;
   const backendLoc = userData?.savedLastLocation;
   const fromBackend = normalizeBrowseLocation(backendLoc);
   if (fromBackend) return fromBackend;
   const stored = await loadStoredBrowseLocation(userData?.id);
   return normalizeBrowseLocation(stored);
+}
+
+/** True when we should background-geocode after a fast login navigation. */
+export function shouldBackgroundGeocodeProfile(userData, browseLoc) {
+  if (browseLoc) return false;
+  const postcode = String(userData?.postcode || '').trim();
+  const addressText = String(userData?.address || '').trim();
+  return !!(postcode || addressText);
 }
 
 /**

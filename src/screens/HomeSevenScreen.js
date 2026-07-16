@@ -30,12 +30,13 @@ import { useDispatch } from 'react-redux';
 import {
   appSetUser,
   setBrowseLocation,
-  clearBrowseLocation,
 } from '../redux/actions/appSlice';
 import {
   resolvePostLoginBrowseLocation,
+  resolveProfileBrowseLocation,
   homeRouteForBrowseLocation,
   persistBrowseLocation,
+  shouldBackgroundGeocodeProfile,
 } from '../services/userLocationService';
 import { login, isAccountInactiveError, isEmailNotVerifiedError } from '../services/authService';
 import {
@@ -116,27 +117,42 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       );
       return;
     }
+    // Fast path only (no geocode await) so home mounts immediately.
     const browseLoc = await resolvePostLoginBrowseLocation(userData);
-    dispatch(clearBrowseLocation());
     if (browseLoc) {
       dispatch(setBrowseLocation(browseLoc));
-      await persistBrowseLocation({
+      persistBrowseLocation({
         userId: userData?.id,
         lat: browseLoc.lat,
         lng: browseLoc.lng,
         postcode: browseLoc.postcode || '',
         addressText: browseLoc.addressText || '',
         areaLabel: browseLoc.areaLabel || '',
-      });
+      }).catch(() => {});
     }
     const targetRoute = homeRouteForBrowseLocation(browseLoc);
-    setTimeout(() => {
-      try {
-        navigation.reset({ index: 0, routes: [targetRoute] });
-      } catch (_) {
-        navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
-      }
-    }, 0);
+    try {
+      navigation.reset({ index: 0, routes: [targetRoute] });
+    } catch (_) {
+      navigation.reset({ index: 0, routes: [{ name: 'HomeOneScreen' }] });
+    }
+    // Geocode profile address in background if login skipped it for speed.
+    if (shouldBackgroundGeocodeProfile(userData, browseLoc)) {
+      resolveProfileBrowseLocation(userData)
+        .then(loc => {
+          if (!loc) return;
+          dispatch(setBrowseLocation(loc));
+          persistBrowseLocation({
+            userId: userData?.id,
+            lat: loc.lat,
+            lng: loc.lng,
+            postcode: loc.postcode || '',
+            addressText: loc.addressText || '',
+            areaLabel: loc.areaLabel || '',
+          }).catch(() => {});
+        })
+        .catch(() => {});
+    }
   };
 
   const handleLogin = async () => {
@@ -175,9 +191,10 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
       };
 
       dispatch(appSetUser(userData));
-      await refreshUserSafetyAfterLogin();
+      // Don't block navigation on safety / biometric session sync.
+      refreshUserSafetyAfterLogin().catch(() => {});
       if (userData.fingerprintEnabled) {
-        await syncBiometricSessionForUser(userData);
+        syncBiometricSessionForUser(userData).catch(() => {});
       }
       await navigateAfterLogin(userData);
     } catch (error) {
@@ -244,7 +261,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         rememberMe: true,
       };
       dispatch(appSetUser(userData));
-      await refreshUserSafetyAfterLogin();
+      refreshUserSafetyAfterLogin().catch(() => {});
       await navigateAfterLogin(userData);
     } catch (e) {
       const msg = e?.message || 'Could not unlock';
@@ -293,7 +310,7 @@ const HomeSevenScreen = ({ onBack, onSignUp }) => {
         token: data.token,
       };
       dispatch(appSetUser(userData));
-      await refreshUserSafetyAfterLogin();
+      refreshUserSafetyAfterLogin().catch(() => {});
       await navigateAfterLogin(userData);
     } catch (error) {
       const msg = normalizeSocialAuthError(error);

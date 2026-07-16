@@ -23,6 +23,7 @@ import {
   Dimensions,
   Share,
   Linking,
+  BackHandler,
 } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Video from 'react-native-video';
@@ -1938,6 +1939,23 @@ const PromotionScreen = ({ onBack }) => {
     loadGalleryTab,
     loadNotifTab,
   ]);
+
+  useEffect(() => {
+    if (!editProfileVisible) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (savingProfile) return true;
+      setEditProfileVisible(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [editProfileVisible, savingProfile]);
+
+  const runAwayFromReactModal = useCallback(async work => {
+    // Edit Profile is an in-window overlay (not RN Modal). Still pause briefly so
+    // BiometricPrompt attaches cleanly on OEM skins (Vivo/OPPO).
+    await new Promise(resolve => setTimeout(resolve, 120));
+    await work();
+  }, []);
 
   const openEditProfile = () => {
     if (!isOwnProfile) return;
@@ -4000,18 +4018,20 @@ const PromotionScreen = ({ onBack }) => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Edit Profile Modal */}
-      <Modal
-        visible={editProfileVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => !savingProfile && setEditProfileVisible(false)}
-      >
+      {/* Edit Profile sheet — in-window overlay (not RN Modal).
+          RN Modal uses a second Android Dialog window; BiometricPrompt over that
+          Dialog glows/doubles text on Vivo OriginOS. Same-window overlay avoids it. */}
+      {editProfileVisible ? (
+        <View style={styles.editModalRoot} pointerEvents="box-none">
         <KeyboardAvoidingView
           style={styles.editModalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.editModalBackdrop} />
+          <TouchableOpacity
+            style={styles.editModalBackdrop}
+            activeOpacity={1}
+            onPress={() => !savingProfile && setEditProfileVisible(false)}
+          />
           <View style={styles.editModalBox}>
             <View style={styles.editModalHeader}>
               <Text style={styles.editModalTitle}>Edit Profile</Text>
@@ -4134,7 +4154,10 @@ const PromotionScreen = ({ onBack }) => {
                 </TouchableOpacity>
               </View>
               {isOwnProfile ? (
-                <BiometricLockToggle variant="modal" />
+                <BiometricLockToggle
+                  variant="modal"
+                  runAwayFromReactModal={runAwayFromReactModal}
+                />
               ) : null}
               <Text style={[styles.editLabel, { marginTop: 16 }]}>
                 Social links
@@ -4535,7 +4558,8 @@ const PromotionScreen = ({ onBack }) => {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+        </View>
+      ) : null}
       <MapLocationPicker
         visible={locationMapVisible}
         onClose={() => setLocationMapVisible(false)}
@@ -4973,6 +4997,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  editModalRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2000,
+    elevation: 2000,
+  },
   editModalOverlay: { flex: 1, justifyContent: 'flex-end' },
   editModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
