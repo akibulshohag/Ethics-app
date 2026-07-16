@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -16,20 +16,28 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const {width, height} = Dimensions.get('window');
 
+const MIXKIT_PREVIEW = 'https://assets.mixkit.co/music/preview';
+
 const SOUNDS_DATA = [
-  { id: '1', title: 'As It Was', artist: 'Harry Styles', duration: '01:00', usage: '65.1M', image: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=500&q=80', isFavorite: false, isSelected: true },
-  { id: '2', title: 'Jiggle Jiggle', artist: 'Duke & Jones, Thero...', duration: '00:40', usage: '91.54M', image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80', isFavorite: false, isSelected: false },
-  { id: '3', title: 'About Damn Time', artist: 'Lizzo', duration: '01:30', usage: '21.05K', image: 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=500&q=80', isFavorite: false, isSelected: false },
-  { id: '4', title: 'Sunroof', artist: 'Nicky Youre, Dazy', duration: '00:50', usage: '32.17K', image: 'https://images.unsplash.com/photo-1514525253361-bee8a487409e?w=500&q=80', isFavorite: true, isSelected: false },
-  { id: '5', title: 'Late Night Talking', artist: 'Harry Styles', duration: '01:00', usage: '91.82M', image: 'https://images.unsplash.com/photo-1459749411177-042180ce673c?w=500&q=80', isFavorite: false, isSelected: false },
-  { id: '6', title: 'STAY', artist: 'The Kid Laroi, Bieb...', duration: '00:45', usage: '37.97M', image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80', isFavorite: true, isSelected: false },
-  { id: '7', title: 'Heat Waves', artist: 'Glass Animals', duration: '01:00', usage: '86.67K', image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&q=80', isFavorite: false, isSelected: false },
+  { id: '1', title: 'Tech House Vibes', artist: 'Mixkit', duration: '01:00', usage: 'Trending', image: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-tech-house-vibes-130.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-tech-house-vibes-130.mp3` },
+  { id: '2', title: 'Driving Ambient', artist: 'Mixkit', duration: '00:40', usage: 'Popular', image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-driving-ambient-138.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-driving-ambient-138.mp3` },
+  { id: '3', title: 'Happy Rock', artist: 'Mixkit', duration: '01:30', usage: '21K', image: 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-happy-rock-615.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-happy-rock-615.mp3` },
+  { id: '4', title: 'Sweet Waiting', artist: 'Mixkit', duration: '00:50', usage: '32K', image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-sweet-waiting-831.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-sweet-waiting-831.mp3` },
+  { id: '5', title: 'Motivated', artist: 'Mixkit', duration: '01:00', usage: '92K', image: 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-motivated-641.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-motivated-641.mp3` },
+  { id: '6', title: 'Just Chill', artist: 'Mixkit', duration: '00:45', usage: '38K', image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-just-chill-16.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-just-chill-16.mp3` },
+  { id: '7', title: 'Slow Trail', artist: 'Mixkit', duration: '01:00', usage: '87K', image: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500&q=80', previewUrl: `${MIXKIT_PREVIEW}/mixkit-slow-trail-701.mp3`, soundUrl: `${MIXKIT_PREVIEW}/mixkit-slow-trail-701.mp3` },
 ];
 
-const SoundsModal = ({visible, onClose, onSelect}) => {
+const SoundsModal = ({visible, onClose, onSelect, selectedSoundId}) => {
   const [activeTab, setActiveTab] = useState('Discover');
   const [selectedId, setSelectedId] = useState('1');
   const [favorites, setFavorites] = useState(['4', '6']);
+
+  useEffect(() => {
+    if (visible && selectedSoundId) {
+      setSelectedId(String(selectedSoundId));
+    }
+  }, [visible, selectedSoundId]);
 
   const handleSelect = (item) => {
     setSelectedId(item.id);

@@ -11,15 +11,20 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {useNavigation} from '@react-navigation/native';
+import {clearReelEditorDraft, newShortSessionKey} from '../utils/reelDraftStorage';
+import {navigateToRootRoute} from '../utils/navigateToRootRoute';
 
 const { height } = Dimensions.get('window');
 
 const CreateVideoModal = ({
   visible,
   onClose,
+  onCreatePost: onCreatePostProp,
   onCreateShort: onCreateShortProp,
   onUploadVideo: onUploadVideoProp,
   onGoLive: onGoLiveProp,
+  showFeaturedVideoOption,
+  onUploadFeaturedVideo: onUploadFeaturedVideoProp,
 }) => {
   const navigation = useNavigation();
 
@@ -28,7 +33,22 @@ const CreateVideoModal = ({
     if (onCreateShortProp) {
       onCreateShortProp();
     } else {
-      navigation.navigate('CreateShortsScreen', { isLive: false });
+      navigation.navigate('CreateShortsScreen', {
+        isLive: false,
+        sessionKey: newShortSessionKey(),
+      });
+    }
+  };
+
+  const handleCreatePost = async () => {
+    onClose?.();
+    if (onCreatePostProp) {
+      onCreatePostProp();
+    } else {
+      await clearReelEditorDraft();
+      navigateToRootRoute(navigation, 'PostCreateNew', {
+        freshSession: newShortSessionKey(),
+      });
     }
   };
 
@@ -46,7 +66,17 @@ const CreateVideoModal = ({
     if (onGoLiveProp) {
       onGoLiveProp();
     } else {
-      navigation.navigate('CreateShortsScreen', { isLive: true });
+      navigation.navigate('CreateShortsScreen', {
+        isLive: true,
+        sessionKey: newShortSessionKey(),
+      });
+    }
+  };
+
+  const handleUploadFeaturedVideo = () => {
+    onClose?.();
+    if (onUploadFeaturedVideoProp) {
+      onUploadFeaturedVideoProp();
     }
   };
 
@@ -65,12 +95,30 @@ const CreateVideoModal = ({
               <View style={styles.handle} />
 
               <View style={styles.header}>
+                <View style={styles.headerSide} />
                 <Text style={styles.headerText}>Create</Text>
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={styles.headerSide}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                >
+                  <Ionicons name="close" size={26} color="#333" />
+                </TouchableOpacity>
               </View>
 
               <View style={styles.divider} />
 
               <View style={styles.optionsContainer}>
+                {/* Create a Post */}
+                <TouchableOpacity style={styles.optionItem} onPress={handleCreatePost}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="create-outline" size={24} color="#FF8C00" />
+                  </View>
+                  <Text style={styles.optionText}>Create a post</Text>
+                </TouchableOpacity>
+
                 {/* Create a Short */}
                 <TouchableOpacity style={styles.optionItem} onPress={handleCreateShort}>
                   <View style={styles.iconContainer}>
@@ -94,6 +142,18 @@ const CreateVideoModal = ({
                   </View>
                   <Text style={styles.optionText}>Go Live</Text>
                 </TouchableOpacity>
+
+                {showFeaturedVideoOption ? (
+                  <TouchableOpacity
+                    style={styles.optionItem}
+                    onPress={handleUploadFeaturedVideo}
+                  >
+                    <View style={styles.iconContainer}>
+                      <Ionicons name="star" size={24} color="#FF8C00" />
+                    </View>
+                    <Text style={styles.optionText}>Upload featured video</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
           </TouchableWithoutFeedback>
@@ -114,7 +174,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    minHeight: 280,
+    minHeight: 340,
   },
   handle: {
     width: 40,
@@ -125,10 +185,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   header: {
-    paddingVertical: 15,
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  headerSide: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerText: {
+    flex: 1,
+    textAlign: 'center',
     fontSize: 20,
     fontWeight: 'bold',
     color: '#1a1a1a',

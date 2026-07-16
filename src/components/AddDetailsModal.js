@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,49 +14,105 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const DEFAULT_THUMBNAIL = 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
-import {launchImageLibrary} from 'react-native-image-picker';
+const DEFAULT_THUMBNAIL =
+  'https://images.unsplash.com/photo-1611162616475-46b635cb6868?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import SetVisibilityModal from './SetVisibilityModal';
 import SelectAudienceModal from './SelectAudienceModal';
 import CommentsSettingsModal from './CommentsSettingsModal';
+import VideoScheduleModal from './VideoScheduleModal';
+import VideoCoverPickerModal from './VideoCoverPickerModal';
+import VideoCoverSuggestionsRow from './VideoCoverSuggestionsRow';
 import { shortsService } from '../services/shortsService';
+import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 
-const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false, onVideoPicked}) => {
+const AddDetailsModal = ({
+  visible,
+  onClose,
+  shortsMetadata = {},
+  isLive = false,
+  onVideoPicked,
+  /** Called after OK on successful upload — e.g. navigate to HomeOneScreen */
+  onUploadSuccess,
+}) => {
   const [visibilityModalVisible, setVisibilityModalVisible] = useState(false);
   const [visibility, setVisibility] = useState('Public');
   const [audienceModalVisible, setAudienceModalVisible] = useState(false);
-  const [audience, setAudience] = useState({ madeForKids: null, ageRestricted: null });
+  const [audience, setAudience] = useState({
+    madeForKids: null,
+    ageRestricted: null,
+  });
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
   const [comments, setComments] = useState('Allow all comments');
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [scheduledPublishDate, setScheduledPublishDate] = useState(null);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [localVideo, setLocalVideo] = useState(null);
   const [localThumb, setLocalThumb] = useState(null);
+  const [coverPickerVisible, setCoverPickerVisible] = useState(false);
+
+  const resetFormState = React.useCallback(() => {
+    setVisibilityModalVisible(false);
+    setVisibility('Public');
+    setAudienceModalVisible(false);
+    setAudience({ madeForKids: null, ageRestricted: null });
+    setCommentsModalVisible(false);
+    setComments('Allow all comments');
+    setScheduleModalVisible(false);
+    setScheduledPublishDate(null);
+    setCaption('');
+    setUploading(false);
+    setLocalVideo(null);
+    setLocalThumb(null);
+    setCoverPickerVisible(false);
+  }, []);
+
+  useEffect(() => {
+    if (visible && shortsMetadata?.commentsSetting) {
+      setComments(shortsMetadata.commentsSetting);
+    }
+  }, [visible, shortsMetadata?.commentsSetting]);
 
   const videoUri = shortsMetadata?.videoUri || localVideo?.uri;
   const videoMeta = localVideo || shortsMetadata;
+  const videoDurationSec =
+    videoMeta?.duration ??
+    videoMeta?.durationSec ??
+    shortsMetadata?.durationSec;
+  const activeThumbUri =
+    localThumb?.uri || shortsMetadata?.thumbnailUri || null;
+
+  const applyCoverFrame = frame => {
+    const asset = frameToThumbnailAsset(frame);
+    if (asset) setLocalThumb(asset);
+  };
 
   const pickVideoInModal = () => {
-    launchImageLibrary(
-      {mediaType: 'video', videoMaxDuration: 180},
-      (res) => {
-        if (res.didCancel) return;
-        const asset = res.assets?.[0];
-        if (asset?.uri) {
-          setLocalVideo({
-            uri: asset.uri,
-            type: asset.type || 'video/mp4',
-            name: asset.fileName || 'short.mp4',
-          });
-          if (onVideoPicked) onVideoPicked(asset);
-        }
-      },
-    );
+    launchImageLibrary({ mediaType: 'video', videoMaxDuration: 180 }, res => {
+      if (res.didCancel) return;
+      const asset = res.assets?.[0];
+      if (asset?.uri) {
+        const nextVideo = {
+          uri: asset.uri,
+          type: asset.type || 'video/mp4',
+          name: asset.fileName || 'short.mp4',
+          duration:
+            asset.duration != null ? Math.max(0, Number(asset.duration)) : undefined,
+        };
+        setLocalVideo(nextVideo);
+        setLocalThumb(null);
+        if (onVideoPicked) onVideoPicked(asset);
+        thumbnailFromVideoFrame(asset.uri).then(thumb => {
+          if (thumb) setLocalThumb(thumb);
+        });
+      }
+    });
   };
 
   const pickThumbnailInModal = () => {
-    launchImageLibrary({mediaType: 'photo'}, (res) => {
+    launchImageLibrary({ mediaType: 'photo' }, res => {
       if (res.didCancel) return;
       const asset = res.assets?.[0];
       if (asset?.uri) {
@@ -69,19 +125,38 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
     });
   };
 
-  const mapToVisibility = (v) => {
+  const pickCoverFromVideoInModal = () => {
+    if (!videoUri) {
+      Alert.alert('Select video first', 'Please select a video before choosing cover.');
+      return;
+    }
+    setCoverPickerVisible(true);
+  };
+
+  const mapToVisibility = v => {
     if (v === 'Public') return 'public';
     if (v === 'Private') return 'private';
-    if (v === 'Unlisted') return 'unlisted';
+
     return 'public';
   };
 
-  const mapToCommentSetting = (c) => {
+  const mapToCommentSetting = c => {
     if (c?.includes('all')) return 'allow';
     if (c?.includes('hold')) return 'hold';
     if (c?.includes('Disable')) return 'disable';
     return 'allow';
   };
+
+  const scheduleDisplay = (() => {
+    if (!(scheduledPublishDate instanceof Date)) return 'Now';
+    const ms = scheduledPublishDate.getTime();
+    if (!Number.isFinite(ms) || ms <= Date.now() + 60_000) return 'Now';
+    return scheduledPublishDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  })();
 
   const handleUploadShorts = async () => {
     if (!shortsMetadata?.userId) {
@@ -104,26 +179,59 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
       if (thumbUri) {
         formData.append('files', {
           uri: thumbUri,
-          type: shortsMetadata.thumbnailType || localThumb?.type || 'image/jpeg',
+          type:
+            shortsMetadata.thumbnailType || localThumb?.type || 'image/jpeg',
           name: shortsMetadata.thumbnailName || localThumb?.name || 'thumb.jpg',
         });
       }
       formData.append('userId', shortsMetadata.userId);
       formData.append('title', caption || 'Untitled Short');
       formData.append('description', caption || '');
-      formData.append('durationLimit', isLive ? '10s' : (shortsMetadata.activeDuration || '60'));
+      formData.append(
+        'durationLimit',
+        isLive ? '10s' : shortsMetadata.activeDuration || '60',
+      );
       formData.append('visibility', mapToVisibility(visibility));
       formData.append('commentSetting', mapToCommentSetting(comments));
+      if (audience?.madeForKids != null) {
+        formData.append('madeForKids', String(Boolean(audience.madeForKids)));
+      }
+      if (audience?.ageRestricted != null) {
+        formData.append(
+          'ageRestricted',
+          String(Boolean(audience.ageRestricted)),
+        );
+      }
+      if (
+        scheduledPublishDate instanceof Date &&
+        scheduledPublishDate.getTime() > Date.now() + 60_000
+      ) {
+        formData.append(
+          'scheduledPublishAt',
+          scheduledPublishDate.toISOString(),
+        );
+      }
       if (shortsMetadata.selectedFilter?.id) {
         formData.append('filterId', shortsMetadata.selectedFilter.id);
         formData.append('filterName', shortsMetadata.selectedFilter.name);
       }
       if (shortsMetadata.selectedSound) {
-        formData.append('soundId', shortsMetadata.selectedSound.id);
-        formData.append('soundTitle', shortsMetadata.selectedSound.title);
-        formData.append('soundArtist', shortsMetadata.selectedSound.artist || '');
-        if (shortsMetadata.selectedSound.soundUrl) {
-          formData.append('soundUrl', shortsMetadata.selectedSound.soundUrl);
+        if (shortsMetadata.selectedSound.id) {
+          formData.append('soundId', shortsMetadata.selectedSound.id);
+        }
+        formData.append('soundTitle', shortsMetadata.selectedSound.title || '');
+        formData.append(
+          'soundArtist',
+          shortsMetadata.selectedSound.artist || '',
+        );
+        const selectedSoundUrl = String(
+          shortsMetadata.selectedSound.soundUrl ||
+            shortsMetadata.selectedSound.previewUrl ||
+            shortsMetadata.selectedSound.url ||
+            '',
+        ).trim();
+        if (selectedSoundUrl) {
+          formData.append('soundUrl', selectedSoundUrl);
         }
       }
       if (shortsMetadata.beautyLevel) {
@@ -142,10 +250,24 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
         formData.append('isLive', 'true');
       }
       await shortsService.uploadShort(formData, shortsMetadata.userId);
-      Alert.alert('Success', 'Short uploaded successfully', [{ text: 'OK', onPress: onClose }]);
+      resetFormState();
+      Alert.alert('Success', 'Short uploaded successfully', [
+        {
+          text: 'OK',
+          onPress: () => {
+            onClose?.();
+            onUploadSuccess?.();
+          },
+        },
+      ]);
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Failed to upload short';
-      const isNetwork = e?.message === 'Network Error' || e?.code === 'ERR_NETWORK';
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        'Failed to upload short';
+      const isNetwork =
+        e?.message === 'Network Error' || e?.code === 'ERR_NETWORK';
       const hint = isNetwork
         ? '\n\nEnsure:\n1. Backend is running: cd ethics-backend && npm run start:dev\n2. Port 3000 is correct\n3. For physical device: set LOCAL_OVERRIDE in config.js to your computer IP (e.g. http://192.168.1.x:3000/v1)'
         : '';
@@ -159,10 +281,11 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
       animationType="slide"
       transparent={false}
       visible={visible}
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="white" />
-        
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.headerButton}>
@@ -170,24 +293,33 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Details</Text>
           <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="ellipsis-horizontal-circle-outline" size={24} color="black" />
+            <Ionicons
+              name="ellipsis-horizontal-circle-outline"
+              size={24}
+              color="black"
+            />
           </TouchableOpacity>
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.topSection}>
-            <TouchableOpacity style={styles.coverContainer} onPress={pickThumbnailInModal}>
+            <TouchableOpacity
+              style={styles.coverContainer}
+              onPress={pickCoverFromVideoInModal}
+            >
               <Image
-                source={{uri: (shortsMetadata.thumbnailUri || localThumb?.uri) || DEFAULT_THUMBNAIL}}
+                source={{
+                  uri: activeThumbUri || DEFAULT_THUMBNAIL,
+                }}
                 style={styles.coverImage}
                 resizeMode="cover"
               />
               <View style={styles.selectCoverOverlay}>
-                <Text style={styles.selectCoverText}>Select Cover</Text>
+                <Text style={styles.selectCoverText}>Select Cover From Video</Text>
               </View>
             </TouchableOpacity>
             <View style={styles.captionContainer}>
-              <TextInput 
+              <TextInput
                 placeholder="Caption your shorts..."
                 placeholderTextColor="#999"
                 multiline
@@ -199,8 +331,21 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
             </View>
           </View>
 
+          {videoUri ? (
+            <VideoCoverSuggestionsRow
+              videoUri={videoUri}
+              durationSec={videoDurationSec}
+              selectedUri={activeThumbUri}
+              onSelect={applyCoverFrame}
+              onPressSeeAll={pickCoverFromVideoInModal}
+            />
+          ) : null}
+
           {!videoUri && (
-            <TouchableOpacity style={styles.selectVideoBtn} onPress={pickVideoInModal}>
+            <TouchableOpacity
+              style={styles.selectVideoBtn}
+              onPress={pickVideoInModal}
+            >
               <Ionicons name="videocam-outline" size={24} color="#FF8C00" />
               <Text style={styles.selectVideoText}>Select Video</Text>
             </TouchableOpacity>
@@ -211,16 +356,40 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
               <Text style={styles.videoSelectedText}>Video selected</Text>
             </View>
           )}
+          {videoUri && (
+            <TouchableOpacity
+              style={styles.selectVideoBtn}
+              onPress={pickCoverFromVideoInModal}
+            >
+              <Ionicons name="images-outline" size={22} color="#FF8C00" />
+              <Text style={styles.selectVideoText}>Choose cover from this video</Text>
+            </TouchableOpacity>
+          )}
+          {videoUri && (
+            <TouchableOpacity
+              style={styles.selectFromGalleryBtn}
+              onPress={pickThumbnailInModal}
+            >
+              <Text style={styles.selectFromGalleryText}>
+                Or pick cover photo from gallery
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.divider} />
 
           <View style={styles.optionsList}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionItem}
               onPress={() => setVisibilityModalVisible(true)}
             >
               <View style={styles.optionLeft}>
-                <Ionicons name="eye-outline" size={24} color="#333" style={styles.optionIcon} />
+                <Ionicons
+                  name="eye-outline"
+                  size={24}
+                  color="#333"
+                  style={styles.optionIcon}
+                />
                 <Text style={styles.optionLabel}>Visibility</Text>
               </View>
               <View style={styles.optionRight}>
@@ -229,12 +398,17 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionItem}
               onPress={() => setAudienceModalVisible(true)}
             >
               <View style={styles.optionLeft}>
-                <Ionicons name="people-outline" size={24} color="#333" style={styles.optionIcon} />
+                <Ionicons
+                  name="people-outline"
+                  size={24}
+                  color="#333"
+                  style={styles.optionIcon}
+                />
                 <Text style={styles.optionLabel}>Select Audience</Text>
               </View>
               <View style={styles.optionRight}>
@@ -242,27 +416,45 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.optionItem}>
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => setScheduleModalVisible(true)}
+            >
               <View style={styles.optionLeft}>
-                <Ionicons name="calendar-outline" size={24} color="#333" style={styles.optionIcon} />
+                <Ionicons
+                  name="calendar-outline"
+                  size={24}
+                  color="#333"
+                  style={styles.optionIcon}
+                />
                 <Text style={styles.optionLabel}>Schedule</Text>
               </View>
               <View style={styles.optionRight}>
-                <Text style={styles.optionValue}>Now</Text>
+                <Text style={styles.optionValue}>{scheduleDisplay}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#333" />
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.optionItem}
               onPress={() => setCommentsModalVisible(true)}
             >
               <View style={styles.optionLeft}>
-                <Ionicons name="chatbubble-ellipses-outline" size={24} color="#333" style={styles.optionIcon} />
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={24}
+                  color="#333"
+                  style={styles.optionIcon}
+                />
                 <Text style={styles.optionLabel}>Comments</Text>
               </View>
               <View style={styles.optionRight}>
-                <Text style={[styles.optionValue, {maxWidth: 150}]} numberOfLines={1}>{comments}</Text>
+                <Text
+                  style={[styles.optionValue, { maxWidth: 150 }]}
+                  numberOfLines={1}
+                >
+                  {comments}
+                </Text>
                 <Ionicons name="chevron-forward" size={20} color="#333" />
               </View>
             </TouchableOpacity>
@@ -272,16 +464,18 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
         {/* Footer */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.uploadButton, uploading && styles.uploadButtonDisabled]}
+            style={[
+              styles.uploadButton,
+              uploading && styles.uploadButtonDisabled,
+            ]}
             onPress={() => handleUploadShorts()}
             disabled={uploading}
-            activeOpacity={0.7}>
+            activeOpacity={0.7}
+          >
             {uploading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.uploadButtonText}>
-                Upload Video
-              </Text>
+              <Text style={styles.uploadButtonText}>Upload Video</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -290,19 +484,34 @@ const AddDetailsModal = ({visible, onClose, shortsMetadata = {}, isLive = false,
           visible={visibilityModalVisible}
           onClose={() => setVisibilityModalVisible(false)}
           initialValue={visibility}
-          onApply={(val) => setVisibility(val)}
+          onApply={val => setVisibility(val)}
         />
         <SelectAudienceModal
           visible={audienceModalVisible}
           onClose={() => setAudienceModalVisible(false)}
           initialValue={audience}
-          onApply={(val) => setAudience(val)}
+          onApply={val => setAudience(val)}
         />
         <CommentsSettingsModal
           visible={commentsModalVisible}
           onClose={() => setCommentsModalVisible(false)}
           initialValue={comments}
-          onApply={(val) => setComments(val)}
+          onApply={val => setComments(val)}
+        />
+        <VideoScheduleModal
+          visible={scheduleModalVisible}
+          onClose={() => setScheduleModalVisible(false)}
+          initialDate={scheduledPublishDate}
+          onSelectNow={() => setScheduledPublishDate(null)}
+          onConfirmDate={d => setScheduledPublishDate(d)}
+        />
+        <VideoCoverPickerModal
+          visible={coverPickerVisible}
+          onClose={() => setCoverPickerVisible(false)}
+          videoUri={videoUri}
+          durationSec={videoDurationSec}
+          onSelect={applyCoverFrame}
+          title="Select short cover"
         />
       </SafeAreaView>
     </Modal>
@@ -368,6 +577,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FF8C00',
     marginLeft: 8,
+  },
+  selectFromGalleryBtn: {
+    alignItems: 'center',
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  selectFromGalleryText: {
+    fontSize: 13,
+    color: '#666',
+    textDecorationLine: 'underline',
   },
   videoSelectedRow: {
     flexDirection: 'row',

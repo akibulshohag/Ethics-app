@@ -1,7 +1,8 @@
 /**
- * Filter effects config - YouTube/Messenger style
- * Each filter defines a visual overlay applied to the preview in real-time
- * overlayColor + overlayOpacity simulates color grading
+ * Filter effects config — in-app preview (overlay).
+ * Upload pipeline: ethics-backend `shorts-ffmpeg-presets.ts` uses the same
+ * overlayColor + overlayOpacity per `id` (FILTER_OVERLAY) to bake the look into the MP4.
+ * If you change a look here, update FILTER_OVERLAY there too.
  */
 export const FILTER_EFFECTS = [
   {
@@ -79,7 +80,7 @@ export const FILTER_EFFECTS = [
   {
     id: '9',
     name: 'Fade',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1514525253361-bee8a487409e?w=200&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=200&q=80',
     overlayColor: '#F5E6D3',
     overlayOpacity: 0.2,
     isTrending: true,
@@ -108,6 +109,70 @@ export const FILTER_EFFECTS = [
     overlayOpacity: 0.5,
     isTrending: false,
   },
+  {
+    id: '13',
+    name: 'Golden',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=200&q=80',
+    overlayColor: '#C9A227',
+    overlayOpacity: 0.22,
+    isTrending: true,
+  },
+  {
+    id: '14',
+    name: 'Teal',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=200&q=80',
+    overlayColor: '#2A9D8F',
+    overlayOpacity: 0.22,
+    isTrending: false,
+  },
+  {
+    id: '15',
+    name: 'Vivid',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=200&q=80',
+    overlayColor: '#E63946',
+    overlayOpacity: 0.18,
+    isTrending: true,
+  },
+  {
+    id: '16',
+    name: 'Matte',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?w=200&q=80',
+    overlayColor: '#6D6875',
+    overlayOpacity: 0.28,
+    isTrending: false,
+  },
+  {
+    id: '17',
+    name: 'Punchy B&W',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?w=200&q=80',
+    overlayColor: '#2B2B2B',
+    overlayOpacity: 0.42,
+    isTrending: true,
+  },
+  {
+    id: '18',
+    name: 'Glow',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1499028344343-cd173ffc68a9?w=200&q=80',
+    overlayColor: '#FFE5B4',
+    overlayOpacity: 0.2,
+    isTrending: false,
+  },
+  {
+    id: '19',
+    name: 'Film',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=200&q=80',
+    overlayColor: '#3D2C1E',
+    overlayOpacity: 0.32,
+    isTrending: true,
+  },
+  {
+    id: '20',
+    name: 'Crush',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=200&q=80',
+    overlayColor: '#1A1A2E',
+    overlayOpacity: 0.38,
+    isTrending: false,
+  },
 ];
 
 export const getFilterOverlayStyle = filter => {
@@ -117,5 +182,16 @@ export const getFilterOverlayStyle = filter => {
   return {
     backgroundColor: filter.overlayColor || 'transparent',
     opacity: filter.overlayOpacity || 0,
+  };
+};
+
+/** Soft warm overlay for “beauty” (preview only; real face retouch needs native pipeline). */
+export const getBeautyOverlayStyle = level => {
+  const n = Number(level);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const t = Math.min(100, Math.max(0, n)) / 100;
+  return {
+    backgroundColor: 'rgba(255, 248, 240, 1)',
+    opacity: 0.06 + t * 0.38,
   };
 };

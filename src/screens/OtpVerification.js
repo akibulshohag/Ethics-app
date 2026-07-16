@@ -1,22 +1,40 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { forgotPassword, verifyOtp, verifyEmailOtp, resendEmailVerificationOtp } from '../services/authService';
+import { useDispatch } from 'react-redux';
+import { appSetUser } from '../redux/actions/appSlice';
+import { refreshUserSafetyAfterLogin } from '../services/userSafetyService';
+import { navigationRef } from '../utils/helper';
 import {
   COLORS,
   FONTS,
   SPACING,
   BORDER_RADIUS,
-  SHADOWS,
-  DIMENSIONS,
   COMMON_STYLES,
 } from '../constants/theme';
 
 const OtpVerification = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const dispatch = useDispatch();
+  const email = route.params?.email || '';
+  const method = route.params?.method || 'email';
+  const mode = route.params?.mode || 'reset';
   const [timer, setTimer] = useState(55);
-  const [otp] = useState(['7', '4', '', '', '']);
+  const [otp, setOtp] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -25,44 +43,132 @@ const OtpVerification = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const maskedEmail = email
+    ? email.replace(/(.{2})(.*)(@.*)/, (_, start, middle, domain) => {
+        const masked = middle.length > 0 ? '*'.repeat(Math.min(middle.length, 4)) : '';
+        return `${start}${masked}${domain}`;
+      })
+    : 'your email';
+
+  const handleVerify = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Missing email. Please start again.');
+      navigation.navigate('ForgotPassword');
+      return;
+    }
+    if (!otp.trim() || otp.trim().length < 5) {
+      Alert.alert('Error', 'Please enter the 5-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (mode === 'signup') {
+        const data = await verifyEmailOtp(email, otp.trim());
+        const userData = {
+          id: data.user.id,
+          name: data.user.name || 'New User',
+          email: data.user.email,
+          phone: data.user.phone || '',
+          nickname: data.user.nickname || '',
+          gender: data.user.gender || 'others',
+          role: data.user.role,
+          roleId: data.user.roleId,
+          address: data.user.address,
+          token: data.token,
+        };
+        dispatch(appSetUser(userData));
+        await refreshUserSafetyAfterLogin();
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Account');
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
+        }
+        return;
+      }
+
+      const data = await verifyOtp(email, otp.trim());
+      navigation.navigate('CreateNewPassword', {
+        email,
+        resetToken: data.resetToken,
+      });
+    } catch (error) {
+      Alert.alert('Error', error.message || 'OTP verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email || timer > 0) return;
+    setResending(true);
+    try {
+      if (mode === 'signup') {
+        await resendEmailVerificationOtp(email);
+      } else {
+        await forgotPassword(email, method);
+      }
+      setTimer(55);
+      Alert.alert('Success', 'A new OTP has been sent to your email');
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to resend OTP');
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
           <Icon name="arrow-left" size={28} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Forgot Password</Text>
+        <Text style={styles.headerTitle}>Verify OTP</Text>
       </View>
 
       <View style={styles.whiteSheet}>
         <Text style={styles.infoText}>
-          Code has been send to +1 111 ******99
+          Code has been sent to {maskedEmail}
         </Text>
 
-        <View style={styles.otpContainer}>
-          {otp.map((digit, index) => (
-            <View
-              key={index}
-              style={[
-                styles.otpBox,
-                digit !== '' && styles.otpBoxFilled,
-                index === 2 && styles.otpBoxActive,
-              ]}
-            >
-              <Text style={styles.otpText}>{digit}</Text>
-            </View>
-          ))}
-        </View>
+        <TextInput
+          style={styles.otpInput}
+          placeholder="Enter 5-digit OTP"
+          placeholderTextColor={COLORS.gray600}
+          value={otp}
+          onChangeText={setOtp}
+          keyboardType="number-pad"
+          maxLength={5}
+          autoFocus
+        />
 
-        <Text style={styles.resendText}>
-          Resend code in <Text style={styles.timerText}>{timer}</Text> s
-        </Text>
+        <TouchableOpacity onPress={handleResend} disabled={timer > 0 || resending}>
+          <Text style={styles.resendText}>
+            {timer > 0 ? (
+              <>
+                Resend code in <Text style={styles.timerText}>{timer}</Text> s
+              </>
+            ) : (
+              <Text style={styles.timerText}>
+                {resending ? 'Sending...' : 'Resend code'}
+              </Text>
+            )}
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.verifyButton}
-          onPress={() => navigation.navigate('CreateNewPassword')}
+          onPress={handleVerify}
+          disabled={loading}
         >
-          <Text style={styles.verifyButtonText}>Verify</Text>
+          {loading ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <Text style={styles.verifyButtonText}>Verify</Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -101,32 +207,21 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: SPACING.xxl,
     marginBottom: SPACING.xxl,
+    textAlign: 'center',
   },
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  otpInput: {
     width: '100%',
-    marginBottom: SPACING.xxl,
-  },
-  otpBox: {
-    width: 60,
     height: 60,
     borderRadius: BORDER_RADIUS.lg,
     backgroundColor: COLORS.gray100,
     borderWidth: 1,
-    borderColor: COLORS.gray300,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  otpBoxActive: {
     borderColor: COLORS.primaryOrange,
-    backgroundColor: '#FFF4EB',
-  },
-  otpBoxFilled: {},
-  otpText: {
+    textAlign: 'center',
     fontSize: FONTS.xl,
     fontWeight: FONTS.bold,
     color: COLORS.textPrimary,
+    marginBottom: SPACING.xxl,
+    letterSpacing: 8,
   },
   resendText: {
     fontSize: FONTS.base,
@@ -139,12 +234,11 @@ const styles = StyleSheet.create({
   },
   verifyButton: {
     width: '100%',
-    height: 60,
-    backgroundColor: COLORS.gray900,
-    borderRadius: BORDER_RADIUS.xxxl,
+    height: 52,
+    backgroundColor: '#2B1A00',
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
   },
   verifyButtonText: {
     color: COLORS.white,

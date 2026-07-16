@@ -32,7 +32,7 @@ const NotificationModal = ({ visible, onAllow, onDecline }) => {
           </View>
 
           <Text style={styles.title}>
-            EatIx would live to send you Notifications
+            Eatwaze would like to send you notifications
           </Text>
 
           <Text style={styles.message}>

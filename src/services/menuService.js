@@ -3,17 +3,20 @@ import { config } from '../../config';
 const API_URL = `${config.apiBaseUrl}/menu`;
 
 /**
- * Get menu items for a user (e.g. video owner). Public, no auth.
- * Returns { menu: [{ id, userId, itemName, price, imageUrl, sortOrder }, ...] }
+ * Get menu items and categories for a user (e.g. video owner). Public, no auth.
+ * Returns { menu: [...], categories: [{ id, name, sortOrder, itemCount? }, ...] }
  */
 export const getMenuByUserId = async (userId) => {
-  if (!userId) return { menu: [] };
+  if (!userId) return { menu: [], categories: [] };
   try {
     const res = await fetch(`${API_URL}/by-user/${userId}`);
     const data = await res.json();
-    return { menu: data.menu || [] };
+    return {
+      menu: data.menu || [],
+      categories: data.categories || [],
+    };
   } catch (e) {
-    return { menu: [] };
+    return { menu: [], categories: [] };
   }
 };
 
@@ -60,7 +63,14 @@ export const updateMenuItem = async (token, id, body) => {
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to update');
+  if (!res.ok) {
+    let message = 'Failed to update menu item';
+    try {
+      const err = await res.json();
+      message = err?.message || message;
+    } catch (_) {}
+    throw new Error(message);
+  }
   return res.json();
 };
 
@@ -109,6 +119,22 @@ export const uploadMenuFile = async (token, formData) => {
 };
 
 /**
+ * Upload CSV file and bulk-create menu items/categories. Requires auth.
+ */
+export const uploadMenuCsv = async (token, formData) => {
+  const res = await fetch(`${API_URL}/upload-csv`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Failed to import CSV');
+  }
+  return res.json();
+};
+
+/**
  * List menu files (owner's PDF/image uploads). Requires auth.
  */
 export const getMenuFiles = async (token, userId = null) => {
@@ -117,5 +143,91 @@ export const getMenuFiles = async (token, userId = null) => {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error('Failed to load menu files');
+  return res.json();
+};
+
+/**
+ * Delete uploaded menu file (PDF/image). Requires auth.
+ */
+export const deleteMenuFile = async (token, id) => {
+  const res = await fetch(`${API_URL}/files/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    let message = 'Failed to delete menu file';
+    try {
+      const err = await res.json();
+      message = err?.message || message;
+    } catch (_) {}
+    throw new Error(message);
+  }
+  return res.json();
+};
+
+/**
+ * List menu categories. Owner: own. Admin: ?userId=. Requires auth.
+ * Returns { categories: [{ id, name, sortOrder, itemCount }, ...] }
+ */
+export const getMenuCategories = async (token, userId = null) => {
+  const url = userId ? `${API_URL}/categories?userId=${userId}` : `${API_URL}/categories`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to load menu categories');
+  return res.json();
+};
+
+/**
+ * Create menu category. Owner: own. Admin: ?userId=. Requires auth.
+ */
+export const createMenuCategory = async (token, body, userId = null) => {
+  const url = userId ? `${API_URL}/categories?userId=${userId}` : `${API_URL}/categories`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Failed to create category');
+  }
+  return res.json();
+};
+
+/**
+ * Update menu category. Requires auth.
+ */
+export const updateMenuCategory = async (token, id, body) => {
+  const res = await fetch(`${API_URL}/categories/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Failed to update category');
+  }
+  return res.json();
+};
+
+/**
+ * Delete menu category. Items in that category become uncategorized. Requires auth.
+ */
+export const deleteMenuCategory = async (token, id) => {
+  const res = await fetch(`${API_URL}/categories/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || 'Failed to delete category');
+  }
   return res.json();
 };

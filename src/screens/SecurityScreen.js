@@ -45,7 +45,6 @@ const SecurityScreen = () => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -57,7 +56,6 @@ const SecurityScreen = () => {
         <View style={{ width: 28 }} />
       </View>
 
-      {/* Content */}
       <View style={styles.content}>
         <Text style={styles.description}>
           Manage your security settings to keep your account safe
@@ -74,10 +72,18 @@ const SecurityScreen = () => {
 
           <SecurityOption
             iconName="fingerprint"
-            title="Fingerprint"
-            subtitle="Enable or disable fingerprint authentication"
+            title="Fingerprint & Face lock"
+            subtitle="Unlock with fingerprint or face unlock"
             iconColor="#4CAF50"
             onPress={() => navigation.navigate('SetFingerprint')}
+          />
+
+          <SecurityOption
+            iconName="printer-wireless"
+            title="WiFi printer"
+            subtitle="Configure thermal printer for invoices"
+            iconColor="#2196F3"
+            onPress={() => navigation.navigate('PrinterSettingsScreen')}
           />
 
           <SecurityOption

@@ -1,6 +1,8 @@
-package com.ethics
+package com.eatix.app
 
 import android.app.Application
+import com.facebook.FacebookSdk
+import com.facebook.appevents.AppEventsLogger
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -14,14 +16,24 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // Packages that cannot be autolinked yet can be added manually here, for example:
-          // add(MyReactNativePackage())
+          add(MediaScannerRefreshPackage())
+          add(EatixBiometricPackage())
         },
     )
   }
 
   override fun onCreate() {
     super.onCreate()
+    // Avoid startup crash when Facebook client token is not configured yet.
+    val appId = getString(R.string.facebook_app_id).trim()
+    val clientToken = getString(R.string.facebook_client_token).trim()
+    if (appId.isNotEmpty() && clientToken.isNotEmpty()) {
+      FacebookSdk.setApplicationId(appId)
+      FacebookSdk.setClientToken(clientToken)
+      FacebookSdk.fullyInitialize()
+      AppEventsLogger.activateApp(this)
+    }
+    SigningKeyHashUtil.logSigningFingerprints(packageName, packageManager)
     loadReactNative(this)
   }
 }

@@ -3,6 +3,28 @@ import { config } from '../../config';
 const API_URL = `${config.apiBaseUrl}/featured`;
 
 /**
+ * Get all featured campaigns (no location check). Use for home banner.
+ * Returns { featured: Array<{ id, videoId, video, user, areaName, ... }> }
+ */
+export const getFeatured = async () => {
+  try {
+    const res = await fetch(API_URL);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { featured: [] };
+    const raw = data.featured;
+    // API may return featured as array or single object { id, video, user, ... }
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && (raw.video || raw.videoId)
+        ? [raw]
+        : [];
+    return { featured: list };
+  } catch (e) {
+    return { featured: [] };
+  }
+};
+
+/**
  * Get featured video for user's current location.
  * Returns { featured: { video, areaName, ... } | null }
  */
@@ -12,8 +34,10 @@ export const getFeaturedByLocation = async (latitude, longitude) => {
     const res = await fetch(
       `${API_URL}/by-location?latitude=${latitude}&longitude=${longitude}`,
     );
-    const data = await res.json();
-    return { featured: data.featured || null };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { featured: null };
+    const featured = data.featured ?? data.data?.featured ?? null;
+    return { featured: featured && featured.video ? featured : null };
   } catch (e) {
     return { featured: null };
   }

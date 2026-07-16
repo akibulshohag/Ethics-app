@@ -14,6 +14,7 @@ import { useSelector } from 'react-redux';
 import CompactVideoCard from '../components/CompactVideoCard';
 import { getFavorites } from '../services/playlistService';
 import { mapVideoApiToDisplay, mapShortApiToDisplay } from '../utils/playlistMappers';
+import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 
 const FavoritesScreen = ({ navigation }) => {
   const { user: currentUser } = useSelector(state => state.app) || {};
@@ -50,11 +51,9 @@ const FavoritesScreen = ({ navigation }) => {
 
   const handleItemPress = useCallback(
     item => {
-      if (item.type === 'short') {
-        navigation?.navigate('ShortsVideoScreen', { shortId: item.id });
-      } else {
-        navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
-      }
+      navigateToHomeOneLibraryDetail(navigation, item, {
+        returnTo: 'favorites',
+      });
     },
     [navigation],
   );
@@ -99,7 +98,7 @@ const FavoritesScreen = ({ navigation }) => {
           contentContainerStyle={[styles.listContent, items.length === 0 && styles.emptyListContent]}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <MaterialCommunityIcons name="heart-outline" size={64} color="#ccc" />
+              <MaterialCommunityIcons name="heart-outline" size={64} color="#FF7F0B" />
               <Text style={styles.emptyStateText}>No videos in favorites</Text>
             </View>
           }

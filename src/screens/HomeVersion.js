@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { config } from '../../config';
-import { navigationRef } from '../utils/helper';
+import { navigationRef, safeImageUri } from '../utils/helper';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
@@ -37,10 +37,12 @@ import { getFeaturedByLocation } from '../services/featuredService';
 import { getVendorFeaturedByLocation } from '../services/vendorFeaturedService';
 import { getVendorSponsoredByLocation } from '../services/vendorSponsoredService';
 import { setPlaylist } from '../services/playlistService';
+import { getPosts } from '../services/postService';
 import { downloadVideo } from '../services/downloadService';
 import { submitReport } from '../services/reportService';
 import SaveModal from '../components/SaveModal';
 import Toast from 'react-native-toast-message';
+import { buildContentShareMessage } from '../utils/contentLinks';
 
 const { width } = Dimensions.get('window');
 
@@ -119,6 +121,29 @@ const mapVideoToCard = v => {
   };
 };
 
+// Same as Video: no location on Post schema; nearby = by creator's User location. Same card shape as video.
+const mapPostToCard = p => {
+  const user = p.user || {};
+  const likeCount = p.likeCount ?? p._count?.likes ?? 0;
+  const pubAt = p.publishedAt || p.createdAt;
+  const isVideo = p.mediaType === 'video';
+  return {
+    id: p.id,
+    postId: p.id,
+    type: 'post',
+    userId: p.userId,
+    title: p.title || 'Untitled',
+    author: user.nickname || user.name || 'Unknown',
+    views: `${formatCount(likeCount)} likes`,
+    time: formatTimeAgo(pubAt),
+    duration: isVideo ? formatDuration(p.duration) : null,
+    thumbnail:
+      p.thumbnailUrl || p.mediaUrl || 'https://via.placeholder.com/300',
+    videoUrl: isVideo ? p.mediaUrl : null,
+    mediaUrl: p.mediaUrl,
+  };
+};
+
 const shuffle = arr => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -142,6 +167,7 @@ const HomeVersion = () => {
   const [selectedItem, setSelectedItem] = useState(null); // { id, type: 'video'|'short', title, videoUrl?, ... }
   const [shortsData, setShortsData] = useState([]);
   const [videosData, setVideosData] = useState([]);
+  const [postsData, setPostsData] = useState([]);
   const [continueData, setContinueData] = useState([]);
   const [channelsData, setChannelsData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -216,28 +242,50 @@ const HomeVersion = () => {
           radiusKm: 50,
         }
       : baseParams;
+    const postParams = isNearby
+      ? {
+          page: 1,
+          limit: 100,
+          sort: 'latest',
+          viewerRole,
+          nearbyLat: selectedLocation.lat,
+          nearbyLng: selectedLocation.lng,
+          radiusKm: 50,
+        }
+      : null;
     try {
-      const [shortsRes, videosRes] = await Promise.all([
+      const promises = [
         shortsService.getShorts(shortParams),
         getVideos(videoParams),
-      ]);
+      ];
+      if (postParams) {
+        promises.push(getPosts(postParams));
+      }
+      const results = await Promise.all(promises);
+      const shortsRes = results[0];
+      const videosRes = results[1];
+      const postsRes = postParams ? results[2] : null;
       const shorts = (shortsRes?.shorts || []).filter(
         s => s.videoUrl && String(s.videoUrl).trim(),
       );
       const videos = videosRes?.videos || [];
+      const posts = postsRes?.posts || [];
       if (!isNearby) {
         const shuffledShorts = shuffle(shorts).map(mapShortToCard);
         const shuffledVideos = shuffle(videos).map(mapVideoToCard);
         setShortsData(shuffledShorts);
         setVideosData(shuffledVideos);
+        setPostsData([]);
       } else {
         setShortsData(shorts.map(mapShortToCard));
         setVideosData(videos.map(mapVideoToCard));
+        setPostsData(posts.map(mapPostToCard));
       }
     } catch (e) {
       console.error('Error loading feed:', e);
       setShortsData([]);
       setVideosData([]);
+      setPostsData([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -364,8 +412,10 @@ const HomeVersion = () => {
         } else {
           setLocationLoading(false);
         }
-        // Save to user profile (with address from reverse geocode so address is not null)
-        if (currentUser?.id && currentUser?.token) {
+        // Save to user profile only for non-owners. Owners (restaurant/shop) must use Edit Profile
+        // to set their shop address; "select location" here is only for browsing nearby, not their business location.
+        const isOwner = (currentUser?.role || '').toLowerCase() === 'owner';
+        if (currentUser?.id && currentUser?.token && !isOwner) {
           try {
             const address = await reverseGeocode(lat, lng);
             const response = await fetch(
@@ -467,6 +517,12 @@ const HomeVersion = () => {
   const buildMainFeed = () => {
     const shorts = shortsData || [];
     const videos = videosData || [];
+    const posts = postsData || [];
+    // Same as Video: posts have no location on schema; nearby = by creator. Merge with videos for feed.
+    const combinedVideoPost = [
+      ...videos.map(v => ({ ...v, _feedType: 'VIDEO' })),
+      ...posts.map(p => ({ ...p, _feedType: 'POST' })),
+    ];
     const feed = [];
     let sIdx = 0;
     let vIdx = 0;
@@ -476,6 +532,8 @@ const HomeVersion = () => {
       shorts.length,
       'videos:',
       videos.length,
+      'posts:',
+      posts.length,
     );
 
     // 1) First block: 2 shorts
@@ -485,16 +543,16 @@ const HomeVersion = () => {
       feed.push({ type: 'SHORTS', id: 's-2', data: firstShorts });
     }
 
-    // 2) Then 2 videos
-    const firstVideos = videos.slice(vIdx, vIdx + 2);
-    vIdx += firstVideos.length;
-    if (firstVideos.length > 0) {
-      firstVideos.forEach(v => {
-        feed.push({ ...v, type: 'VIDEO' }); // Ensure type is VIDEO (uppercase) after spread
+    // 2) Then 2 video/post cards
+    const firstVideoPost = combinedVideoPost.slice(vIdx, vIdx + 2);
+    vIdx += firstVideoPost.length;
+    if (firstVideoPost.length > 0) {
+      firstVideoPost.forEach(v => {
+        feed.push({ ...v, type: v._feedType });
       });
-      console.log('Added first 2 videos to feed');
+      console.log('Added first 2 video/post cards to feed');
     } else {
-      console.log('No videos available to add');
+      console.log('No videos or posts available to add');
     }
 
     // 3) Continue watching block
@@ -506,9 +564,9 @@ const HomeVersion = () => {
       });
     }
 
-    // 4) Then blocks that grow: 4, 6, 8, ... shorts/videos
+    // 4) Then blocks that grow: 4, 6, 8, ... shorts and video/post cards
     let blockSize = 4;
-    while (sIdx < shorts.length || vIdx < videos.length) {
+    while (sIdx < shorts.length || vIdx < combinedVideoPost.length) {
       const blockShorts = shorts.slice(sIdx, sIdx + blockSize);
       sIdx += blockShorts.length;
       if (blockShorts.length > 0) {
@@ -519,14 +577,14 @@ const HomeVersion = () => {
         });
       }
 
-      const blockVideos = videos.slice(vIdx, vIdx + blockSize);
-      vIdx += blockVideos.length;
-      if (blockVideos.length > 0) {
-        blockVideos.forEach(v => {
-          feed.push({ ...v, type: 'VIDEO' }); // Ensure type is VIDEO (uppercase) after spread
+      const blockVideoPost = combinedVideoPost.slice(vIdx, vIdx + blockSize);
+      vIdx += blockVideoPost.length;
+      if (blockVideoPost.length > 0) {
+        blockVideoPost.forEach(v => {
+          feed.push({ ...v, type: v._feedType });
         });
         console.log(
-          `Added ${blockVideos.length} videos (block size ${blockSize})`,
+          `Added ${blockVideoPost.length} video/post cards (block size ${blockSize})`,
         );
       }
 
@@ -534,10 +592,13 @@ const HomeVersion = () => {
     }
 
     const videoCount = feed.filter(f => f.type === 'VIDEO').length;
+    const postCount = feed.filter(f => f.type === 'POST').length;
     const shortsCount = feed.filter(f => f.type === 'SHORTS').length;
     console.log(
       'Final feed - videos:',
       videoCount,
+      'posts:',
+      postCount,
       'shorts blocks:',
       shortsCount,
       'total items:',
@@ -676,7 +737,12 @@ const HomeVersion = () => {
     >
       <View style={styles.storyBorder}>
         <Image
-          source={{ uri: channel?.avatar || 'https://via.placeholder.com/100' }}
+          source={{
+            uri: safeImageUri(
+              channel?.avatar,
+              'https://via.placeholder.com/100',
+            ),
+          }}
           style={styles.storyImage}
         />
       </View>
@@ -786,11 +852,11 @@ const HomeVersion = () => {
       navigationRef.current?.navigate('Login');
       return;
     }
-    const shareUrl =
-      selectedItem.type === 'short'
-        ? `eatix://shorts/${selectedItem.id}`
-        : `eatix://video/${selectedItem.id}`;
-    const message = `${selectedItem.title || 'Video'}\n${shareUrl}`;
+    const message = buildContentShareMessage({
+      type: selectedItem.type === 'short' ? 'short' : 'video',
+      id: selectedItem.id,
+      title: selectedItem.title || 'Video',
+    });
     try {
       await Share.share({ message, title: selectedItem.title || 'Share' });
       if (selectedItem.type === 'video') {
@@ -813,6 +879,12 @@ const HomeVersion = () => {
 
   const handleVideoPress = videoId => {
     navigation.navigate('VideoDetailsScreen', { videoId });
+  };
+
+  const handlePostPress = item => {
+    if (item?.userId) {
+      navigation.navigate('ChannelDetailsScreen', { userId: item.userId });
+    }
   };
 
   const handleSearchPress = () => {
@@ -850,7 +922,7 @@ const HomeVersion = () => {
                 activeOpacity={0.9}
               >
                 <Image
-                  source={{ uri: short.image }}
+                  source={{ uri: safeImageUri(short.image) }}
                   style={styles.shortImage}
                 />
                 <View style={styles.shortOverlay}>
@@ -891,7 +963,7 @@ const HomeVersion = () => {
                 activeOpacity={0.9}
               >
                 <Image
-                  source={{ uri: c.thumbnail || c.image }}
+                  source={{ uri: safeImageUri(c.thumbnail || c.image) }}
                   style={styles.continueImage}
                 />
                 <View style={styles.playButtonSmall}>
@@ -914,7 +986,7 @@ const HomeVersion = () => {
         >
           <View style={styles.thumbnailWrapper}>
             <Image
-              source={{ uri: item.thumbnail }}
+              source={{ uri: safeImageUri(item.thumbnail) }}
               style={styles.videoThumbnail}
             />
             {item.isSponsored && (
@@ -955,6 +1027,40 @@ const HomeVersion = () => {
           </View>
         </TouchableOpacity>
       );
+
+    if (item.type === 'POST') {
+      return (
+        <TouchableOpacity
+          style={styles.videoCard}
+          onPress={() => handlePostPress(item)}
+          activeOpacity={1}
+        >
+          <View style={styles.thumbnailWrapper}>
+            <Image
+              source={{ uri: safeImageUri(item.thumbnail) }}
+              style={styles.videoThumbnail}
+            />
+            {item.duration != null && item.duration !== '' && (
+              <View style={styles.durationBadge}>
+                <Text style={styles.durationText}>{item.duration}</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.videoDetails}>
+            <View style={styles.channelIcon} />
+            <View style={styles.videoInfo}>
+              <Text style={styles.videoTitleMerged}>{item.title}</Text>
+              <Text style={styles.videoMetaMerged}>
+                {item.author} • {item.views} • {item.time}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => openOptions(item)}>
+              <Icon name="dots-vertical" size={20} color={COLORS.textPrimary} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      );
+    }
     return null;
   };
 
@@ -1031,6 +1137,7 @@ const HomeVersion = () => {
         keyExtractor={(item, index) => {
           if (item.type === 'VIDEO')
             return `video-${item.id || index}-${index}`;
+          if (item.type === 'POST') return `post-${item.id || index}-${index}`;
           if (item.type === 'SHORTS')
             return `${item.id || `s-${index}`}-${index}`;
           if (item.type === 'CONTINUE') return `${item.id || 'cont'}-${index}`;
@@ -1275,7 +1382,6 @@ const HomeVersion = () => {
                       contentType:
                         selectedItem.type === 'short' ? 'short' : 'video',
                       contentId: selectedItem.id,
-                      reporterId: currentUser?.id,
                       reason: selectedReason,
                     });
                     Toast.show({ type: 'success', text1: 'Report submitted' });

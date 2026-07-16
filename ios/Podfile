@@ -8,6 +8,11 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
+# Required when using use_frameworks! :linkage => :static with RNFirebase
+$RNFirebaseAsStaticFramework = true
+# App only needs when-in-use location; disable VisionCamera's Always location APIs
+$VCEnableLocation = false
+
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
@@ -16,7 +21,7 @@ end
 
 target 'Ethics' do
   config = use_native_modules!
-
+  use_frameworks! :linkage => :static
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.
@@ -30,5 +35,13 @@ target 'Ethics' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+    # Fix for fmt library error in Xcode 26
+    installer.pods_project.targets.each do |target|
+      if target.name == 'fmt'
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+        end
+      end
+    end
   end
 end

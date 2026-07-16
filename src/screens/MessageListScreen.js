@@ -16,6 +16,15 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { getConversations } from '../services/chatService';
+import { safeImageUri } from '../utils/helper';
+
+function formatPartnerRole(role) {
+  const r = String(role || '').toLowerCase();
+  if (r === 'owner') return 'Owner';
+  if (r === 'vendor') return 'Vendor';
+  if (r === 'user') return 'User';
+  return '';
+}
 
 function formatTime(iso) {
   if (!iso) return '';
@@ -44,7 +53,7 @@ export default function MessageListScreen() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const list = await getConversations(user.token);
+      const list = await getConversations(user.token, user.id);
       setConversations(Array.isArray(list) ? list : []);
     } catch (e) {
       setConversations([]);
@@ -61,7 +70,7 @@ export default function MessageListScreen() {
   );
 
   const openChat = (item) => {
-    navigation.navigate('DetailedChatScreen', {
+    navigation.navigate('ChatScreen', {
       partnerId: item.partnerId,
       partnerName: item.partnerName,
       partnerAvatar: item.partnerAvatar,
@@ -77,6 +86,13 @@ export default function MessageListScreen() {
     : conversations;
 
   const storyPartners = filtered.slice(0, 8);
+  const getAvatarForPartner = (partnerName, partnerAvatar) =>
+    safeImageUri(
+      partnerAvatar,
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        partnerName || 'User',
+      )}&background=111&color=fff`,
+    );
 
   if (!user?.token) {
     return (
@@ -121,7 +137,7 @@ export default function MessageListScreen() {
                 <View style={styles.storyRing}>
                   <Image
                     source={{
-                      uri: c.partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.partnerName || '')}&background=111&color=fff`,
+                      uri: getAvatarForPartner(c.partnerName, c.partnerAvatar),
                     }}
                     style={styles.storyImage}
                   />
@@ -149,32 +165,49 @@ export default function MessageListScreen() {
           {filtered.length === 0 ? (
             <Text style={styles.emptyText}>No conversations yet</Text>
           ) : (
-            filtered.map((item) => (
-              <TouchableOpacity
-                key={item.partnerId}
-                style={styles.chatCard}
-                onPress={() => openChat(item)}
-                activeOpacity={0.7}
-              >
-                <Image
-                  source={{
-                    uri: item.partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.partnerName || '')}&background=111&color=fff`,
-                  }}
-                  style={styles.avatar}
-                />
-                <View style={styles.chatInfo}>
-                  <View style={styles.chatHeader}>
-                    <Text style={styles.userName} numberOfLines={1}>{item.partnerName}</Text>
-                    <Text style={styles.timeText}>{formatTime(item.lastMessageAt)}</Text>
+            filtered.map((item) => {
+              const partnerRoleLabel = formatPartnerRole(
+                item.partnerRole || item.role || item.partnerType,
+              );
+              return (
+                <TouchableOpacity
+                  key={item.partnerId}
+                  style={styles.chatCard}
+                  onPress={() => openChat(item)}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={{
+                      uri: getAvatarForPartner(
+                        item.partnerName,
+                        item.partnerAvatar,
+                      ),
+                    }}
+                    style={styles.avatar}
+                  />
+                  <View style={styles.chatInfo}>
+                    <View style={styles.chatHeader}>
+                      <View style={styles.nameRoleCol}>
+                        <Text style={styles.userName} numberOfLines={1}>
+                          {item.partnerName}
+                        </Text>
+                        {partnerRoleLabel ? (
+                          <Text style={styles.roleText}>{partnerRoleLabel}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={styles.timeText}>
+                        {formatTime(item.lastMessageAt)}
+                      </Text>
+                    </View>
+                    <View style={styles.messageRow}>
+                      <Text style={styles.messageText} numberOfLines={1}>
+                        {item.lastMessage || 'No message'}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.messageRow}>
-                    <Text style={styles.messageText} numberOfLines={1}>
-                      {item.lastMessage || 'No message'}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -240,8 +273,10 @@ const styles = StyleSheet.create({
   avatar: { width: 80, height: 80, borderRadius: 12 },
   chatInfo: { flex: 1, marginLeft: 15 },
   chatHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  userName: { fontSize: 18, fontWeight: '600', color: '#333', flex: 1 },
-  timeText: { fontSize: 14, color: '#A0A0A0' },
+  nameRoleCol: { flex: 1, marginRight: 8 },
+  userName: { fontSize: 18, fontWeight: '600', color: '#616161' },
+  roleText: { fontSize: 12, color: '#F69E23', fontWeight: '600', marginTop: 2 },
+  timeText: { fontSize: 14, color: '#9E9E9E' },
   messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  messageText: { fontSize: 14, color: '#888', flex: 1, marginRight: 10 },
+  messageText: { fontSize: 14, color: '#9E9E9E', flex: 1, marginRight: 10 },
 });

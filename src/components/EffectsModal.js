@@ -24,7 +24,7 @@ const EFFECTS_DATA = [
   { id: '6', image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&q=80' },
   { id: '7', image: 'https://images.unsplash.com/photo-1554151228-14d9def656e4?w=500&q=80' },
   { id: '8', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&q=80' },
-  { id: '9', image: 'https://images.unsplash.com/photo-1111111111111?w=500&q=80' }, // Placeholder fallback
+  { id: '9', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500&q=80' },
   { id: '10', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&q=80' },
   { id: '11', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500&q=80' },
   { id: '12', image: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=500&q=80' },

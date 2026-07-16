@@ -6,10 +6,14 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import SuccessModal from './SuccessModal';
+import { resetPassword, validatePasswordStrength } from '../services/authService';
 import {
   COLORS,
   FONTS,
@@ -21,19 +25,72 @@ import {
 } from '../constants/theme';
 
 const CreateNewPassword = () => {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const email = route.params?.email || '';
+  const resetToken = route.params?.resetToken || '';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!email || !resetToken) {
+      Alert.alert('Error', 'Session expired. Please start again.');
+      navigation.navigate('ForgotPassword');
+      return;
+    }
+
+    if (!password.trim() || !confirmPassword.trim()) {
+      Alert.alert('Error', 'Please fill in both password fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      Alert.alert('Error', passwordError);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await resetPassword({
+        email,
+        resetToken,
+        newPassword: password,
+        confirmPassword,
+      });
+      setShowSuccess(true);
+      setTimeout(() => {
+        setShowSuccess(false);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
+      }, 2500);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to reset password');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#FF7A00" />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
           <Icon name="arrow-left" size={28} color={COLORS.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create New Password</Text>
@@ -41,6 +98,9 @@ const CreateNewPassword = () => {
 
       <View style={styles.whiteSheet}>
         <Text style={styles.instructionText}>Create Your New Password</Text>
+        <Text style={styles.hintText}>
+          Use at least 8 characters with uppercase, lowercase, and a number.
+        </Text>
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>New Password</Text>
@@ -97,28 +157,22 @@ const CreateNewPassword = () => {
         </View>
 
         <TouchableOpacity
-          style={styles.checkboxContainer}
-          onPress={() => setRememberMe(!rememberMe)}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
-            {rememberMe && <Icon name="check" size={14} color="#FFF" />}
-          </View>
-          <Text style={styles.checkboxLabel}>Remember me</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={styles.continueButton}
-          onPress={() => setShowSuccess(true)}
+          onPress={handleResetPassword}
+          disabled={loading}
         >
-          <Text style={styles.continueText}>Continue</Text>
+          {loading ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <Text style={styles.continueText}>Continue</Text>
+          )}
         </TouchableOpacity>
       </View>
 
       <SuccessModal
         visible={showSuccess}
         onClose={() => setShowSuccess(false)}
-        message="Your password successfully reset"
+        message="Your password was reset successfully. Redirecting to login..."
       />
     </SafeAreaView>
   );
@@ -156,6 +210,11 @@ const styles = StyleSheet.create({
     fontSize: FONTS.lg,
     fontWeight: FONTS.semiBold,
     color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  hintText: {
+    fontSize: FONTS.sm,
+    color: COLORS.textSecondary,
     marginBottom: SPACING.xxl,
   },
   inputContainer: {
@@ -178,29 +237,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FONTS.base,
     color: COLORS.textPrimary,
-  },
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: SPACING.md,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: COLORS.primaryOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  checkboxActive: {
-    backgroundColor: COLORS.primaryOrange,
-  },
-  checkboxLabel: {
-    fontSize: FONTS.sm,
-    color: COLORS.gray700,
-    fontWeight: FONTS.medium,
   },
   continueButton: {
     backgroundColor: COLORS.primaryOrange,

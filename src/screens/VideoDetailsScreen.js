@@ -23,7 +23,6 @@ import DescriptionModal from '../components/DescriptionModal';
 import SaveModal from '../components/SaveModal';
 import CommentsModal from '../components/CommentsModal';
 import LiveChatModal from '../components/LiveChatModal';
-import ProductDetailModal from '../components/ProductDetailModal';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
@@ -42,6 +41,7 @@ import {
   subscribeToChannel,
   unsubscribeFromChannel,
 } from '../services/channelService';
+import { buildContentShareMessage, buildContentUniversalLink } from '../utils/contentLinks';
 import {
   downloadVideo,
   isVideoDownloaded,
@@ -49,6 +49,11 @@ import {
 } from '../services/downloadService';
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
+import { safeImageUri } from '../utils/helper';
+import {
+  isBusinessCreator,
+  shouldShowOrderBookButtons,
+} from '../utils/contentVisibility';
 
 const { width } = Dimensions.get('window');
 
@@ -111,12 +116,18 @@ const mapVideoApiToDisplay = v => {
   const shareCount = v.shareCount ?? 0;
   const pubAt = v.publishedAt || v.createdAt;
   const channelName = user.nickname || user.name || 'Unknown';
+  const channelAvatarRaw =
+    user.photos?.[0] || (Array.isArray(user.photos) && user.photos[0]) || null;
   const channelAvatar =
-    user.photos?.[0] ||
-    (Array.isArray(user.photos) && user.photos[0]) ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      channelName,
-    )}&background=111&color=fff`;
+    typeof channelAvatarRaw === 'string' && channelAvatarRaw.trim()
+      ? channelAvatarRaw.trim()
+      : channelAvatarRaw &&
+        typeof channelAvatarRaw === 'object' &&
+        (channelAvatarRaw.src || channelAvatarRaw.uri)
+      ? channelAvatarRaw.src || channelAvatarRaw.uri
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          channelName,
+        )}&background=111&color=fff`;
   return {
     id: v.id,
     title: v.title || 'Untitled',
@@ -145,7 +156,10 @@ const mapVideoApiToDisplay = v => {
     creatorLatitude: user.latitude ?? undefined,
     creatorLongitude: user.longitude ?? undefined,
     creatorSocialLinks: Array.isArray(user.socialLinks) ? user.socialLinks : [],
-    creatorRole: user.role ?? undefined,
+    creatorRole:
+      user.role != null ? String(user.role).toLowerCase() : undefined,
+
+    user: v.user ?? undefined,
   };
 };
 
@@ -178,10 +192,12 @@ const VideoDetailsScreen = () => {
     isSubscribed: false,
     subscriberCount: 0,
   });
+  const [channelRating, setChannelRating] = useState({
+    average: 0,
+    reviewCount: 0,
+  });
   const [subscribeLoading, setSubscribeLoading] = useState(false);
   const [liveChatModalVisible, setLiveChatModalVisible] = useState(false);
-  const [productDetailModalVisible, setProductDetailModalVisible] =
-    useState(false);
 
   // Video player states
   const [videoPaused, setVideoPaused] = useState(true);
@@ -204,7 +220,6 @@ const VideoDetailsScreen = () => {
   const [downloadProgress, setDownloadProgress] = useState(null);
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [videoPlaybackUri, setVideoPlaybackUri] = useState(null);
-
 
   const loadVideo = useCallback(async () => {
     if (!videoId && !offlineVideo) {
@@ -272,6 +287,26 @@ const VideoDetailsScreen = () => {
                 isSubscribed: profile.isSubscribed ?? false,
                 subscriberCount: profile.subscriberCount ?? 0,
               });
+              const avgRaw =
+                profile?.averageRating ??
+                profile?.ratingAverage ??
+                profile?.ratingAvg ??
+                profile?.rating;
+              const countRaw =
+                profile?.reviewCount ??
+                profile?.reviewsCount ??
+                profile?.totalReviews ??
+                profile?.ratingCount;
+              const avg = Number(avgRaw);
+              const count = Number(countRaw);
+              setChannelRating({
+                average: Number.isFinite(avg)
+                  ? Math.max(0, Math.min(5, avg))
+                  : 0,
+                reviewCount: Number.isFinite(count)
+                  ? Math.max(0, Math.floor(count))
+                  : 0,
+              });
             })
             .catch(() => {});
         }
@@ -302,6 +337,7 @@ const VideoDetailsScreen = () => {
       setCurrentVideo(null);
       setRelatedVideos([]);
       setChannelSubscription({ isSubscribed: false, subscriberCount: 0 });
+      setChannelRating({ average: 0, reviewCount: 0 });
     } finally {
       setLoading(false);
     }
@@ -436,8 +472,12 @@ const VideoDetailsScreen = () => {
         prev ? { ...prev, shareCount: prev.shareCount + 1 } : null,
       );
       await Share.share({
-        message: `Check out this video: ${currentVideo.title}`,
-        url: currentVideo.videoUrl || '',
+        message: buildContentShareMessage({
+          type: 'video',
+          id: currentVideo.id,
+          title: currentVideo.title || 'Video',
+        }),
+        url: buildContentUniversalLink('video', currentVideo.id),
         title: currentVideo.title,
       });
     } catch (error) {
@@ -571,6 +611,13 @@ const VideoDetailsScreen = () => {
     setVideoPaused(p => !p);
   };
 
+  const showOrderBookCta = shouldShowOrderBookButtons(currentVideo, user?.id);
+  const isOwnVideo =
+    user?.id &&
+    currentVideo?.userId &&
+    String(currentVideo.userId) === String(user.id);
+  const showMessageCta = isBusinessCreator(currentVideo) && !isOwnVideo;
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.videoPlayer}>
@@ -579,8 +626,20 @@ const VideoDetailsScreen = () => {
             <Video
               ref={videoRef}
               key={`video-${videoId}-${retryCount}`}
-              source={{ uri: videoPlaybackUri || currentVideo.videoUrl }}
-              poster={currentVideo.thumbnail}
+              source={{
+                uri: (() => {
+                  const raw = videoPlaybackUri || currentVideo.videoUrl;
+                  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+                  if (raw && typeof raw === 'object' && (raw.uri || raw.src))
+                    return String(raw.uri || raw.src).trim();
+                  return '';
+                })(),
+              }}
+              poster={
+                typeof currentVideo.thumbnail === 'string'
+                  ? currentVideo.thumbnail
+                  : safeImageUri(currentVideo.thumbnail)
+              }
               posterResizeMode="cover"
               style={styles.videoPlayerContent}
               resizeMode="contain"
@@ -631,7 +690,12 @@ const VideoDetailsScreen = () => {
           </>
         ) : (
           <Image
-            source={{ uri: currentVideo.thumbnail }}
+            source={{
+              uri: safeImageUri(
+                currentVideo.thumbnail,
+                'https://via.placeholder.com/300',
+              ),
+            }}
             style={styles.videoThumbnail}
           />
         )}
@@ -786,17 +850,81 @@ const VideoDetailsScreen = () => {
           />
         </View>
 
-        {/* Order Now / Visit Website / Message Now – owner (restaurant) or vendor (owner/admin can order from vendor) */}
-        {((currentVideo?.user?.role === 'owner' || currentVideo?.creatorRole === 'owner') ||
-          (currentVideo?.user?.role === 'vendor' || currentVideo?.creatorRole === 'vendor')) && (
+        {/* Creator social links (show above booking/order actions) */}
+        {currentVideo.creatorSocialLinks?.length > 0 &&
+          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim())
+            .length > 0 && (
+            <View style={styles.creatorSocialRow}>
+              {currentVideo.creatorSocialLinks
+                .filter(l => (l?.url || '').trim())
+                .map((link, index) => (
+                  <TouchableOpacity
+                    key={`creator-${link.type}-${index}`}
+                    style={styles.creatorSocialIconBtn}
+                    onPress={() => {
+                      const url = (link.url || '').trim();
+                      if (url)
+                        Linking.openURL(
+                          url.startsWith('http') ? url : `https://${url}`,
+                        );
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={getSocialIcon(link.type)}
+                      size={24}
+                      color="#F97507"
+                    />
+                  </TouchableOpacity>
+                ))}
+            </View>
+          )}
+
+        {/* Order / Message only for business creators; hide on own content */}
+        {(showOrderBookCta || showMessageCta) && (
           <View style={styles.ctaButtonsRow}>
-            <TouchableOpacity
-              style={styles.ctaButton}
-              onPress={() => setProductDetailModalVisible(true)}
-            >
-              <Text style={styles.ctaButtonText}>Order Now</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            {showOrderBookCta ? (
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => {
+                  if (!user?.id) {
+                    navigation.navigate('Login');
+                    return;
+                  }
+                  const role = (user?.role || '').toLowerCase();
+                  if (role !== 'user') {
+                    Alert.alert(
+                      'Order',
+                      'Only diners can place orders from this restaurant. Sign in as a diner to order.',
+                    );
+                    return;
+                  }
+                  const ownerId =
+                    currentVideo?.userId || currentVideo?.user?.id;
+                  if (ownerId) {
+                    try {
+                      navigation.getParent()?.navigate('Home1', {
+                        screen: 'HomeThreeScreen',
+                        params: {
+                          ownerId,
+                          ownerName:
+                            currentVideo?.user?.nickname ||
+                            currentVideo?.user?.name ||
+                            currentVideo?.channelName ||
+                            '',
+                          title: currentVideo.title,
+                          location: currentVideo.creatorAddress || '',
+                        },
+                      });
+                    } catch (_) {
+                      navigation.navigate('Login');
+                    }
+                  }
+                }}
+              >
+                <Text style={styles.ctaButtonText}>Order Now</Text>
+              </TouchableOpacity>
+            ) : null}
+            {/* <TouchableOpacity
               style={styles.ctaButton}
               onPress={() => {
                 // Visit Website - open creator website if available, else channel
@@ -820,22 +948,24 @@ const VideoDetailsScreen = () => {
               }}
             >
               <Text style={styles.ctaButtonText}>Visit Website</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.ctaButton}
-              onPress={() => {
-                // Message Now - open chat with channel / restaurant owner
-                if (currentVideo.userId) {
-                  navigation.navigate('ChatScreen', {
-                    partnerId: currentVideo.userId,
-                    partnerName: currentVideo.channelName || 'Channel',
-                    partnerAvatar: currentVideo.channelAvatar,
-                  });
-                }
-              }}
-            >
-              <Text style={styles.ctaButtonText}>Message Now</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
+            {showMessageCta ? (
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => {
+                  // Message Now - open chat with channel / restaurant owner
+                  if (currentVideo.userId) {
+                    navigation.navigate('ChatScreen', {
+                      partnerId: currentVideo.userId,
+                      partnerName: currentVideo.channelName || 'Channel',
+                      partnerAvatar: currentVideo.channelAvatar,
+                    });
+                  }
+                }}
+              >
+                <Text style={styles.ctaButtonText}>Message Now</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
 
@@ -852,12 +982,19 @@ const VideoDetailsScreen = () => {
             activeOpacity={0.7}
           >
             <Image
-              source={{ uri: currentVideo.channelAvatar }}
+              source={{
+                uri: safeImageUri(
+                  currentVideo.channelAvatar,
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                    currentVideo.channelName || 'User',
+                  )}&background=111&color=fff`,
+                ),
+              }}
               style={styles.channelAvatar}
             />
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={styles.channelName}>
+            <View style={styles.channelMeta}>
+              <View style={styles.channelNameRow}>
+                <Text style={styles.channelName} numberOfLines={1}>
                   {currentVideo.channelName}
                 </Text>
                 <MaterialCommunityIcons
@@ -866,6 +1003,28 @@ const VideoDetailsScreen = () => {
                   color="#3ea6ff"
                   style={{ marginLeft: 4 }}
                 />
+              </View>
+              <View style={styles.channelRatingRow}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <MaterialCommunityIcons
+                    key={`video-rating-star-${star}`}
+                    name={
+                      star <= Math.round(channelRating.average)
+                        ? 'star'
+                        : 'star-outline'
+                    }
+                    size={12}
+                    color={
+                      star <= Math.round(channelRating.average)
+                        ? '#FFE082'
+                        : '#BDBDBD'
+                    }
+                  />
+                ))}
+                <Text style={styles.channelRatingText}>
+                  ({channelRating.reviewCount}{' '}
+                  {channelRating.reviewCount === 1 ? 'review' : 'reviews'})
+                </Text>
               </View>
               <Text style={styles.subscriberCount}>
                 {channelSubscription.subscriberCount > 0
@@ -903,37 +1062,8 @@ const VideoDetailsScreen = () => {
           ) : null}
         </View>
 
-        {/* Creator social links */}
-        {currentVideo.creatorSocialLinks?.length > 0 &&
-          currentVideo.creatorSocialLinks.filter(l => (l?.url || '').trim())
-            .length > 0 && (
-            <View style={styles.creatorSocialRow}>
-              {currentVideo.creatorSocialLinks
-                .filter(l => (l?.url || '').trim())
-                .map((link, index) => (
-                  <TouchableOpacity
-                    key={`creator-${link.type}-${index}`}
-                    style={styles.creatorSocialIconBtn}
-                    onPress={() => {
-                      const url = (link.url || '').trim();
-                      if (url)
-                        Linking.openURL(
-                          url.startsWith('http') ? url : `https://${url}`,
-                        );
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name={getSocialIcon(link.type)}
-                      size={24}
-                      color="#F97507"
-                    />
-                  </TouchableOpacity>
-                ))}
-            </View>
-          )}
-
         {/* Creator location map */}
-        {currentVideo.creatorLatitude != null &&
+        {/* {currentVideo.creatorLatitude != null &&
           currentVideo.creatorLongitude != null && (
             <View style={styles.creatorLocationSection}>
               <Text style={styles.creatorLocationTitle}>Creator location</Text>
@@ -956,7 +1086,7 @@ const VideoDetailsScreen = () => {
                 resizeMode="cover"
               />
             </View>
-          )}
+          )} */}
 
         {/* Comments Preview */}
         <TouchableOpacity
@@ -989,12 +1119,13 @@ const VideoDetailsScreen = () => {
           <View style={styles.addCommentRow}>
             <Image
               source={{
-                uri:
-                  user?.photos?.[0] ||
-                  (Array.isArray(user?.photos) && user?.photos[0]) ||
+                uri: safeImageUri(
+                  user?.photos?.[0] ??
+                    (Array.isArray(user?.photos) ? user?.photos[0] : null),
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(
                     user?.nickname || user?.name || 'User',
                   )}&background=111&color=fff`,
+                ),
               }}
               style={styles.userAvatarSmall}
             />
@@ -1071,12 +1202,6 @@ const VideoDetailsScreen = () => {
             return next;
           });
         }}
-      />
-      <ProductDetailModal
-        visible={productDetailModalVisible}
-        onClose={() => setProductDetailModalVisible(false)}
-        ownerUserId={currentVideo?.userId}
-        token={user?.token}
       />
       <LiveChatModal
         visible={liveChatModalVisible}
@@ -1296,6 +1421,15 @@ const styles = StyleSheet.create({
   channelInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    paddingRight: 10,
+  },
+  channelMeta: {
+    flex: 1,
+  },
+  channelNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   channelAvatar: {
     width: 40,
@@ -1308,10 +1442,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#212121',
+    flexShrink: 1,
   },
   subscriberCount: {
     fontSize: 12,
     color: '#424242',
+  },
+  channelRatingRow: {
+    marginTop: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+  },
+  channelRatingText: {
+    marginLeft: 4,
+    color: '#616161',
+    fontSize: 11,
+    fontWeight: '600',
   },
   subscribeButton: {
     backgroundColor: '#F97507',

@@ -8,7 +8,17 @@ try {
   const Camera = vision.Camera;
   const {useCameraDevice, useCameraPermission, useMicrophonePermission} = vision;
 
-  const Inner = Camera ? forwardRef(({facing, style, onCameraReady, isActive, onRecordingFinished, onRecordingError, children}, ref) => {
+  const Inner = Camera ? forwardRef(({
+    facing,
+    style,
+    onCameraReady,
+    isActive,
+    onRecordingFinished,
+    onRecordingError,
+    children,
+    torch = 'off',
+    audio = true,
+  }, ref) => {
     const cameraRef = useRef(null);
     const {hasPermission, requestPermission} = useCameraPermission();
     const {hasPermission: hasMicPermission, requestPermission: requestMicPermission} = useMicrophonePermission();
@@ -64,7 +74,8 @@ try {
           device={device}
           isActive={isActive}
           video={true}
-          audio={hasMicPermission}
+          audio={audio && hasMicPermission}
+          torch={torch === 'on' ? 'on' : 'off'}
           enableZoomGesture
         />
         {children}
@@ -88,6 +99,8 @@ const CameraShortsView = forwardRef(({
   onRecordingFinished,
   onRecordingError,
   children,
+  torch = 'off',
+  audio = true,
 }, ref) => {
   if (CameraInner) {
     return (
@@ -98,7 +111,9 @@ const CameraShortsView = forwardRef(({
         onCameraReady={onCameraReady}
         isActive={isActive}
         onRecordingFinished={onRecordingFinished}
-        onRecordingError={onRecordingError}>
+        onRecordingError={onRecordingError}
+        torch={torch}
+        audio={audio}>
         {children}
       </CameraInner>
     );

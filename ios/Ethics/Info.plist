@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ethics</string>
+	<string>Eatwaze</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,10 +22,52 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.eatwaze.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>eatwaze</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb1020637567080925</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>google-signin</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.236298500212-s19odpqururn1hls4u3o8ebp79o2b726</string>
+			</array>
+		</dict>
+	</array>
+	<key>FacebookAppID</key>
+	<string>1020637567080925</string>
+	<key>FacebookClientToken</key>
+	<string>2490cd089fef0f717b9237884f858cc7</string>
+	<key>FacebookDisplayName</key>
+	<string>Eatwaze</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>GMSApiKey</key>
+	<string>AIzaSyDdAoHeCNbd81rqwMApCne-bB5qYVwCaqk</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -33,16 +75,48 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to your photo library to select videos and thumbnails for upload</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Eatwaze uses Face ID or Touch ID to unlock the app and sign you in securely.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs access to your camera to record videos</string>
+	<string>Eatwaze uses your camera so you can record short food videos and take photos to post on your restaurant profile or menu.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Eatwaze uses your location to show restaurants and food videos near your UK postcode.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Eatwaze uses your location to show nearby restaurants and food videos in your area. Location is only used while you are using the app.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>This app needs access to your microphone to record audio for videos</string>
+	<string>Eatwaze uses your microphone to record audio when you record food videos inside the app.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Eatwaze accesses your photo library so you can choose food photos and short videos from your device to upload to your profile, menu, or restaurant page. For example, you can select a dish photo from your gallery to add to your menu listing.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Eatwaze saves images to your photo library only when you choose to download or save a food photo or video from the app to your device.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>AntDesign.ttf</string>
+		<string>Entypo.ttf</string>
+		<string>EvilIcons.ttf</string>
+		<string>Feather.ttf</string>
+		<string>FontAwesome.ttf</string>
+		<string>FontAwesome5_Brands.ttf</string>
+		<string>FontAwesome5_Regular.ttf</string>
+		<string>FontAwesome5_Solid.ttf</string>
+		<string>FontAwesome6_Brands.ttf</string>
+		<string>FontAwesome6_Regular.ttf</string>
+		<string>FontAwesome6_Solid.ttf</string>
+		<string>Foundation.ttf</string>
+		<string>Ionicons.ttf</string>
+		<string>MaterialIcons.ttf</string>
+		<string>MaterialCommunityIcons.ttf</string>
+		<string>SimpleLineIcons.ttf</string>
+		<string>Octicons.ttf</string>
+		<string>Zocial.ttf</string>
+		<string>Fontisto.ttf</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

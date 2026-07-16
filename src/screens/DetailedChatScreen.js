@@ -31,6 +31,7 @@ import {
 } from '../services/chatSocket';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { COLORS } from '../constants/theme';
+import { safeImageUri } from '../utils/helper';
 
 let pickDocumentNative = null;
 let docTypes = {};
@@ -82,8 +83,14 @@ export default function DetailedChatScreen() {
   const partnerId = normalizeId(rawPartnerId);
   const user = useSelector((s) => s?.app?.user);
   const myId = user?.id ? normalizeId(user.id) : '';
-  const partnerImage = partnerAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(partnerName || '')}&background=111&color=fff`;
-  const myImage = user?.photos?.[0] || 'https://i.pravatar.cc/150?u=me';
+  const partnerImage = safeImageUri(
+    partnerAvatar,
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(partnerName || '')}&background=111&color=fff`,
+  );
+  const myImage = safeImageUri(
+    user?.photos?.[0],
+    'https://i.pravatar.cc/150?u=me',
+  );
 
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -735,7 +742,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#FDB022',
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    padding: 50,
   },
   backButton: {
     flexDirection: 'row',
@@ -761,7 +768,7 @@ const styles = StyleSheet.create({
   avatar: { width: 55, height: 55, borderRadius: 27.5 },
   avatarSpacer: { width: 55, height: 55 },
   bubbleContainer: { maxWidth: '75%', position: 'relative' },
-  receivedBubbleContainer: { marginLeft: 15 },
+  receivedBubbleContainer: { marginLeft: -35 },
   sentBubbleContainer: { marginRight: 15 },
   bubble: {
     backgroundColor: '#E0E0E0',

@@ -1,4 +1,4 @@
-import React, {useState, useRef, useEffect} from 'react';
+import React, {useState, useRef, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useFocusEffect} from '@react-navigation/native';
 import {useSelector} from 'react-redux';
 import {getUserSubscription} from '../services/subscriptionService';
 import SoundsModal from '../components/SoundsModal';
@@ -24,12 +25,31 @@ import TimerModal from '../components/TimerModal';
 import BeautyModal from '../components/BeautyModal';
 import SpeedModal from '../components/SpeedModal';
 import CameraShortsView from '../components/CameraShortsView';
-import {getFilterOverlayStyle} from '../constants/filterEffects';
+import CommentsSettingsModal from '../components/CommentsSettingsModal';
+import {
+  getFilterOverlayStyle,
+  getBeautyOverlayStyle,
+} from '../constants/filterEffects';
+import {COLORS} from '../constants/theme';
+import {
+  playShortsBackdrop,
+  stopShortsBackdrop,
+  bindShortsBackdropLoop,
+} from '../utils/shortsBackdropSound';
+import {navigateToHomeOne} from '../utils/navigateToHomeOne';
+import {newShortSessionKey} from '../utils/reelDraftStorage';
+import {thumbnailFromVideoFrame} from '../utils/videoThumbnail';
 
 const {width, height} = Dimensions.get('window');
 
+const DEFAULT_COMMENTS_SETTING = 'Allow all comments';
+
 const CreateShortsScreen = ({navigation, route}) => {
+  const exitToHomeOne = () => navigateToHomeOne(navigation);
+
   const initialLive = route?.params?.isLive === true;
+  const lastSessionKeyRef = useRef(null);
+  const [detailsModalKey, setDetailsModalKey] = useState(0);
   const [activeDuration, setActiveDuration] = useState(initialLive ? '10s' : '60s');
   const [soundsVisible, setSoundsVisible] = useState(false);
   const [addDetailsVisible, setAddDetailsVisible] = useState(false);
@@ -52,7 +72,59 @@ const CreateShortsScreen = ({navigation, route}) => {
   const cameraRef = useRef(null);
   const maxDurationTimerRef = useRef(null);
   const isRecordingRef = useRef(false);
+  const backdropLoopCleanupRef = useRef(null);
   const insets = useSafeAreaInsets();
+
+  const [torchOn, setTorchOn] = useState(false);
+  const [recordCommentsModalVisible, setRecordCommentsModalVisible] =
+    useState(false);
+  const [commentsSetting, setCommentsSetting] = useState(DEFAULT_COMMENTS_SETTING);
+
+  const resetCreationState = useCallback(
+    (isLive = false) => {
+      if (maxDurationTimerRef.current) {
+        clearTimeout(maxDurationTimerRef.current);
+        maxDurationTimerRef.current = null;
+      }
+      backdropLoopCleanupRef.current?.();
+      backdropLoopCleanupRef.current = null;
+      void stopShortsBackdrop();
+      isRecordingRef.current = false;
+
+      setActiveDuration(isLive ? '10s' : '60s');
+      setSoundsVisible(false);
+      setAddDetailsVisible(false);
+      setFilterVisible(false);
+      setTimerVisible(false);
+      setBeautyVisible(false);
+      setSpeedVisible(false);
+      setIsEditing(false);
+      setIsLiveMode(isLive);
+      setSelectedSound(null);
+      setSelectedFilter(null);
+      setSelectedTimer(0);
+      setBeautyLevel(0);
+      setSpeedFactor(1);
+      setCameraFacing('back');
+      setPickedVideo(null);
+      setPickedThumbnail(null);
+      setIsRecording(false);
+      setCountdown(null);
+      setTorchOn(false);
+      setRecordCommentsModalVisible(false);
+      setCommentsSetting(DEFAULT_COMMENTS_SETTING);
+      setDetailsModalKey(k => k + 1);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const sessionKey = route.params?.sessionKey;
+    if (sessionKey == null) return;
+    if (lastSessionKeyRef.current === sessionKey) return;
+    lastSessionKeyRef.current = sessionKey;
+    resetCreationState(route?.params?.isLive === true);
+  }, [route.params?.sessionKey, route.params?.isLive, resetCreationState]);
 
   const parseDurationSeconds = (d) => {
     if (d === '10s') return 10;
@@ -66,11 +138,43 @@ const CreateShortsScreen = ({navigation, route}) => {
   useEffect(() => {
     return () => {
       if (maxDurationTimerRef.current) clearTimeout(maxDurationTimerRef.current);
+      backdropLoopCleanupRef.current?.();
+      backdropLoopCleanupRef.current = null;
+      void stopShortsBackdrop();
     };
   }, []);
 
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setIsScreenFocused(true);
+      return () => {
+        setIsScreenFocused(false);
+        backdropLoopCleanupRef.current?.();
+        backdropLoopCleanupRef.current = null;
+        void stopShortsBackdrop();
+      };
+    }, []),
+  );
+
+  useEffect(() => {
+    if (!addDetailsVisible) return;
+    backdropLoopCleanupRef.current?.();
+    backdropLoopCleanupRef.current = null;
+    void stopShortsBackdrop();
+  }, [addDetailsVisible]);
+
+  const shouldPlayPreviewVideo =
+    isScreenFocused &&
+    !addDetailsVisible &&
+    Boolean(pickedVideo?.uri);
+
   const stopRecording = () => {
     if (!isRecordingRef.current) return;
+    backdropLoopCleanupRef.current?.();
+    backdropLoopCleanupRef.current = null;
+    void stopShortsBackdrop();
     isRecordingRef.current = false;
     setIsRecording(false);
     if (maxDurationTimerRef.current) {
@@ -84,7 +188,10 @@ const CreateShortsScreen = ({navigation, route}) => {
     }
   };
 
-  const handleRecordingFinished = (video) => {
+  const handleRecordingFinished = video => {
+    backdropLoopCleanupRef.current?.();
+    backdropLoopCleanupRef.current = null;
+    void stopShortsBackdrop();
     isRecordingRef.current = false;
     setIsRecording(false);
     const path = video?.path ?? video;
@@ -104,7 +211,10 @@ const CreateShortsScreen = ({navigation, route}) => {
       stopRecording();
       return;
     }
-    if (showCamera && !cameraRef.current?.startRecording) return;
+    if (!showCamera) {
+      return;
+    }
+    if (!cameraRef.current?.startRecording) return;
     if (user?.id) {
       try {
         const sub = await getUserSubscription(user.id);
@@ -123,13 +233,26 @@ const CreateShortsScreen = ({navigation, route}) => {
         console.error('Subscription check error:', e);
       }
     }
-    const start = () => {
+    const runRecording = async () => {
       if (!cameraRef.current?.startRecording) return;
+      backdropLoopCleanupRef.current?.();
+      backdropLoopCleanupRef.current = null;
+      await stopShortsBackdrop();
+      if (selectedSound?.previewUrl) {
+        await playShortsBackdrop(selectedSound.previewUrl);
+        backdropLoopCleanupRef.current = bindShortsBackdropLoop(
+          selectedSound.previewUrl,
+          isRecordingRef,
+        );
+      }
       isRecordingRef.current = true;
       setIsRecording(true);
       cameraRef.current.startRecording({
         onRecordingFinished: handleRecordingFinished,
-        onRecordingError: (e) => {
+        onRecordingError: e => {
+          backdropLoopCleanupRef.current?.();
+          backdropLoopCleanupRef.current = null;
+          void stopShortsBackdrop();
           isRecordingRef.current = false;
           setIsRecording(false);
           Alert.alert('Recording Error', e?.message || 'Failed to record');
@@ -147,11 +270,11 @@ const CreateShortsScreen = ({navigation, route}) => {
         if (n <= 0) {
           clearInterval(iv);
           setCountdown(null);
-          start();
+          void runRecording();
         }
       }, 1000);
     } else {
-      start();
+      void runRecording();
     }
   };
 
@@ -194,6 +317,12 @@ const CreateShortsScreen = ({navigation, route}) => {
             uri: asset.uri,
             type: asset.type || 'video/mp4',
             name: asset.fileName || 'short.mp4',
+            duration:
+              asset.duration != null ? Math.max(0, Number(asset.duration)) : undefined,
+          });
+          setPickedThumbnail(null);
+          thumbnailFromVideoFrame(asset.uri).then(thumb => {
+            if (thumb) setPickedThumbnail(thumb);
           });
           setIsEditing(true);
         }
@@ -219,28 +348,41 @@ const CreateShortsScreen = ({navigation, route}) => {
   };
   const user = useSelector(state => state?.app?.user);
 
-  const handleSoundSelect = (sound) => {
+  const handleSoundSelect = sound => {
     setSelectedSound(sound);
     setSoundsVisible(false);
-    setIsEditing(true);
   };
 
-  const ActionItem = ({icon, label, iconType = 'Ionicons', onPress}) => {
+  const ActionItem = ({
+    icon,
+    label,
+    iconType = 'Ionicons',
+    onPress,
+    active,
+  }) => {
     const IconComp =
       iconType === 'MaterialCommunityIcons'
         ? MaterialCommunityIcons
         : iconType === 'MaterialIcons'
         ? MaterialIcons
         : Ionicons;
+    const iconColor = active ? COLORS.primaryOrange : 'white';
     return (
       <TouchableOpacity style={styles.actionItem} onPress={onPress}>
-        <IconComp name={icon} size={28} color="white" style={styles.shadow} />
+        <IconComp
+          name={icon}
+          size={28}
+          color={iconColor}
+          style={styles.shadow}
+        />
         <Text style={styles.actionLabel}>{label}</Text>
       </TouchableOpacity>
     );
   };
 
   const filterOverlayStyle = getFilterOverlayStyle(selectedFilter);
+  const beautyOverlayStyle = getBeautyOverlayStyle(beautyLevel);
+  const recordMicEnabled = !selectedSound?.previewUrl;
 
   const shortsMetadata = {
     activeDuration,
@@ -251,17 +393,34 @@ const CreateShortsScreen = ({navigation, route}) => {
     speedFactor,
     cameraFacing,
     isLiveMode,
+    commentsSetting,
     userId: user?.id,
     videoUri: pickedVideo?.uri,
     videoType: pickedVideo?.type,
     videoName: pickedVideo?.name,
+    durationSec: pickedVideo?.duration,
     thumbnailUri: pickedThumbnail?.uri,
     thumbnailType: pickedThumbnail?.type,
     thumbnailName: pickedThumbnail?.name,
   };
 
   const toggleCameraFlip = () => {
-    setCameraFacing(f => (f === 'back' ? 'front' : 'back'));
+    setCameraFacing(f => {
+      const next = f === 'back' ? 'front' : 'back';
+      if (next === 'front') setTorchOn(false);
+      return next;
+    });
+  };
+
+  const toggleFlash = () => {
+    if (cameraFacing !== 'back') {
+      Alert.alert(
+        'Flash',
+        'Switch to the back camera to use the flash / torch.',
+      );
+      return;
+    }
+    setTorchOn(t => !t);
   };
 
   const showCamera = !isEditing && (isLiveMode || !pickedVideo);
@@ -274,7 +433,9 @@ const CreateShortsScreen = ({navigation, route}) => {
           ref={cameraRef}
           facing={cameraFacing}
           style={styles.background}
-          isActive={true}>
+          isActive={true}
+          torch={cameraFacing === 'back' && torchOn ? 'on' : 'off'}
+          audio={recordMicEnabled}>
           {filterOverlayStyle && (
             <View
               style={[
@@ -282,6 +443,18 @@ const CreateShortsScreen = ({navigation, route}) => {
                 {
                   backgroundColor: filterOverlayStyle.backgroundColor,
                   opacity: filterOverlayStyle.opacity,
+                },
+              ]}
+              pointerEvents="none"
+            />
+          )}
+          {beautyOverlayStyle && (
+            <View
+              style={[
+                styles.filterOverlay,
+                {
+                  backgroundColor: beautyOverlayStyle.backgroundColor,
+                  opacity: beautyOverlayStyle.opacity,
                 },
               ]}
               pointerEvents="none"
@@ -324,7 +497,11 @@ const CreateShortsScreen = ({navigation, route}) => {
                   onPress={() => setSpeedVisible(true)}
                 />
                  <ActionItem icon="closed-caption-outline" label="Subtit..." iconType="MaterialCommunityIcons" />
-                 <ActionItem icon="comment-outline" label="Com..." iconType="MaterialCommunityIcons" />
+                 <ActionItem
+                  icon="chatbubble-ellipses-outline"
+                  label="Comments"
+                  onPress={() => setRecordCommentsModalVisible(true)}
+                />
               </View>
 
               <View style={[styles.bottomEditingRow, { paddingBottom: insets.bottom + 20 }]}>
@@ -341,15 +518,17 @@ const CreateShortsScreen = ({navigation, route}) => {
           ) : (
             <View style={styles.recordingModeOverlay}>
               <View style={[styles.topControls, { marginTop: insets.top + 10 }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                <TouchableOpacity onPress={exitToHomeOne} style={styles.closeButton}>
                   <Ionicons name="close" size={30} color="white" />
                 </TouchableOpacity>
                 <View style={styles.topRightRow}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.addSoundPill}
                     onPress={() => setSoundsVisible(true)}>
                     <Ionicons name="musical-notes" size={18} color="white" />
-                    <Text style={styles.addSoundText}>Add Sound</Text>
+                    <Text style={styles.addSoundText} numberOfLines={1}>
+                      {selectedSound?.title || 'Add Sound'}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.liveModePill, isLiveMode && styles.liveModePillActive]}
@@ -373,8 +552,17 @@ const CreateShortsScreen = ({navigation, route}) => {
                 <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
                 <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" onPress={() => setBeautyVisible(true)} />
                 <ActionItem icon="timer-outline" label="Timer" onPress={() => setTimerVisible(true)} />
-                <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
-                <ActionItem icon="flash" label="Flash" />
+                <ActionItem
+                  icon="chatbubble-ellipses-outline"
+                  label="Comments"
+                  onPress={() => setRecordCommentsModalVisible(true)}
+                />
+                <ActionItem
+                  icon={torchOn ? 'flash' : 'flash-outline'}
+                  label="Flash"
+                  onPress={toggleFlash}
+                  active={torchOn}
+                />
               </View>
               <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 20 }]}>
                 {!isLiveMode && (
@@ -396,7 +584,7 @@ const CreateShortsScreen = ({navigation, route}) => {
                   {!isLiveMode && (
                   <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setFilterVisible(true)}>
                     <View style={styles.effectsIconContainer}>
-                       <MaterialCommunityIcons name="filter-variant" size={30} color="#FF8C00" />
+                       <MaterialCommunityIcons name="filter-variant" size={30} color={COLORS.primaryOrange} />
                     </View>
                     <Text style={styles.bottomAuxLabel}>Filters</Text>
                   </TouchableOpacity>
@@ -432,7 +620,7 @@ const CreateShortsScreen = ({navigation, route}) => {
         </CameraShortsView>
       ) : (
         <View style={styles.background}>
-          {pickedVideo?.uri ? (
+          {shouldPlayPreviewVideo ? (
             <Video
               source={{uri: pickedVideo.uri}}
               style={StyleSheet.absoluteFillObject}
@@ -440,7 +628,13 @@ const CreateShortsScreen = ({navigation, route}) => {
               repeat
               paused={false}
               muted={false}
+              rate={speedFactor}
+              ignoreSilentSwitch="ignore"
+              playInBackground={false}
+              playWhenInactive={false}
             />
+          ) : pickedVideo?.uri ? (
+            <View style={[StyleSheet.absoluteFillObject, styles.previewStopped]} />
           ) : (
             <ImageBackground
               source={{
@@ -457,6 +651,18 @@ const CreateShortsScreen = ({navigation, route}) => {
                 {
                   backgroundColor: filterOverlayStyle.backgroundColor,
                   opacity: filterOverlayStyle.opacity,
+                },
+              ]}
+              pointerEvents="none"
+            />
+          )}
+          {beautyOverlayStyle && (
+            <View
+              style={[
+                styles.filterOverlay,
+                {
+                  backgroundColor: beautyOverlayStyle.backgroundColor,
+                  opacity: beautyOverlayStyle.opacity,
                 },
               ]}
               pointerEvents="none"
@@ -490,7 +696,11 @@ const CreateShortsScreen = ({navigation, route}) => {
                   <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
                   <ActionItem icon="speedometer-outline" label="Speed" onPress={() => setSpeedVisible(true)} />
                   <ActionItem icon="closed-caption-outline" label="Subtit..." iconType="MaterialCommunityIcons" />
-                  <ActionItem icon="comment-outline" label="Com..." iconType="MaterialCommunityIcons" />
+                  <ActionItem
+                    icon="chatbubble-ellipses-outline"
+                    label="Comments"
+                    onPress={() => setRecordCommentsModalVisible(true)}
+                  />
                 </View>
                 <View style={[styles.bottomEditingRow, {paddingBottom: insets.bottom + 20}]}>
                   <TouchableOpacity style={styles.draftButton}>
@@ -506,13 +716,15 @@ const CreateShortsScreen = ({navigation, route}) => {
             ) : (
               <View style={styles.recordingModeOverlay}>
                 <View style={[styles.topControls, {marginTop: insets.top + 10}]}>
-                  <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeButton}>
+                  <TouchableOpacity onPress={exitToHomeOne} style={styles.closeButton}>
                     <Ionicons name="close" size={30} color="white" />
                   </TouchableOpacity>
                   <View style={styles.topRightRow}>
                     <TouchableOpacity style={styles.addSoundPill} onPress={() => setSoundsVisible(true)}>
                       <Ionicons name="musical-notes" size={18} color="white" />
-                      <Text style={styles.addSoundText}>Add Sound</Text>
+                      <Text style={styles.addSoundText} numberOfLines={1}>
+                        {selectedSound?.title || 'Add Sound'}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.liveModePill, isLiveMode && styles.liveModePillActive]}
@@ -528,8 +740,17 @@ const CreateShortsScreen = ({navigation, route}) => {
                   <ActionItem icon="filter-variant" label="Filters" iconType="MaterialCommunityIcons" onPress={() => setFilterVisible(true)} />
                   <ActionItem icon="face-recognition" label="Beauty" iconType="MaterialCommunityIcons" onPress={() => setBeautyVisible(true)} />
                   <ActionItem icon="timer-outline" label="Timer" onPress={() => setTimerVisible(true)} />
-                  <ActionItem icon="comment-outline" label="Comments" iconType="MaterialCommunityIcons" />
-                  <ActionItem icon="flash" label="Flash" />
+                  <ActionItem
+                    icon="chatbubble-ellipses-outline"
+                    label="Comments"
+                    onPress={() => setRecordCommentsModalVisible(true)}
+                  />
+                  <ActionItem
+                    icon={torchOn ? 'flash' : 'flash-outline'}
+                    label="Flash"
+                    onPress={toggleFlash}
+                    active={torchOn}
+                  />
                 </View>
                 <View style={[styles.bottomControls, {paddingBottom: insets.bottom + 20}]}>
                   {!isLiveMode && (
@@ -548,7 +769,7 @@ const CreateShortsScreen = ({navigation, route}) => {
                     {!isLiveMode && (
                       <TouchableOpacity style={styles.bottomAuxButton} onPress={() => setFilterVisible(true)}>
                         <View style={styles.effectsIconContainer}>
-                          <MaterialCommunityIcons name="filter-variant" size={30} color="#FF8C00" />
+                          <MaterialCommunityIcons name="filter-variant" size={30} color={COLORS.primaryOrange} />
                         </View>
                         <Text style={styles.bottomAuxLabel}>Filters</Text>
                       </TouchableOpacity>
@@ -583,10 +804,25 @@ const CreateShortsScreen = ({navigation, route}) => {
         visible={soundsVisible}
         onClose={() => setSoundsVisible(false)}
         onSelect={handleSoundSelect}
+        selectedSoundId={selectedSound?.id}
+      />
+      <CommentsSettingsModal
+        visible={recordCommentsModalVisible}
+        onClose={() => setRecordCommentsModalVisible(false)}
+        initialValue={commentsSetting}
+        onApply={v => {
+          setCommentsSetting(v);
+          setRecordCommentsModalVisible(false);
+        }}
       />
       <AddDetailsModal
+        key={detailsModalKey}
         visible={addDetailsVisible}
         onClose={() => setAddDetailsVisible(false)}
+        onUploadSuccess={() => {
+          resetCreationState(initialLive);
+          exitToHomeOne();
+        }}
         shortsMetadata={shortsMetadata}
         isLive={isLiveMode}
       />
@@ -627,6 +863,9 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
   },
+  previewStopped: {
+    backgroundColor: '#000',
+  },
   filterOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
@@ -653,7 +892,7 @@ const styles = StyleSheet.create({
   },
   progressBarActive: {
     flex: 0.65,
-    backgroundColor: '#FF8C00',
+    backgroundColor: COLORS.primaryOrange,
   },
   progressBarInactive: {
     flex: 0.35,
@@ -675,6 +914,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
+    maxWidth: width * 0.42,
   },
   addSoundText: {
     color: 'white',
@@ -807,7 +1047,7 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: '#FF8C00',
+    backgroundColor: COLORS.primaryOrange,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -853,13 +1093,13 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   draftButtonText: {
-    color: '#FF8C00',
+    color: COLORS.primaryOrange,
     fontSize: 18,
     fontWeight: 'bold',
   },
   nextButton: {
     flex: 1,
-    backgroundColor: '#FF8C00',
+    backgroundColor: COLORS.primaryOrange,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',

@@ -19,6 +19,7 @@ export const SOCIAL_LINK_ICONS = {
   facebook: 'facebook',
   instagram: 'instagram',
   x: 'twitter',
+  google_email: 'email-outline',
   linkedin: 'linkedin',
   youtube: 'youtube',
   tiktok: 'music', // MCI may not have tiktok; music is a common fallback

@@ -1,99 +1,154 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {
   StyleSheet,
   View,
-  Text,
-  ImageBackground,
+  Image,
   TouchableOpacity,
   StatusBar,
   ScrollView,
   Dimensions,
-  Pressable,
+  Text,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDispatch } from 'react-redux';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { setOnboardingDone } from '../redux/actions/appSlice';
-import {
-  COLORS,
-  FONTS,
-  SPACING,
-  BORDER_RADIUS,
-  SHADOWS,
-  DIMENSIONS,
-  COMMON_STYLES,
-} from '../constants/theme';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-const SCREEN_WIDTH = DIMENSIONS.screenWidth;
+import onboard1 from '../assets/img/b2.png';
+import onboard2 from '../assets/img/b3.png';
+import onboard3 from '../assets/img/b4.png';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const SLIDES = [
-  {
-    key: 'slide-1',
-    imageUri:
-      'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?q=80&w=2070',
-    title: 'Tasty Meal\nDelivered Faster\nThan You Think !',
-    subtitle:
-      "Hi! You haven't added any medicines yet. Want me to help you set up the first one?",
-    buttonColor: '#1A1A1A',
-    buttonHoverColor: '#F97507',
-    arrowColor: '#1A1A1A',
-    gradientColors: ['transparent', 'rgba(255,255,255,0.8)', '#ffffff'],
-  },
-  {
-    key: 'slide-2',
-    imageUri:
-      'https://images.unsplash.com/photo-1571091718767-18b5b1457add?q=80&w=2072',
-    title: 'See The Video\nChose Your\nFavorite Food !',
-    subtitle:
-      "Hi! You haven't added any medicines yet. Want me to help you set up the first one?",
-    buttonColor: '#1A1A1A',
-    buttonHoverColor: '#F97507',
-    arrowColor: '#1A1A1A',
-    gradientColors: ['transparent', 'rgba(255,255,255,0.7)', COLORS.white],
-    showBack: true,
-  },
-  {
-    key: 'slide-3',
-    imageUri:
-      'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?q=80&w=1974',
-    title: 'Enjoy Your Day\nand Make a\nHealthy Life',
-    subtitle:
-      "Hi! You haven't added any medicines yet. Want me to help you set up the first one?",
-    buttonColor: '#1A1A1A',
-    buttonHoverColor: '#F97507',
-    arrowColor: '#1A1A1A',
-    gradientColors: ['transparent', 'rgba(255,255,255,0.8)', '#ffffff'],
-    isLast: true,
-  },
+  { key: 'slide-1', image: onboard1, isLast: false },
+  { key: 'slide-2', image: onboard2, isLast: false },
+  { key: 'slide-3', image: onboard3, isLast: true },
 ];
 
+const ORANGE = '#F97507';
+
+const PrimaryActionButton = ({
+  label,
+  onPress,
+  bottom,
+  left,
+  right,
+  accessibilityLabel,
+}) => (
+  <TouchableOpacity
+    style={[styles.primaryBtn, { bottom, left, right }]}
+    onPress={onPress}
+    activeOpacity={0.88}
+    accessibilityRole="button"
+    accessibilityLabel={accessibilityLabel || label}
+  >
+    <Text style={styles.primaryBtnText}>{label}</Text>
+    <View style={styles.primaryBtnArrowWrap}>
+      <Icon name="arrow-right" size={22} color={ORANGE} />
+    </View>
+  </TouchableOpacity>
+);
+
+const GetExploringButton = props => (
+  <PrimaryActionButton label="Get Exploring" {...props} />
+);
+
+const LetsGetStartedButton = props => (
+  <PrimaryActionButton label="Let's Get Started" {...props} />
+);
+
+const PreviousButton = ({ onPress, top, left }) => (
+  <TouchableOpacity
+    style={[styles.prevBtn, { top, left }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel="Previous"
+  >
+    <Icon name="arrow-left" size={18} color="#FFFFFF" />
+    <Text style={styles.prevText}>Previous</Text>
+  </TouchableOpacity>
+);
+
+const SkipButton = ({ onPress, top, right }) => (
+  <TouchableOpacity
+    style={[styles.skipBtn, { top, right }]}
+    onPress={onPress}
+    activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel="Skip onboarding"
+  >
+    <Text style={styles.skipText}>Skip</Text>
+    <Icon name="arrow-right" size={18} color="#FFFFFF" />
+  </TouchableOpacity>
+);
+
+const OnboardingDots = ({ total, activeCount, bottom }) => (
+  <View style={[styles.dotsRow, { bottom }]} pointerEvents="none">
+    {Array.from({ length: total }).map((_, index) => (
+      <View
+        key={`dot-${index}`}
+        style={[
+          styles.dot,
+          index > 0 && styles.dotSpacing,
+          index < activeCount ? styles.dotActive : styles.dotInactive,
+        ]}
+      />
+    ))}
+  </View>
+);
+
 const OnboardingScreen = () => {
-  const navigation = useNavigation();
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const handleNext = () => {
+  const goToIndex = useCallback(index => {
+    const nextIndex = Math.max(0, Math.min(index, SLIDES.length - 1));
+    scrollRef.current?.scrollTo({
+      x: nextIndex * SCREEN_WIDTH,
+      animated: true,
+    });
+    setCurrentIndex(nextIndex);
+  }, []);
+
+  const handleNext = useCallback(() => {
     if (currentIndex >= SLIDES.length - 1) {
       dispatch(setOnboardingDone(true));
       return;
     }
-    scrollRef.current?.scrollTo({
-      x: (currentIndex + 1) * SCREEN_WIDTH,
-      animated: true,
-    });
-  };
+    goToIndex(currentIndex + 1);
+  }, [currentIndex, dispatch, goToIndex]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (currentIndex <= 0) {
       return;
     }
-    scrollRef.current?.scrollTo({
-      x: (currentIndex - 1) * SCREEN_WIDTH,
-      animated: true,
-    });
-  };
+    goToIndex(currentIndex - 1);
+  }, [currentIndex, goToIndex]);
+
+  const onScrollEnd = useCallback(
+    event => {
+      const index = Math.round(
+        event.nativeEvent.contentOffset.x / SCREEN_WIDTH,
+      );
+      if (index !== currentIndex) {
+        setCurrentIndex(index);
+      }
+    },
+    [currentIndex],
+  );
+
+  const handleSkip = useCallback(() => {
+    dispatch(setOnboardingDone(true));
+  }, [dispatch]);
+
+  const actionBottom = insets.bottom + 24;
+  const dotsBottom = insets.bottom + 92;
+  const headerTop = insets.top + 10;
+  const actionHorizontal = 24;
 
   return (
     <View style={styles.container}>
@@ -107,83 +162,54 @@ const OnboardingScreen = () => {
         ref={scrollRef}
         horizontal
         pagingEnabled
+        bounces={false}
         showsHorizontalScrollIndicator={false}
-        onScroll={event => {
-          const index = Math.round(
-            event.nativeEvent.contentOffset.x / SCREEN_WIDTH,
-          );
-          if (index !== currentIndex) {
-            setCurrentIndex(index);
-          }
-        }}
+        onMomentumScrollEnd={onScrollEnd}
         scrollEventThrottle={16}
       >
         {SLIDES.map((slide, index) => (
           <View key={slide.key} style={styles.slide}>
-            <ImageBackground
-              source={{ uri: slide.imageUri }}
-              style={styles.backgroundImage}
-            >
-              {slide.showBack ? (
-                <SafeAreaView style={styles.topNav}>
-                  <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={handleBack}
-                  >
-                    <Text style={styles.backIcon}>←</Text>
-                  </TouchableOpacity>
-                </SafeAreaView>
-              ) : (
-                <SafeAreaView style={styles.topNav} />
-              )}
+            <Image
+              source={slide.image}
+              style={styles.slideImage}
+              resizeMode="cover"
+            />
 
-              <LinearGradient
-                colors={slide.gradientColors}
-                style={styles.gradient}
-              >
-                <View style={styles.contentContainer}>
-                  <View style={styles.paginationRow}>
-                    {SLIDES.map((_, dotIndex) => (
-                      <View
-                        key={`dot-${dotIndex}`}
-                        style={[
-                          styles.dot,
-                          dotIndex === index && styles.activeDot,
-                        ]}
-                      />
-                    ))}
-                  </View>
+            {index > 0 ? (
+              <PreviousButton
+                onPress={handleBack}
+                top={headerTop}
+                left={20}
+              />
+            ) : null}
 
-                  <View style={styles.textWrapper}>
-                    <Text style={styles.title}>{slide.title}</Text>
-                    <Text style={styles.subtitle}>{slide.subtitle}</Text>
-                  </View>
+            <SkipButton
+              onPress={handleSkip}
+              top={headerTop}
+              right={20}
+            />
 
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.nextButton,
-                      {
-                        backgroundColor: pressed
-                          ? slide.buttonHoverColor
-                          : slide.buttonColor,
-                      },
-                    ]}
-                    onPress={handleNext}
-                  >
-                    <Text style={styles.nextText}>
-                      {slide.isLast ? 'Get Started' : 'Next'}
-                    </Text>
-                    <View style={styles.arrowCircle}>
-                      <Text
-                        style={[styles.arrowIcon, { color: slide.arrowColor }]}
-                      >
-                        →
-                      </Text>
-                    </View>
-                  </Pressable>
-                </View>
-              </LinearGradient>
-            </ImageBackground>
+            <OnboardingDots
+              total={SLIDES.length}
+              activeCount={index + 1}
+              bottom={dotsBottom}
+            />
+
+            {slide.isLast ? (
+              <LetsGetStartedButton
+                onPress={handleNext}
+                bottom={actionBottom}
+                left={actionHorizontal}
+                right={actionHorizontal}
+              />
+            ) : (
+              <GetExploringButton
+                onPress={handleNext}
+                bottom={actionBottom}
+                left={actionHorizontal}
+                right={actionHorizontal}
+              />
+            )}
           </View>
         ))}
       </ScrollView>
@@ -192,77 +218,92 @@ const OnboardingScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: COMMON_STYLES.container,
+  container: {
+    flex: 1,
+    backgroundColor: '#F5A623',
+  },
   slide: {
     width: SCREEN_WIDTH,
-    flex: 1,
+    height: SCREEN_HEIGHT,
   },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
+  slideImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
   },
-  topNav: {
-    paddingHorizontal: SPACING.xxl,
-    marginTop: SPACING.sm,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-  },
-  backIcon: {
-    fontSize: 30,
-    color: COLORS.white,
-    fontWeight: FONTS.thin,
-  },
-  gradient: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  contentContainer: {
-    paddingHorizontal: SPACING.xxl,
-    paddingBottom: SPACING.xxl,
-    alignItems: 'center',
-  },
-  paginationRow: {
+  prevBtn: {
+    position: 'absolute',
     flexDirection: 'row',
-    marginBottom: SPACING.xxl,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    zIndex: 12,
   },
-  dot: COMMON_STYLES.dot,
-  activeDot: COMMON_STYLES.activeDot,
-  textWrapper: {
-    marginBottom: SPACING.xxxxl,
+  prevText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
-  title: {
-    ...COMMON_STYLES.h1,
-    textAlign: 'left ',
+  skipBtn: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    zIndex: 12,
   },
-  subtitle: {
-    ...COMMON_STYLES.bodyMedium,
-    textAlign: 'left',
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xxxl,
-    paddingHorizontal: SPACING.xxl,
-    color: COLORS.gray700,
+  skipText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
-  nextButton: {
-    width: '100%',
-    height: DIMENSIONS.buttonHeight,
-    borderRadius: BORDER_RADIUS.xxxl,
+  primaryBtn: {
+    position: 'absolute',
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: ORANGE,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.xxl,
-    ...SHADOWS.large,
+    paddingLeft: 28,
+    paddingRight: 6,
+    zIndex: 12,
   },
-  nextText: {
-    ...COMMON_STYLES.bodyLarge,
-    color: COLORS.white,
-    fontWeight: FONTS.semiBold,
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    flexShrink: 1,
   },
-  arrowCircle: COMMON_STYLES.arrowCircle,
-  arrowIcon: {
-    fontSize: 22,
+  primaryBtnArrowWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotsRow: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 12,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  dotSpacing: {
+    marginLeft: 10,
+  },
+  dotActive: {
+    backgroundColor: ORANGE,
+  },
+  dotInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,16 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector } from 'react-redux';
-import { getPlaylistStatus, setPlaylist } from '../services/playlistService';
+import {
+  getSaveMembership,
+  setPlaylist,
+  listCustomPlaylists,
+  setCustomPlaylistItem,
+} from '../services/playlistService';
 
 const { height } = Dimensions.get('window');
 
-const PLAYLISTS = [
+const BASE_ROWS = [
   { id: 'watch_later', name: 'Watch Later', isPrivate: true },
   { id: 'favorites', name: 'Favorites', isPrivate: true },
 ];
@@ -26,21 +31,35 @@ const SaveModal = ({ visible, onClose, contentType = 'video', contentId }) => {
   const [selectedPlaylists, setSelectedPlaylists] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [customPlaylists, setCustomPlaylists] = useState([]);
+  const membershipRef = useRef(null);
 
   const loadStatus = useCallback(async () => {
     if (!currentUser?.id || !contentId) {
       setSelectedPlaylists([]);
+      setCustomPlaylists([]);
+      membershipRef.current = null;
       return;
     }
     setLoading(true);
     try {
-      const status = await getPlaylistStatus(currentUser.id, contentType, contentId);
-      const selected = [];
-      if (status.inWatchLater) selected.push('watch_later');
-      if (status.inFavorites) selected.push('favorites');
-      setSelectedPlaylists(selected);
+      const [mem, pls] = await Promise.all([
+        getSaveMembership(contentType, contentId),
+        listCustomPlaylists(currentUser.id),
+      ]);
+      membershipRef.current = mem;
+      setCustomPlaylists(Array.isArray(pls) ? pls : []);
+      const sel = [];
+      if (mem.inWatchLater) sel.push('watch_later');
+      if (mem.inFavorites) sel.push('favorites');
+      (mem.customPlaylistIds || []).forEach(id => {
+        if (id && !sel.includes(id)) sel.push(id);
+      });
+      setSelectedPlaylists(sel);
     } catch (e) {
       setSelectedPlaylists([]);
+      setCustomPlaylists([]);
+      membershipRef.current = null;
     } finally {
       setLoading(false);
     }
@@ -51,6 +70,16 @@ const SaveModal = ({ visible, onClose, contentType = 'video', contentId }) => {
       loadStatus();
     }
   }, [visible, contentId, loadStatus]);
+
+  const listData = [
+    ...BASE_ROWS,
+    ...customPlaylists.map(p => ({
+      id: p.id,
+      name: p.name,
+      isPrivate: true,
+      isCustom: true,
+    })),
+  ];
 
   const togglePlaylist = id => {
     if (selectedPlaylists.includes(id)) {
@@ -67,22 +96,59 @@ const SaveModal = ({ visible, onClose, contentType = 'video', contentId }) => {
     }
     setSaving(true);
     try {
+      const prev = membershipRef.current || {
+        inWatchLater: false,
+        inFavorites: false,
+        customPlaylistIds: [],
+      };
       const watchLaterSelected = selectedPlaylists.includes('watch_later');
       const favoritesSelected = selectedPlaylists.includes('favorites');
-
-      const prev = await getPlaylistStatus(currentUser.id, contentType, contentId);
       const tasks = [];
 
-      if (watchLaterSelected !== prev.inWatchLater) {
+      if (watchLaterSelected !== !!prev.inWatchLater) {
         tasks.push(
-          setPlaylist(currentUser.id, 'watch_later', contentType, contentId, watchLaterSelected),
+          setPlaylist(
+            currentUser.id,
+            'watch_later',
+            contentType,
+            contentId,
+            watchLaterSelected,
+          ),
         );
       }
-      if (favoritesSelected !== prev.inFavorites) {
+      if (favoritesSelected !== !!prev.inFavorites) {
         tasks.push(
-          setPlaylist(currentUser.id, 'favorites', contentType, contentId, favoritesSelected),
+          setPlaylist(
+            currentUser.id,
+            'favorites',
+            contentType,
+            contentId,
+            favoritesSelected,
+          ),
         );
       }
+
+      const prevCustom = new Set(prev.customPlaylistIds || []);
+      const selectedCustom = new Set(
+        selectedPlaylists.filter(
+          x => x !== 'watch_later' && x !== 'favorites',
+        ),
+      );
+      for (const pid of prevCustom) {
+        if (!selectedCustom.has(pid)) {
+          tasks.push(
+            setCustomPlaylistItem(pid, contentType, contentId, false),
+          );
+        }
+      }
+      for (const pid of selectedCustom) {
+        if (!prevCustom.has(pid)) {
+          tasks.push(
+            setCustomPlaylistItem(pid, contentType, contentId, true),
+          );
+        }
+      }
+
       await Promise.all(tasks);
       onClose();
     } catch (e) {
@@ -147,11 +213,16 @@ const SaveModal = ({ visible, onClose, contentType = 'video', contentId }) => {
                 </View>
               ) : (
                 <FlatList
-                  data={PLAYLISTS}
-                  keyExtractor={item => item.id}
+                  data={listData}
+                  keyExtractor={item => String(item.id)}
                   renderItem={renderItem}
                   contentContainerStyle={styles.listContent}
                   showsVerticalScrollIndicator={false}
+                  ListEmptyComponent={
+                    <Text style={styles.hintBelow}>
+                      Create playlists from Library → New Playlist
+                    </Text>
+                  }
                 />
               )}
 
@@ -235,8 +306,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
+  hintBelow: {
+    padding: 16,
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 14,
+  },
   listContent: {
     paddingVertical: 10,
+    maxHeight: height * 0.42,
   },
   playlistItem: {
     flexDirection: 'row',

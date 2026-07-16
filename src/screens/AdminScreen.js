@@ -13,7 +13,10 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSelector } from 'react-redux';
+import { useNavigation } from '@react-navigation/native';
+import { useDispatch, useSelector } from 'react-redux';
+import { navigateToRootRoute } from '../utils/navigateToRootRoute';
+import { appSetUser } from '../redux/actions/appSlice';
 import {
   getRoles,
   createRole,
@@ -33,11 +36,7 @@ import {
   createSponsored,
   deleteSponsored,
 } from '../services/sponsoredService';
-import {
-  getFeaturedList,
-  createFeatured,
-  deleteFeatured,
-} from '../services/featuredService';
+import { getFeaturedList, deleteFeatured } from '../services/featuredService';
 import {
   getVendorFeaturedList,
   createVendorFeatured,
@@ -48,14 +47,27 @@ import {
   createVendorSponsored,
   deleteVendorSponsored,
 } from '../services/vendorSponsoredService';
-import { getRestaurantOrders } from '../services/orderService';
+import {
+  listAppRatings,
+  deleteAppRatingById,
+  updateAppRatingById,
+} from '../services/appRatingService';
+import {
+  getRestaurantOrders,
+  listRestaurantOrderReviews,
+  upsertRestaurantOrderReview,
+  deleteRestaurantOrderReview,
+} from '../services/orderService';
 import { uploadVideo } from '../services/videoService';
+import { listContentReports } from '../services/reportService';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 
 const SIDEBAR_WIDTH = 140;
 
 const AdminScreen = () => {
+  const dispatch = useDispatch();
+  const navigation = useNavigation();
   const { user } = useSelector(s => s.app) || {};
   const roleNorm = String(user?.role || '').toLowerCase();
   const isAdminUser =
@@ -64,7 +76,7 @@ const AdminScreen = () => {
     roleNorm === 'super_admin' ||
     roleNorm === 'super-admin';
   const isOwnerUser = roleNorm === 'owner';
-  const [menu, setMenu] = useState('roles'); // 'roles' | 'users' | 'sponsored' | 'featured'
+  const [menu, setMenu] = useState('roles'); // 'roles' | 'users' | 'sponsored' | 'featured' | 'appRatings'
   const [roles, setRoles] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -91,7 +103,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '',
-    currency: 'BDT',
+    currency: 'GBP',
   });
   const [sponsoredVideoFile, setSponsoredVideoFile] = useState(null);
   const [sponsoredThumbnailFile, setSponsoredThumbnailFile] = useState(null);
@@ -104,32 +116,19 @@ const AdminScreen = () => {
   const [myOwnerProfileLoading, setMyOwnerProfileLoading] = useState(false);
 
   const [featuredList, setFeaturedList] = useState([]);
-  const [featuredForm, setFeaturedForm] = useState({
-    ownerId: '',
-    title: '',
-    areaName: '',
-    latitude: '',
-    longitude: '',
-    radiusKm: '2',
-    startDate: '',
-    endDate: '',
-    amountPaid: '0',
-    currency: 'BDT',
-  });
-  const [featuredVideoFile, setFeaturedVideoFile] = useState(null);
-  const [featuredThumbnailFile, setFeaturedThumbnailFile] = useState(null);
-  const [featuredOwnerSearchQuery, setFeaturedOwnerSearchQuery] = useState('');
-  const [featuredOwnerSearchResults, setFeaturedOwnerSearchResults] = useState(
-    [],
-  );
-  const [featuredOwnerSearchLoading, setFeaturedOwnerSearchLoading] =
-    useState(false);
-  const [selectedFeaturedOwner, setSelectedFeaturedOwner] = useState(null);
-  const featuredOwnerSearchTimeoutRef = useRef(null);
-  const [myFeaturedProfile, setMyFeaturedProfile] = useState(null);
-  const [myFeaturedProfileLoading, setMyFeaturedProfileLoading] =
-    useState(false);
   const [ordersList, setOrdersList] = useState([]);
+  const [appRatings, setAppRatings] = useState([]);
+  const [editingAppRating, setEditingAppRating] = useState(null);
+  const [appRatingValue, setAppRatingValue] = useState(0);
+  const [appRatingComment, setAppRatingComment] = useState('');
+  const [orderReviews, setOrderReviews] = useState([]);
+  const [contentReports, setContentReports] = useState([]);
+  const [contentReportsTotal, setContentReportsTotal] = useState(0);
+  const [reportsPage, setReportsPage] = useState(1);
+  const [reportTypeFilter, setReportTypeFilter] = useState('all'); // all | short | video
+  const [editingOrderReview, setEditingOrderReview] = useState(null);
+  const [orderReviewValue, setOrderReviewValue] = useState(0);
+  const [orderReviewComment, setOrderReviewComment] = useState('');
   const [vendorFeaturedList, setVendorFeaturedList] = useState([]);
   const [vendorSponsoredList, setVendorSponsoredList] = useState([]);
   const [vendorFeaturedForm, setVendorFeaturedForm] = useState({
@@ -142,7 +141,7 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'BDT',
+    currency: 'GBP',
   });
   const [vendorSponsoredForm, setVendorSponsoredForm] = useState({
     userId: '',
@@ -154,20 +153,31 @@ const AdminScreen = () => {
     startDate: '',
     endDate: '',
     amountPaid: '0',
-    currency: 'BDT',
+    currency: 'GBP',
   });
-  const [selectedVendorFeaturedUser, setSelectedVendorFeaturedUser] = useState(null);
-  const [vendorFeaturedSearchQuery, setVendorFeaturedSearchQuery] = useState('');
-  const [vendorFeaturedSearchResults, setVendorFeaturedSearchResults] = useState([]);
-  const [vendorFeaturedSearchLoading, setVendorFeaturedSearchLoading] = useState(false);
+  const [selectedVendorFeaturedUser, setSelectedVendorFeaturedUser] =
+    useState(null);
+  const [vendorFeaturedSearchQuery, setVendorFeaturedSearchQuery] =
+    useState('');
+  const [vendorFeaturedSearchResults, setVendorFeaturedSearchResults] =
+    useState([]);
+  const [vendorFeaturedSearchLoading, setVendorFeaturedSearchLoading] =
+    useState(false);
   const [vendorFeaturedVideoFile, setVendorFeaturedVideoFile] = useState(null);
-  const [vendorFeaturedThumbnailFile, setVendorFeaturedThumbnailFile] = useState(null);
-  const [selectedVendorSponsoredUser, setSelectedVendorSponsoredUser] = useState(null);
-  const [vendorSponsoredSearchQuery, setVendorSponsoredSearchQuery] = useState('');
-  const [vendorSponsoredSearchResults, setVendorSponsoredSearchResults] = useState([]);
-  const [vendorSponsoredSearchLoading, setVendorSponsoredSearchLoading] = useState(false);
-  const [vendorSponsoredVideoFile, setVendorSponsoredVideoFile] = useState(null);
-  const [vendorSponsoredThumbnailFile, setVendorSponsoredThumbnailFile] = useState(null);
+  const [vendorFeaturedThumbnailFile, setVendorFeaturedThumbnailFile] =
+    useState(null);
+  const [selectedVendorSponsoredUser, setSelectedVendorSponsoredUser] =
+    useState(null);
+  const [vendorSponsoredSearchQuery, setVendorSponsoredSearchQuery] =
+    useState('');
+  const [vendorSponsoredSearchResults, setVendorSponsoredSearchResults] =
+    useState([]);
+  const [vendorSponsoredSearchLoading, setVendorSponsoredSearchLoading] =
+    useState(false);
+  const [vendorSponsoredVideoFile, setVendorSponsoredVideoFile] =
+    useState(null);
+  const [vendorSponsoredThumbnailFile, setVendorSponsoredThumbnailFile] =
+    useState(null);
   const vendorFeaturedSearchTimeoutRef = useRef(null);
   const vendorSponsoredSearchTimeoutRef = useRef(null);
 
@@ -228,7 +238,7 @@ const AdminScreen = () => {
     }
   }, [user?.token]);
 
-  const searchVendorUsersForFeatured = useCallback(async (query) => {
+  const searchVendorUsersForFeatured = useCallback(async query => {
     setVendorFeaturedSearchLoading(true);
     try {
       const res = await getUsers({
@@ -239,9 +249,7 @@ const AdminScreen = () => {
       const list = res?.data || [];
       // Only show users with role owner
       setVendorFeaturedSearchResults(
-        list.filter(
-          (u) => (u?.role || '').toLowerCase() === 'owner',
-        ),
+        list.filter(u => (u?.role || '').toLowerCase() === 'owner'),
       );
     } catch (e) {
       setVendorFeaturedSearchResults([]);
@@ -250,7 +258,7 @@ const AdminScreen = () => {
     }
   }, []);
 
-  const searchVendorUsersForSponsored = useCallback(async (query) => {
+  const searchVendorUsersForSponsored = useCallback(async query => {
     setVendorSponsoredSearchLoading(true);
     try {
       const res = await getUsers({
@@ -261,9 +269,7 @@ const AdminScreen = () => {
       const list = res?.data || [];
       // Only show users with role owner
       setVendorSponsoredSearchResults(
-        list.filter(
-          (u) => (u?.role || '').toLowerCase() === 'owner',
-        ),
+        list.filter(u => (u?.role || '').toLowerCase() === 'owner'),
       );
     } catch (e) {
       setVendorSponsoredSearchResults([]);
@@ -292,6 +298,54 @@ const AdminScreen = () => {
     }
   }, [user?.token]);
 
+  const loadAppRatings = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await listAppRatings(user.token, { page: 1, perPage: 200 });
+      setAppRatings(res?.items || []);
+    } catch (e) {
+      setAppRatings([]);
+    }
+  }, [user?.token]);
+
+  const loadOrderReviews = useCallback(async () => {
+    if (!user?.token) return;
+    try {
+      const res = await listRestaurantOrderReviews(user.token, {
+        page: 1,
+        perPage: 200,
+      });
+      setOrderReviews(res?.items || []);
+    } catch (e) {
+      setOrderReviews([]);
+    }
+  }, [user?.token]);
+
+  const loadContentReports = useCallback(
+    async (page = 1, append = false) => {
+      if (!user?.token) return;
+      try {
+        const res = await listContentReports(user.token, {
+          page,
+          limit: 50,
+        });
+        const items = res?.items || [];
+        setContentReports(prev => (append ? [...prev, ...items] : items));
+        setContentReportsTotal(Number(res?.total) || 0);
+        setReportsPage(page);
+      } catch (e) {
+        if (!append) setContentReports([]);
+        Alert.alert(
+          'Error',
+          e?.response?.data?.message ||
+            e?.message ||
+            'Failed to load content reports',
+        );
+      }
+    },
+    [user?.token],
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (menu === 'roles') await loadRoles();
@@ -301,6 +355,9 @@ const AdminScreen = () => {
     else if (menu === 'orders') await loadOrders();
     else if (menu === 'vendorFeatured') await loadVendorFeatured();
     else if (menu === 'vendorSponsored') await loadVendorSponsored();
+    else if (menu === 'appRatings') await loadAppRatings();
+    else if (menu === 'orderReviews') await loadOrderReviews();
+    else if (menu === 'contentReports') await loadContentReports(1, false);
     setRefreshing(false);
   }, [
     menu,
@@ -311,6 +368,9 @@ const AdminScreen = () => {
     loadOrders,
     loadVendorFeatured,
     loadVendorSponsored,
+    loadAppRatings,
+    loadOrderReviews,
+    loadContentReports,
   ]);
 
   const searchOwners = useCallback(async query => {
@@ -375,35 +435,6 @@ const AdminScreen = () => {
     };
   }, [modalOpen, isOwnerUser, user?.id]);
 
-  const searchFeaturedOwners = useCallback(async query => {
-    setFeaturedOwnerSearchLoading(true);
-    try {
-      const res = await getUsers({
-        role: 'owner',
-        search: query && query.trim() ? query.trim() : undefined,
-        getAll: true,
-      });
-      setFeaturedOwnerSearchResults(res?.data || []);
-    } catch (e) {
-      setFeaturedOwnerSearchResults([]);
-    } finally {
-      setFeaturedOwnerSearchLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (modalOpen !== 'featured' || !isAdminUser) return;
-    if (featuredOwnerSearchTimeoutRef.current)
-      clearTimeout(featuredOwnerSearchTimeoutRef.current);
-    featuredOwnerSearchTimeoutRef.current = setTimeout(() => {
-      searchFeaturedOwners(featuredOwnerSearchQuery);
-    }, 400);
-    return () => {
-      if (featuredOwnerSearchTimeoutRef.current)
-        clearTimeout(featuredOwnerSearchTimeoutRef.current);
-    };
-  }, [modalOpen, featuredOwnerSearchQuery, isAdminUser, searchFeaturedOwners]);
-
   // Vendor Featured: show vendor search list when modal opens and when query changes – same as owner search in Featured
   useEffect(() => {
     if (modalOpen !== 'vendorFeatured') return;
@@ -434,39 +465,6 @@ const AdminScreen = () => {
     }
   }, [modalOpen, vendorSponsoredSearchQuery, searchVendorUsersForSponsored]);
 
-  useEffect(() => {
-    if (modalOpen !== 'featured' || !isOwnerUser || !user?.id) return;
-    let cancelled = false;
-    setMyFeaturedProfileLoading(true);
-    getUser(user.id)
-      .then(res => {
-        const profile = res?.user || res;
-        if (cancelled) return;
-        setMyFeaturedProfile(profile || null);
-        setFeaturedForm(p => ({
-          ...p,
-          areaName: profile?.address
-            ? String(profile.address).trim()
-            : p.areaName,
-          latitude:
-            profile?.latitude != null ? String(profile.latitude) : p.latitude,
-          longitude:
-            profile?.longitude != null
-              ? String(profile.longitude)
-              : p.longitude,
-        }));
-      })
-      .catch(() => {
-        if (!cancelled) setMyFeaturedProfile(null);
-      })
-      .finally(() => {
-        if (!cancelled) setMyFeaturedProfileLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [modalOpen, isOwnerUser, user?.id]);
-
   const openAddSponsored = () => {
     const isOwner = isOwnerUser;
     setSponsoredForm({
@@ -480,7 +478,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '',
-      currency: 'BDT',
+      currency: 'GBP',
     });
     setSponsoredVideoFile(null);
     setSponsoredThumbnailFile(null);
@@ -492,27 +490,7 @@ const AdminScreen = () => {
   };
 
   const openAddFeatured = () => {
-    const isOwner = isOwnerUser;
-    setFeaturedForm({
-      ownerId: '',
-      title: '',
-      areaName: isOwner && user?.address ? String(user.address).trim() : '',
-      latitude: isOwner && user?.latitude != null ? String(user.latitude) : '',
-      longitude:
-        isOwner && user?.longitude != null ? String(user.longitude) : '',
-      radiusKm: '2',
-      startDate: '',
-      endDate: '',
-      amountPaid: '0',
-      currency: 'BDT',
-    });
-    setFeaturedVideoFile(null);
-    setFeaturedThumbnailFile(null);
-    setFeaturedOwnerSearchQuery('');
-    setFeaturedOwnerSearchResults([]);
-    setSelectedFeaturedOwner(null);
-    setMyFeaturedProfile(null);
-    setModalOpen('featured');
+    navigateToRootRoute(navigation, 'FeaturedVideoUpload');
   };
 
   const openAddVendorFeatured = () => {
@@ -526,7 +504,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'BDT',
+      currency: 'GBP',
     });
     setSelectedVendorFeaturedUser(null);
     setVendorFeaturedSearchQuery('');
@@ -547,7 +525,7 @@ const AdminScreen = () => {
       startDate: '',
       endDate: '',
       amountPaid: '0',
-      currency: 'BDT',
+      currency: 'GBP',
     });
     setSelectedVendorSponsoredUser(null);
     setVendorSponsoredSearchQuery('');
@@ -658,7 +636,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid),
-        currency: currency || 'BDT',
+        currency: currency || 'GBP',
       };
       if (isAdmin) body.ownerId = ownerId;
       await createSponsored(user.token, body);
@@ -687,28 +665,6 @@ const AdminScreen = () => {
         },
       },
     ]);
-  };
-
-  const pickFeaturedVideo = () => {
-    launchImageLibrary({ mediaType: 'video', videoQuality: 'high' }, res => {
-      if (res.didCancel) return;
-      if (res.errorCode) {
-        Alert.alert('Error', res.errorMessage || 'Failed to pick video');
-        return;
-      }
-      if (res.assets?.[0]) setFeaturedVideoFile(res.assets[0]);
-    });
-  };
-
-  const pickFeaturedThumbnail = () => {
-    launchImageLibrary({ mediaType: 'photo' }, res => {
-      if (res.didCancel) return;
-      if (res.errorCode) {
-        Alert.alert('Error', res.errorMessage || 'Failed to pick image');
-        return;
-      }
-      if (res.assets?.[0]) setFeaturedThumbnailFile(res.assets[0]);
-    });
   };
 
   const pickVendorFeaturedVideo = () => {
@@ -753,103 +709,6 @@ const AdminScreen = () => {
       }
       if (res.assets?.[0]) setVendorSponsoredThumbnailFile(res.assets[0]);
     });
-  };
-
-  const handleCreateFeatured = async () => {
-    const {
-      ownerId,
-      title,
-      areaName: featAreaName,
-      radiusKm,
-      startDate,
-      endDate,
-      amountPaid,
-      currency,
-    } = featuredForm;
-    const isAdmin = isAdminUser;
-
-    if (!featuredVideoFile || !featuredThumbnailFile) {
-      Alert.alert('Error', 'Please select a video and a thumbnail');
-      return;
-    }
-    if (isAdmin && !ownerId) {
-      Alert.alert('Error', 'Please select the owner this featured is for');
-      return;
-    }
-    if (isAdmin) {
-      if (!selectedFeaturedOwner) {
-        Alert.alert('Error', 'Please select the owner this featured is for');
-        return;
-      }
-      if (
-        selectedFeaturedOwner.latitude == null ||
-        selectedFeaturedOwner.longitude == null
-      ) {
-        Alert.alert(
-          'Error',
-          'Selected owner has no saved location. Update owner profile first.',
-        );
-        return;
-      }
-    } else if (isOwnerUser) {
-      const lat = myFeaturedProfile?.latitude ?? user?.latitude;
-      const lng = myFeaturedProfile?.longitude ?? user?.longitude;
-      if (lat == null || lng == null) {
-        Alert.alert(
-          'Error',
-          'You have no saved location. Update your profile first.',
-        );
-        return;
-      }
-    }
-    if (!startDate || !endDate || amountPaid === '') {
-      Alert.alert('Error', 'Please fill Dates and Amount paid');
-      return;
-    }
-    setSubmitLoading(true);
-    try {
-      const videoTitle =
-        title || featAreaName
-          ? `Featured - ${title || featAreaName}`
-          : 'Featured video';
-      const uploadRes = await uploadVideo({
-        userId: user.id,
-        title: videoTitle,
-        videoUri: featuredVideoFile.uri,
-        videoType: featuredVideoFile.type || 'video/mp4',
-        videoName:
-          featuredVideoFile.fileName ||
-          featuredVideoFile.uri?.split('/').pop() ||
-          'video.mp4',
-        thumbnailUri: featuredThumbnailFile.uri,
-        thumbnailType: featuredThumbnailFile.type || 'image/jpeg',
-        thumbnailName:
-          featuredThumbnailFile.fileName ||
-          featuredThumbnailFile.uri?.split('/').pop() ||
-          'thumb.jpg',
-      });
-      const finalVideoId = uploadRes?.video?.id || uploadRes?.id;
-      if (!finalVideoId)
-        throw new Error('Upload succeeded but no video ID returned');
-
-      const body = {
-        videoId: finalVideoId,
-        radiusKm: parseFloat(radiusKm) || 2,
-        startDate: new Date(startDate).toISOString(),
-        endDate: new Date(endDate).toISOString(),
-        amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'BDT',
-      };
-      if (isAdmin) body.ownerId = ownerId;
-      await createFeatured(user.token, body);
-      setModalOpen(false);
-      loadFeatured();
-      Alert.alert('Success', 'Featured campaign created.');
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to create');
-    } finally {
-      setSubmitLoading(false);
-    }
   };
 
   const handleDeleteFeatured = f => {
@@ -933,7 +792,9 @@ const AdminScreen = () => {
       await createVendorFeatured(user.token, {
         userId: vendorFeaturedForm.userId,
         videoId: finalVideoId,
-        areaName: (areaName || '').trim() || (selectedVendorFeaturedUser.address || '').trim(),
+        areaName:
+          (areaName || '').trim() ||
+          (selectedVendorFeaturedUser.address || '').trim(),
         latitude:
           latitude !== '' && latitude != null
             ? parseFloat(latitude)
@@ -946,7 +807,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'BDT',
+        currency: currency || 'GBP',
       });
       setModalOpen(false);
       loadVendorFeatured();
@@ -1022,7 +883,9 @@ const AdminScreen = () => {
       await createVendorSponsored(user.token, {
         userId: vendorSponsoredForm.userId,
         videoId: finalVideoId,
-        areaName: (areaName || '').trim() || (selectedVendorSponsoredUser.address || '').trim(),
+        areaName:
+          (areaName || '').trim() ||
+          (selectedVendorSponsoredUser.address || '').trim(),
         latitude:
           latitude !== '' && latitude != null
             ? parseFloat(latitude)
@@ -1035,7 +898,7 @@ const AdminScreen = () => {
         startDate: new Date(startDate).toISOString(),
         endDate: new Date(endDate).toISOString(),
         amountPaid: parseFloat(amountPaid) || 0,
-        currency: currency || 'BDT',
+        currency: currency || 'GBP',
       });
       setModalOpen(false);
       loadVendorSponsored();
@@ -1089,6 +952,9 @@ const AdminScreen = () => {
     else if (menu === 'orders') loadOrders();
     else if (menu === 'vendorFeatured') loadVendorFeatured();
     else if (menu === 'vendorSponsored') loadVendorSponsored();
+    else if (menu === 'appRatings') loadAppRatings();
+    else if (menu === 'orderReviews') loadOrderReviews();
+    else if (menu === 'contentReports') loadContentReports(1, false);
   }, [
     menu,
     loadRoles,
@@ -1098,7 +964,120 @@ const AdminScreen = () => {
     loadOrders,
     loadVendorFeatured,
     loadVendorSponsored,
+    loadAppRatings,
+    loadOrderReviews,
+    loadContentReports,
   ]);
+
+  const openEditAppRating = (r) => {
+    setEditingAppRating(r);
+    setAppRatingValue(Number(r?.rating) || 0);
+    setAppRatingComment(r?.comment || '');
+    setModalOpen('appRating');
+  };
+
+  const openEditOrderReview = (r) => {
+    setEditingOrderReview(r);
+    setOrderReviewValue(Number(r?.rating) || 0);
+    setOrderReviewComment(r?.comment || '');
+    setModalOpen('orderReview');
+  };
+
+  const handleDeleteOrderReview = (r) => {
+    if (!user?.token || !r?.orderId) return;
+    Alert.alert('Delete', 'Delete this order review?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteRestaurantOrderReview(user.token, r.orderId);
+            loadOrderReviews();
+          } catch (e) {
+            Alert.alert('Error', e?.message || 'Failed to delete review');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleUpdateOrderReview = async () => {
+    if (!user?.token || !editingOrderReview?.orderId) return;
+    if (!orderReviewValue || orderReviewValue < 1) {
+      Alert.alert('Rating required', 'Please select a star rating first.');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      await upsertRestaurantOrderReview(user.token, editingOrderReview.orderId, {
+        rating: orderReviewValue,
+        comment: orderReviewComment,
+      });
+      setModalOpen(false);
+      setEditingOrderReview(null);
+      loadOrderReviews();
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to update review');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleDeleteAppRating = (r) => {
+    if (!user?.token) return;
+    Alert.alert('Delete rating', 'Delete this app rating?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAppRatingById(user.token, r.id);
+            loadAppRatings();
+          } catch (e) {
+            Alert.alert('Error', e.message || 'Failed to delete');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleUpdateAppRating = async () => {
+    if (!user?.token || !editingAppRating?.id) return;
+    if (!appRatingValue) {
+      Alert.alert('Error', 'Select a rating');
+      return;
+    }
+    setSubmitLoading(true);
+    try {
+      await updateAppRatingById(user.token, editingAppRating.id, {
+        rating: appRatingValue,
+        comment: appRatingComment || undefined,
+      });
+      setModalOpen(false);
+      setEditingAppRating(null);
+      loadAppRatings();
+      Alert.alert('Success', 'Rating updated');
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to update');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: () => {
+          dispatch(appSetUser(null));
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     if (modalOpen) loadRoleOptions();
@@ -1413,6 +1392,90 @@ const AdminScreen = () => {
               Vendor Sponsored
             </Text>
           </TouchableOpacity>
+
+          {isAdminUser && (
+            <TouchableOpacity
+              style={[
+                styles.sideItem,
+                menu === 'appRatings' && styles.sideItemActive,
+              ]}
+              onPress={() => setMenu('appRatings')}
+            >
+              <Icon
+                name="star"
+                size={24}
+                color={
+                  menu === 'appRatings'
+                    ? COLORS.primaryOrange
+                    : COLORS.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.sideText,
+                  menu === 'appRatings' && styles.sideTextActive,
+                ]}
+              >
+                App Ratings
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {isAdminUser && (
+            <TouchableOpacity
+              style={[
+                styles.sideItem,
+                menu === 'orderReviews' && styles.sideItemActive,
+              ]}
+              onPress={() => setMenu('orderReviews')}
+            >
+              <Icon
+                name="comment-text-outline"
+                size={24}
+                color={
+                  menu === 'orderReviews'
+                    ? COLORS.primaryOrange
+                    : COLORS.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.sideText,
+                  menu === 'orderReviews' && styles.sideTextActive,
+                ]}
+              >
+                Order Reviews
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {isAdminUser && (
+            <TouchableOpacity
+              style={[
+                styles.sideItem,
+                menu === 'contentReports' && styles.sideItemActive,
+              ]}
+              onPress={() => setMenu('contentReports')}
+            >
+              <Icon
+                name="flag-outline"
+                size={24}
+                color={
+                  menu === 'contentReports'
+                    ? COLORS.primaryOrange
+                    : COLORS.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.sideText,
+                  menu === 'contentReports' && styles.sideTextActive,
+                ]}
+              >
+                Reports
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.main}>
@@ -1430,9 +1493,26 @@ const AdminScreen = () => {
                 ? 'Vendor Featured'
                 : menu === 'vendorSponsored'
                 ? 'Vendor Sponsored'
+                : menu === 'appRatings'
+                ? 'App Ratings'
+                : menu === 'orderReviews'
+                ? 'Order Reviews'
+                : menu === 'contentReports'
+                ? 'Reported shorts & videos'
                 : 'Featured'}
             </Text>
-            {menu !== 'orders' && (
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <Icon name="logout" size={20} color={COLORS.white} />
+              <Text style={styles.logoutBtnText}>Logout</Text>
+            </TouchableOpacity>
+            {menu !== 'orders' &&
+              menu !== 'appRatings' &&
+              menu !== 'orderReviews' &&
+              menu !== 'contentReports' && (
               <TouchableOpacity
                 style={styles.addBtn}
                 onPress={
@@ -1471,6 +1551,242 @@ const AdminScreen = () => {
                 color={COLORS.primaryOrange}
                 style={{ marginTop: 40 }}
               />
+            ) : menu === 'contentReports' ? (
+              <>
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
+                    paddingHorizontal: 12,
+                    marginBottom: 12,
+                    gap: 8,
+                  }}
+                >
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'short', label: 'Shorts' },
+                    { id: 'video', label: 'Videos' },
+                  ].map(f => (
+                    <TouchableOpacity
+                      key={f.id}
+                      onPress={() => setReportTypeFilter(f.id)}
+                      style={{
+                        paddingHorizontal: 14,
+                        paddingVertical: 8,
+                        borderRadius: 20,
+                        backgroundColor:
+                          reportTypeFilter === f.id
+                            ? COLORS.primaryOrange
+                            : '#F0F0F0',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontWeight: '600',
+                          color:
+                            reportTypeFilter === f.id
+                              ? '#FFF'
+                              : COLORS.textSecondary,
+                        }}
+                      >
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text
+                  style={{
+                    paddingHorizontal: 16,
+                    marginBottom: 8,
+                    color: COLORS.textSecondary,
+                    fontSize: 13,
+                  }}
+                >
+                  {contentReportsTotal} total report
+                  {contentReportsTotal !== 1 ? 's' : ''}
+                  {reportTypeFilter !== 'all'
+                    ? ` · showing ${reportTypeFilter}s`
+                    : ''}
+                </Text>
+                {contentReports.filter(
+                  r =>
+                    reportTypeFilter === 'all' ||
+                    r.contentType === reportTypeFilter,
+                ).length === 0 ? (
+                  <Text
+                    style={{
+                      padding: 24,
+                      color: COLORS.textSecondary,
+                      textAlign: 'center',
+                    }}
+                  >
+                    No content reports yet.
+                  </Text>
+                ) : (
+                  contentReports
+                    .filter(
+                      r =>
+                        reportTypeFilter === 'all' ||
+                        r.contentType === reportTypeFilter,
+                    )
+                    .map(r => (
+                      <View key={r.id} style={styles.row}>
+                        <View style={styles.rowLeft}>
+                          <View
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <View
+                              style={{
+                                paddingHorizontal: 8,
+                                paddingVertical: 3,
+                                borderRadius: 6,
+                                backgroundColor:
+                                  r.contentType === 'short'
+                                    ? '#7B1FA2'
+                                    : '#1565C0',
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  color: '#FFF',
+                                  fontSize: 11,
+                                  fontWeight: '700',
+                                  textTransform: 'uppercase',
+                                }}
+                              >
+                                {r.contentType === 'short' ? 'Short' : 'Video'}
+                              </Text>
+                            </View>
+                            <Text
+                              style={[styles.rowTitle, { flex: 1 }]}
+                              numberOfLines={2}
+                            >
+                              {r.contentTitle || '—'}
+                            </Text>
+                          </View>
+                          <Text style={styles.rowSub}>
+                            <Text style={{ fontWeight: '600' }}>Reason: </Text>
+                            {r.reason || '—'}
+                          </Text>
+                          <Text style={styles.rowSub}>
+                            <Text style={{ fontWeight: '600' }}>Reporter: </Text>
+                            {r.reporter?.nickname ||
+                              r.reporter?.name ||
+                              r.reporter?.email ||
+                              '—'}
+                          </Text>
+                          <Text style={styles.rowSub}>
+                            Content ID: {r.contentId || '—'}
+                          </Text>
+                          <Text style={styles.rowSub}>
+                            {r.createdAt
+                              ? new Date(r.createdAt).toLocaleString()
+                              : '—'}
+                          </Text>
+                          {r.details ? (
+                            <Text style={[styles.rowSub, { marginTop: 4 }]}>
+                              Details: {r.details}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))
+                )}
+                {contentReports.length < contentReportsTotal ? (
+                  <TouchableOpacity
+                    style={{
+                      margin: 16,
+                      padding: 14,
+                      backgroundColor: '#F5F5F5',
+                      borderRadius: 10,
+                      alignItems: 'center',
+                    }}
+                    onPress={() => loadContentReports(reportsPage + 1, true)}
+                  >
+                    <Text style={{ fontWeight: '600', color: COLORS.primaryOrange }}>
+                      Load more ({contentReports.length} / {contentReportsTotal})
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            ) : menu === 'orderReviews' ? (
+              orderReviews.map(r => (
+                <View key={r.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>
+                      #{String(r.orderId || '').slice(0, 8)} ·{' '}
+                      {r.user?.nickname || r.user?.name || r.user?.email || 'User'} ·{' '}
+                      {r.rating}★
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={2}>
+                      {r.comment ? r.comment : '—'}
+                      {'  '}•{'  '}
+                      {r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => openEditOrderReview(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="pencil"
+                      size={22}
+                      color={COLORS.primaryOrange}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteOrderReview(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="delete-outline"
+                      size={22}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))
+            ) : menu === 'appRatings' ? (
+              appRatings.map(r => (
+                <View key={r.id} style={styles.row}>
+                  <View style={styles.rowLeft}>
+                    <Text style={styles.rowTitle}>
+                      {r.user?.nickname || r.user?.name || r.user?.email || 'User'} · {r.rating}★
+                    </Text>
+                    <Text style={styles.rowSub} numberOfLines={2}>
+                      {r.comment ? r.comment : '—'}
+                      {'  '}•{'  '}
+                      {r.createdAt ? new Date(r.createdAt).toLocaleString() : '—'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => openEditAppRating(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="pencil"
+                      size={22}
+                      color={COLORS.primaryOrange}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteAppRating(r)}
+                    style={styles.iconBtn}
+                  >
+                    <Icon
+                      name="delete-outline"
+                      size={22}
+                      color={COLORS.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ))
             ) : menu === 'sponsored' ? (
               sponsoredList.map(s => (
                 <View key={s.id} style={styles.row}>
@@ -1686,10 +2002,12 @@ const AdminScreen = () => {
                 ? editingRole
                   ? 'Edit Role'
                   : 'New Role'
+                : modalOpen === 'appRating'
+                ? 'Edit App Rating'
+                : modalOpen === 'orderReview'
+                ? 'Edit Order Review'
                 : modalOpen === 'sponsored'
                 ? 'New Sponsored Campaign'
-                : modalOpen === 'featured'
-                ? 'New Featured Campaign'
                 : modalOpen === 'vendorFeatured'
                 ? 'New Vendor Featured Campaign'
                 : modalOpen === 'vendorSponsored'
@@ -1698,7 +2016,65 @@ const AdminScreen = () => {
                 ? 'Edit User'
                 : 'New User'}
             </Text>
-            {modalOpen === 'vendorFeatured' ? (
+            {modalOpen === 'appRating' ? (
+              <>
+                <Text style={styles.label}>Rating</Text>
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => setAppRatingValue(s)}
+                      style={{ padding: 4 }}
+                      disabled={submitLoading}
+                    >
+                      <Icon
+                        name={s <= appRatingValue ? 'star' : 'star-outline'}
+                        size={32}
+                        color={COLORS.primaryOrange}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.label}>Comment (optional)</Text>
+                <TextInput
+                  style={[styles.input, { height: 90 }]}
+                  value={appRatingComment}
+                  onChangeText={setAppRatingComment}
+                  placeholder="Write a comment..."
+                  placeholderTextColor="#999"
+                  multiline
+                />
+              </>
+            ) : modalOpen === 'orderReview' ? (
+              <>
+                <Text style={styles.label}>Rating</Text>
+                <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => setOrderReviewValue(s)}
+                      style={{ padding: 4 }}
+                      disabled={submitLoading}
+                    >
+                      <Icon
+                        name={s <= orderReviewValue ? 'star' : 'star-outline'}
+                        size={32}
+                        color={COLORS.primaryOrange}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.label}>Comment (optional)</Text>
+                <TextInput
+                  style={[styles.input, { height: 90 }]}
+                  value={orderReviewComment}
+                  onChangeText={setOrderReviewComment}
+                  placeholder="Write a comment..."
+                  placeholderTextColor="#999"
+                  multiline
+                />
+              </>
+            ) : modalOpen === 'vendorFeatured' ? (
               <ScrollView
                 style={{ maxHeight: 520 }}
                 showsVerticalScrollIndicator={false}
@@ -1708,10 +2084,7 @@ const AdminScreen = () => {
                 </Text>
                 {selectedVendorFeaturedUser ? (
                   <View style={styles.selectedOwnerBox}>
-                    <Text
-                      style={styles.selectedOwnerName}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.selectedOwnerName} numberOfLines={1}>
                       {selectedVendorFeaturedUser.nickname ||
                         selectedVendorFeaturedUser.name ||
                         selectedVendorFeaturedUser.email}
@@ -1896,8 +2269,8 @@ const AdminScreen = () => {
                     </Text>
                   ) : (
                     <Text style={styles.hintText}>
-                      Selected owner has no address/location saved. Update
-                      owner profile first.
+                      Selected owner has no address/location saved. Update owner
+                      profile first.
                     </Text>
                   )}
                 </View>
@@ -1950,7 +2323,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setVendorFeaturedForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -1964,10 +2337,7 @@ const AdminScreen = () => {
                 </Text>
                 {selectedVendorSponsoredUser ? (
                   <View style={styles.selectedOwnerBox}>
-                    <Text
-                      style={styles.selectedOwnerName}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.selectedOwnerName} numberOfLines={1}>
                       {selectedVendorSponsoredUser.nickname ||
                         selectedVendorSponsoredUser.name ||
                         selectedVendorSponsoredUser.email}
@@ -2135,7 +2505,8 @@ const AdminScreen = () => {
                 >
                   <Text style={styles.addBtnText}>
                     {vendorSponsoredThumbnailFile
-                      ? vendorSponsoredThumbnailFile.fileName || 'Image selected'
+                      ? vendorSponsoredThumbnailFile.fileName ||
+                        'Image selected'
                       : 'Pick thumbnail'}
                   </Text>
                 </TouchableOpacity>
@@ -2152,8 +2523,8 @@ const AdminScreen = () => {
                     </Text>
                   ) : (
                     <Text style={styles.hintText}>
-                      Selected owner has no address/location saved. Update
-                      owner profile first.
+                      Selected owner has no address/location saved. Update owner
+                      profile first.
                     </Text>
                   )}
                 </View>
@@ -2206,281 +2577,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setVendorSponsoredForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
-                  placeholderTextColor="#999"
-                />
-              </ScrollView>
-            ) : modalOpen === 'featured' ? (
-              <ScrollView
-                style={{ maxHeight: 520 }}
-                showsVerticalScrollIndicator={false}
-              >
-                {isAdminUser && (
-                  <>
-                    <Text style={styles.label}>
-                      1. Select owner (list shows only role: owner)
-                    </Text>
-                    {selectedFeaturedOwner ? (
-                      <View style={styles.selectedOwnerBox}>
-                        <Text
-                          style={styles.selectedOwnerName}
-                          numberOfLines={1}
-                        >
-                          {selectedFeaturedOwner.nickname ||
-                            selectedFeaturedOwner.name ||
-                            selectedFeaturedOwner.email}
-                        </Text>
-                        {selectedFeaturedOwner.address ? (
-                          <Text
-                            style={styles.selectedOwnerAddress}
-                            numberOfLines={2}
-                          >
-                            {selectedFeaturedOwner.address}
-                          </Text>
-                        ) : null}
-                        <TouchableOpacity
-                          onPress={() => {
-                            setSelectedFeaturedOwner(null);
-                            setFeaturedForm(p => ({
-                              ...p,
-                              ownerId: '',
-                              areaName: '',
-                              latitude: '',
-                              longitude: '',
-                            }));
-                          }}
-                          style={styles.changeOwnerBtn}
-                        >
-                          <Text style={styles.changeOwnerBtnText}>
-                            Change owner
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <>
-                        <TextInput
-                          style={styles.input}
-                          value={featuredOwnerSearchQuery}
-                          onChangeText={setFeaturedOwnerSearchQuery}
-                          placeholder="Search by name or email (email is unique)"
-                          placeholderTextColor="#999"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          keyboardType="email-address"
-                        />
-                        <Text style={[styles.hintText, { marginTop: 4 }]}>
-                          {
-                            'Only owners listed. Type name or full email → select one, address & location auto-fill.'
-                          }
-                        </Text>
-                        {featuredOwnerSearchLoading ? (
-                          <ActivityIndicator
-                            size="small"
-                            style={{ marginVertical: 8 }}
-                            color={COLORS?.primary || '#333'}
-                          />
-                        ) : featuredOwnerSearchResults.length > 0 ? (
-                          <ScrollView
-                            style={styles.ownerSearchList}
-                            nestedScrollEnabled
-                            keyboardShouldPersistTaps="handled"
-                          >
-                            {featuredOwnerSearchResults.map(o => (
-                              <TouchableOpacity
-                                key={o.id}
-                                style={styles.ownerSearchItem}
-                                onPress={() => {
-                                  setFeaturedOwnerSearchLoading(true);
-                                  getUser(o.id)
-                                    .then(res => {
-                                      const profile = res?.user || res || o;
-                                      setSelectedFeaturedOwner(profile);
-                                      setFeaturedForm(p => ({
-                                        ...p,
-                                        ownerId: profile?.id || o.id,
-                                        areaName: profile?.address
-                                          ? String(profile.address).trim()
-                                          : '',
-                                        latitude:
-                                          profile?.latitude != null
-                                            ? String(profile.latitude)
-                                            : '',
-                                        longitude:
-                                          profile?.longitude != null
-                                            ? String(profile.longitude)
-                                            : '',
-                                      }));
-                                      setFeaturedOwnerSearchQuery('');
-                                      setFeaturedOwnerSearchResults([]);
-                                    })
-                                    .catch(() => {
-                                      setSelectedFeaturedOwner(o);
-                                      setFeaturedForm(p => ({
-                                        ...p,
-                                        ownerId: o.id,
-                                        areaName: o.address
-                                          ? String(o.address).trim()
-                                          : '',
-                                        latitude:
-                                          o.latitude != null
-                                            ? String(o.latitude)
-                                            : '',
-                                        longitude:
-                                          o.longitude != null
-                                            ? String(o.longitude)
-                                            : '',
-                                      }));
-                                      setFeaturedOwnerSearchQuery('');
-                                      setFeaturedOwnerSearchResults([]);
-                                    })
-                                    .finally(() =>
-                                      setFeaturedOwnerSearchLoading(false),
-                                    );
-                                }}
-                              >
-                                <Text
-                                  style={styles.ownerSearchItemName}
-                                  numberOfLines={1}
-                                >
-                                  {o.nickname || o.name || o.email}
-                                </Text>
-                                {o.address ? (
-                                  <Text
-                                    style={styles.ownerSearchItemAddress}
-                                    numberOfLines={1}
-                                  >
-                                    {o.address}
-                                  </Text>
-                                ) : null}
-                              </TouchableOpacity>
-                            ))}
-                          </ScrollView>
-                        ) : featuredOwnerSearchQuery.trim() ? (
-                          <Text style={styles.hintText}>
-                            No owners found. Try another search.
-                          </Text>
-                        ) : (
-                          <Text style={styles.hintText}>
-                            Type to search owners (name or email).
-                          </Text>
-                        )}
-                      </>
-                    )}
-                  </>
-                )}
-                <Text style={styles.label}>Title (optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.title}
-                  onChangeText={t => setFeaturedForm(p => ({ ...p, title: t }))}
-                  placeholder="e.g. My featured promo"
-                  placeholderTextColor="#999"
-                />
-                <Text style={styles.label}>Video (required)</Text>
-                <TouchableOpacity
-                  style={[styles.addBtn, { marginVertical: 4 }]}
-                  onPress={pickFeaturedVideo}
-                >
-                  <Text style={styles.addBtnText}>
-                    {featuredVideoFile
-                      ? featuredVideoFile.fileName || 'Video selected'
-                      : 'Pick video'}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.label}>Thumbnail (required)</Text>
-                <TouchableOpacity
-                  style={[styles.addBtn, { marginVertical: 4 }]}
-                  onPress={pickFeaturedThumbnail}
-                >
-                  <Text style={styles.addBtnText}>
-                    {featuredThumbnailFile
-                      ? featuredThumbnailFile.fileName || 'Image selected'
-                      : 'Pick thumbnail'}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.label}>Location</Text>
-                <View style={styles.selectedOwnerBox}>
-                  {isAdminUser ? (
-                    !selectedFeaturedOwner ? (
-                      <Text style={styles.hintText}>
-                        Select an owner first. Location will be taken from that
-                        owner's profile.
-                      </Text>
-                    ) : selectedFeaturedOwner?.address ? (
-                      <Text style={styles.selectedOwnerAddress}>
-                        {selectedFeaturedOwner.address}
-                      </Text>
-                    ) : (
-                      <Text style={styles.hintText}>
-                        Selected owner has no address/location saved. Please
-                        update the owner profile first.
-                      </Text>
-                    )
-                  ) : myFeaturedProfileLoading ? (
-                    <Text style={styles.hintText}>
-                      Loading your saved location…
-                    </Text>
-                  ) : myFeaturedProfile?.address || user?.address ? (
-                    <Text style={styles.selectedOwnerAddress}>
-                      {myFeaturedProfile?.address || user?.address}
-                    </Text>
-                  ) : (
-                    <Text style={styles.hintText}>
-                      You have no address/location saved. Please update your
-                      profile first.
-                    </Text>
-                  )}
-                </View>
-                <Text style={styles.label}>Radius (km)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.radiusKm}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, radiusKm: t }))
-                  }
-                  placeholder="2"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                />
-                <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.startDate}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, startDate: t }))
-                  }
-                  placeholder="2026-02-18"
-                  placeholderTextColor="#999"
-                />
-                <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.endDate}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, endDate: t }))
-                  }
-                  placeholder="2026-03-18"
-                  placeholderTextColor="#999"
-                />
-                <Text style={styles.label}>Amount paid</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.amountPaid}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, amountPaid: t }))
-                  }
-                  placeholder="0"
-                  placeholderTextColor="#999"
-                  keyboardType="decimal-pad"
-                />
-                <Text style={styles.label}>Currency</Text>
-                <TextInput
-                  style={styles.input}
-                  value={featuredForm.currency}
-                  onChangeText={t =>
-                    setFeaturedForm(p => ({ ...p, currency: t }))
-                  }
-                  placeholder="BDT"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2756,7 +2853,7 @@ const AdminScreen = () => {
                   onChangeText={t =>
                     setSponsoredForm(p => ({ ...p, currency: t }))
                   }
-                  placeholder="BDT"
+                  placeholder="GBP"
                   placeholderTextColor="#999"
                 />
               </ScrollView>
@@ -2850,12 +2947,14 @@ const AdminScreen = () => {
               <TouchableOpacity
                 style={styles.saveBtn}
                 onPress={
-                  modalOpen === 'role'
+                  modalOpen === 'appRating'
+                    ? handleUpdateAppRating
+                    : modalOpen === 'orderReview'
+                    ? handleUpdateOrderReview
+                    : modalOpen === 'role'
                     ? handleSaveRole
                     : modalOpen === 'sponsored'
                     ? handleCreateSponsored
-                    : modalOpen === 'featured'
-                    ? handleCreateFeatured
                     : modalOpen === 'vendorFeatured'
                     ? handleCreateVendorFeatured
                     : modalOpen === 'vendorSponsored'
@@ -2923,6 +3022,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addBtnText: { color: COLORS.white, fontWeight: '600', fontSize: FONTS.sm },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.gray700,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: BORDER_RADIUS.md,
+    marginRight: SPACING.md,
+    gap: 6,
+  },
+  logoutBtnText: { color: COLORS.white, fontWeight: '600', fontSize: FONTS.xs },
   list: { flex: 1, padding: SPACING.lg },
   row: {
     flexDirection: 'row',

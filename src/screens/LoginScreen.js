@@ -14,18 +14,38 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import { config } from '../../config';
+import {
+  login,
+  isAccountInactiveError,
+} from '../services/authService';
 import {
   COLORS,
   FONTS,
   SPACING,
   BORDER_RADIUS,
-  SHADOWS,
-  DIMENSIONS,
-  COMMON_STYLES,
 } from '../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const mapUserData = (data, rememberMe) => ({
+  id: data.user.id,
+  name: data.user.name,
+  email: data.user.email,
+  phone: data.user.phone,
+  nickname: data.user.nickname,
+  gender: data.user.gender,
+  role: data.user.role,
+  roleId: data.user.roleId,
+  address: data.user.address,
+  latitude: data.user.latitude,
+  longitude: data.user.longitude,
+  pin: data.user.pin,
+  photos: data.user.photos ?? [],
+  channelAbout: data.user.channelAbout,
+  socialLinks: data.user.socialLinks,
+  rememberMe,
+  token: data.token,
+});
 
 const LoginScreen = () => {
   const navigation = useNavigation();
@@ -38,64 +58,32 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      setTimeout(() => {
-        Alert.alert('Error', 'Please enter email and password');
-      }, 100);
+      Alert.alert('Error', 'Please enter email and password');
       return;
     }
 
     setLoading(true);
     try {
-      // Call login API
-      const response = await fetch(`${config.apiBaseUrl}/users/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
-
-      // Save user data to Redux (which persists to AsyncStorage)
-      const userData = {
-        id: data.user.id,
-        name: data.user.name,
-        email: data.user.email,
-        phone: data.user.phone,
-        nickname: data.user.nickname,
-        gender: data.user.gender,
-        role: data.user.role,
-        roleId: data.user.roleId,
-        address: data.user.address,
-        latitude: data.user.latitude,
-        longitude: data.user.longitude,
-        pin: data.user.pin, // Boolean indicating if user has PIN
-        rememberMe: rememberMe,
-        token: data.token,
-      };
-
-      dispatch(appSetUser(userData));
-
-      // Go directly to main app (Home = HomeVersion)
+      const data = await login(email, password);
+      dispatch(appSetUser(mapUserData(data, rememberMe)));
       try {
         navigation.reset({ index: 0, routes: [{ name: 'Root' }] });
       } catch (_) {}
     } catch (error) {
-      console.error('Login error:', error);
-      setTimeout(() => {
-        Alert.alert(
-          'Error',
-          error.message || 'Login failed. Please try again.',
-        );
-      }, 100);
+      const message = error.message || 'Login failed. Please try again.';
+
+      if (isAccountInactiveError(message)) {
+        Alert.alert('Account Recovery Required', message.replace(/^ACCOUNT_[A-Z]+:\s*/, ''), [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Recover Account',
+            onPress: () => navigation.navigate('ForgotPassword'),
+          },
+        ]);
+        return;
+      }
+
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
@@ -103,9 +91,8 @@ const LoginScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFCC00" />
 
-      {/* Orange Header */}
       <View style={styles.header}>
         <SafeAreaView>
           <TouchableOpacity
@@ -116,16 +103,13 @@ const LoginScreen = () => {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Login to Your Account</Text>
           <Text style={styles.headerSubtitle}>
-            Let's get started on your journey to better health. to better
-            health.
+            Let's get started on your journey to better health.
           </Text>
         </SafeAreaView>
       </View>
 
-      {/* Login Form Container */}
       <View style={styles.formCard}>
         <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Email Field */}
           <Text style={styles.inputLabel}>Email</Text>
           <View style={styles.inputWrapper}>
             <Icon name="email" size={20} color="black" />
@@ -140,7 +124,6 @@ const LoginScreen = () => {
             />
           </View>
 
-          {/* Password Field (Active State) */}
           <Text style={styles.inputLabel}>Password</Text>
           <View style={[styles.inputWrapper, styles.inputActive]}>
             <Icon name="lock" size={20} color="black" />
@@ -162,7 +145,6 @@ const LoginScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Remember Me & Forgot Password Row */}
           <View style={styles.optionsRow}>
             <TouchableOpacity
               style={styles.checkboxContainer}
@@ -183,8 +165,6 @@ const LoginScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Sign In Button */}
-
           <Pressable
             style={({ hovered, pressed }) => [
               styles.signInButton,
@@ -202,27 +182,6 @@ const LoginScreen = () => {
             )}
           </Pressable>
 
-          {/* Divider */}
-          <View style={styles.dividerContainer}>
-            <View style={styles.line} />
-            <Text style={styles.orText}>or continue with</Text>
-            <View style={styles.line} />
-          </View>
-
-          {/* Social Icons */}
-          <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialCircle}>
-              <Icon name="facebook" size={20} color="blablck" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialCircle}>
-              <Icon name="google" size={20} color="black" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialCircle}>
-              <Icon name="apple" size={20} color="black" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
@@ -236,7 +195,10 @@ const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: COMMON_STYLES.container,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFCC00',
+  },
   header: {
     backgroundColor: COLORS.primaryOrange,
     paddingHorizontal: SPACING.xxl,
@@ -269,7 +231,7 @@ const styles = StyleSheet.create({
     marginTop: -SPACING.lg,
     backgroundColor: COLORS.white,
     borderTopLeftRadius: BORDER_RADIUS.xl,
-    borderTopRightRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xxl,
     paddingHorizontal: SPACING.xxl,
     paddingTop: SPACING.xxl,
   },
@@ -291,20 +253,13 @@ const styles = StyleSheet.create({
   inputActive: {
     borderWidth: 1,
     borderColor: '#FF7F0B',
-    backgroundColor: '#FFF5EE', // Subtle orange tint for active field
-  },
-  inputIcon: {
-    fontSize: 18,
-    marginRight: 10,
+    backgroundColor: '#FFF5EE',
   },
   input: {
     flex: 1,
     fontSize: 16,
     color: '#333',
     fontWeight: '500',
-  },
-  eyeIcon: {
-    fontSize: 18,
   },
   optionsRow: {
     flexDirection: 'row',
@@ -355,35 +310,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 40,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#EEE',
-  },
-  orText: {
-    marginHorizontal: 15,
-    color: '#666',
-    fontSize: 14,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 30,
-  },
-  socialCircle: {
-    width: 65,
-    height: 65,
-    borderRadius: 32.5,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   footer: {
     flexDirection: 'row',

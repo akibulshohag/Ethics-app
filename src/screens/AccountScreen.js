@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { getCurrentPositionSafe, reverseGeocode } from '../utils/geolocation';
+import MapLocationPicker from '../components/MapLocationPicker';
+import { normalizeUkPostcode } from '../utils/ukPostcode';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -41,6 +43,7 @@ const AccountScreen = () => {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [address, setAddress] = useState(user?.address || '');
+  const [postcode, setPostcode] = useState(user?.postcode || '');
   const [latitude, setLatitude] = useState(
     user?.latitude != null ? String(user.latitude) : '',
   );
@@ -55,6 +58,10 @@ const AccountScreen = () => {
   });
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
+
+  const roleNorm = String(user?.role || '').toLowerCase();
+  const isRestaurantOwner = roleNorm === 'owner' || roleNorm === 'vendor';
 
   const handleUseMyLocation = () => {
     setLocationLoading(true);
@@ -95,6 +102,20 @@ const AccountScreen = () => {
       return;
     }
 
+    if (isRestaurantOwner) {
+      const lat = latitude ? parseFloat(latitude) : NaN;
+      const lng = longitude ? parseFloat(longitude) : NaN;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setTimeout(() => {
+          Alert.alert(
+            'Location required',
+            'Restaurant owners must set a map pin so customers can find you nearby. Use "Pick on map" or "Use my location".',
+          );
+        }, 100);
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       // Call actual API to update user profile
@@ -110,6 +131,7 @@ const AccountScreen = () => {
           phone,
           gender,
           address: address || undefined,
+          postcode: postcode ? normalizeUkPostcode(postcode) : undefined,
           latitude: latitude ? parseFloat(latitude) : undefined,
           longitude: longitude ? parseFloat(longitude) : undefined,
           socialLinks: socialLinks
@@ -133,6 +155,7 @@ const AccountScreen = () => {
         phone: data.userUpdate?.phone || phone,
         gender: data.userUpdate?.gender || gender,
         address: data.userUpdate?.address ?? address,
+        postcode: data.userUpdate?.postcode ?? (postcode ? normalizeUkPostcode(postcode) : ''),
         latitude:
           data.userUpdate?.latitude ??
           (latitude ? parseFloat(latitude) : undefined),
@@ -308,6 +331,21 @@ const AccountScreen = () => {
             placeholder="Enter your address (e.g. city, area)"
             id="address"
           />
+          <InputField
+            label="UK Postcode"
+            value={postcode}
+            onChangeText={setPostcode}
+            placeholder="e.g. SW1A 1AA"
+            id="postcode"
+            autoCapitalize="characters"
+          />
+          <TouchableOpacity
+            style={styles.useLocationButton}
+            onPress={() => setMapPickerVisible(true)}
+          >
+            <Icon name="map" size={22} color={COLORS.primaryOrange} />
+            <Text style={styles.useLocationText}>Pick on map</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.useLocationButton}
             onPress={handleUseMyLocation}
@@ -468,6 +506,22 @@ const AccountScreen = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <MapLocationPicker
+        visible={mapPickerVisible}
+        onClose={() => setMapPickerVisible(false)}
+        title="Business location"
+        initialLat={latitude ? parseFloat(latitude) : undefined}
+        initialLng={longitude ? parseFloat(longitude) : undefined}
+        initialPostcode={postcode}
+        initialAddress={address}
+        requirePostcode={isRestaurantOwner}
+        onConfirm={browse => {
+          setLatitude(String(browse.lat));
+          setLongitude(String(browse.lng));
+          setPostcode(browse.postcode || postcode);
+          setAddress(browse.addressText || browse.areaLabel || address);
+        }}
+      />
     </SafeAreaView>
   );
 };

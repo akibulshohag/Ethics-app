@@ -17,6 +17,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
+import { deleteMyAccount } from '../services/userSafetyService';
+import { asyncStorageKeysToRemoveOnLogout } from '../utils/logoutStorage';
 import {
   COLORS,
   FONTS,
@@ -26,6 +28,7 @@ import {
 } from '../constants/theme';
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
+import { safeImageUri } from '../utils/helper';
 
 const DARK_MODE_KEY = '@ethics_dark_mode';
 
@@ -34,6 +37,7 @@ const ProfileScreen = () => {
   const dispatch = useDispatch();
   const { user } = useSelector(state => state.app);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(DARK_MODE_KEY).then(val => {
@@ -47,7 +51,81 @@ const ProfileScreen = () => {
   };
 
   const navigateToSecurity = () => {
-    navigation.getParent()?.getParent()?.navigate('SecurityScreen');
+    navigation.navigate('SecurityScreen');
+  };
+
+  const resetToLogin = async () => {
+    dispatch(appSetUser(null));
+    const allKeys = await AsyncStorage.getAllKeys();
+    const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
+    if (toRemove.length > 0) {
+      await AsyncStorage.multiRemove(toRemove);
+    }
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: 'Root',
+          state: {
+            index: 0,
+            routes: [
+              {
+                name: 'Home1',
+                state: {
+                  index: 1,
+                  routes: [
+                    { name: 'HomeOneScreen' },
+                    { name: 'HomeSevenScreen' },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This permanently deletes your EatWaze account and data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirm deletion',
+              'Are you sure you want to permanently delete your account?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    try {
+                      await deleteMyAccount();
+                      await resetToLogin();
+                    } catch (error) {
+                      Alert.alert(
+                        'Could not delete account',
+                        error?.message ||
+                          'Please try again or contact support.',
+                      );
+                    } finally {
+                      setDeletingAccount(false);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const handleLogout = () => {
@@ -68,14 +146,35 @@ const ProfileScreen = () => {
                 // Clear user data from Redux
                 dispatch(appSetUser(null));
 
-                // Clear AsyncStorage data
-                await AsyncStorage.clear();
+                const allKeys = await AsyncStorage.getAllKeys();
+                const toRemove = asyncStorageKeysToRemoveOnLogout(allKeys);
+                if (toRemove.length > 0) {
+                  await AsyncStorage.multiRemove(toRemove);
+                }
 
-                // Force navigation to Login screen
-                // Reset navigation stack to prevent going back
+                // Reset to Home1 tab with HomeSevenScreen (no back stack)
                 navigation.reset({
                   index: 0,
-                  routes: [{ name: 'Login' }],
+                  routes: [
+                    {
+                      name: 'Root',
+                      state: {
+                        index: 0,
+                        routes: [
+                          {
+                            name: 'Home1',
+                            state: {
+                              index: 1,
+                              routes: [
+                                { name: 'HomeOneScreen' },
+                                { name: 'HomeSevenScreen' },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
                 });
               } catch (error) {
                 console.error('Logout error:', error);
@@ -119,9 +218,7 @@ const ProfileScreen = () => {
           <Icon name="arrow-left" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('SettingsScreen')}
-        >
+        <TouchableOpacity onPress={() => navigation.navigate('SettingsScreen')}>
           <Icon name="dots-vertical" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -132,12 +229,13 @@ const ProfileScreen = () => {
           <View style={styles.avatarContainer}>
             <Image
               source={{
-                uri:
-                  user?.photos?.[0] ||
-                  (Array.isArray(user?.photos) && user?.photos[0]) ||
+                uri: safeImageUri(
+                  user?.photos?.[0] ??
+                    (Array.isArray(user?.photos) ? user.photos[0] : null),
                   `https://ui-avatars.com/api/?name=${encodeURIComponent(
                     user?.name || user?.email || 'U',
                   )}&background=FF8C00&color=fff`,
+                ),
               }}
               style={styles.avatar}
             />
@@ -148,30 +246,36 @@ const ProfileScreen = () => {
               <Icon name="pencil" size={14} color={COLORS.white} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{user?.name || user?.nickname || 'Guest User'}</Text>
+          <Text style={styles.userName}>
+            {user?.name || user?.nickname || 'Guest User'}
+          </Text>
           <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
-          {Array.isArray(user?.socialLinks) && user.socialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
-            <View style={styles.socialLinksRow}>
-              {user.socialLinks
-                .filter(l => (l?.url || '').trim())
-                .map((link, index) => (
-                  <TouchableOpacity
-                    key={`${link.type}-${index}`}
-                    style={styles.socialLinkIconBtn}
-                    onPress={() => {
-                      const url = (link.url || '').trim();
-                      if (url) Linking.openURL(url.startsWith('http') ? url : `https://${url}`);
-                    }}
-                  >
-                    <Icon
-                      name={getSocialIcon(link.type)}
-                      size={26}
-                      color={COLORS.primaryOrange}
-                    />
-                  </TouchableOpacity>
-                ))}
-            </View>
-          )}
+          {Array.isArray(user?.socialLinks) &&
+            user.socialLinks.filter(l => (l?.url || '').trim()).length > 0 && (
+              <View style={styles.socialLinksRow}>
+                {user.socialLinks
+                  .filter(l => (l?.url || '').trim())
+                  .map((link, index) => (
+                    <TouchableOpacity
+                      key={`${link.type}-${index}`}
+                      style={styles.socialLinkIconBtn}
+                      onPress={() => {
+                        const url = (link.url || '').trim();
+                        if (url)
+                          Linking.openURL(
+                            url.startsWith('http') ? url : `https://${url}`,
+                          );
+                      }}
+                    >
+                      <Icon
+                        name={getSocialIcon(link.type)}
+                        size={26}
+                        color={COLORS.primaryOrange}
+                      />
+                    </TouchableOpacity>
+                  ))}
+              </View>
+            )}
         </View>
 
         {/* Profile location map */}
@@ -183,7 +287,13 @@ const ProfileScreen = () => {
             ) : null}
             <Image
               source={{
-                uri: `https://maps.googleapis.com/maps/api/staticmap?center=${user.latitude},${user.longitude}&zoom=14&size=${Dimensions.get('window').width - 32}x120&markers=${user.latitude},${user.longitude}&key=${config.googleMapsApiKey}`,
+                uri: `https://maps.googleapis.com/maps/api/staticmap?center=${
+                  user.latitude
+                },${user.longitude}&zoom=14&size=${
+                  Dimensions.get('window').width - 32
+                }x120&markers=${user.latitude},${user.longitude}&key=${
+                  config.googleMapsApiKey
+                }`,
               }}
               style={styles.locationMapImage}
               resizeMode="cover"
@@ -219,7 +329,9 @@ const ProfileScreen = () => {
             title="Your Channel"
             onPress={() =>
               user?.id
-                ? navigation.navigate('ChannelDetailsScreen', { userId: user.id })
+                ? navigation.navigate('ChannelDetailsScreen', {
+                    userId: user.id,
+                  })
                 : navigation.navigate('AccountScreen')
             }
           />
@@ -243,7 +355,11 @@ const ProfileScreen = () => {
           )}
           <MenuItem
             iconName="cart-check"
-            title={String(user?.role || '').toLowerCase() === 'owner' ? 'Restaurant orders' : 'My orders'}
+            title={
+              String(user?.role || '').toLowerCase() === 'owner'
+                ? 'Restaurant orders'
+                : 'My orders'
+            }
             onPress={() => navigation.navigate('OrderListScreen')}
           />
 
@@ -287,6 +403,12 @@ const ProfileScreen = () => {
           />
 
           <View style={{ marginTop: SPACING.lg }}>
+            <MenuItem
+              iconName="account-remove-outline"
+              title="Delete account"
+              color={COLORS.error}
+              onPress={deletingAccount ? undefined : handleDeleteAccount}
+            />
             <MenuItem
               iconName="logout"
               title="Logout"

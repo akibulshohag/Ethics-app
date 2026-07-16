@@ -1,10 +1,9 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
   Dimensions,
   Platform,
@@ -13,25 +12,165 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, SPACING, SHADOWS } from '../constants/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
-
-const DEFAULT_IMAGE = 'https://img.freepik.com/free-photo/delicious-burger-with-fire-flames_23-2151846510.jpg';
+import { getMenuByUserId } from '../services/menuService';
+import MenuItemThumbnail from '../components/MenuItemThumbnail';
+import Toast from 'react-native-toast-message';
+import { getChannelProfile } from '../services/channelService';
+import {
+  getVendorOrderLimits,
+  validateVendorOrderItems,
+  adjustVendorItemQty,
+} from '../utils/vendorOrderLimits';
 
 const CartDetailsScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { ownerId, items: paramItems = [] } = route.params || {};
-  const items = Array.isArray(paramItems) ? paramItems : [];
+  const [items, setItems] = useState(Array.isArray(paramItems) ? paramItems : []);
+  const [suggestedItems, setSuggestedItems] = useState([]);
+  const [suggestedLoading, setSuggestedLoading] = useState(false);
+  const [vendorLimits, setVendorLimits] = useState({
+    isVendor: false,
+    min: null,
+    max: null,
+  });
 
-  const total = items.reduce(
-    (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
-    0,
-  );
-  const currency = items[0]?.currency || 'BDT';
+  const { total, currency } = useMemo(() => {
+    const t = (items || []).reduce(
+      (sum, i) => sum + (Number(i.price) || 0) * (i.quantity || 1),
+      0,
+    );
+    return {
+      total: t,
+      currency: items?.[0]?.currency || 'GBP',
+    };
+  }, [items]);
 
   const onCheckout = () => {
     if (!items.length || !ownerId) return;
-    navigation.navigate('CheckoutScreen', { ownerId, items });
+    const check = validateVendorOrderItems(items, vendorLimits);
+    if (!check.ok) {
+      Toast.show({
+        type: 'error',
+        text1: 'Order quantity',
+        text2: check.message,
+      });
+      return;
+    }
+    const rootNav = navigation.getParent?.() ?? navigation;
+    rootNav.navigate('Root', {
+      screen: 'Home1',
+      params: {
+        screen: 'HomeFourScreen',
+        params: {
+          ownerId,
+          items,
+          ownerName: route.params?.ownerName || 'Restaurant',
+        },
+      },
+    });
   };
+
+  const changeQty = (key, delta) => {
+    setItems(prev => {
+      const next = (prev || []).map(i => ({ ...i }));
+      const idx = next.findIndex(i => (i.menuItemId || i.id) === key);
+      if (idx === -1) return prev;
+      const cur = next[idx]?.quantity || 0;
+      const { qty: newQty, toast } = adjustVendorItemQty(cur, delta, vendorLimits);
+      if (toast) {
+        Toast.show({ type: 'error', text1: 'Order quantity', text2: toast });
+      }
+      if (newQty === 0) {
+        next.splice(idx, 1);
+        return next;
+      }
+      next[idx].quantity = newQty;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!ownerId) {
+      setVendorLimits({ isVendor: false, min: null, max: null });
+      return;
+    }
+    let mounted = true;
+    getChannelProfile(ownerId)
+      .then(p => {
+        if (mounted) setVendorLimits(getVendorOrderLimits(p));
+      })
+      .catch(() => {
+        if (mounted) setVendorLimits({ isVendor: false, min: null, max: null });
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [ownerId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSuggestions = async () => {
+      if (!ownerId) {
+        setSuggestedItems([]);
+        return;
+      }
+      setSuggestedLoading(true);
+      try {
+        const res = await getMenuByUserId(ownerId);
+        if (!mounted) return;
+        const menu = Array.isArray(res?.menu) ? res.menu : [];
+        setSuggestedItems(menu.slice(0, 12));
+      } catch (_) {
+        if (mounted) setSuggestedItems([]);
+      } finally {
+        if (mounted) setSuggestedLoading(false);
+      }
+    };
+    loadSuggestions();
+    return () => {
+      mounted = false;
+    };
+  }, [ownerId]);
+
+  const addSuggestedItem = menuItem => {
+    if (!menuItem?.id) return;
+    const key = String(menuItem.id);
+    setItems(prev => {
+      const next = (prev || []).map(i => ({ ...i }));
+      const idx = next.findIndex(i => String(i.menuItemId || i.id) === key);
+      const current = idx >= 0 ? next[idx].quantity || 0 : 0;
+      const { qty: newQty, toast } = adjustVendorItemQty(current, 1, vendorLimits);
+      if (toast) {
+        Toast.show({ type: 'error', text1: 'Order quantity', text2: toast });
+        return prev;
+      }
+      if (idx >= 0) {
+        next[idx].quantity = newQty;
+        return next;
+      }
+      next.push({
+        menuItemId: key,
+        itemName: menuItem.itemName || menuItem.name || 'Item',
+        description: menuItem.description || '',
+        price: Number(menuItem.price) || 0,
+        quantity: newQty,
+        currency: menuItem.currency || '£',
+        imageUrl: menuItem.imageUrl || menuItem.thumbnailUrl || null,
+      });
+      return next;
+    });
+  };
+
+  const cartItemKeySet = useMemo(
+    () => new Set((items || []).map(i => String(i.menuItemId || i.id))),
+    [items],
+  );
+  const addMoreItems = useMemo(
+    () =>
+      (suggestedItems || []).filter(it => !cartItemKeySet.has(String(it?.id || ''))),
+    [suggestedItems, cartItemKeySet],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -43,13 +182,21 @@ const CartDetailsScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {items.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Icon name="cart-outline" size={64} color={COLORS.gray400} />
             <Text style={styles.emptyText}>Your cart is empty</Text>
-            <Text style={styles.emptySubtext}>Add items from a restaurant to see them here.</Text>
-            <TouchableOpacity style={styles.backToShopBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.emptySubtext}>
+              Add items from a restaurant to see them here.
+            </Text>
+            <TouchableOpacity
+              style={styles.backToShopBtn}
+              onPress={() => navigation.goBack()}
+            >
               <Text style={styles.backToShopText}>Go back</Text>
             </TouchableOpacity>
           </View>
@@ -61,21 +208,47 @@ const CartDetailsScreen = () => {
                 const qty = item.quantity || 1;
                 const price = Number(item.price) || 0;
                 const lineTotal = price * qty;
+                const key = item.menuItemId || item.id || String(index);
                 return (
-                  <View key={item.menuItemId || index} style={styles.cartItem}>
-                    <Image
-                      source={{ uri: item.imageUrl || DEFAULT_IMAGE }}
+                  <View key={key} style={styles.cartItem}>
+                    <MenuItemThumbnail
+                      uri={item.imageUrl}
                       style={styles.itemImage}
+                      imageStyle={styles.itemImage}
                     />
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemTitle}>{item.itemName}</Text>
-                      <Text style={styles.itemMeta}>
-                        {item.currency || 'BDT'} {price.toFixed(2)} × {qty}
-                      </Text>
+                      {item.description ? (
+                        <Text style={styles.itemDescription} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      ) : null}
+                      <View style={styles.qtyRow}>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => changeQty(key, -1)}
+                          activeOpacity={0.8}
+                        >
+                          <Icon name="minus" size={18} color={COLORS.textPrimary} />
+                        </TouchableOpacity>
+                        <View style={styles.qtyPill}>
+                          <Text style={styles.qtyText}>{qty}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.qtyBtn}
+                          onPress={() => changeQty(key, +1)}
+                          activeOpacity={0.8}
+                        >
+                          <Icon name="plus" size={18} color={COLORS.textPrimary} />
+                        </TouchableOpacity>
+                        <Text style={styles.itemMeta}>
+                          {item.currency || 'GBP'} {price.toFixed(2)}
+                        </Text>
+                      </View>
                     </View>
                     <View style={styles.itemPriceColumn}>
                       <Text style={styles.itemPrice}>
-                        {item.currency || 'BDT'} {lineTotal.toFixed(2)}
+                        {item.currency || 'GBP'} {lineTotal.toFixed(2)}
                       </Text>
                     </View>
                   </View>
@@ -90,6 +263,48 @@ const CartDetailsScreen = () => {
                 </Text>
               </View>
             </View>
+            <View style={styles.addMoreSection}>
+              <Text style={styles.addMoreHeading}>Add more items</Text>
+              <Text style={styles.addMoreSubheading}>
+                Popular from {route.params?.ownerName || 'this restaurant'}
+              </Text>
+              {suggestedLoading ? (
+                <Text style={styles.addMoreLoadingText}>Loading items...</Text>
+              ) : addMoreItems.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.addMoreScroll}
+                >
+                  {addMoreItems.map(it => (
+                    <View key={String(it.id)} style={styles.addMoreCard}>
+                      <MenuItemThumbnail
+                        uri={it.imageUrl || it.thumbnailUrl}
+                        style={styles.addMoreImage}
+                        imageStyle={styles.addMoreImage}
+                      />
+                      <Text style={styles.addMoreItemName} numberOfLines={1}>
+                        {it.itemName || it.name || 'Item'}
+                      </Text>
+                      <View style={styles.addMorePriceRow}>
+                        <Text style={styles.addMorePrice}>
+                          {(it.currency || '£') + ' ' + (Number(it.price) || 0).toFixed(2)}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.addMorePlusBtn}
+                          onPress={() => addSuggestedItem(it)}
+                          activeOpacity={0.85}
+                        >
+                          <Icon name="plus" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <Text style={styles.addMoreLoadingText}>No more items available</Text>
+              )}
+            </View>
             <View style={{ height: 140 }} />
           </>
         )}
@@ -101,7 +316,9 @@ const CartDetailsScreen = () => {
           <View style={styles.footerRow}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalPrice}>{currency} {total.toFixed(2)}</Text>
+              <Text style={styles.totalPrice}>
+                {currency} {total.toFixed(2)}
+              </Text>
             </View>
             <TouchableOpacity style={styles.checkoutBtn} onPress={onCheckout}>
               <Text style={styles.checkoutBtnText}>Checkout</Text>
@@ -112,7 +329,6 @@ const CartDetailsScreen = () => {
     </SafeAreaView>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
@@ -295,11 +511,49 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: COLORS.gray800,
+    marginBottom: 2,
+  },
+  itemDescription: {
+    fontSize: 12,
+    color: COLORS.gray500,
+    lineHeight: 16,
     marginBottom: 4,
   },
   itemMeta: {
     fontSize: 13,
     color: COLORS.gray500,
+  },
+  qtyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  qtyBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.gray100,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+  },
+  qtyPill: {
+    minWidth: 34,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    paddingHorizontal: 10,
+  },
+  qtyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
   },
   quantityWrapper: {
     flexDirection: 'row',
@@ -387,6 +641,66 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     marginBottom: 20,
+  },
+  addMoreSection: {
+    marginBottom: 24,
+  },
+  addMoreHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.gray900 || COLORS.black,
+  },
+  addMoreSubheading: {
+    fontSize: 12,
+    color: COLORS.gray600,
+    marginTop: 3,
+    marginBottom: 12,
+  },
+  addMoreLoadingText: {
+    fontSize: 13,
+    color: COLORS.gray500,
+  },
+  addMoreScroll: {
+    paddingRight: 8,
+  },
+  addMoreCard: {
+    width: 150,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 12,
+    padding: 8,
+    marginRight: 10,
+  },
+  addMoreImage: {
+    width: '100%',
+    height: 84,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  addMoreItemName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.gray800,
+    marginBottom: 8,
+  },
+  addMorePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addMorePrice: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primaryOrange,
+  },
+  addMorePlusBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primaryOrange,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -501,6 +815,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
-
 
 export default CartDetailsScreen;

@@ -1,93 +1,140 @@
 import axios from 'axios';
 import { config } from '../../config';
+import { ensureVideoThumbnailFields } from '../utils/videoThumbnail';
 
 const API_URL = `${config.apiBaseUrl}/videos`;
 
+const getAuthHeaders = () => {
+  try {
+    const { store } = require('../redux');
+    const token = store.getState()?.app?.user?.token;
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+  } catch {}
+  return {};
+};
+
+const isFutureScheduledMedia = item => {
+  const raw =
+    item?.scheduledPublishAt ||
+    item?.scheduleAt ||
+    item?.scheduleDate ||
+    item?.scheduledAt ||
+    item?.publishAt ||
+    item?.publishedAt ||
+    null;
+  const d = raw ? new Date(raw) : null;
+  return !!(d && Number.isFinite(d.getTime()) && d.getTime() > Date.now());
+};
+
+const filterPublicScheduledVideos = data => {
+  if (!data || !Array.isArray(data.videos)) return data;
+  return {
+    ...data,
+    videos: data.videos.filter(video => !isFutureScheduledMedia(video)),
+  };
+};
+
+const filterUserVideosForViewer = (data, userId, viewerUserId) => {
+  if (!data || !Array.isArray(data.videos)) return data;
+  const viewerIsOwner =
+    viewerUserId != null &&
+    userId != null &&
+    String(viewerUserId) === String(userId);
+  if (viewerIsOwner) return data;
+  return {
+    ...data,
+    videos: data.videos.filter(video => !isFutureScheduledMedia(video)),
+  };
+};
+
 /**
- * Upload video with thumbnail
+ * Upload video with thumbnail - same approach as profile/gallery (fetch + FormData, no Content-Type).
+ * React Native sends file URIs correctly this way.
  */
 export const uploadVideo = async videoData => {
   if (!videoData?.userId) {
     throw new Error('User ID is required. Please log in to upload videos.');
   }
+  if (!videoData?.videoUri) {
+    throw new Error('Video is required.');
+  }
+  const prepared = await ensureVideoThumbnailFields(videoData);
+  if (!prepared?.thumbnailUri) {
+    throw new Error(
+      'Could not create a preview image from this video. Pick a cover image or try another clip.',
+    );
+  }
+  const formData = new FormData();
+  formData.append('files', {
+    uri: prepared.videoUri,
+    type: prepared.videoType || 'video/mp4',
+    name: prepared.videoName || 'video.mp4',
+  });
+  formData.append('files', {
+    uri: prepared.thumbnailUri,
+    type: prepared.thumbnailType || 'image/jpeg',
+    name: prepared.thumbnailName || 'thumbnail.jpg',
+  });
+  formData.append('userId', prepared.userId);
+  formData.append('title', prepared.title);
+  if (prepared.description) {
+    formData.append('description', prepared.description);
+  }
+  if (prepared.category) {
+    formData.append('category', prepared.category);
+  }
+  if (prepared.tags && prepared.tags.length > 0) {
+    formData.append('tags', JSON.stringify(prepared.tags));
+  }
+  if (prepared.visibility) {
+    formData.append('visibility', prepared.visibility);
+  }
+  if (prepared.duration !== undefined && !isNaN(prepared.duration)) {
+    formData.append('duration', String(Math.floor(Number(prepared.duration))));
+  }
+  if (prepared.width !== undefined && !isNaN(prepared.width) && prepared.width > 0) {
+    formData.append('width', String(Math.floor(Number(prepared.width))));
+  }
+  if (prepared.height !== undefined && !isNaN(prepared.height) && prepared.height > 0) {
+    formData.append('height', String(Math.floor(Number(prepared.height))));
+  }
+  if (prepared.scheduledPublishAt) {
+    formData.append('scheduledPublishAt', String(prepared.scheduledPublishAt));
+  }
+  if (prepared.customPlaylistId) {
+    formData.append('customPlaylistId', String(prepared.customPlaylistId));
+  }
+
+  const headers = getAuthHeaders();
   try {
-    const formData = new FormData();
-
-    // Add video file
-    formData.append('files', {
-      uri: videoData.videoUri,
-      type: videoData.videoType,
-      name: videoData.videoName,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min for video
+    const response = await fetch(`${API_URL}/upload`, {
+      method: 'POST',
+      headers: { ...headers },
+      body: formData,
+      signal: controller.signal,
     });
-
-    // Add thumbnail file
-    formData.append('files', {
-      uri: videoData.thumbnailUri,
-      type: videoData.thumbnailType,
-      name: videoData.thumbnailName,
-    });
-
-    // Add video metadata
-    formData.append('userId', videoData.userId);
-    formData.append('title', videoData.title);
-    if (videoData.description) {
-      formData.append('description', videoData.description);
+    clearTimeout(timeoutId);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        data?.message ||
+        (Array.isArray(data?.message) ? data.message.join(' ') : null) ||
+        `Upload failed (${response.status})`;
+      console.error('[uploadVideo]', response.status, data);
+      throw new Error(msg);
     }
-    if (videoData.category) {
-      formData.append('category', videoData.category);
-    }
-    if (videoData.tags && videoData.tags.length > 0) {
-      formData.append('tags', JSON.stringify(videoData.tags));
-    }
-    if (videoData.visibility) {
-      formData.append('visibility', videoData.visibility);
-    }
-    // Only append numeric values if they are valid numbers
-    if (videoData.duration !== undefined && !isNaN(videoData.duration)) {
-      formData.append(
-        'duration',
-        String(Math.floor(Number(videoData.duration))),
-      );
-    }
-    if (
-      videoData.width !== undefined &&
-      !isNaN(videoData.width) &&
-      videoData.width > 0
-    ) {
-      formData.append('width', String(Math.floor(Number(videoData.width))));
-    }
-    if (
-      videoData.height !== undefined &&
-      !isNaN(videoData.height) &&
-      videoData.height > 0
-    ) {
-      formData.append('height', String(Math.floor(Number(videoData.height))));
-    }
-
-    const response = await axios.post(`${API_URL}/upload`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: progressEvent => {
-        if (videoData.onUploadProgress) {
-          const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total,
-          );
-          videoData.onUploadProgress(percentCompleted);
-        }
-      },
-    });
-
-    return response.data;
-  } catch (error) {
-    const data = error.response?.data;
-    const msg = Array.isArray(data?.message)
-      ? data.message.join(' ')
-      : data?.message || error.message || 'Failed to upload video';
-    console.error('Error uploading video:', error.response?.status, msg, data);
-    const err = new Error(msg);
-    err.response = error.response;
-    throw err;
+    return data;
+  } catch (err) {
+    const msg =
+      err.name === 'AbortError'
+        ? 'Upload timed out. Try again.'
+        : err.message || 'Network error. Check connection and try again.';
+    console.error('[uploadVideo]', err.message, err);
+    throw new Error(msg);
   }
 };
 
@@ -97,7 +144,7 @@ export const uploadVideo = async videoData => {
 export const getVideos = async (params = {}) => {
   try {
     const response = await axios.get(API_URL, { params });
-    return response.data;
+    return filterPublicScheduledVideos(response.data);
   } catch (error) {
     console.error('Error fetching videos:', error);
     throw error;
@@ -261,6 +308,23 @@ export const deleteComment = async (commentId, userId) => {
 };
 
 /**
+ * Edit own comment or reply
+ */
+export const updateComment = async (commentId, userId, content) => {
+  try {
+    const response = await axios.post(`${API_URL}/comment/update`, {
+      commentId,
+      userId,
+      content,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    throw error;
+  }
+};
+
+/**
  * Dislike/Undislike comment
  */
 export const toggleCommentDislike = async (commentId, userId) => {
@@ -303,12 +367,24 @@ export const recordView = async (
 /**
  * Get user's uploaded videos
  */
-export const getUserVideos = async (userId, page = 1, limit = 20) => {
+export const getUserVideos = async (
+  userId,
+  page = 1,
+  limit = 20,
+  viewerUserId,
+  extraParams = {},
+) => {
   try {
     const response = await axios.get(`${API_URL}/user/${userId}`, {
-      params: { page, limit },
+      params: {
+        page,
+        limit,
+        ...(viewerUserId ? { viewerUserId } : {}),
+        ...extraParams,
+      },
+      headers: { ...getAuthHeaders() },
     });
-    return response.data;
+    return filterUserVideosForViewer(response.data, userId, viewerUserId);
   } catch (error) {
     console.error('Error fetching user videos:', error);
     throw error;

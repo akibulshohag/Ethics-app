@@ -3,6 +3,15 @@ import { config } from '../../config';
 
 const API_URL = `${config.apiBaseUrl}/playlists`;
 
+const getAuthHeaders = () => {
+  try {
+    const { store } = require('../redux');
+    const token = store.getState()?.app?.user?.token;
+    if (token) return { Authorization: `Bearer ${token}` };
+  } catch (_) {}
+  return {};
+};
+
 /**
  * Get playlist status for a video or short
  */
@@ -15,6 +24,29 @@ export const getPlaylistStatus = async (userId, contentType, contentId) => {
   } catch (error) {
     console.error('Error fetching playlist status:', error);
     return { inWatchLater: false, inFavorites: false };
+  }
+};
+
+/**
+ * Library tab counts (watch later, liked, favorites).
+ * Falls back to null when /summary is not deployed (404) — caller should use list APIs.
+ */
+export const getPlaylistSummary = async userId => {
+  try {
+    const response = await axios.get(`${API_URL}/summary`, {
+      params: { userId },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    const status = error?.response?.status;
+    if (status !== 404) {
+      console.warn(
+        'Playlist summary unavailable:',
+        status || error?.message || error,
+      );
+    }
+    return null;
   }
 };
 
@@ -65,4 +97,90 @@ export const getFavorites = async (userId, page = 1, limit = 50) => {
     console.error('Error fetching favorites:', error);
     return { items: [], videos: [], shorts: [] };
   }
+};
+
+/** Save modal: watch later, favorites, custom playlist membership for one content */
+export const getSaveMembership = async (contentType, contentId) => {
+  try {
+    const response = await axios.get(`${API_URL}/save-membership`, {
+      params: { contentType, contentId },
+      headers: getAuthHeaders(),
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error getSaveMembership:', error);
+    return {
+      inWatchLater: false,
+      inFavorites: false,
+      customPlaylistIds: [],
+      playlists: [],
+    };
+  }
+};
+
+export const listCustomPlaylists = async (userId) => {
+  try {
+    const response = await axios.get(`${API_URL}/custom/user/${userId}`, {
+      headers: getAuthHeaders(),
+    });
+    return response.data?.playlists || [];
+  } catch (error) {
+    console.error('Error listCustomPlaylists:', error);
+    return [];
+  }
+};
+
+export const createCustomPlaylist = async (name) => {
+  const response = await axios.post(
+    `${API_URL}/custom`,
+    { name },
+    { headers: getAuthHeaders() },
+  );
+  return response.data;
+};
+
+export const deleteCustomPlaylist = async (playlistId) => {
+  await axios.delete(`${API_URL}/custom/${playlistId}`, {
+    headers: getAuthHeaders(),
+  });
+};
+
+export const renameCustomPlaylist = async (playlistId, name) => {
+  await axios.patch(
+    `${API_URL}/custom/${playlistId}`,
+    { name },
+    { headers: getAuthHeaders() },
+  );
+};
+
+export const setCustomPlaylistItem = async (
+  playlistId,
+  contentType,
+  contentId,
+  add,
+) => {
+  await axios.post(
+    `${API_URL}/custom/${playlistId}/item`,
+    { contentType, contentId, add },
+    { headers: getAuthHeaders() },
+  );
+};
+
+export const getCustomPlaylistItems = async (playlistId, page = 1, limit = 50) => {
+  const id = encodeURIComponent(String(playlistId || '').trim());
+  if (!id || id === 'undefined' || id === 'null') {
+    throw new Error('Invalid playlist');
+  }
+  const response = await axios.get(`${API_URL}/custom/${id}/items`, {
+    params: { page, limit },
+    headers: getAuthHeaders(),
+  });
+  const body = response.data;
+  const items = Array.isArray(body?.items) ? body.items : [];
+  return {
+    ...body,
+    items,
+    playlist: body?.playlist,
+    pagination: body?.pagination,
+  };
 };

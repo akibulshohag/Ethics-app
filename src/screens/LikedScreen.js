@@ -15,6 +15,7 @@ import { useSelector } from 'react-redux';
 import CompactVideoCard from '../components/CompactVideoCard';
 import { getLikedVideos } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
+import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 
 const formatCount = n => {
   if (!n || n < 0) return '0';
@@ -127,11 +128,7 @@ const LikedScreen = ({ navigation }) => {
 
   const handleItemPress = useCallback(
     item => {
-      if (item.type === 'short') {
-        navigation?.navigate('ShortsVideoScreen', { shortId: item.id });
-      } else {
-        navigation?.navigate('VideoDetailsScreen', { videoId: item.id });
-      }
+      navigateToHomeOneLibraryDetail(navigation, item, { returnTo: 'liked' });
     },
     [navigation],
   );
@@ -229,7 +226,7 @@ const LikedScreen = ({ navigation }) => {
           ListEmptyComponent={
             listData.length === 0 ? (
               <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="thumb-up-outline" size={64} color="#ccc" />
+                <MaterialCommunityIcons name="thumb-up-outline" size={64} color="#FF7F0B" />
                 <Text style={styles.emptyStateText}>No liked videos yet</Text>
                 <Text style={styles.emptyStateSubtext}>
                   Like videos and shorts to see them here

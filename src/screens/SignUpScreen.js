@@ -14,20 +14,24 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import { config } from '../../config';
 import {
   COLORS,
   FONTS,
   SPACING,
   BORDER_RADIUS,
-  SHADOWS,
-  DIMENSIONS,
-  COMMON_STYLES,
 } from '../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Dropdown } from 'react-native-element-dropdown';
 import { getRolesList } from '../services/roleService';
+import {
+  register,
+  // Future: email verification after signup
+  // verifyEmailOtp,
+  // resendEmailVerificationOtp,
+  validatePasswordStrength,
+  SIGNUP_ROLES,
+} from '../services/authService';
 
 const SignUpScreen = () => {
   const navigation = useNavigation();
@@ -41,17 +45,31 @@ const SignUpScreen = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Future: email verification step after signup
+  // const [verificationMode, setVerificationMode] = useState(false);
+  // const [pendingEmail, setPendingEmail] = useState('');
+  // const [verificationOtp, setVerificationOtp] = useState('');
 
   useEffect(() => {
     getRolesList()
       .then(res => {
-        setRoles(res?.roles || []);
-        if (res?.roles?.length > 0 && !roleId) {
-          const defaultRole = res.roles.find(r => r.name === 'user') || res.roles[0];
+        const signupRoles = (res?.roles || []).filter(r =>
+          SIGNUP_ROLES.includes(String(r.name || '').toLowerCase()),
+        );
+        setRoles(signupRoles);
+        if (signupRoles.length > 0 && !roleId) {
+          const defaultRole =
+            signupRoles.find(r => r.name === 'user') || signupRoles[0];
           setRoleId(defaultRole.id);
         }
       })
-      .catch(() => setRoles([]))
+      .catch(() => {
+        setRoles([]);
+        Alert.alert(
+          'Error',
+          'Unable to load account types. Please check your connection and try again.',
+        );
+      })
       .finally(() => setRolesLoading(false));
   }, []);
 
@@ -70,26 +88,47 @@ const SignUpScreen = () => {
       return;
     }
 
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      Alert.alert('Error', passwordError);
+      return;
+    }
+
+    if (!roleId) {
+      Alert.alert('Error', 'Please select an account type');
+      return;
+    }
+
+    const selectedRole = roles.find(r => r.id === roleId);
+    if (!selectedRole) {
+      Alert.alert('Error', 'Invalid account type selected');
+      return;
+    }
+
+    const isFallbackRoleId = ['user', 'owner', 'vendor'].includes(
+      String(selectedRole.id).toLowerCase(),
+    );
+
     setLoading(true);
     try {
-      // Call register API
-      const response = await fetch(`${config.apiBaseUrl}/users/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email.trim(),
-          password: password.trim(),
-          ...(roleId ? { roleId } : {}),
-        }),
+      const data = await register({
+        email: email.trim(),
+        password: password.trim(),
+        role: selectedRole.name,
+        ...(isFallbackRoleId ? {} : { roleId: selectedRole.id }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Registration failed');
-      }
+      // Future: email verification before first login
+      // if (data?.requiresEmailVerification) {
+      //   setPendingEmail(email.trim());
+      //   setVerificationMode(true);
+      //   setVerificationOtp('');
+      //   Alert.alert(
+      //     'Verify Email',
+      //     'We sent a verification OTP to your email. Enter OTP to activate your account.',
+      //   );
+      //   return;
+      // }
 
       // Save user data to Redux (which persists to AsyncStorage)
       const userData = {
@@ -126,9 +165,13 @@ const SignUpScreen = () => {
     }
   };
 
+  // Future: email verification handlers
+  // const handleVerifyEmailOtp = async () => { ... };
+  // const handleResendVerificationOtp = async () => { ... };
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFCC00" />
 
       {/* Orange Header */}
       <View style={styles.header}>
@@ -169,7 +212,6 @@ const SignUpScreen = () => {
             />
           </View>
 
-          {/* Password Input (Focused/Active State) */}
           <Text style={styles.inputLabel}>Create Password</Text>
           <View style={[styles.inputWrapper, styles.inputActive]}>
             <Icon name="lock" size={20} color="black" />
@@ -191,46 +233,65 @@ const SignUpScreen = () => {
             </TouchableOpacity>
           </View>
 
-          {/* Role Input */}
-          <Text style={styles.inputLabel}>Role</Text>
-          <View style={styles.inputWrapper}>
-            <Icon name="account-badge" size={20} color="black" />
-            <Dropdown
-              data={roles.map(r => ({ label: r.name, value: r.id }))}
-              value={roleId}
-              labelField="label"
-              valueField="value"
-              placeholder={rolesLoading ? 'Loading roles...' : 'Select role'}
-              onChange={item => setRoleId(item.value)}
-              style={styles.dropdown}
-              placeholderStyle={styles.dropdownPlaceholder}
-              selectedTextStyle={styles.dropdownSelectedText}
-              containerStyle={styles.dropdownContainer}
-            />
-          </View>
+          <>
+              {/* Role Input */}
+              <Text style={styles.inputLabel}>Account Type</Text>
+              <View style={styles.inputWrapper}>
+                <Icon name="account-badge" size={20} color="black" />
+                <Dropdown
+                  data={roles.map(r => ({
+                    label:
+                      r.name === 'user'
+                        ? 'User'
+                        : r.name === 'owner'
+                          ? 'Owner'
+                          : r.name === 'vendor'
+                            ? 'Vendor'
+                            : r.name,
+                    value: r.id,
+                  }))}
+                  value={roleId}
+                  labelField="label"
+                  valueField="value"
+                  placeholder={
+                    rolesLoading
+                      ? 'Loading account types...'
+                      : roles.length
+                        ? 'Select account type'
+                        : 'No account types available'
+                  }
+                  onChange={item => setRoleId(item.value)}
+                  style={styles.dropdown}
+                  placeholderStyle={styles.dropdownPlaceholder}
+                  selectedTextStyle={styles.dropdownSelectedText}
+                  containerStyle={styles.dropdownContainer}
+                />
+              </View>
+            </>
 
-          {/* Confirm Password Input */}
-          <Text style={styles.inputLabel}>Confirm Password</Text>
-          <View style={styles.inputWrapper}>
-            <Icon name="lock" size={20} color="black" />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirm Password"
-              placeholderTextColor="#BBB"
-              secureTextEntry={!confirmPasswordVisible}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            <TouchableOpacity
-              onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
-            >
-              <Icon
-                name={confirmPasswordVisible ? 'eye' : 'eye-off'}
-                size={20}
-                color="black"
-              />
-            </TouchableOpacity>
-          </View>
+          <>
+              <Text style={styles.inputLabel}>Confirm Password</Text>
+              <View style={styles.inputWrapper}>
+                <Icon name="lock" size={20} color="black" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="#BBB"
+                  secureTextEntry={!confirmPasswordVisible}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
+                >
+                  <Icon
+                    name={confirmPasswordVisible ? 'eye' : 'eye-off'}
+                    size={20}
+                    color="black"
+                  />
+                </TouchableOpacity>
+              </View>
+            </>
 
           {/* Sign Up Button */}
           <Pressable
@@ -249,6 +310,8 @@ const SignUpScreen = () => {
               <Text style={styles.signUpButtonText}>Sign up</Text>
             )}
           </Pressable>
+
+          {/* Future: OTP verify + Resend OTP buttons when email verification is enabled */}
 
           {/* Divider */}
           <View style={styles.dividerContainer}>
@@ -284,7 +347,10 @@ const SignUpScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: COMMON_STYLES.container,
+  container: {
+    flex: 1,
+    backgroundColor: '#FFCC00',
+  },
   header: {
     backgroundColor: COLORS.primaryOrange,
     paddingHorizontal: SPACING.xxl,

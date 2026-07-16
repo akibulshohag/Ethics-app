@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>236298500212-s19odpqururn1hls4u3o8ebp79o2b726.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.236298500212-s19odpqururn1hls4u3o8ebp79o2b726</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyBD6o2f5MxDwBHurn895AVmMwjSJ7spxfc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>236298500212</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.eatwaze.app</string>
+	<key>PROJECT_ID</key>
+	<string>eatix-17d2a</string>
+	<key>STORAGE_BUCKET</key>
+	<string>eatix-17d2a.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:236298500212:ios:3701cda3dc7647cb953921</string>
+</dict>
+</plist>

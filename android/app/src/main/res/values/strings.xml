@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">Ethics</string>
+    <string name="app_name">Eatwaze</string>
+    <string name="facebook_app_id">1020637567080925</string>
+    <string name="facebook_client_token">2490cd089fef0f717b9237884f858cc7</string>
+    <string name="fb_login_protocol_scheme">fb1020637567080925</string>
+    <string name="default_web_client_id">236298500212-810ubvv2taqs55m35pgvg0h795so6u68.apps.googleusercontent.com</string>
 </resources>
