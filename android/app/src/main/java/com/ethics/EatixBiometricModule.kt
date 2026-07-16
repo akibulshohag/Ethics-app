@@ -3,6 +3,7 @@ package com.eatix.app
 import android.os.Build
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -12,7 +13,6 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.bridge.WritableMap
-import java.util.concurrent.Executors
 
 /**
  * Android biometric prompts with explicit face (camera) vs fingerprint support.
@@ -61,7 +61,11 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
-    val promptMessage = options.getString("promptMessage") ?: "Confirm your identity"
+    val promptMessage =
+      (options.getString("promptMessage") ?: "Confirm your identity")
+        .trim()
+        .ifEmpty { "Confirm your identity" }
+        .take(MAX_PROMPT_MESSAGE_LENGTH)
     val cancelButtonText = options.getString("cancelButtonText") ?: "Cancel"
     val method = options.getString("biometricMethod") ?: "any"
     val allowDeviceCredentials =
@@ -93,11 +97,11 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
 
         val builder =
           BiometricPrompt.PromptInfo.Builder()
-            .setTitle(promptMessage)
+            .setTitle(PROMPT_TITLE)
+            .setSubtitle(promptMessage)
             .setAllowedAuthenticators(authenticators)
 
         if (method == "face") {
-          builder.setSubtitle("Look at the front camera to unlock")
           builder.setDescription("Use your enrolled face to continue")
         }
 
@@ -107,7 +111,7 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
           builder.setNegativeButtonText(negativeText)
         }
 
-        val executor = Executors.newSingleThreadExecutor()
+        val executor = ContextCompat.getMainExecutor(activity)
         val biometricPrompt =
           BiometricPrompt(
             activity,
@@ -185,5 +189,10 @@ class EatixBiometricModule(private val reactContext: ReactApplicationContext) :
         return if (status == BiometricManager.BIOMETRIC_SUCCESS) authenticators else 0
       }
     }
+  }
+
+  private companion object {
+    const val PROMPT_TITLE = "Eatwaze"
+    const val MAX_PROMPT_MESSAGE_LENGTH = 60
   }
 }

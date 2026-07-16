@@ -142,13 +142,6 @@ export async function promptBiometric(
 
   try {
     if (isEatixBiometricNativeAvailable()) {
-      const faceMessage =
-        promptMethod === 'face'
-          ? message.includes('camera')
-            ? message
-            : `${message} — look at the front camera`
-          : message;
-
       if (promptMethod === 'face' && Platform.OS === 'android') {
         if (!skipFaceCameraPreview) {
           await openFaceUnlockCamera({
@@ -162,7 +155,7 @@ export async function promptBiometric(
 
       try {
         const { success, error } = await eatixBiometricPrompt({
-          promptMessage: faceMessage,
+          promptMessage: message,
           cancelButtonText: 'Cancel',
           biometricMethod: promptMethod,
           allowDeviceCredentials: promptMethod === 'any',
