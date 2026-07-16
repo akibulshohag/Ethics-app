@@ -20,7 +20,9 @@ import {
   saveBiometricSession,
 } from './secureStorageService';
 
-const rnBiometrics = new ReactNativeBiometrics({ allowDeviceCredentials: true });
+const rnBiometrics = new ReactNativeBiometrics({
+  allowDeviceCredentials: true,
+});
 
 export async function getBiometricSupport() {
   try {
@@ -41,7 +43,9 @@ export async function getBiometricSupport() {
       biometryType: biometryType || null,
       faceAvailable: isFace,
       fingerprintAvailable:
-        !!available && (biometryType === BiometryTypes.TouchID || biometryType === BiometryTypes.Biometrics),
+        !!available &&
+        (biometryType === BiometryTypes.TouchID ||
+          biometryType === BiometryTypes.Biometrics),
     };
   } catch {
     return {
@@ -76,7 +80,11 @@ export function biometricLoginButtonLabel(biometryType, method) {
   return 'Fingerprint & Face login';
 }
 
-export function biometricUnlockDescription(biometryType, enabled, preferredMethod) {
+export function biometricUnlockDescription(
+  biometryType,
+  enabled,
+  preferredMethod,
+) {
   if (preferredMethod === 'face') {
     return enabled
       ? 'Sign in quickly with face recognition on the login screen'
@@ -109,11 +117,16 @@ export async function syncBiometricSessionForUser(user) {
 }
 
 function resolvePromptMethod(explicitMethod, support) {
-  if (explicitMethod === 'face' || explicitMethod === 'fingerprint' || explicitMethod === 'any') {
+  if (
+    explicitMethod === 'face' ||
+    explicitMethod === 'fingerprint' ||
+    explicitMethod === 'any'
+  ) {
     return explicitMethod;
   }
   if (support?.faceAvailable && !support?.fingerprintAvailable) return 'face';
-  if (support?.fingerprintAvailable && !support?.faceAvailable) return 'fingerprint';
+  if (support?.fingerprintAvailable && !support?.faceAvailable)
+    return 'fingerprint';
   return 'any';
 }
 
@@ -130,10 +143,14 @@ export async function promptBiometric(
   const promptMethod = resolvePromptMethod(method || storedMethod, support);
 
   if (method === 'face' && !support.faceAvailable) {
-    throw new Error('Face unlock is not set up. Add face unlock in phone Settings.');
+    throw new Error(
+      'Face unlock is not set up. Add face unlock in phone Settings.',
+    );
   }
   if (method === 'fingerprint' && !support.fingerprintAvailable) {
-    throw new Error('Fingerprint is not set up. Add fingerprint in phone Settings.');
+    throw new Error(
+      'Fingerprint is not set up. Add fingerprint in phone Settings.',
+    );
   }
 
   if (persistMethod && method) {
@@ -183,7 +200,11 @@ export async function promptBiometric(
   }
 }
 
-export async function updateFingerprintEnabled(user, nextEnabled, { method } = {}) {
+export async function updateFingerprintEnabled(
+  user,
+  nextEnabled,
+  { method } = {},
+) {
   if (!user?.id || !user?.token) {
     throw new Error('You must be logged in to change biometric settings');
   }
@@ -191,7 +212,9 @@ export async function updateFingerprintEnabled(user, nextEnabled, { method } = {
   if (nextEnabled) {
     const support = await getBiometricSupport();
     if (!support.available) {
-      throw new Error('Biometric authentication is not available on this device');
+      throw new Error(
+        'Biometric authentication is not available on this device',
+      );
     }
     const enableMethod = resolvePromptMethod(method, support);
     await promptBiometric('Enable biometric login for Eatwaze', {
@@ -254,7 +277,10 @@ export async function disableBiometricLogin() {
   await saveBiometricPreferredMethod(null);
 }
 
-export async function tryBiometricLogin(method, { skipFaceCameraPreview = false } = {}) {
+export async function tryBiometricLogin(
+  method,
+  { skipFaceCameraPreview = false } = {},
+) {
   const exists = await hasBiometricSession();
   if (!exists) {
     throw new Error('Biometric login is not set up');
@@ -266,8 +292,8 @@ export async function tryBiometricLogin(method, { skipFaceCameraPreview = false 
     unlockMethod === 'face'
       ? 'Sign in to Eatwaze with face recognition'
       : unlockMethod === 'fingerprint'
-        ? 'Sign in to Eatwaze with fingerprint'
-        : 'Sign in to Eatwaze with fingerprint or face';
+      ? 'Sign in to Eatwaze with fingerprint'
+      : 'Sign in to Eatwaze with fingerprint or face';
 
   await promptBiometric(unlockMessage, {
     method: unlockMethod,
