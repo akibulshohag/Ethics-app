@@ -87,46 +87,10 @@ const PromotionDetailScreen = () => {
     );
   }
 
-  // Static placeholders when no menu data (same design as PromotionOneScreen)
-  const STATIC_MENU_CARDS = [
-    { name: 'Tandoori Planet' },
-    { name: 'Streetly balty' },
-    { name: 'Bangal hub' },
-    { name: 'Indian Grill' },
-    { name: 'Streetly balty' },
-    { name: 'Tandoori Planet' },
-  ];
-
-  const MenuCard = ({ item, isStatic }) => {
-    if (isStatic) {
-      return (
-        <View style={styles.promoCard}>
-          <View style={styles.cardOrangeHeader}>
-            <Text style={styles.cardHeaderText} numberOfLines={1}>
-              {item.name}
-            </Text>
-          </View>
-          <View style={styles.imageContainer}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-              }}
-              style={styles.foodImage}
-            />
-          </View>
-          <View style={styles.cardFooter}>
-            <Text style={styles.getFlatText}>
-              Get Flat <Text style={styles.highlightText}>30% OFF</Text>
-            </Text>
-            <Text style={styles.uptoText}>UPTO €3</Text>
-          </View>
-        </View>
-      );
-    }
+  const MenuCard = ({ item }) => {
     const name = item?.itemName || 'Item';
     const imageUri =
-      item?.imageUrl ||
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+      item?.imageUrl || '';
     const priceStr =
       item?.price != null ? `€${Number(item.price).toFixed(2)}` : '—';
 
@@ -212,13 +176,13 @@ const PromotionDetailScreen = () => {
           </View>
         ) : (
           <View style={styles.promoGrid}>
-            {menuItems.length > 0
-              ? menuItems.map(item => (
-                  <MenuCard key={item.id} item={item} isStatic={false} />
-                ))
-              : STATIC_MENU_CARDS.map((s, idx) => (
-                  <MenuCard key={`static-${idx}`} item={s} isStatic />
-                ))}
+            {menuItems.length > 0 ? (
+              menuItems.map(item => <MenuCard key={item.id} item={item} />)
+            ) : (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyText}>No menu items for this promotion.</Text>
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -235,6 +199,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  emptyWrap: { width: '100%', paddingVertical: 30, alignItems: 'center' },
   emptyText: { fontSize: 16, color: '#666' },
 
   headerBackground: {

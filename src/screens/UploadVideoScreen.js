@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { IMAGE_PLACEHOLDER } from '../utils/helper';
 import {
   StyleSheet,
   View,
@@ -243,19 +244,33 @@ const UploadVideoScreen = () => {
       );
     }
 
-    // Regular video item - clicking opens video details (for now, do nothing or navigate)
+    // Regular video item — open player / details
     const video = item;
     return (
       <TouchableOpacity
         style={styles.videoItem}
         onPress={() => {
-          // TODO: Navigate to video details/player screen
-          // For now, do nothing - videos are view-only in this screen
+          if (!video?.id) return;
+          if (video.status === 'processing') {
+            Alert.alert(
+              'Still processing',
+              'This video is not ready to play yet. Pull to refresh in a moment.',
+            );
+            return;
+          }
+          if (video.status === 'failed') {
+            Alert.alert(
+              'Upload failed',
+              'This video could not be processed. Try uploading again.',
+            );
+            return;
+          }
+          navigation.navigate('VideoDetailsScreen', { videoId: video.id });
         }}
       >
         <Image
           source={{
-            uri: video.thumbnailUrl || 'https://via.placeholder.com/300',
+            uri: video.thumbnailUrl || IMAGE_PLACEHOLDER,
           }}
           style={styles.thumbnail}
         />

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { IMAGE_PLACEHOLDER } from '../../utils/helper';
 import {
   StyleSheet,
   View,
@@ -91,7 +92,7 @@ const WriteCaptionScreen = () => {
           </Text>
         </View>
         <Image
-          source={{ uri: 'https://via.placeholder.com/40' }}
+          source={{ uri: IMAGE_PLACEHOLDER }}
           style={styles.profilePic}
         />
         </View>

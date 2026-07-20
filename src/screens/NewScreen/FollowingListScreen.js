@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import { safeImageUri } from '../../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../../utils/helper';
 import {
   getChannelFollowing,
   getChannelProfile,
@@ -80,7 +80,7 @@ export default function FollowingListScreen({ navigation }) {
           name: it.channelName || it.nickname || it.name || 'Channel',
           image: safeImageUri(
             it.channelAvatar || it.avatar,
-            'https://via.placeholder.com/100',
+            IMAGE_PLACEHOLDER,
           ),
           subs: '0',
           videos: '0',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,10 +7,127 @@ import {
   TouchableOpacity,
   TextInput,
   LayoutAnimation,
+  Linking,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
+import {
+  EATWAZE_PRIVACY_URL,
+  EATWAZE_SUPPORT_EMAIL,
+  EATWAZE_TERMS_URL,
+  EATWAZE_WEBSITE_URL,
+} from '../constants/communityTerms';
+
+const CATEGORIES = ['General', 'Account', 'Orders', 'Video'];
+
+const FAQ_DATA = [
+  {
+    category: 'General',
+    question: 'What is Eatwaze?',
+    answer:
+      'Eatwaze is a UK food discovery app. Browse nearby restaurants, watch food shorts and videos, follow channels you like, and order from local vendors — all in one place.',
+  },
+  {
+    category: 'General',
+    question: 'How do I use Eatwaze?',
+    answer:
+      'Set your postcode or area on the home screen to see nearby food content. Tap Shorts or videos to watch, follow restaurants you like, and use Order when a vendor has an active menu. Create an account to save favourites, upload content, and place orders.',
+  },
+  {
+    category: 'General',
+    question: 'Where can I read the Privacy Policy and Terms?',
+    answer:
+      'Open Settings → Privacy Policy or Community Guidelines, or use the Contact us tab in Help Center to open our Privacy Policy and Terms of Use.',
+  },
+  {
+    category: 'Account',
+    question: 'How do I create or sign in to an account?',
+    answer:
+      'Tap Sign in from the home or library area, then register with email or use phone / social sign-in if available. You can reset a forgotten password from the login screen.',
+  },
+  {
+    category: 'Account',
+    question: 'How do I update my profile?',
+    answer:
+      'Open Library or your profile, then edit your name, photo, and business details (for vendors). Changes save to your Eatwaze account.',
+  },
+  {
+    category: 'Account',
+    question: 'How do I report or block someone?',
+    answer:
+      'Open the content or profile menu, then choose Report or Block. Reported content is reviewed under our community guidelines. Blocked users and their content are hidden from your feed.',
+  },
+  {
+    category: 'Orders',
+    question: 'How do I place an order?',
+    answer:
+      'Open a restaurant profile with an active menu, add items to your cart, then checkout. You need a signed-in account and a valid delivery address or collection option for that vendor.',
+  },
+  {
+    category: 'Orders',
+    question: 'Where can I see my order status?',
+    answer:
+      'Open the Orders tab to track live and past orders. Vendors and riders update status as the order is prepared and delivered.',
+  },
+  {
+    category: 'Video',
+    question: 'How do I upload a video or short?',
+    answer:
+      'Sign in, tap the + button, then choose a video from your library or record a new short. Add a title and details, then publish or schedule. Processing may take a short time before the video appears in your feed.',
+  },
+  {
+    category: 'Video',
+    question: 'How do I delete a video?',
+    answer:
+      'Go to your profile or Library, open the video you uploaded, tap the menu, and choose Delete. Deleted videos are removed from your channel and cannot be recovered.',
+  },
+  {
+    category: 'Video',
+    question: 'Why did my video upload fail?',
+    answer:
+      'Check your internet connection and that the file is a supported video format. Very large files may take longer or fail on a weak connection — try again on Wi‑Fi. If it still fails, contact support with the time you tried to upload.',
+  },
+];
+
+const CONTACT_OPTIONS = [
+  {
+    label: 'Email support',
+    icon: 'email-outline',
+    url: `mailto:${EATWAZE_SUPPORT_EMAIL}?subject=${encodeURIComponent(
+      'Eatwaze help request',
+    )}`,
+  },
+  {
+    label: 'Website',
+    icon: 'earth',
+    url: EATWAZE_WEBSITE_URL,
+  },
+  {
+    label: 'Privacy Policy',
+    icon: 'shield-account-outline',
+    url: EATWAZE_PRIVACY_URL,
+  },
+  {
+    label: 'Terms of Use',
+    icon: 'file-document-outline',
+    url: EATWAZE_TERMS_URL,
+  },
+];
+
+const openExternalUrl = async url => {
+  try {
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      Alert.alert('Unavailable', 'This link cannot be opened on this device.');
+      return;
+    }
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert('Unavailable', 'Could not open this link. Please try again.');
+  }
+};
 
 const HelpCenterScreen = () => {
   const navigation = useNavigation();
@@ -20,39 +137,17 @@ const HelpCenterScreen = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const categories = ['General', 'Account', 'Service', 'Video'];
-
-  const searchResults = [
-    "Why did my video upload didn't working?",
-    "Why can't I add multiple accounts?",
-    "Why can't I delete an uploaded video?",
-    "Why can't I sync accounts with MeTube?",
-  ];
-
-  const faqData = [
-    {
-      question: 'What is Eatwaze?',
-      answer: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit...',
-    },
-    {
-      question: 'How to use Eatwaze?',
-      answer: 'Follow the onboarding steps to set up your profile...',
-    },
-    {
-      question: 'How do I delete a video?',
-      answer:
-        'To delete a video, go to your profile, select the video you want to delete, and tap the delete button.',
-    },
-  ];
-
-  const contactOptions = [
-    { label: 'Customer Service', icon: 'headphones' },
-    { label: 'WhatsApp', icon: 'whatsapp' },
-    { label: 'Website', icon: 'earth' },
-    { label: 'Facebook', icon: 'facebook' },
-    { label: 'Twitter', icon: 'twitter' },
-    { label: 'Instagram', icon: 'instagram' },
-  ];
+  const filteredFaqs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return FAQ_DATA.filter(item => {
+      const matchesCategory = !query && item.category === selectedCategory;
+      const matchesSearch =
+        query.length > 0 &&
+        (item.question.toLowerCase().includes(query) ||
+          item.answer.toLowerCase().includes(query));
+      return query.length > 0 ? matchesSearch : matchesCategory;
+    });
+  }, [searchQuery, selectedCategory]);
 
   const toggleAccordion = index => {
     const isNewArchitecture =
@@ -66,16 +161,25 @@ const HelpCenterScreen = () => {
     setExpandedIndex(expandedIndex === index ? null : index);
   };
 
+  const onSelectCategory = cat => {
+    setSelectedCategory(cat);
+    setSearchQuery('');
+    setIsSearching(false);
+    setExpandedIndex(0);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Icon name="arrow-left" size={28} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help Center</Text>
-        <TouchableOpacity>
-          <Icon name="dots-horizontal-circle-outline" size={28} color="#333" />
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.tabContainer}>
@@ -100,6 +204,7 @@ const HelpCenterScreen = () => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         {activeTab === 'FAQ' ? (
           <>
@@ -108,19 +213,23 @@ const HelpCenterScreen = () => {
               showsHorizontalScrollIndicator={false}
               style={styles.categoryScroll}
             >
-              {categories.map(cat => (
+              {CATEGORIES.map(cat => (
                 <TouchableOpacity
                   key={cat}
                   style={[
                     styles.categoryBtn,
-                    selectedCategory === cat && styles.categoryBtnActive,
+                    selectedCategory === cat &&
+                      !searchQuery.trim() &&
+                      styles.categoryBtnActive,
                   ]}
-                  onPress={() => setSelectedCategory(cat)}
+                  onPress={() => onSelectCategory(cat)}
                 >
                   <Text
                     style={[
                       styles.categoryText,
-                      selectedCategory === cat && styles.categoryTextActive,
+                      selectedCategory === cat &&
+                        !searchQuery.trim() &&
+                        styles.categoryTextActive,
                     ]}
                   >
                     {cat}
@@ -141,31 +250,44 @@ const HelpCenterScreen = () => {
                 color={isSearching ? '#FF7A00' : '#ccc'}
               />
               <TextInput
-                placeholder="Search"
+                placeholder="Search help topics"
                 style={styles.searchInput}
                 placeholderTextColor="#ccc"
                 onFocus={() => setIsSearching(true)}
                 onBlur={() => setIsSearching(false)}
-                onChangeText={setSearchQuery}
+                onChangeText={text => {
+                  setSearchQuery(text);
+                  setExpandedIndex(0);
+                }}
                 value={searchQuery}
+                returnKeyType="search"
+                autoCorrect={false}
               />
-              <Icon name="tune-variant" size={20} color="#FF7A00" />
+              {searchQuery.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSearchQuery('');
+                    setExpandedIndex(0);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <Icon name="close-circle" size={20} color="#999" />
+                </TouchableOpacity>
+              ) : null}
             </View>
 
-            {isSearching ? (
-              <View style={styles.resultsCard}>
-                {searchResults.map((result, index) => (
-                  <TouchableOpacity key={index} style={styles.resultItem}>
-                    <Text style={styles.resultText}>{result}</Text>
-                    {index < searchResults.length - 1 && (
-                      <View style={styles.resultDivider} />
-                    )}
-                  </TouchableOpacity>
-                ))}
+            {filteredFaqs.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No matching topics</Text>
+                <Text style={styles.emptyText}>
+                  Try another search, or open Contact us to email Eatwaze
+                  support.
+                </Text>
               </View>
             ) : (
-              faqData.map((item, index) => (
-                <View key={index} style={styles.accordionCard}>
+              filteredFaqs.map((item, index) => (
+                <View key={`${item.category}-${item.question}`} style={styles.accordionCard}>
                   <TouchableOpacity
                     style={styles.accordionHeader}
                     onPress={() => toggleAccordion(index)}
@@ -190,13 +312,16 @@ const HelpCenterScreen = () => {
             )}
           </>
         ) : (
-          /* Contact Us UI */
           <View style={styles.contactContainer}>
-            {contactOptions.map((item, index) => (
+            <Text style={styles.contactIntro}>
+              Need more help? Reach Eatwaze support or read our policies below.
+            </Text>
+            {CONTACT_OPTIONS.map(item => (
               <TouchableOpacity
-                key={index}
+                key={item.label}
                 style={styles.contactCard}
                 activeOpacity={0.8}
+                onPress={() => openExternalUrl(item.url)}
               >
                 <View style={styles.contactLeft}>
                   <Icon
@@ -207,6 +332,7 @@ const HelpCenterScreen = () => {
                   />
                   <Text style={styles.contactLabel}>{item.label}</Text>
                 </View>
+                <Icon name="chevron-right" size={22} color="#999" />
               </TouchableOpacity>
             ))}
           </View>
@@ -226,6 +352,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#333' },
+  headerSpacer: { width: 28 },
   tabContainer: {
     flexDirection: 'row',
     borderBottomWidth: 1,
@@ -263,19 +390,14 @@ const styles = StyleSheet.create({
   },
   searchContainerActive: { backgroundColor: '#FFF1F0', borderColor: '#FF7A00' },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 16, color: '#333' },
-  resultsCard: {
+  emptyCard: {
     backgroundColor: '#fff',
     marginHorizontal: 16,
     borderRadius: 20,
-    paddingVertical: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    padding: 20,
   },
-  resultItem: { paddingHorizontal: 20, paddingVertical: 15 },
-  resultText: { fontSize: 15, color: '#333', fontWeight: '500' },
-  resultDivider: { height: 1, backgroundColor: '#F1F2F4', marginTop: 15 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: '#333', marginBottom: 6 },
+  emptyText: { fontSize: 14, color: '#666', lineHeight: 20 },
   accordionCard: {
     backgroundColor: '#fff',
     marginHorizontal: 16,
@@ -293,11 +415,15 @@ const styles = StyleSheet.create({
   accordionContent: { marginTop: 10 },
   divider: { height: 1, backgroundColor: '#eee', marginBottom: 10 },
   answerText: { fontSize: 14, color: '#666', lineHeight: 20 },
-
-  // New Contact Us Styles
   contactContainer: {
     paddingTop: 20,
     paddingHorizontal: 16,
+  },
+  contactIntro: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 16,
   },
   contactCard: {
     backgroundColor: '#fff',
@@ -310,10 +436,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   contactLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   contactIcon: {
     marginRight: 15,

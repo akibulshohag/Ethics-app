@@ -1,5 +1,7 @@
 export const EATWAZE_TERMS_URL = 'https://eatwaze.com/terms';
 export const EATWAZE_PRIVACY_URL = 'https://eatwaze.com/privacy';
+export const EATWAZE_WEBSITE_URL = 'https://eatwaze.com';
+export const EATWAZE_SUPPORT_EMAIL = 'support@eatwaze.com';
 
 export const COMMUNITY_EULA_SUMMARY =
   'By using Eatwaze you agree to our Terms of Use and Community Guidelines. ' +

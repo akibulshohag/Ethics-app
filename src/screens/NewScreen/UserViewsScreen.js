@@ -31,7 +31,7 @@ import BusinessVideoCard from '../../components/BusinessVideoCard';
 import PromotionCard from '../../components/PromotionCard';
 import { useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import { safeImageUri } from '../../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../../utils/helper';
 import { blockUser } from '../../services/userSafetyService';
 import { isUserBlocked } from '../../utils/filterBlockedContent';
 import MenuItemThumbnail from '../../components/MenuItemThumbnail';
@@ -207,7 +207,7 @@ const mapVideoToCard = (v, profile) => {
     publishedAt: timeAgo(v.publishedAt || v.createdAt),
     thumbnail: safeImageUri(
       v.thumbnailUrl || v.videoUrl,
-      'https://via.placeholder.com/600',
+      IMAGE_PLACEHOLDER,
     ),
     duration: formatDuration(v.duration),
     views: `${formatCount(viewCount)} views`,
@@ -229,7 +229,7 @@ const mapVideoApiToModal = (v = {}) => {
     title: v.title || 'Untitled',
     videoUrl: v.videoUrl,
     thumbnail:
-      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+      v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
     durationSeconds: v.duration ?? 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? 0,
@@ -263,7 +263,7 @@ const mapPostToCard = (p, profile) => {
     publishedAt: timeAgo(p.publishedAt || p.createdAt),
     thumbnail: safeImageUri(
       p.thumbnailUrl || p.mediaUrl,
-      'https://via.placeholder.com/600',
+      IMAGE_PLACEHOLDER,
     ),
     duration:
       p.mediaType === 'video' && p.duration != null
@@ -308,7 +308,7 @@ const mapShortToPostCard = (s, profile, profileUserId) => {
     sortTime: new Date(createdAt || 0).getTime() || Date.now(),
     thumbnail: safeImageUri(
       s.thumbnailUrl || s.coverUrl || s.videoUrl,
-      'https://via.placeholder.com/600',
+      IMAGE_PLACEHOLDER,
     ),
     duration: s.duration != null ? formatDuration(s.duration) : '',
     likeCount: s.likeCount ?? 0,
@@ -508,7 +508,7 @@ const UserViewsScreen = ({ navigation }) => {
         mediaUrl: media,
         thumbnail: safeImageUri(
           p?.thumbnailUrl || p?.mediaUrl,
-          'https://via.placeholder.com/600',
+          IMAGE_PLACEHOLDER,
         ),
         isScheduled: isFutureScheduledMedia(p),
         createdAt:
@@ -526,7 +526,7 @@ const UserViewsScreen = ({ navigation }) => {
       mediaUrl: String(v?.videoUrl || '').trim(),
       thumbnail: safeImageUri(
         v?.thumbnailUrl || v?.videoUrl,
-        'https://via.placeholder.com/600',
+        IMAGE_PLACEHOLDER,
       ),
       type: v?.type || v?._type || v?.contentType || '',
       isShort:
@@ -546,7 +546,7 @@ const UserViewsScreen = ({ navigation }) => {
       subtitle: timeAgo(g?.createdAt),
       mediaType: 'image',
       mediaUrl: String(g?.src || '').trim(),
-      thumbnail: safeImageUri(g?.src, 'https://via.placeholder.com/600'),
+      thumbnail: safeImageUri(g?.src, IMAGE_PLACEHOLDER),
       createdAt: new Date(g?.createdAt || 0).getTime() || Date.now(),
       likeCount: g.likeCount ?? 0,
       dislikeCount: g.dislikeCount ?? 0,
@@ -1121,7 +1121,7 @@ const UserViewsScreen = ({ navigation }) => {
         subtitle: timeAgo(p?.createdAt),
         mediaType: 'image',
         mediaUrl: String(p?.src || '').trim(),
-        thumbnail: safeImageUri(p?.src, 'https://via.placeholder.com/600'),
+        thumbnail: safeImageUri(p?.src, IMAGE_PLACEHOLDER),
         likeCount: p.likeCount ?? 0,
         dislikeCount: p.dislikeCount ?? 0,
         commentCount: p.commentCount ?? 0,
@@ -2114,7 +2114,7 @@ const UserViewsScreen = ({ navigation }) => {
         return (galleryPhotos || []).map(p => ({
           ...p,
           id: p.id,
-          thumbnail: safeImageUri(p.src, 'https://via.placeholder.com/600'),
+          thumbnail: safeImageUri(p.src, IMAGE_PLACEHOLDER),
         }));
       case 'Videos':
         return videos;

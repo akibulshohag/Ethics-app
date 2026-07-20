@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
-import { safeImageUri } from '../../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../../utils/helper';
 import {
   getChannelFollowers,
   getChannelProfile,
@@ -96,7 +96,7 @@ export default function FollowersListScreen({ navigation }) {
           name: it.channelName || it.nickname || it.name || 'Channel',
           image: safeImageUri(
             it.channelAvatar || it.avatar,
-            'https://via.placeholder.com/100',
+            IMAGE_PLACEHOLDER,
           ),
           // We don't have per-follower subscriber counts yet,
           // so keep using the header total here.

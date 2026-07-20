@@ -1,4 +1,5 @@
-import {createNavigationContainerRef} from '@react-navigation/native';
+import { createNavigationContainerRef } from '@react-navigation/native';
+import { Image } from 'react-native';
 
 export function validPhoneNumber(phone) {
   const p = String(phone || '').replace(/[\s\-().]/g, '');
@@ -19,8 +20,8 @@ export function validEmail(email) {
 }
 
 export function fontSize(size) {
-  const {Dimensions} = require('react-native');
-  const {width} = Dimensions.get('window');
+  const { Dimensions } = require('react-native');
+  const { width } = Dimensions.get('window');
   if (width < 350) {
     return size - 2;
   } else {
@@ -42,14 +43,36 @@ export function navigate(name, params) {
   navigationRef?.current?.navigate(name, params);
 }
 
-const DEFAULT_VIDEO_POSTER =
-  'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600';
+/** Local grey fallback — never use via.placeholder.com in production. */
+const resolvedImagePlaceholder = Image.resolveAssetSource(
+  require('../assets/image-placeholder.png'),
+);
+const resolvedAvatarPlaceholder = Image.resolveAssetSource(
+  require('../assets/avatar-placeholder.png'),
+);
+
+export const IMAGE_PLACEHOLDER =
+  resolvedImagePlaceholder?.uri ||
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+export const AVATAR_PLACEHOLDER =
+  resolvedAvatarPlaceholder?.uri || IMAGE_PLACEHOLDER;
+
+export function avatarPlaceholder(name = 'Eatwaze') {
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    String(name || 'Eatwaze').trim() || 'Eatwaze',
+  )}&background=F1F2F4&color=666666&size=128`;
+}
+
+const DEFAULT_VIDEO_POSTER = IMAGE_PLACEHOLDER;
 
 const VIDEO_FILE_EXT_RE = /\.(mp4|mov|m4v|webm|avi|mkv|3gp)(\?|$)/i;
 
 /** True when URL points at a video file (not usable as Image source). */
 export function looksLikeVideoMediaUrl(url) {
-  const s = String(url || '').trim().toLowerCase();
+  const s = String(url || '')
+    .trim()
+    .toLowerCase();
   if (!s) return false;
   return VIDEO_FILE_EXT_RE.test(s) || s.includes('/videos/');
 }
@@ -73,15 +96,24 @@ export function resolveVideoPosterUri(
 export function hasMenuImageUrl(url) {
   const s = String(url || '').trim();
   if (!s || s === 'null' || s === 'undefined') return false;
+  if (/via\.placeholder\.com/i.test(s)) return false;
   return true;
 }
 
 /** Ensure Image source.uri is always a string (avoids "cannot cast ReadableNativeMap to String" crash) */
-export function safeImageUri(val, placeholder = 'https://via.placeholder.com/200') {
-  if (typeof val === 'string' && val.trim().length > 0) return val.trim();
+export function safeImageUri(val, placeholder = IMAGE_PLACEHOLDER) {
+  if (typeof val === 'string' && val.trim().length > 0) {
+    const trimmed = val.trim();
+    if (/via\.placeholder\.com/i.test(trimmed)) return placeholder;
+    return trimmed;
+  }
   if (val != null && typeof val === 'object') {
     const s = val.src ?? val.uri;
-    if (typeof s === 'string' && s.trim().length > 0) return s.trim();
+    if (typeof s === 'string' && s.trim().length > 0) {
+      const trimmed = s.trim();
+      if (/via\.placeholder\.com/i.test(trimmed)) return placeholder;
+      return trimmed;
+    }
   }
   return placeholder;
 }

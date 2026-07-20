@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { IMAGE_PLACEHOLDER } from '../utils/helper';
 import {
   StyleSheet,
   View,
@@ -55,7 +56,7 @@ const mapShortToCard = (s) => {
     type: 'short',
     title,
     views: `${formatCount(s.viewCount ?? s._count?.views ?? 0)} views`,
-    image: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+    image: s.thumbnailUrl || s.videoUrl || IMAGE_PLACEHOLDER,
   };
 };
 
@@ -71,7 +72,7 @@ const mapVideoToCard = (v) => {
     views: `${formatCount(viewCount)} views`,
     time: formatTimeAgo(pubAt),
     duration: formatDuration(v.duration),
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+    thumbnail: v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
   };
 };
 

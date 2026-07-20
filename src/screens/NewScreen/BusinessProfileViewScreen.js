@@ -109,7 +109,7 @@ import { persistBrowseLocation } from '../../services/userLocationService';
 import { appSetUser, setBrowseLocation } from '../../redux/actions/appSlice';
 import { blockUser } from '../../services/userSafetyService';
 import { isUserBlocked } from '../../utils/filterBlockedContent';
-import { safeImageUri } from '../../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../../utils/helper';
 import MenuItemThumbnail from '../../components/MenuItemThumbnail';
 import { buildPostShareMessage } from '../../utils/contentLinks';
 import {
@@ -249,7 +249,7 @@ const mapPostToCard = (post, user) => {
     publishedAt: formatTimeAgo(createdAt),
     sortTime: new Date(createdAt || 0).getTime() || Date.now(),
     thumbnail:
-      post.thumbnailUrl || post.mediaUrl || 'https://via.placeholder.com/300',
+      post.thumbnailUrl || post.mediaUrl || IMAGE_PLACEHOLDER,
     duration,
     likes: formatCount(post.likeCount ?? 0),
     dislikes: formatCount(post.dislikeCount ?? 0),
@@ -301,7 +301,7 @@ const mapShortToPostCard = (shortItem, user, profileUserId) => {
       shortItem.thumbnailUrl ||
       shortItem.coverUrl ||
       shortItem.videoUrl ||
-      'https://via.placeholder.com/300',
+      IMAGE_PLACEHOLDER,
     duration,
     likes: formatCount(shortItem.likeCount ?? 0),
     dislikes: formatCount(shortItem.dislikeCount ?? 0),
@@ -335,156 +335,6 @@ const DEFAULT_OPENING_HOURS = [
   { day: 'Thursday', open: '12.00PM', close: '12.00PM' },
   { day: 'Friday', open: '12.00PM', close: '12.00PM' },
   { day: 'Saturday', open: '12.00PM', close: '12.00PM' },
-];
-
-const MOCK_POSTS = [
-  {
-    id: '1',
-    title: 'Bang Bang Chicken Skewers - Quick and Easy Recipe!',
-    channelName: 'Dalchini',
-    channelAvatar: 'https://via.placeholder.com/100',
-    publishedAt: '5 months ago',
-    thumbnail:
-      'https://images.pexels.com/photos/2641886/pexels-photo-2641886.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    duration: '15:27',
-    views: '3.2K',
-    likes: '3.2K',
-    dislikes: '368',
-    comments: '675',
-    shares: '675',
-    website: 'www.tandoriplanet.com',
-    hashtags: ['steak', 'food', 'fries'],
-  },
-  {
-    id: '2',
-    title: 'Special Beef Burger - Homemade Style',
-    channelName: 'Dalchini',
-    channelAvatar: 'https://via.placeholder.com/100',
-    publishedAt: '2 months ago',
-    thumbnail:
-      'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    duration: '10:15',
-    views: '5.1K',
-    likes: '4.2K',
-    dislikes: '120',
-    comments: '890',
-    shares: '450',
-    website: 'www.tandoriplanet.com',
-    hashtags: ['burger', 'beef', 'fastfood'],
-  },
-  {
-    id: '3',
-    title: 'Fresh Garden Salad with Lemon Dressing',
-    channelName: 'Dalchini',
-    channelAvatar: 'https://via.placeholder.com/100',
-    publishedAt: '1 month ago',
-    thumbnail:
-      'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    duration: '05:45',
-    views: '1.2K',
-    likes: '900',
-    dislikes: '15',
-    comments: '120',
-    shares: '80',
-    website: 'www.tandoriplanet.com',
-    hashtags: ['salad', 'healthy', 'vegan'],
-  },
-];
-
-const MOCK_PROMOTIONS = [
-  {
-    id: '1',
-    title: '10 Rice Bag',
-    price: '£100',
-    image:
-      'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '120',
-  },
-  {
-    id: '2',
-    title: '10 Rice Bag',
-    price: '£100',
-    image:
-      'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '120',
-  },
-  {
-    id: '3',
-    title: '10 Rice Bag',
-    price: '£100',
-    image:
-      'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '120',
-  },
-];
-
-const MOCK_GRID_IMAGES = [
-  {
-    id: '1',
-    image:
-      'https://images.pexels.com/photos/2641886/pexels-photo-2641886.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '2',
-    image:
-      'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '3',
-    image:
-      'https://images.pexels.com/photos/1059905/pexels-photo-1059905.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '4',
-    image:
-      'https://images.pexels.com/photos/376464/pexels-photo-376464.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '5',
-    image:
-      'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '6',
-    image:
-      'https://images.pexels.com/photos/1146760/pexels-photo-1146760.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '7',
-    image:
-      'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '8',
-    image:
-      'https://images.pexels.com/photos/718742/pexels-photo-718742.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-  {
-    id: '9',
-    image:
-      'https://images.pexels.com/photos/675951/pexels-photo-675951.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-  },
-];
-
-const MOCK_VIDEOS = [
-  {
-    id: '1',
-    title: 'Tandoori Planet',
-    thumbnail:
-      'https://images.pexels.com/photos/1639557/pexels-photo-1639557.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '100k',
-    location: 'Birmingham, UK',
-    distance: '12 Km',
-  },
-  {
-    id: '2',
-    title: 'Spicy Burger House',
-    thumbnail:
-      'https://images.pexels.com/photos/1639562/pexels-photo-1639562.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1',
-    views: '85k',
-    location: 'London, UK',
-    distance: '5 Km',
-  },
 ];
 
 const BusinessProfileViewScreen = ({ navigation }) => {
@@ -949,7 +799,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         mediaUrl: media,
         thumbnail: safeImageUri(
           p?.thumbnail || p.mediaUrl,
-          'https://via.placeholder.com/600',
+          IMAGE_PLACEHOLDER,
         ),
         isScheduled: isFutureScheduledMedia(p),
         createdAt: p.sortTime || Date.now(),
@@ -965,7 +815,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       mediaUrl: String(v?.videoUrl || '').trim(),
       thumbnail: safeImageUri(
         v?.thumbnail || v?.thumbnailUrl,
-        'https://via.placeholder.com/600',
+        IMAGE_PLACEHOLDER,
       ),
       type: v?._type || '',
       isShort: v?._type === 'short',
@@ -981,7 +831,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       subtitle: formatTimeAgo(g?.createdAt),
       mediaType: 'image',
       mediaUrl: String(g?.src || '').trim(),
-      thumbnail: safeImageUri(g?.src, 'https://via.placeholder.com/600'),
+      thumbnail: safeImageUri(g?.src, IMAGE_PLACEHOLDER),
       createdAt: new Date(g?.createdAt || 0).getTime() || Date.now(),
       likeCount: g.likeCount ?? 0,
       dislikeCount: g.dislikeCount ?? 0,
@@ -2625,7 +2475,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         subtitle: formatTimeAgo(p?.createdAt),
         mediaType: 'image',
         mediaUrl: String(p?.src || '').trim(),
-        thumbnail: safeImageUri(p?.src, 'https://via.placeholder.com/600'),
+        thumbnail: safeImageUri(p?.src, IMAGE_PLACEHOLDER),
         likeCount: p.likeCount ?? 0,
         dislikeCount: p.dislikeCount ?? 0,
         commentCount: p.commentCount ?? 0,
@@ -3661,7 +3511,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         (profileAvatarUri && !profileAvatarUri.includes('ui-avatars.com')
           ? profileAvatarUri
           : null) ||
-        (profilePhotoUri && !profilePhotoUri.includes('via.placeholder')
+        (profilePhotoUri &&
+        !/via\.placeholder|image-placeholder|avatar-placeholder/i.test(
+          String(profilePhotoUri),
+        )
           ? profilePhotoUri
           : null) ||
         item.channelAvatar;
@@ -5017,7 +4870,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   uri: safeImageUri(
                     selectedPromotion?.thumbnailUrl ||
                       selectedPromotion?.image ||
-                      'https://via.placeholder.com/600',
+                      IMAGE_PLACEHOLDER,
                   ),
                 }}
                 style={styles.promotionDetailImage}

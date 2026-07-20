@@ -7,7 +7,7 @@ import {
 } from './googleAuthConfig';
 
 export const APP_NAME = 'Eatwaze';
-export const TEL_NUMBER = '018********';
+export const TEL_NUMBER = '01607-828966';
 
 // Override for physical device: use your computer's LAN IP (e.g. 192.168.1.x:3000)
 const LOCAL_OVERRIDE = null; // e.g. 'http://192.168.1.100:3000/v1'

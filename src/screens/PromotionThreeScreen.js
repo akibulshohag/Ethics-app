@@ -140,18 +140,9 @@ const PromotionThreeScreen = () => {
 
         {/* Video Feed */}
         <View style={styles.feedContainer}>
-          <VideoCard 
-            name="Tandoori Planet" 
-            location="Birmingham, UK" 
-            distance="12 Km" 
-            views="100k" 
-          />
-          <VideoCard 
-            name="Tandoori Planet" 
-            location="Birmingham, UK" 
-            distance="12 Km" 
-            views="100k" 
-          />
+          <Text style={{ textAlign: 'center', color: '#888', paddingVertical: 24 }}>
+            No videos to show yet.
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>

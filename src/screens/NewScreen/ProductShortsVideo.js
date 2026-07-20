@@ -207,51 +207,6 @@ const isRemoteMediaUri = uri => {
   return raw.startsWith('http://') || raw.startsWith('https://');
 };
 
-const DUMMY_VIDEOS = [
-  {
-    id: '1',
-    title: 'Tandoori Planet',
-    location: 'Birmingham, UK',
-    videoUrl:
-      'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    user: 'tandooriplanet',
-    desc: 'Description goes here',
-    hashtags: '#hashtags #music #dance',
-    likes: '100k',
-    comments: 'Com',
-    shares: 'Share',
-    audio: 'Original Sound',
-  },
-  {
-    id: '2',
-    title: 'Abbots Burger',
-    location: 'Birmingham, UK',
-    videoUrl:
-      'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    user: 'abbotsburger',
-    desc: 'Description goes here',
-    hashtags: '#food #burger #yummy',
-    likes: '250k',
-    comments: '99k+',
-    shares: 'Share',
-    audio: 'Original Sound',
-  },
-  {
-    id: '3',
-    title: 'Pizza Hut',
-    location: 'London, UK',
-    videoUrl:
-      'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-    user: 'pizzahut',
-    desc: 'Best pizza in town',
-    hashtags: '#pizza #cheese #party',
-    likes: '1.2M',
-    comments: '10k',
-    shares: '1k',
-    audio: 'Trending Sound',
-  },
-];
-
 const ProductShortsVideo = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -262,6 +217,7 @@ const ProductShortsVideo = () => {
   const { width, height } = useWindowDimensions();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   const [commentsVisible, setCommentsVisible] = useState(false);
@@ -480,6 +436,7 @@ const ProductShortsVideo = () => {
     let cancelled = false;
 
     const run = async () => {
+      setLoadError('');
       const currentNormalized = initialItem
         ? normalizeShort({
             ...initialItem,
@@ -625,8 +582,12 @@ const ProductShortsVideo = () => {
               },
             }),
           ]);
+          setLoadError('');
         } else if (!cancelled) {
-          setVideos(DUMMY_VIDEOS);
+          setVideos([]);
+          setLoadError(
+            'Could not load shorts right now. Please check your connection and try again.',
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -841,7 +802,7 @@ const ProductShortsVideo = () => {
     [user?.token, navigation],
   );
 
-  const listData = videos.length > 0 ? videos : DUMMY_VIDEOS;
+  const listData = videos;
 
   const menuTargetProduct = () =>
     moreMenuItem || listData[currentIndex] || null;
@@ -1459,6 +1420,37 @@ const ProductShortsVideo = () => {
     );
   }
 
+  if (!loading && listData.length === 0) {
+    return (
+      <View style={[styles.container, styles.centered, styles.emptyWrap]}>
+        <StatusBar barStyle="light-content" />
+        <TouchableOpacity
+          style={[styles.emptyBackBtn, { top: Math.max(insets.top, 12) }]}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Icon name="play-box-multiple-outline" size={48} color="#F5A623" />
+        <Text style={styles.emptyTitle}>
+          {loadError ? 'Shorts unavailable' : 'No shorts yet'}
+        </Text>
+        <Text style={styles.emptyText}>
+          {loadError ||
+            'There are no food shorts to show right now. Check back soon or explore restaurants on Home.'}
+        </Text>
+        <TouchableOpacity
+          style={styles.emptyPrimaryBtn}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.emptyPrimaryBtnText}>Back to Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar hidden />
@@ -1862,6 +1854,41 @@ const ProductShortsVideo = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   centered: { justifyContent: 'center', alignItems: 'center' },
+  emptyWrap: {
+    paddingHorizontal: 28,
+  },
+  emptyBackBtn: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 2,
+    padding: 8,
+  },
+  emptyTitle: {
+    marginTop: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+  },
+  emptyPrimaryBtn: {
+    marginTop: 22,
+    backgroundColor: '#F97507',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  emptyPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   videoContainer: { width: '100%', position: 'relative' },
   videoBackground: { ...StyleSheet.absoluteFillObject },
   touchOverlay: {

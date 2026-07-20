@@ -1,3 +1,5 @@
+import { IMAGE_PLACEHOLDER } from './helper';
+
 const formatCount = n => {
   if (!n || n < 0) return '0';
   if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
@@ -6,7 +8,7 @@ const formatCount = n => {
 };
 
 const safeUri = val =>
-  typeof val === 'string' && val.trim().length > 0 ? val.trim() : 'https://via.placeholder.com/100';
+  typeof val === 'string' && val.trim().length > 0 ? val.trim() : IMAGE_PLACEHOLDER;
 
 const formatDuration = seconds => {
   if (!seconds || seconds < 0) return '0:00';
@@ -41,7 +43,7 @@ export const mapVideoApiToDisplay = v => {
     channelName,
     views: `${formatCount(viewCount)} views`,
     publishedAt: formatTimeAgo(pubAt),
-    thumbnail: safeUri(v.thumbnailUrl || v.videoUrl) || 'https://via.placeholder.com/300',
+    thumbnail: safeUri(v.thumbnailUrl || v.videoUrl) || IMAGE_PLACEHOLDER,
     duration: formatDuration(v.duration),
     addedAt: v.addedAt ? new Date(v.addedAt).getTime() : 0,
   };
@@ -59,7 +61,7 @@ export const mapShortApiToDisplay = s => {
     channelName,
     views: `${formatCount(viewCount)} views`,
     publishedAt: formatTimeAgo(pubAt),
-    thumbnail: safeUri(s.thumbnailUrl || s.videoUrl) || 'https://via.placeholder.com/300',
+    thumbnail: safeUri(s.thumbnailUrl || s.videoUrl) || IMAGE_PLACEHOLDER,
     duration: s.duration ? formatDuration(s.duration) : 'SHORT',
     addedAt: s.addedAt ? new Date(s.addedAt).getTime() : 0,
   };

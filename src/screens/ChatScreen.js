@@ -23,7 +23,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { COLORS } from '../constants/theme';
-import { safeImageUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../utils/helper';
 
 const ActionSheetIOS =
   Platform.OS === 'ios' ? require('react-native').ActionSheetIOS : null;
@@ -631,7 +631,7 @@ const ChatScreen = () => {
                   source={{
                     uri:
                       orderDetails.itemImage ||
-                      'https://via.placeholder.com/50',
+                      IMAGE_PLACEHOLDER,
                   }}
                   style={styles.orderImage}
                 />

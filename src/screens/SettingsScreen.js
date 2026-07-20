@@ -11,7 +11,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
-import { EATWAZE_TERMS_URL } from '../constants/communityTerms';
+import {
+  EATWAZE_PRIVACY_URL,
+  EATWAZE_TERMS_URL,
+  EATWAZE_WEBSITE_URL,
+} from '../constants/communityTerms';
+
+const openUrl = url => {
+  Linking.openURL(url).catch(() => {});
+};
 
 const SettingsScreen = () => {
   const navigation = useNavigation();
@@ -92,25 +100,25 @@ const SettingsScreen = () => {
           label="Background & Downloads"
           onPress={() => navigation.navigate('BackgroundDownloadsScreen')}
         />
-        <SettingItem icon="television" label="Watch on TV" />
-        <SettingItem icon="clock-outline" label="History" />
-        <SettingItem icon="information-outline" label="Privacy Policy" />
-        <SettingItem icon="wallet-outline" label="Billing & Payments" />
-        <SettingItem icon="bell-outline" label="Notifications" />
+        <SettingItem
+          icon="information-outline"
+          label="Privacy Policy"
+          onPress={() => openUrl(EATWAZE_PRIVACY_URL)}
+        />
         <SettingItem
           icon="account-group-outline"
           label="Community Guidelines"
-          onPress={() => Linking.openURL(EATWAZE_TERMS_URL).catch(() => {})}
+          onPress={() => openUrl(EATWAZE_TERMS_URL)}
         />
-        <SettingItem icon="message-text-outline" label="Live Chat" />
-        <SettingItem icon="closed-caption-outline" label="Captions" />
         <SettingItem
-          icon="chevron-right-circle-outline"
-          label="Accessibility"
+          icon="earth"
+          label="Website"
+          onPress={() => openUrl(EATWAZE_WEBSITE_URL)}
         />
         <SettingItem
           icon="dots-horizontal-circle-outline"
           label="About"
+          onPress={() => openUrl(EATWAZE_WEBSITE_URL)}
           showBorder={false}
         />
       </ScrollView>

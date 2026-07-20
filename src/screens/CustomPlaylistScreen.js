@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { IMAGE_PLACEHOLDER } from '../utils/helper';
 import {
   StyleSheet,
   Text,
@@ -23,7 +24,7 @@ const mapItemToCard = item => ({
   views: `${item.viewCount ?? item._count?.views ?? 0} views`,
   publishedAt: '',
   thumbnail:
-    item.thumbnailUrl || item.videoUrl || 'https://via.placeholder.com/300',
+    item.thumbnailUrl || item.videoUrl || IMAGE_PLACEHOLDER,
   duration: item.duration
     ? `${Math.floor(item.duration / 60)}:${String(item.duration % 60).padStart(2, '0')}`
     : '',

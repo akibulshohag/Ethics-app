@@ -49,7 +49,7 @@ import {
 } from '../services/downloadService';
 import { config } from '../../config';
 import { getSocialIcon } from '../constants/socialLinks';
-import { safeImageUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../utils/helper';
 import {
   isBusinessCreator,
   shouldShowOrderBookButtons,
@@ -143,7 +143,7 @@ const mapVideoApiToDisplay = v => {
     publishedAt: formatTimeAgo(pubAt),
     publishedDate: formatPublishedDate(pubAt),
     thumbnail:
-      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+      v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
     videoUrl: v.videoUrl,
     duration: formatDuration(v.duration),
     durationSeconds: v.duration,
@@ -693,7 +693,7 @@ const VideoDetailsScreen = () => {
             source={{
               uri: safeImageUri(
                 currentVideo.thumbnail,
-                'https://via.placeholder.com/300',
+                IMAGE_PLACEHOLDER,
               ),
             }}
             style={styles.videoThumbnail}

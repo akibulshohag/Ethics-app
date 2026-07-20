@@ -46,7 +46,7 @@ import { shortsService } from '../services/shortsService';
 import { getWatchLater } from '../services/playlistService';
 import { getNearbyPromotions } from '../services/promotionService';
 import { appSetUser } from '../redux/actions/appSlice';
-import { safeImageUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../utils/helper';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
 import CommentsModal from '../components/CommentsModal';
@@ -81,7 +81,7 @@ const mapVideoApiToModal = (v = {}) => {
     id: v.id,
     title: v.title || 'Untitled',
     videoUrl: v.videoUrl,
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+    thumbnail: v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
     durationSeconds: v.duration ?? 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? 0,
@@ -117,7 +117,7 @@ const mapShortApiToModal = (s = {}) => {
       s.thumbnailUrl ||
       s.coverUrl ||
       s.videoUrl ||
-      'https://via.placeholder.com/600',
+      IMAGE_PLACEHOLDER,
     durationSeconds: s.duration ?? 0,
     likeCount: s.likeCount ?? s._count?.likes ?? 0,
     dislikeCount: s.dislikeCount ?? 0,
@@ -709,7 +709,7 @@ const PromotionScreen = ({ onBack }) => {
     if (item.thumbnailUrl) return safeImageUri(item.thumbnailUrl);
     if (item.type === 'short' && item.coverUrl)
       return safeImageUri(item.coverUrl);
-    return 'https://via.placeholder.com/200';
+    return IMAGE_PLACEHOLDER;
   };
 
   const handleMessagePress = () => {

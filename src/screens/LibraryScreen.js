@@ -26,6 +26,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { IMAGE_PLACEHOLDER } from '../utils/helper';
 import { useFocusEffect } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -84,7 +85,7 @@ const formatCount = n => {
 const safeUri = val =>
   typeof val === 'string' && val.trim().length > 0
     ? val.trim()
-    : 'https://via.placeholder.com/100';
+    : IMAGE_PLACEHOLDER;
 
 const formatDuration = seconds => {
   if (!seconds || seconds < 0) return '0:00';
@@ -160,7 +161,7 @@ const mapVideoApiToDisplay = (v, viewerOpts) => {
     publishedAt: formatTimeAgo(pubAt),
     thumbnail:
       safeUri(v.thumbnailUrl || v.videoUrl) ||
-      'https://via.placeholder.com/300',
+      IMAGE_PLACEHOLDER,
     duration: formatDuration(v.duration),
   };
 };
@@ -201,7 +202,7 @@ const mapShortApiToDisplay = (s, viewerOpts) => {
     publishedAt: formatTimeAgo(pubAt),
     thumbnail:
       safeUri(s.thumbnailUrl || s.videoUrl) ||
-      'https://via.placeholder.com/300',
+      IMAGE_PLACEHOLDER,
     duration: s.duration ? formatDuration(s.duration) : 'SHORT',
   };
 };
@@ -228,7 +229,7 @@ const mapVideoApiToModal = (v = {}) => {
     title: v.title || 'Untitled',
     videoUrl: v.videoUrl,
     thumbnail:
-      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/600',
+      v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
     durationSeconds: v.duration ?? 0,
     likeCount: v.likeCount ?? v._count?.likes ?? 0,
     dislikeCount: v.dislikeCount ?? 0,

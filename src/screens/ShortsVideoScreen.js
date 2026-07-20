@@ -116,85 +116,7 @@ const buildSubscribersOrderLine = (firstDisplay, total) => {
   return `${name} & others Ordered Here`;
 };
 
-// Fallback mock data when API has no shorts
-const MOCK_VIDEOS = [
-  {
-    id: '1',
-    videoUrl:
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    user: {
-      id: 'u1',
-      username: 'Jenny Wilson',
-      avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-      isSubscribed: false,
-    },
-    description:
-      'Hello everyone, in this video I will See one of my favorite Foods ❤️❤️',
-    hashtags: ['#Foods', '#resturent', '#love', '#eat'],
-    likes: '27.8K',
-    likesDisplay: '27.8K',
-    dislikes: '3.6K',
-    comments: '2.4K',
-    commentsDisplay: '2.4K',
-    shares: '2.2K',
-    sharesDisplay: '2.2K',
-    viewsDisplay: '100k',
-    isLiked: false,
-    creatorRole: 'owner',
-    userId: 'u1',
-    location: 'Near you',
-  },
-  {
-    id: '2',
-    videoUrl:
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    user: {
-      id: 'u2',
-      username: 'Foodie Life',
-      avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-      isSubscribed: true,
-    },
-    description: 'Best burger in town! You have to try this out. 🍔🍟',
-    hashtags: ['#Burger', '#FoodPorn', '#Yummy'],
-    likes: '125K',
-    likesDisplay: '125K',
-    dislikes: '1.2K',
-    comments: '8K',
-    commentsDisplay: '8K',
-    shares: '15K',
-    sharesDisplay: '15K',
-    viewsDisplay: '125K',
-    isLiked: false,
-    creatorRole: 'owner',
-    userId: 'u2',
-    location: 'Near you',
-  },
-  {
-    id: '3',
-    videoUrl:
-      'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    user: {
-      id: 'u3',
-      username: 'Nature Lover',
-      avatar: 'https://randomuser.me/api/portraits/women/68.jpg',
-      isSubscribed: false,
-    },
-    description: 'The beauty of nature is unmatched. 🌲🍃',
-    hashtags: ['#Nature', '#Peace', '#Forest'],
-    likes: '50K',
-    likesDisplay: '50K',
-    dislikes: '200',
-    comments: '500',
-    commentsDisplay: '500',
-    shares: '3K',
-    sharesDisplay: '3K',
-    viewsDisplay: '50K',
-    isLiked: false,
-    creatorRole: 'user',
-    userId: 'u3',
-    location: 'Near you',
-  },
-];
+// No mock/sample shorts — empty feed shows a real empty state.
 
 const VideoItem = ({
   item,
@@ -932,6 +854,7 @@ const ShortsVideoScreen = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [isScreenFocused, setIsScreenFocused] = useState(true);
   /** Bumps each time we focus with a deep-linked short so record effect re-runs (same id reopen from Promotion). */
@@ -1222,12 +1145,13 @@ const ShortsVideoScreen = ({ navigation }) => {
   );
 
   const screenHeight = windowHeight;
-  const displayVideos = videos.length > 0 ? videos : MOCK_VIDEOS;
+  const displayVideos = videos;
   const firstRowShortId = videos[0]?.id;
 
   const loadShorts = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const useOwnerFeed =
         shortsFeedMode === 'owner' &&
         Array.isArray(scopedShortsFeedParam) &&
@@ -1237,7 +1161,7 @@ const ShortsVideoScreen = ({ navigation }) => {
           s => s?.videoUrl && String(s.videoUrl).trim(),
         );
         if (filtered.length === 0) {
-          setVideos(MOCK_VIDEOS);
+          setVideos([]);
         } else {
           const enriched = await enrichShortsWithProfile(filtered);
           let mapped = enriched.map(mapShortToItem);
@@ -1276,11 +1200,15 @@ const ShortsVideoScreen = ({ navigation }) => {
           setActiveVideoIndex(0);
           hasAppliedInitialShort.current = !!initialShortId;
         } else {
-          setVideos(MOCK_VIDEOS);
+          setVideos([]);
         }
       }
     } catch (e) {
-      setVideos(MOCK_VIDEOS);
+      setVideos([]);
+      setLoadError(
+        e?.message ||
+          'Could not load shorts right now. Please check your connection and try again.',
+      );
     } finally {
       setLoading(false);
     }
@@ -2055,6 +1983,39 @@ const ShortsVideoScreen = ({ navigation }) => {
         <View style={[styles.centerContent, { height: screenHeight }]}>
           <ActivityIndicator size="large" color="#FF8C00" />
         </View>
+      ) : displayVideos.length === 0 ? (
+        <View style={[styles.centerContent, styles.emptyWrap, { height: screenHeight }]}>
+          <TouchableOpacity
+            style={[styles.emptyBackBtn, { top: Math.max(insets.top, 12) }]}
+            onPress={handleShortsBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Icon name="play-box-multiple-outline" size={48} color="#FF8C00" />
+          <Text style={styles.emptyTitle}>
+            {loadError ? 'Shorts unavailable' : 'No shorts yet'}
+          </Text>
+          <Text style={styles.emptyText}>
+            {loadError ||
+              'There are no food shorts to show right now. Check back soon.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyPrimaryBtn}
+            onPress={loadShorts}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptyPrimaryBtnText}>Try again</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.emptySecondaryBtn}
+            onPress={handleShortsBack}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptySecondaryBtnText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           ref={listRef}
@@ -2537,6 +2498,51 @@ const styles = StyleSheet.create({
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emptyWrap: {
+    paddingHorizontal: 28,
+  },
+  emptyBackBtn: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 2,
+    padding: 8,
+  },
+  emptyTitle: {
+    marginTop: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+  },
+  emptyPrimaryBtn: {
+    marginTop: 22,
+    backgroundColor: '#F97507',
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  emptyPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  emptySecondaryBtn: {
+    marginTop: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  emptySecondaryBtnText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    fontWeight: '600',
   },
   videoContainer: {
     position: 'relative',

@@ -69,8 +69,7 @@ function ProductShortsVideoRow({
   const lastTapMsRef = useRef(0);
   const singleTapTimerRef = useRef(null);
 
-  const descText =
-    (item.desc && String(item.desc).trim()) || 'Description goes here';
+  const descText = (item.desc && String(item.desc).trim()) || '';
   const [descExpanded, setDescExpanded] = useState(false);
   const [descNeedsMore, setDescNeedsMore] = useState(false);
   const [descMeasureWidth, setDescMeasureWidth] = useState(0);
@@ -508,6 +507,7 @@ function ProductShortsVideoRow({
               {locationLine}
             </Text>
           ) : null}
+          {descText ? (
           <View
             style={styles.descBlock}
             onLayout={e => {
@@ -577,9 +577,10 @@ function ProductShortsVideoRow({
               </Text>
             )}
           </View>
-          <Text style={styles.videoHashtags}>
-            {item.hashtags || '#hashtags #music #dance'}
-          </Text>
+          ) : null}
+          {item.hashtags && String(item.hashtags).trim() ? (
+            <Text style={styles.videoHashtags}>{item.hashtags}</Text>
+          ) : null}
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={() => {

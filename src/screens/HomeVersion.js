@@ -22,7 +22,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
 import { config } from '../../config';
-import { navigationRef, safeImageUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, navigationRef, safeImageUri} from '../utils/helper';
 import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import NotificationScreen from './NotificationScreen';
 import { shortsService } from '../services/shortsService';
@@ -96,9 +96,9 @@ const mapShortToCard = s => {
     type: 'short',
     title,
     views: `${formatCount(s.viewCount ?? s._count?.views ?? 0)} views`,
-    image: s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+    image: s.thumbnailUrl || s.videoUrl || IMAGE_PLACEHOLDER,
     thumbnail:
-      s.thumbnailUrl || s.videoUrl || 'https://via.placeholder.com/200',
+      s.thumbnailUrl || s.videoUrl || IMAGE_PLACEHOLDER,
     videoUrl: s.videoUrl,
   };
 };
@@ -116,7 +116,7 @@ const mapVideoToCard = v => {
     time: formatTimeAgo(pubAt),
     duration: formatDuration(v.duration),
     thumbnail:
-      v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+      v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
     videoUrl: v.videoUrl,
   };
 };
@@ -138,7 +138,7 @@ const mapPostToCard = p => {
     time: formatTimeAgo(pubAt),
     duration: isVideo ? formatDuration(p.duration) : null,
     thumbnail:
-      p.thumbnailUrl || p.mediaUrl || 'https://via.placeholder.com/300',
+      p.thumbnailUrl || p.mediaUrl || IMAGE_PLACEHOLDER,
     videoUrl: isVideo ? p.mediaUrl : null,
     mediaUrl: p.mediaUrl,
   };
@@ -634,7 +634,7 @@ const HomeVersion = () => {
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
             thumbnail:
-              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+              v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
             videoUrl: v.videoUrl,
             isSponsored: true,
           };
@@ -660,7 +660,7 @@ const HomeVersion = () => {
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
             thumbnail:
-              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+              v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
             videoUrl: v.videoUrl,
             isFeatured: true,
           };
@@ -686,7 +686,7 @@ const HomeVersion = () => {
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
             thumbnail:
-              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+              v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
             videoUrl: v.videoUrl,
             isVendorFeatured: true,
           };
@@ -712,7 +712,7 @@ const HomeVersion = () => {
             time: formatTimeAgo(pubAt),
             duration: formatDuration(v.duration),
             thumbnail:
-              v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+              v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
             videoUrl: v.videoUrl,
             isVendorSponsored: true,
           };
@@ -740,7 +740,7 @@ const HomeVersion = () => {
           source={{
             uri: safeImageUri(
               channel?.avatar,
-              'https://via.placeholder.com/100',
+              IMAGE_PLACEHOLDER,
             ),
           }}
           style={styles.storyImage}

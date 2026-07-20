@@ -27,7 +27,7 @@ import {
 import { shortsService } from '../services/shortsService';
 import CommentsModal from './CommentsModal';
 import SaveModal from './SaveModal';
-import { safeImageUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../utils/helper';
 
 const { width: W } = Dimensions.get('window');
 const PLAYER_H = Math.min(260, W * 0.56);
@@ -156,7 +156,7 @@ const mapVideoRes = v => {
     topLevelCommentCount: v.topLevelCommentCount ?? commentCount,
     shareCount: v.shareCount ?? 0,
     publishedAt: formatTimeAgo(v.publishedAt || v.createdAt),
-    thumbnail: v.thumbnailUrl || v.videoUrl || 'https://via.placeholder.com/300',
+    thumbnail: v.thumbnailUrl || v.videoUrl || IMAGE_PLACEHOLDER,
     videoUrl: v.videoUrl,
     duration: formatDuration(v.duration),
     durationSeconds: v.duration || 0,
@@ -890,7 +890,7 @@ const GalleryVideoDetailModal = ({
                   source={{
                     uri: safeImageUri(
                       detail?.thumbnail,
-                      'https://via.placeholder.com/400',
+                      IMAGE_PLACEHOLDER,
                     ),
                   }}
                   style={styles.video}
@@ -986,7 +986,7 @@ const GalleryVideoDetailModal = ({
                               source={{
                                 uri: safeImageUri(
                                   rd.thumbnail,
-                                  'https://via.placeholder.com/640x360',
+                                  IMAGE_PLACEHOLDER,
                                 ),
                               }}
                               style={styles.relatedHeroThumb}

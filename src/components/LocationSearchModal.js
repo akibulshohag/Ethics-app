@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,41 +7,168 @@ import {
   TouchableOpacity,
   FlatList,
   StatusBar,
-  Dimensions,
+  ActivityIndicator,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { COLORS, SPACING } from '../constants/theme';
+import { getPlaceSuggestions } from '../utils/geolocation';
+import { UK_POPULAR_AREAS } from '../utils/ukPostcode';
 
-const { width } = Dimensions.get('window');
+const NOMINATIM_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'EatwazeApp/1.0 (React Native)',
+};
 
-const MOCK_LOCATIONS = [
-  { id: '1', title: 'United States', address: '' },
-  { id: '2', title: 'United States Embassy', address: '6391 Elgin St. Celina, Delaware 10299' },
-  { id: '3', title: 'United States Minor Outlying Islands', address: '1901 Thornridge Cir. Shiloh, Hawaii 81063' },
-  { id: '4', title: 'United States Virgin Islands', address: '2715 Ash Dr. San Jose, South Dakota 83475' },
-  { id: '5', title: 'United States Air Force Academy', address: '4140 Parker Rd. Allentown, New Mexico 31134' },
-  { id: '6', title: 'United States Bank Central', address: '4517 Washington Ave. Manchester, Kentucky 39495' },
-  { id: '7', title: 'United States Police Central', address: '2118 Thornridge Cir. Syracuse, Connecticut 35624' },
-  { id: '8', title: 'United States Botanic Garden', address: '4517 Washington Ave. Manchester, Kentucky 39495' },
-  { id: '9', title: 'United States Grand City Park', address: '8502 Preston Rd. Inglewood, Maine 98380' },
-  { id: '10', title: 'United States Sport Center', address: '2972 Westheimer Rd. Santa Ana, Illinois 85486' },
-  { id: '11', title: 'United States Gym Center', address: '3891 Ranchview Dr. Richardson, California 62639' },
-];
+/**
+ * Extra UK results via OpenStreetMap when Google / local list returns nothing.
+ */
+async function searchUkNominatim(query) {
+  const q = String(query || '').trim();
+  if (q.length < 2) return [];
+  try {
+    const url =
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}` +
+      '&format=json&addressdetails=1&limit=8&countrycodes=gb';
+    const res = await fetch(url, { headers: NOMINATIM_HEADERS });
+    const arr = await res.json();
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((hit, i) => {
+        const title =
+          hit?.name ||
+          hit?.address?.city ||
+          hit?.address?.town ||
+          hit?.address?.village ||
+          hit?.display_name?.split(',')[0] ||
+          'Location';
+        const address = hit?.display_name || '';
+        return {
+          id: `nom-${hit.place_id || i}`,
+          title: String(title).trim(),
+          address: String(address).trim(),
+          selectValue: address || title,
+        };
+      })
+      .filter(r => r.title);
+  } catch (_) {
+    return [];
+  }
+}
+
+/** UK postcode autocomplete via postcodes.io (no API key). */
+async function searchUkPostcodes(query) {
+  const raw = String(query || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+  if (raw.length < 2 || raw.length > 7) return [];
+  try {
+    const res = await fetch(
+      `https://api.postcodes.io/postcodes/${encodeURIComponent(raw)}/autocomplete`,
+      { headers: { Accept: 'application/json' } },
+    );
+    const data = await res.json();
+    const list = Array.isArray(data?.result) ? data.result : [];
+    return list.slice(0, 8).map(pc => ({
+      id: `pc-${pc}`,
+      title: pc,
+      address: `${pc}, United Kingdom`,
+      selectValue: `${pc}, United Kingdom`,
+    }));
+  } catch (_) {
+    return [];
+  }
+}
+
+function popularUkRows() {
+  return UK_POPULAR_AREAS.map((area, i) => ({
+    id: `popular-${i}`,
+    title: area,
+    address: 'United Kingdom',
+    selectValue: area,
+  }));
+}
 
 const LocationSearchModal = ({ visible, onClose, onSelect }) => {
-  const [searchQuery, setSearchQuery] = useState('United States');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [results, setResults] = useState(popularUkRows());
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const requestIdRef = useRef(0);
 
-  const filteredLocations = MOCK_LOCATIONS.filter(loc => 
-    loc.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    if (!visible) return;
+    setSearchQuery('');
+    setResults(popularUkRows());
+    setLoading(false);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const trimmed = searchQuery.trim();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!trimmed) {
+      setResults(popularUkRows());
+      setLoading(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const [places, postcodes] = await Promise.all([
+          getPlaceSuggestions(trimmed, { region: 'uk' }),
+          searchUkPostcodes(trimmed),
+        ]);
+
+        let rows = (places || [])
+          .map((p, i) => ({
+            id: p.place_id || `place-${i}-${p.description}`,
+            title: (p.description || '').split(',')[0].trim() || p.description,
+            address: p.description || '',
+            selectValue: p.description || '',
+          }))
+          .filter(r => r.selectValue);
+
+        // Merge unique postcode suggestions
+        for (const pc of postcodes) {
+          if (!rows.some(r => r.selectValue.toUpperCase().includes(pc.title))) {
+            rows.push(pc);
+          }
+        }
+
+        if (rows.length === 0) {
+          rows = await searchUkNominatim(trimmed);
+        }
+
+        if (reqId === requestIdRef.current) {
+          setResults(rows);
+        }
+      } catch (_) {
+        if (reqId === requestIdRef.current) {
+          setResults([]);
+        }
+      } finally {
+        if (reqId === requestIdRef.current) {
+          setLoading(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery, visible]);
 
   const renderLocationItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.locationItem} 
+    <TouchableOpacity
+      style={styles.locationItem}
       onPress={() => {
-        onSelect(item.title);
+        onSelect(item.selectValue || item.title);
         onClose();
       }}
     >
@@ -50,7 +177,7 @@ const LocationSearchModal = ({ visible, onClose, onSelect }) => {
       </View>
       <View style={styles.textContainer}>
         <Text style={styles.locationTitle}>{item.title}</Text>
-        {item.address !== '' && (
+        {!!item.address && (
           <Text style={styles.locationAddress}>{item.address}</Text>
         )}
       </View>
@@ -66,31 +193,65 @@ const LocationSearchModal = ({ visible, onClose, onSelect }) => {
     >
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-        
-        {/* Header with Search */}
+
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.backButton}>
             <Ionicons name="arrow-back" size={26} color="#000" />
           </TouchableOpacity>
           <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={20} color="#999" style={styles.searchIcon} />
+            <Ionicons
+              name="search-outline"
+              size={20}
+              color="#999"
+              style={styles.searchIcon}
+            />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search location"
+              placeholder="Search UK city, area or postcode"
               placeholderTextColor="#999"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              autoCorrect={false}
+              autoCapitalize="words"
+              returnKeyType="search"
             />
+            {searchQuery.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color="#bbb" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 
-        {/* Location List */}
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={COLORS.primaryOrange} />
+            <Text style={styles.loadingText}>Searching UK locations…</Text>
+          </View>
+        ) : null}
+
         <FlatList
-          data={filteredLocations}
+          data={results}
           renderItem={renderLocationItem}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            !loading ? (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyText}>
+                  No UK locations found. Try a city (e.g. London) or postcode
+                  (e.g. WC2N 5DN).
+                </Text>
+              </View>
+            ) : null
+          }
+          ListHeaderComponent={
+            !searchQuery.trim() && results.length > 0 ? (
+              <Text style={styles.sectionHint}>Popular UK areas</Text>
+            ) : null
+          }
         />
       </SafeAreaView>
     </Modal>
@@ -132,8 +293,38 @@ const styles = StyleSheet.create({
     color: '#333',
     paddingVertical: 0,
   },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: '#888',
+  },
+  sectionHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
   listContent: {
     paddingVertical: SPACING.sm,
+    flexGrow: 1,
+  },
+  emptyWrap: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 32,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#888',
+    lineHeight: 20,
+    textAlign: 'center',
   },
   locationItem: {
     flexDirection: 'row',

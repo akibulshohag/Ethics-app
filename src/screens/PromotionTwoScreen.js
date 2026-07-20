@@ -23,57 +23,54 @@ const PromoDetailsScreen = () => {
   const menuItem = route.params?.menuItem;
   const menuItems = route.params?.menuItems ?? [];
 
-  const hasData = promotion && menuItem;
+  const hasData = !!(promotion && menuItem);
   const ownerId = promotion?.userId ?? promotion?.user?.id ?? null;
   const location = (hasData && promotion?.user?.address) || '';
   const orderTitle = (hasData && (menuItem?.itemName || promotion?.title)) || '';
 
   const restaurantName =
-    (hasData && (promotion?.user?.nickname || promotion?.user?.name)) ||
-    'Tandoori Planet';
-  const restaurantSub =
-    (hasData && promotion?.user?.address) || '42 min - Birmingham, UK';
+    (hasData && (promotion?.user?.nickname || promotion?.user?.name)) || '';
+  const restaurantSub = (hasData && promotion?.user?.address) || '';
   const heroImageUri = hasData
     ? safeImageUri(
         menuItem?.imageUrl || promotion?.thumbnailUrl || promotion?.videoUrl,
-        'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0',
       )
-    : 'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0';
-  const promoCode = (hasData && promotion?.promoCode) || 'MULEN300FF';
+    : '';
+  const promoCode = (hasData && promotion?.promoCode) || '';
   const offerText =
     hasData && promotion?.promoAmount != null
       ? `Get Flat ${promotion.promoAmount}% OFF`
-      : 'Get Flat 30% OFF';
+      : '';
 
   const moreOffers = hasData
     ? menuItems.filter(m => m.id !== menuItem?.id).slice(0, 4)
     : [];
 
   const handleCopyPromo = () => {
+    if (!promoCode) return;
     Share.share({ message: promoCode, title: 'Promo Code' }).catch(() => {});
   };
 
   const handleOrderPress = () => {
+    if (!hasData) return;
     if (!user?.token) {
       navigation.navigate('Home1', {
         screen: 'HomeSevenScreen',
         params: { returnToOrder: true, ownerUserId: ownerId },
       });
+    } else if (ownerId) {
+      navigation.navigate('Home1', {
+        screen: 'HomeThreeScreen',
+        params: {
+          ownerId,
+          ownerName: restaurantName,
+          title: orderTitle,
+          location,
+          singleMenuItem: menuItem,
+        },
+      });
     } else {
-      if (ownerId) {
-        navigation.navigate('Home1', {
-          screen: 'HomeThreeScreen',
-          params: {
-            ownerId,
-            ownerName: restaurantName,
-            title: orderTitle,
-            location,
-            singleMenuItem: hasData ? menuItem : undefined,
-          },
-        });
-      } else {
-        navigation.navigate('Home1', { screen: 'HomeThreeScreen' });
-      }
+      navigation.navigate('Home1', { screen: 'HomeThreeScreen' });
     }
   };
 
@@ -87,20 +84,22 @@ const PromoDetailsScreen = () => {
     }
   };
 
-  const OfferCard = ({ item, isStatic, name: staticName }) => {
-    const name = item ? item.itemName || 'Item' : staticName || 'Offer';
-    const imageUri = item?.imageUrl
-      ? safeImageUri(item.imageUrl)
-      : 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+  const OfferCard = ({ item }) => {
+    if (!item) return null;
+    const name = item.itemName || 'Item';
+    const imageUri = safeImageUri(item.imageUrl);
     const priceStr =
-      item?.price != null ? `€${Number(item.price).toFixed(2)}` : 'UPTO €3';
+      item?.price != null ? `€${Number(item.price).toFixed(2)}` : '';
+    const percentLabel =
+      promotion?.promoAmount != null
+        ? `${promotion.promoAmount}% OFF`
+        : offerText || 'Offer';
 
     return (
       <TouchableOpacity
         style={styles.offerCard}
-        onPress={() => item && handleOfferPress(item)}
-        activeOpacity={item ? 0.8 : 1}
-        disabled={!item}
+        onPress={() => handleOfferPress(item)}
+        activeOpacity={0.8}
       >
         <View style={styles.cardOrangeLabel}>
           <Text style={styles.cardLabelText} numberOfLines={1}>
@@ -112,14 +111,9 @@ const PromoDetailsScreen = () => {
         </View>
         <View style={styles.offerFooter}>
           <Text style={styles.flatText}>
-            Get Flat{' '}
-            <Text style={styles.orangeText}>
-              {promotion?.promoAmount != null
-                ? `${promotion.promoAmount}% OFF`
-                : '30% OFF'}
-            </Text>
+            Get Flat <Text style={styles.orangeText}>{percentLabel}</Text>
           </Text>
-          <Text style={styles.uptoText}>{priceStr}</Text>
+          {priceStr ? <Text style={styles.uptoText}>{priceStr}</Text> : null}
         </View>
       </TouchableOpacity>
     );
@@ -137,73 +131,104 @@ const PromoDetailsScreen = () => {
           <Icon name="chevron-left" size={18} color="#FFF" />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Icon name="dots-vertical" size={24} color="#666" />
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <View>
-              <Text style={styles.restaurantName}>{restaurantName}</Text>
-              <Text style={styles.restaurantSub}>{restaurantSub}</Text>
+      {!hasData ? (
+        <View style={styles.emptyWrap}>
+          <Icon name="tag-off-outline" size={48} color="#F5A623" />
+          <Text style={styles.emptyTitle}>Promotion unavailable</Text>
+          <Text style={styles.emptyText}>
+            This offer could not be loaded. Go back and open a promotion from
+            the restaurant page.
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptyBtnText}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.restaurantName}>{restaurantName}</Text>
+                {restaurantSub ? (
+                  <Text style={styles.restaurantSub}>{restaurantSub}</Text>
+                ) : null}
+              </View>
+              <TouchableOpacity
+                style={styles.orderNowBtn}
+                onPress={handleOrderPress}
+              >
+                <Text style={styles.orderNowText}>
+                  {!user?.token ? 'Login' : 'Order Now'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.orderNowBtn}
-              onPress={handleOrderPress}
-            >
-              <Text style={styles.orderNowText}>
-                {!user?.token ? 'Login' : 'Order Now'}
+
+            {heroImageUri ? (
+              <Image source={{ uri: heroImageUri }} style={styles.heroImage} />
+            ) : (
+              <View style={[styles.heroImage, styles.heroImageFallback]}>
+                <Icon name="food" size={40} color="#bbb" />
+              </View>
+            )}
+
+            {promoCode ? (
+              <>
+                <Text style={styles.promoHeader}>Promo Code</Text>
+                <View style={styles.promoInputContainer}>
+                  <View style={styles.promoCodeBox}>
+                    <Text style={styles.promoCodeValue}>{promoCode}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.copyBtn}
+                    onPress={handleCopyPromo}
+                  >
+                    <Text style={styles.copyBtnText}>Copy Promo Code</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : offerText ? (
+              <Text style={styles.promoHeader}>{offerText}</Text>
+            ) : null}
+
+            <Text style={styles.termsTitle}>Terms and Conditions</Text>
+            <View style={styles.termRow}>
+              <Icon name="record" size={8} color="#666" style={styles.dot} />
+              <Text style={styles.termText}>
+                {promotion?.description
+                  ? promotion.description
+                  : 'This promo code can be used once per order.'}
               </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Image source={{ uri: heroImageUri }} style={styles.heroImage} />
-
-          <Text style={styles.promoHeader}>Promo Code</Text>
-
-          <View style={styles.promoInputContainer}>
-            <View style={styles.promoCodeBox}>
-              <Text style={styles.promoCodeValue}>{promoCode}</Text>
             </View>
-            <TouchableOpacity style={styles.copyBtn} onPress={handleCopyPromo}>
-              <Text style={styles.copyBtnText}>Copy Promo Code</Text>
-            </TouchableOpacity>
+            <View style={styles.termRow}>
+              <Icon name="record" size={8} color="#666" style={styles.dot} />
+              <Text style={styles.termText}>
+                Valid at participating locations only.
+              </Text>
+            </View>
           </View>
 
-          <Text style={styles.termsTitle}>Terms and Conditions</Text>
-          <View style={styles.termRow}>
-            <Icon name="record" size={8} color="#666" style={styles.dot} />
-            <Text style={styles.termText}>
-              {hasData && promotion?.description
-                ? promotion.description
-                : 'This promo code used ones per order'}
-            </Text>
-          </View>
-          <View style={styles.termRow}>
-            <Icon name="record" size={8} color="#666" style={styles.dot} />
-            <Text style={styles.termText}>
-              Valid at participating locations only.
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>More Offers</Text>
-        <View style={styles.offersGrid}>
-          <OfferCard
-            item={moreOffers[0]}
-            isStatic={!moreOffers[0]}
-            name="Tandoori Planet"
-          />
-          <OfferCard
-            item={moreOffers[1]}
-            isStatic={!moreOffers[1]}
-            name="Streetly balty"
-          />
-        </View>
-      </ScrollView>
+          {moreOffers.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>More Offers</Text>
+              <View style={styles.offersGrid}>
+                {moreOffers.map(item => (
+                  <OfferCard key={String(item.id)} item={item} />
+                ))}
+              </View>
+            </>
+          ) : null}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -226,6 +251,34 @@ const styles = StyleSheet.create({
   },
   backText: { color: '#FFF', fontSize: 13, fontWeight: 'bold', marginLeft: 4 },
   scrollContent: { paddingHorizontal: 15, paddingBottom: 30 },
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  emptyTitle: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111',
+    textAlign: 'center',
+  },
+  emptyText: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#666',
+    textAlign: 'center',
+  },
+  emptyBtn: {
+    marginTop: 20,
+    backgroundColor: '#F5A623',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
 
   infoCard: {
     backgroundColor: '#F2F2F2',
@@ -249,6 +302,11 @@ const styles = StyleSheet.create({
   },
   orderNowText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   heroImage: { width: '100%', height: 200, borderRadius: 20, marginBottom: 15 },
+  heroImageFallback: {
+    backgroundColor: '#E8E8E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   promoHeader: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -265,7 +323,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   promoCodeBox: { flex: 1, justifyContent: 'center', paddingLeft: 15 },
-  promoCodeValue: { color: '#999', fontSize: 14 },
+  promoCodeValue: { color: '#333', fontSize: 14, fontWeight: '600' },
   copyBtn: {
     backgroundColor: '#F5A623',
     paddingHorizontal: 15,
@@ -276,7 +334,7 @@ const styles = StyleSheet.create({
   termsTitle: { fontSize: 13, color: '#666', marginBottom: 5 },
   termRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
   dot: { marginRight: 8 },
-  termText: { fontSize: 11, color: '#666' },
+  termText: { fontSize: 11, color: '#666', flex: 1 },
 
   sectionTitle: {
     fontSize: 16,

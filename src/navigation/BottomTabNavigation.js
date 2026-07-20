@@ -27,7 +27,6 @@ import PromotionTwoNavigation from './PromotionTwoStack';
 import PromotionThreeNavigation from './PromotionThreeStack';
 import UProfileNavigation from './UProfileStack';
 import VProfileNavigation from './VProfileStack';
-import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import CreateVideoModalScreen from '../screens/CreateVideoModalScreen';
 import AdminScreen from '../screens/AdminScreen';
 import LiveOrdersScreen from '../screens/LiveOrdersScreen';
@@ -119,16 +118,6 @@ const BottomNaivgation = () => {
     role === 'super_admin' ||
     role === 'super-admin';
   const showVProfileTab = role === 'vendor';
-
-  const requireLogin = (e, tabName) => {
-    if (!user) {
-      e.preventDefault();
-      navigation.navigate('Root', {
-        screen: 'Home1',
-        params: { screen: 'HomeSevenScreen' },
-      });
-    }
-  };
 
   const Tab = createBottomTabNavigator();
 
@@ -368,22 +357,6 @@ const BottomNaivgation = () => {
             }}
           />
 
-          {/* <Tab.Screen
-            name="Subscriptions"
-            component={SubscriptionsScreen}
-            listeners={{
-              tabPress: e => requireLogin(e, 'Subscriptions'),
-            }}
-            options={{
-              tabBarIcon: ({ focused, color }) => (
-                <Icon
-                  name="youtube-subscription"
-                  size={28}
-                  color={focused ? COLORS.primaryOrange : COLORS.gray500}
-                />
-              ),
-            }}
-          /> */}
           {/* {(isOwner || isVendor) && (
             <Tab.Screen
               name="Profile"

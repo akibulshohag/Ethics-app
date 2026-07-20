@@ -32,7 +32,7 @@ import {
 } from '../services/channelService';
 import { getUserVideos } from '../services/videoService';
 import { shortsService } from '../services/shortsService';
-import { safeImageUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri} from '../utils/helper';
 
 const TABS = ['Home', 'Videos', 'About'];
 const FILTERS = ['Videos', 'Shorts'];
@@ -70,7 +70,7 @@ const mapVideoApiToDisplay = v => {
   const viewCount = v.viewCount ?? v._count?.views ?? 0;
   const channelName = user.nickname || user.name || 'Unknown';
   const rawAvatar = user.photos?.[0]?.src ?? (Array.isArray(user.photos) && user.photos[0]?.src);
-  const channelAvatar = safeImageUri(rawAvatar) === 'https://via.placeholder.com/100'
+  const channelAvatar = safeImageUri(rawAvatar) === IMAGE_PLACEHOLDER
     ? `https://ui-avatars.com/api/?name=${encodeURIComponent(channelName)}&background=111&color=fff`
     : safeImageUri(rawAvatar);
   const pubAt = v.publishedAt || v.createdAt;
@@ -81,7 +81,7 @@ const mapVideoApiToDisplay = v => {
     channelAvatar,
     views: `${formatCount(viewCount)} views`,
     publishedAt: formatTimeAgo(pubAt),
-    thumbnail: safeImageUri(v.thumbnailUrl || v.videoUrl, 'https://via.placeholder.com/300'),
+    thumbnail: safeImageUri(v.thumbnailUrl || v.videoUrl, IMAGE_PLACEHOLDER),
     duration: formatDuration(v.duration),
     userId: v.userId,
   };
@@ -93,7 +93,7 @@ const mapShortApiToDisplay = s => {
     id: s.id,
     title: (s.title || 'Untitled').slice(0, 50) + (s.title?.length > 50 ? '...' : ''),
     views: `${formatCount(viewCount)} views`,
-    thumbnail: safeImageUri(s.thumbnailUrl || s.videoUrl, 'https://via.placeholder.com/300'),
+    thumbnail: safeImageUri(s.thumbnailUrl || s.videoUrl, IMAGE_PLACEHOLDER),
   };
 };
 
@@ -241,7 +241,7 @@ const ChannelDetailsScreen = () => {
 
       {activeTab === 'Home' && profile && (
         <View style={styles.profileContainer}>
-          <Image source={{ uri: safeImageUri(profile.channelAvatar, 'https://via.placeholder.com/100') }} style={styles.profileAvatar} />
+          <Image source={{ uri: safeImageUri(profile.channelAvatar, IMAGE_PLACEHOLDER) }} style={styles.profileAvatar} />
           <View style={styles.nameContainer}>
             <Text style={styles.profileName}>{profile.channelName}</Text>
             <MaterialCommunityIcons name="check-decagram" size={16} color="#3ea6ff" style={styles.verifiedIcon} />

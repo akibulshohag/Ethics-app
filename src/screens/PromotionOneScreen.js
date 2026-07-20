@@ -55,42 +55,7 @@ const PromotionsScreen = () => {
     }
   };
 
-  // Static placeholders when no API data (same design, no layout change)
-  const STATIC_CARDS = [
-    { name: 'Tandoori Planet' },
-    { name: 'Streetly balty' },
-    { name: 'Bangal hub' },
-    { name: 'Indian Grill' },
-    { name: 'Streetly balty' },
-    { name: 'Tandoori Planet' },
-  ];
-
-  const PromotionCard = ({ promotion, isStatic }) => {
-    if (isStatic) {
-      return (
-        <View style={styles.promoCard}>
-          <View style={styles.cardOrangeHeader}>
-            <Text style={styles.cardHeaderText} numberOfLines={1}>
-              {promotion.name}
-            </Text>
-          </View>
-          <View style={styles.imageContainer}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-              }}
-              style={styles.foodImage}
-            />
-          </View>
-          <View style={styles.cardFooter}>
-            <Text style={styles.getFlatText}>
-              Get Flat <Text style={styles.highlightText}>30% OFF</Text>
-            </Text>
-            <Text style={styles.uptoText}>UPTO $3</Text>
-          </View>
-        </View>
-      );
-    }
+  const PromotionCard = ({ promotion }) => {
     const name =
       promotion?.title ||
       promotion?.user?.nickname ||
@@ -99,7 +64,7 @@ const PromotionsScreen = () => {
     const imageUri =
       promotion?.thumbnailUrl ||
       promotion?.videoUrl ||
-      'https://images.unsplash.com/photo-1568901346375-23c9450c58cd';
+      '';
     const offerText =
       promotion?.promoAmount != null
         ? `Get Flat ${promotion.promoAmount}% OFF`
@@ -175,17 +140,24 @@ const PromotionsScreen = () => {
         }
       >
         <View style={styles.promoGrid}>
-          {promotions.length > 0
-            ? promotions.map((p, idx) => (
-                <PromotionCard
-                  key={p.id || idx}
-                  promotion={p}
-                  isStatic={false}
-                />
-              ))
-            : STATIC_CARDS.map((s, idx) => (
-                <PromotionCard key={`static-${idx}`} promotion={s} isStatic />
-              ))}
+          {loading && promotions.length === 0 ? (
+            <ActivityIndicator
+              size="large"
+              color="#F5A623"
+              style={{ marginTop: 40, alignSelf: 'center' }}
+            />
+          ) : promotions.length > 0 ? (
+            promotions.map((p, idx) => (
+              <PromotionCard key={p.id || idx} promotion={p} />
+            ))
+          ) : (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyTitle}>No promotions nearby</Text>
+              <Text style={styles.emptyText}>
+                Pull to refresh, or check back when restaurants add offers.
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -240,6 +212,19 @@ const styles = StyleSheet.create({
   loadingWrap: { paddingVertical: 40, alignItems: 'center' },
   loadingText: { marginTop: 8, fontSize: 14, color: '#666' },
   emptyText: { fontSize: 14, color: '#888', textAlign: 'center' },
+  emptyWrap: {
+    width: '100%',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
   promoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

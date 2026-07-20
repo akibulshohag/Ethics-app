@@ -3,7 +3,6 @@ import {
   StyleSheet,
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   StatusBar,
@@ -152,11 +151,6 @@ const HomeThreeScreen = ({ onBack }) => {
       !(Array.isArray(promotionMenuItems) && promotionMenuItems.length > 0),
   );
   const [selectedItems, setSelectedItems] = useState({});
-  const [staticQuantities, setStaticQuantities] = useState({
-    0: 1,
-    1: 1,
-    2: 1,
-  });
   const [menuModalVisible, setMenuModalVisible] = useState(false);
   const [filterSortModalVisible, setFilterSortModalVisible] = useState(false);
   const [appliedSort, setAppliedSort] = useState('default'); // default | price_low | price_high
@@ -794,22 +788,6 @@ const HomeThreeScreen = ({ onBack }) => {
     (a, b) => a + (b || 0),
     0,
   );
-  const staticTotal = Object.values(staticQuantities).reduce(
-    (a, b) => a + (b || 0),
-    0,
-  );
-
-  const setStaticQty = (idx, deltaOrVal) => {
-    setStaticQuantities(prev => {
-      const cur = prev[idx] ?? 0;
-      const next =
-        typeof deltaOrVal === 'function'
-          ? Math.max(0, deltaOrVal(cur))
-          : Math.max(0, deltaOrVal);
-      if (next === 0 && cur === 0) return prev;
-      return { ...prev, [idx]: next };
-    });
-  };
 
   const handleAddToCart = () => {
     const menuMap = new Map(menuItems.map(m => [m.id, m]));
@@ -841,48 +819,31 @@ const HomeThreeScreen = ({ onBack }) => {
   };
 
   const hasDynamicMenu = ownerId && menuItems.length > 0;
-  /** Real restaurant page but API returned no menu — never use demo static counts here */
+  /** Real restaurant page but API returned no menu — never use demo static items */
   const ownerHasNoMenu = !!ownerId && !hasDynamicMenu;
 
   const getItemsForHomeFour = () => {
-    if (hasDynamicMenu) {
-      const menuMap = new Map(menuItems.map(m => [m.id, m]));
-      return Object.entries(selectedItems)
-        .filter(([, q]) => q > 0)
-        .map(([menuItemId, quantity]) => {
-          const menuItem = menuMap.get(menuItemId);
-          return {
-            menuItemId,
-            itemName: menuItem?.itemName || 'Item',
-            description: menuItem?.description || '',
-            price: menuItem?.price ?? 0,
-            quantity,
-            currency: 'GBP',
-            imageUrl: menuItem?.imageUrl,
-          };
-        });
-    }
-    if (ownerId) {
-      return [];
-    }
-    return [0, 1, 2]
-      .filter(idx => (staticQuantities[idx] ?? 0) > 0)
-      .map(idx => ({
-        menuItemId: `static-${idx}`,
-        itemName: 'Tandoori Chicken',
-        price: 12.99,
-        quantity: staticQuantities[idx] ?? 0,
-        currency: 'GBP',
-      }));
+    if (!hasDynamicMenu) return [];
+    const menuMap = new Map(menuItems.map(m => [m.id, m]));
+    return Object.entries(selectedItems)
+      .filter(([, q]) => q > 0)
+      .map(([menuItemId, quantity]) => {
+        const menuItem = menuMap.get(menuItemId);
+        return {
+          menuItemId,
+          itemName: menuItem?.itemName || 'Item',
+          description: menuItem?.description || '',
+          price: menuItem?.price ?? 0,
+          quantity,
+          currency: 'GBP',
+          imageUrl: menuItem?.imageUrl,
+        };
+      });
   };
 
   const itemsForCheckout = getItemsForHomeFour();
-  const displayCount = hasDynamicMenu
-    ? totalCount
-    : ownerId
-    ? totalCount
-    : staticTotal;
-  const cartBarDisabled = ownerHasNoMenu;
+  const displayCount = totalCount;
+  const cartBarDisabled = !hasDynamicMenu;
 
   const renderMenuItemCard = item => {
     const qty = selectedItems[item.id] || 0;
@@ -1061,63 +1022,14 @@ const HomeThreeScreen = ({ onBack }) => {
               filteredMenuForDisplay.map(renderMenuItemCard)
             ) : null}
           </>
-        ) : ownerId ? (
+        ) : (
           <View style={styles.emptyMenu}>
             <Text style={styles.emptyMenuText}>
-              No menu items yet. Restaurant owner can add menu in profile.
+              {ownerId
+                ? 'No menu items yet. Restaurant owner can add menu in profile.'
+                : 'No restaurant selected. Open a restaurant to view its menu.'}
             </Text>
           </View>
-        ) : (
-          <>
-            <Text style={styles.sectionHeading}>Most Ordered</Text>
-            {[0, 1, 2].map(idx => {
-              const qty = staticQuantities[idx] ?? 0;
-              return (
-                <View key={idx} style={styles.menuItemCard}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemTitle}>Tandoori Chicken</Text>
-                    <View style={styles.starsRow}>
-                      {[1, 2, 3, 4, 5].map(s => (
-                        <Icon key={s} name="star" size={16} color="#F5A623" />
-                      ))}
-                    </View>
-                    <Text style={styles.itemPrice}>$12.99</Text>
-                    <Text style={styles.itemDesc} numberOfLines={3}>
-                      A cozy restaurant serving fresh, delicious food.
-                    </Text>
-                  </View>
-                  <View style={styles.imageContainer}>
-                    <Image
-                      source={{
-                        uri: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd',
-                      }}
-                      style={styles.itemImage}
-                    />
-                    <View style={styles.stepperContainer}>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => setStaticQty(idx, n => n - 1)}
-                        disabled={qty === 0}
-                      >
-                        <Icon
-                          name="minus"
-                          size={18}
-                          color={qty === 0 ? '#999' : '#FFF'}
-                        />
-                      </TouchableOpacity>
-                      <Text style={styles.stepperVal}>{qty}</Text>
-                      <TouchableOpacity
-                        style={styles.stepperBtn}
-                        onPress={() => setStaticQty(idx, n => n + 1)}
-                      >
-                        <Icon name="plus" size={18} color="#FFF" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-          </>
         )}
 
         <View style={styles.bottomSpace} />
@@ -1147,7 +1059,7 @@ const HomeThreeScreen = ({ onBack }) => {
               cartBarDisabled && styles.cartTextDisabled,
             ]}
           >
-            {ownerHasNoMenu
+            {ownerHasNoMenu || !ownerId
               ? '0 item added'
               : displayCount > 0
               ? `${displayCount} item${displayCount !== 1 ? 's' : ''} added`

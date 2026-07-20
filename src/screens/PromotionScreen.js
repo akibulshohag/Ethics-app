@@ -84,7 +84,7 @@ import {
   PROMO_NEARBY_RADIUS_KM,
 } from '../services/userLocationService';
 import { appSetUser, setBrowseLocation } from '../redux/actions/appSlice';
-import { safeImageUri, isLocalMediaUri } from '../utils/helper';
+import {IMAGE_PLACEHOLDER, safeImageUri, isLocalMediaUri} from '../utils/helper';
 import { navigateToHomeOneLibraryDetail } from '../utils/navigateHomeLibraryDetail';
 import {
   buildOwnerScopedShortsFeed,
@@ -272,7 +272,7 @@ const mapPostToCardTab = (post, user) => {
     publishedAt: formatTimeAgoTab(post.publishedAt || post.createdAt),
     sortTime: new Date(post.publishedAt || post.createdAt || 0).getTime() || 0,
     thumbnail:
-      post.thumbnailUrl || post.mediaUrl || 'https://via.placeholder.com/300',
+      post.thumbnailUrl || post.mediaUrl || IMAGE_PLACEHOLDER,
     duration,
     likes: formatCountTab(post.likeCount ?? 0),
     dislikes: formatCountTab(post.dislikeCount ?? 0),
@@ -325,7 +325,7 @@ const mapShortToPostCardTab = (shortItem, profile, userId) => {
       shortItem.thumbnailUrl ||
       shortItem.coverUrl ||
       shortItem.videoUrl ||
-      'https://via.placeholder.com/300',
+      IMAGE_PLACEHOLDER,
     duration,
     likes: formatCountTab(shortItem.likeCount ?? 0),
     dislikes: formatCountTab(shortItem.dislikeCount ?? 0),
@@ -948,7 +948,7 @@ const PromotionScreen = ({ onBack }) => {
         mediaUrl: media,
         thumbnail: safeImageUri(
           p?.thumbnailUrl || p?.mediaUrl,
-          'https://via.placeholder.com/600',
+          IMAGE_PLACEHOLDER,
         ),
         isScheduled: isFutureScheduledMedia(p),
         createdAt:
@@ -966,7 +966,7 @@ const PromotionScreen = ({ onBack }) => {
       mediaUrl: String(v?.videoUrl || '').trim(),
       thumbnail: safeImageUri(
         v?.thumbnailUrl || v?.videoUrl,
-        'https://via.placeholder.com/600',
+        IMAGE_PLACEHOLDER,
       ),
       type: v?.type || v?._type || v?.contentType || '',
       isShort: v?.type === 'short' || Boolean(v?.isShort),
@@ -983,7 +983,7 @@ const PromotionScreen = ({ onBack }) => {
       subtitle: formatTimeAgoTab(g?.createdAt),
       mediaType: 'image',
       mediaUrl: String(g?.src || '').trim(),
-      thumbnail: safeImageUri(g?.src, 'https://via.placeholder.com/600'),
+      thumbnail: safeImageUri(g?.src, IMAGE_PLACEHOLDER),
       createdAt: new Date(g?.createdAt || 0).getTime() || Date.now(),
       likeCount: g.likeCount ?? 0,
       dislikeCount: g.dislikeCount ?? 0,
@@ -1167,7 +1167,7 @@ const PromotionScreen = ({ onBack }) => {
         subtitle: formatTimeAgoTab(p?.createdAt),
         mediaType: 'image',
         mediaUrl: String(p?.src || '').trim(),
-        thumbnail: safeImageUri(p?.src, 'https://via.placeholder.com/600'),
+        thumbnail: safeImageUri(p?.src, IMAGE_PLACEHOLDER),
         likeCount: p.likeCount ?? 0,
         dislikeCount: p.dislikeCount ?? 0,
         commentCount: p.commentCount ?? 0,
@@ -2481,7 +2481,7 @@ const PromotionScreen = ({ onBack }) => {
     if (item.thumbnailUrl) return safeImageUri(item.thumbnailUrl);
     if (item.type === 'short' && item.coverUrl)
       return safeImageUri(item.coverUrl);
-    return 'https://via.placeholder.com/200';
+    return IMAGE_PLACEHOLDER;
   };
 
   const mostLikedThumbs = mostLikedItems.map(it => ({
@@ -2859,7 +2859,9 @@ const PromotionScreen = ({ onBack }) => {
                         ? profileAvatarUri
                         : null) ||
                       (profilePhotoUri &&
-                      !String(profilePhotoUri).includes('via.placeholder')
+                      !/via\.placeholder|image-placeholder|avatar-placeholder/i.test(
+                        String(profilePhotoUri),
+                      )
                         ? profilePhotoUri
                         : null) ||
                       item.channelAvatar;
