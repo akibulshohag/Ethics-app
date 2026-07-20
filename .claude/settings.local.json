@@ -31,7 +31,10 @@
       "Bash(rm -rf android/app/build/generated/autolinking)",
       "Bash(rm -rf android/app/.cxx)",
       "Bash(rm -rf node_modules/@react-native-firebase/app/android/.cxx node_modules/@react-native-firebase/auth/android/.cxx)",
-      "Bash(tee /private/tmp/claude-501/-Users-pino-Documents-live-company-savassachi-eatix-Ethics-app/581577f1-b74e-4f80-8316-d8d0c8e578c1/scratchpad/android_run3.log)"
+      "Bash(tee /private/tmp/claude-501/-Users-pino-Documents-live-company-savassachi-eatix-Ethics-app/581577f1-b74e-4f80-8316-d8d0c8e578c1/scratchpad/android_run3.log)",
+      "Bash(java -version)",
+      "Bash(nohup emulator -avd Pixel_9 -no-snapshot-load)",
+      "Bash(adb wait-for-device *)"
     ]
   }
 }

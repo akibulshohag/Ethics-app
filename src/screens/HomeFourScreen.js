@@ -1575,13 +1575,19 @@ const HomeFourScreen = ({ onBack }) => {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
         <View style={styles.paymentMethod}>
-          <TouchableOpacity style={styles.payUsingBtn}>
-            <Text style={styles.payUsingLabel}>Pay Using</Text>
-            <Icon name="menu-up" size={24} color="#666" />
-          </TouchableOpacity>
+          <Text style={styles.payUsingLabel}>Pay Using</Text>
           <Text style={styles.methodName}>
-            {paymentConfig.enabled ? 'Card / Google Pay' : 'Pay at checkout'}
+            {paymentConfig.enabled
+              ? Platform.OS === 'ios'
+                ? 'Card / Apple Pay'
+                : 'Card / Google Pay'
+              : 'Pay at checkout'}
           </Text>
+          {paymentConfig.enabled ? (
+            <Text style={styles.payUsingHint}>
+              Choose method in the next step
+            </Text>
+          ) : null}
         </View>
 
         <TouchableOpacity
@@ -2092,11 +2098,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 10,
     width: '35%',
-  },
-  payUsingBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   payUsingLabel: { fontSize: 12, color: '#999' },
   methodName: {
@@ -2104,6 +2106,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1A1A1A',
     marginTop: 2,
+  },
+  payUsingHint: {
+    fontSize: 10,
+    color: '#999',
+    marginTop: 4,
+    lineHeight: 13,
   },
   placeOrderBtn: {
     backgroundColor: '#F5A623',
