@@ -21,8 +21,8 @@ const SHEET_OVERLAP = 88;
 const SHEET_GAP = 12;
 /** Space between hero top edge and profile avatar (all profile cards) */
 const PROFILE_AVATAR_TOP_GAP = 20;
-/** Rounded top where hero meets orange app header */
-const HERO_TOP_RADIUS = 20;
+/** Rounded top where hero meets orange app header — 0 so no white corner gap under nav */
+const HERO_TOP_RADIUS = 0;
 const HEADER_ORANGE = '#F6B041';
 
 /** Figma stats row — solid white card */
@@ -152,6 +152,7 @@ const UserProfileCard = ({
   const isFoodExplorerUser = profileRole === 'user';
   const isBusinessProfile = profileRole === 'owner' || profileRole === 'vendor';
   const showRating = !isFoodExplorerUser;
+  const showSelfEditHero = !!onEditProfile;
   const showBioSubscribe = showSubscribe && !subscribeInExplorerBar;
   const showBioActions =
     (showPromotionsButton || showBioSubscribe) && !showSelfEditHero;
@@ -159,8 +160,15 @@ const UserProfileCard = ({
     isBusinessProfile &&
     !onEditProfile &&
     !!(onOrderNowPress || onBookNowPress);
-  const showSelfEditHero = !!onEditProfile;
-  const showExplorerBar = !showSelfEditHero;
+  const showExplorerBar =
+    !showSelfEditHero &&
+    (isFoodExplorerUser || showRating || (subscribeInExplorerBar && showSubscribe));
+  const showExplorerSubscribe = subscribeInExplorerBar && showSubscribe;
+  const compactExplorer =
+    Platform.OS === 'ios' && showExplorerSubscribe && showRating;
+  const explorerLabel = 'Food Explorer';
+  const isJoined = isSubscribed || ctaText === 'Subscribed';
+  const explorerSubscribeLabel = isJoined ? 'Subscribed' : 'Subscribe';
 
   const AvatarWrapper = onAvatarPress && canEdit ? TouchableOpacity : View;
   const avatarWrapperProps =
@@ -208,7 +216,12 @@ const UserProfileCard = ({
         ) : null}
 
         {/* Profile on image */}
-        <View style={styles.profileTop}>
+        <View
+          style={[
+            styles.profileTop,
+            showExplorerSubscribe && styles.profileTopWithExplorerSub,
+          ]}
+        >
           {showOrderBook ? (
             <View style={styles.profileHeroRow}>
               <View style={styles.profileHeroBalance} />
@@ -325,74 +338,100 @@ const UserProfileCard = ({
           {showExplorerBar ? (
             <View
               style={[
-                styles.explorerRatingBarOuter,
-                !showRating && !subscribeInExplorerBar && styles.explorerRatingBarSolo,
+                styles.explorerBlock,
+                showExplorerSubscribe && styles.explorerBlockAboveSheet,
               ]}
             >
-              <View style={styles.explorerSegment}>
-                <Text style={styles.foodExplorerText}>Food Explorer</Text>
-              </View>
-              {subscribeInExplorerBar && showSubscribe ? (
-                isSubscribed || ctaText === 'Subscribed' ? (
-                  <TouchableOpacity
-                    onPress={onSubscribe}
-                    disabled={buttonDisabled}
-                    activeOpacity={0.85}
-                    style={styles.subscribeHeroSegment}
+              <View
+                style={[
+                  styles.explorerRatingBarOuter,
+                  compactExplorer && styles.explorerRatingBarCompact,
+                  !showRating &&
+                    !showExplorerSubscribe &&
+                    styles.explorerRatingBarSolo,
+                ]}
+              >
+                <View style={styles.explorerSegment}>
+                  <Text
+                    style={styles.foodExplorerText}
+                    numberOfLines={1}
+                    allowFontScaling={false}
                   >
-                    <LinearGradient
-                      colors={SUBSCRIBED_BTN_GRADIENT.colors}
-                      start={SUBSCRIBED_BTN_GRADIENT.start}
-                      end={SUBSCRIBED_BTN_GRADIENT.end}
+                    {explorerLabel}
+                  </Text>
+                </View>
+                {showExplorerSubscribe ? (
+                  isJoined ? (
+                    <TouchableOpacity
+                      onPress={onSubscribe}
+                      disabled={buttonDisabled}
+                      activeOpacity={0.85}
                       style={[
-                        styles.subscribeHeroSegmentInner,
-                        (subscribeLoading || buttonDisabled) &&
-                          styles.subscribeBtnDisabled,
+                        styles.subscribeHeroSegment,
+                        styles.subscribeHeroSegmentFixed,
+                        styles.subscribeHeroSegmentJoined,
                       ]}
                     >
                       {subscribeLoading ? (
                         <ActivityIndicator size="small" color="#FFF" />
                       ) : (
-                        <Text style={styles.subscribeHeroText}>
-                          {buttonLabel}
+                        <View style={styles.subscribeJoinedInner}>
+                          <Icon name="check-bold" size={12} color="#FFF" />
+                          <Text
+                            style={styles.subscribeHeroText}
+                            numberOfLines={1}
+                            allowFontScaling={false}
+                          >
+                            {explorerSubscribeLabel}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.subscribeHeroSegment,
+                        styles.subscribeHeroSegmentFixed,
+                        styles.subscribeHeroSegmentActive,
+                        (subscribeLoading || buttonDisabled) &&
+                          styles.subscribeBtnDisabled,
+                      ]}
+                      onPress={onSubscribe}
+                      disabled={buttonDisabled}
+                      activeOpacity={0.85}
+                    >
+                      {subscribeLoading ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Text
+                          style={styles.subscribeHeroText}
+                          numberOfLines={1}
+                          allowFontScaling={false}
+                        >
+                          {explorerSubscribeLabel}
                         </Text>
                       )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                ) : (
+                    </TouchableOpacity>
+                  )
+                ) : null}
+                {showRating ? (
                   <TouchableOpacity
                     style={[
-                      styles.subscribeHeroSegment,
-                      styles.subscribeHeroSegmentActive,
-                      (subscribeLoading || buttonDisabled) &&
-                        styles.subscribeBtnDisabled,
+                      styles.ratingSegment,
+                      compactExplorer && styles.ratingSegmentCompact,
                     ]}
-                    onPress={onSubscribe}
-                    disabled={buttonDisabled}
-                    activeOpacity={0.85}
+                    onPress={onPressReviews}
+                    disabled={!onPressReviews}
+                    activeOpacity={onPressReviews ? 0.85 : 1}
                   >
-                    {subscribeLoading ? (
-                      <ActivityIndicator size="small" color="#FFF" />
-                    ) : (
-                      <Text style={styles.subscribeHeroText}>{buttonLabel}</Text>
-                    )}
+                    <Icon name="star" size={12} color="#F5A623" />
+                    <Text style={styles.ratingPillValue}>
+                      {profileRatingText}
+                    </Text>
+                    {compactExplorer ? null : renderStarRow(averageRating)}
                   </TouchableOpacity>
-                )
-              ) : null}
-              {showRating ? (
-                <TouchableOpacity
-                  style={styles.ratingSegment}
-                  onPress={onPressReviews}
-                  disabled={!onPressReviews}
-                  activeOpacity={onPressReviews ? 0.85 : 1}
-                >
-                  <Icon name="star" size={13} color="#F5A623" />
-                  <Text style={styles.ratingPillValue}>
-                    {profileRatingText}
-                  </Text>
-                  {renderStarRow(averageRating)}
-                </TouchableOpacity>
-              ) : null}
+                ) : null}
+              </View>
             </View>
           ) : null}
         </View>
@@ -573,9 +612,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: PROFILE_AVATAR_TOP_GAP,
     paddingBottom: SHEET_OVERLAP + 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     zIndex: 1,
     position: 'relative',
+  },
+  profileTopWithExplorerSub: {
+    // Extra space so the same-row Explorer | Subscribed | Rating bar clears the sheet
+    paddingBottom: SHEET_OVERLAP + 28,
   },
   profileHeroRow: {
     flexDirection: 'row',
@@ -602,8 +645,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     overflow: 'hidden',
-    minHeight: 34,
-    minWidth: 118,
+    minHeight: 32,
+    maxWidth: 112,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
@@ -616,8 +659,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     overflow: 'hidden',
-    minHeight: 34,
-    minWidth: 118,
+    minHeight: 32,
+    maxWidth: 112,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.12,
@@ -646,7 +689,7 @@ const styles = StyleSheet.create({
   },
   topBadgeText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   avatarWrap: {
@@ -688,13 +731,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   profileLocation: {
-    color: 'rgba(255,255,255,0.92)',
+    color: '#FFFFFF',
     fontSize: 13,
     marginTop: 4,
     marginBottom: 14,
     textAlign: 'center',
+    paddingHorizontal: 8,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   heroActionRow: {
     flexDirection: 'row',
@@ -729,88 +779,115 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  explorerBlock: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  explorerBlockAboveSheet: {
+    marginBottom: 10,
+    zIndex: 6,
+  },
   explorerRatingBarOuter: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     paddingVertical: 4,
     paddingHorizontal: 4,
-    gap: 8,
-    marginBottom: 8,
+    gap: 4,
+    flexWrap: 'nowrap',
+    overflow: 'visible',
+  },
+  explorerRatingBarCompact: {
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
   explorerRatingBarSolo: {
     alignSelf: 'center',
   },
   explorerSegment: {
     backgroundColor: '#F5A623',
-    borderRadius: 8,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 20,
-    paddingRight: 20,
+    borderRadius: 7,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
     minHeight: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'center',
+    flexGrow: 0,
     flexShrink: 0,
   },
   foodExplorerText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   ratingSegment: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 20,
-    paddingRight: 20,
+    borderRadius: 7,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
     minHeight: 32,
-    gap: 4,
+    gap: 2,
+    flexGrow: 0,
     flexShrink: 0,
+  },
+  ratingSegmentCompact: {
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    minHeight: 32,
   },
   ratingPillValue: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: '#1A1A1A',
-    lineHeight: 16,
+    lineHeight: 14,
   },
   subscribeHeroSegment: {
-    borderRadius: 8,
+    borderRadius: 7,
     overflow: 'hidden',
-    flexShrink: 0,
-  },
-  subscribeHeroSegmentInner: {
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 16,
-    paddingRight: 16,
     minHeight: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  /** Fixed size so full "Subscribe" / "Subscribed" always fits */
+  subscribeHeroSegmentFixed: {
+    width: 108,
+    minWidth: 108,
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 6,
+  },
+  subscribeHeroSegmentJoined: {
+    backgroundColor: '#9AA3AF',
+    paddingVertical: 6,
+  },
+  subscribeJoinedInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
   subscribeHeroSegmentActive: {
     backgroundColor: '#F5A623',
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 16,
-    paddingRight: 16,
+    paddingVertical: 6,
     minHeight: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
   subscribeHeroText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    lineHeight: 16,
+    lineHeight: 14,
+    textAlign: 'center',
   },
   starRow: {
     flexDirection: 'row',

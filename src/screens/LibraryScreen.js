@@ -328,6 +328,7 @@ const LibraryScreen = ({ navigation }) => {
   const [likedCount, setLikedCount] = useState(0);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const [playlistCountsLoading, setPlaylistCountsLoading] = useState(false);
+  const playlistFocusAtRef = useRef(0);
 
   // Video quick-view modal (same as UserViewsScreen)
   const [videoModalVisible, setVideoModalVisible] = useState(false);
@@ -898,11 +899,15 @@ const LibraryScreen = ({ navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      if (currentUser?.id) {
-        loadPlaylistCounts();
-        if (currentView === 'library') {
-          loadCustomPlaylists();
-        }
+      if (!currentUser?.id) return;
+      const now = Date.now();
+      const last = playlistFocusAtRef.current || 0;
+      // Skip refetch if we loaded within the last 20s (tab switching).
+      if (now - last < 20_000) return;
+      playlistFocusAtRef.current = now;
+      loadPlaylistCounts();
+      if (currentView === 'library') {
+        loadCustomPlaylists();
       }
     }, [currentUser?.id, currentView, loadPlaylistCounts, loadCustomPlaylists]),
   );

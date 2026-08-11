@@ -37,7 +37,7 @@ import { isUserBlocked } from '../../utils/filterBlockedContent';
 import MenuItemThumbnail from '../../components/MenuItemThumbnail';
 import MenuAllergenRow from '../../components/MenuAllergenRow';
 import { mapMenuListRow } from '../../utils/menuListItem';
-import { viewerContentParams } from '../../utils/contentVisibility';
+import { viewerProfileContentParams } from '../../utils/contentVisibility';
 import Video from 'react-native-video';
 import Slider from '@react-native-community/slider';
 import {
@@ -1631,7 +1631,10 @@ const UserViewsScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setVideosLoading(true);
     try {
-      const visibility = viewerContentParams(currentUser, browseLocation);
+      const visibility = viewerProfileContentParams(currentUser, {
+        latitude: profile?.latitude,
+        longitude: profile?.longitude,
+      });
       const [vRes, sRes] = await Promise.all([
         getUserVideos(profileUserId, 1, 100, currentUser?.id, visibility),
         shortsService.getUserShorts(
@@ -1650,13 +1653,21 @@ const UserViewsScreen = ({ navigation }) => {
     } finally {
       setVideosLoading(false);
     }
-  }, [profileUserId, currentUser, browseLocation]);
+  }, [
+    profileUserId,
+    currentUser,
+    profile?.latitude,
+    profile?.longitude,
+  ]);
 
   const loadPosts = useCallback(async () => {
     if (!profileUserId) return;
     setPostsLoading(true);
     try {
-      const visibility = viewerContentParams(currentUser, browseLocation);
+      const visibility = viewerProfileContentParams(currentUser, {
+        latitude: profile?.latitude,
+        longitude: profile?.longitude,
+      });
       const [postRes, shortRes] = await Promise.all([
         getPostsByUser(profileUserId, 1, 50, currentUser?.id, visibility),
         shortsService.getUserShorts(
@@ -1686,7 +1697,12 @@ const UserViewsScreen = ({ navigation }) => {
     } finally {
       setPostsLoading(false);
     }
-  }, [profileUserId, currentUser, browseLocation]);
+  }, [
+    profileUserId,
+    currentUser,
+    profile?.latitude,
+    profile?.longitude,
+  ]);
 
   const openShortFromPostsTab = useCallback(
     item => {
@@ -1979,7 +1995,7 @@ const UserViewsScreen = ({ navigation }) => {
 
       {renderProfilePromotionCarousel()}
 
-      {/* Social icons row — business profiles only (hidden for role "user") */}
+      {/* Social icons — only linked accounts (no grey placeholders) */}
       {String(profile?.role || '').toLowerCase() !== 'user' ? (
         <View style={styles.profileSocialRow}>
           {(() => {
@@ -2010,81 +2026,84 @@ const UserViewsScreen = ({ navigation }) => {
               { type: 'website', icon: 'web' },
             ];
 
-            return iconOrder.map(({ type, icon, image }) => {
-              const match = normalized.find(l => l.type === type && l.url);
-              const url = match?.url || '';
-              const disabled = !url;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.profileSocialBtn,
-                    disabled && styles.profileSocialBtnDisabled,
-                  ]}
-                  disabled={disabled}
-                  onPress={() => {
-                    if (!url) return;
-                    Linking.openURL(
-                      url.startsWith('http') ? url : `https://${url}`,
-                    );
-                  }}
-                  activeOpacity={0.8}
-                >
-                  {image ? (
-                    <Image
-                      source={image}
-                      style={{
-                        width: 22,
-                        height: 22,
-                        tintColor: disabled ? '#BDBDBD' : null,
-                      }}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name={icon || getSocialIcon(type)}
-                      size={20}
-                      color={disabled ? '#BDBDBD' : '#111'}
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            });
+            const linked = iconOrder
+              .map(item => {
+                const match = normalized.find(
+                  l => l.type === item.type && l.url,
+                );
+                return match ? { ...item, url: match.url } : null;
+              })
+              .filter(Boolean);
+
+            if (!linked.length) return null;
+
+            return linked.map(({ type, icon, image, url }) => (
+              <TouchableOpacity
+                key={type}
+                style={styles.profileSocialBtn}
+                onPress={() => {
+                  Linking.openURL(
+                    url.startsWith('http') ? url : `https://${url}`,
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                {image ? (
+                  <Image
+                    source={image}
+                    style={{ width: 22, height: 22 }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <MaterialCommunityIcons
+                    name={icon || getSocialIcon(type)}
+                    size={20}
+                    color="#111"
+                  />
+                )}
+              </TouchableOpacity>
+            ));
           })()}
         </View>
       ) : null}
 
       <View style={styles.tabsContainer}>
-        {visibleTabs.map(tab => {
-          const isGrid = tab === 'Gallery';
-          const isActive = activeTab === tab;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[
-                styles.tabItem,
-                isActive && styles.activeTabItem,
-                isGrid && styles.gridTabItem,
-              ]}
-              onPress={() => setActiveTab(tab)}
-              activeOpacity={0.85}
-            >
-              {isGrid ? (
-                <MaterialCommunityIcons
-                  name={tab === 'Instagram' ? 'instagram' : 'view-grid'}
-                  size={22}
-                  color={isActive ? '#F5A623' : '#9CA3AF'}
-                />
-              ) : (
-                <Text
-                  style={[styles.tabText, isActive && styles.activeTabText]}
-                >
-                  {tab}
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-        })}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsScrollContent}
+        >
+          {visibleTabs.map(tab => {
+            const isGrid = tab === 'Gallery';
+            const isActive = activeTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[
+                  styles.tabItem,
+                  isActive && styles.activeTabItem,
+                  isGrid && styles.gridTabItem,
+                ]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.85}
+              >
+                {isGrid ? (
+                  <MaterialCommunityIcons
+                    name={tab === 'Instagram' ? 'instagram' : 'view-grid'}
+                    size={22}
+                    color={isActive ? '#F5A623' : '#6B7280'}
+                  />
+                ) : (
+                  <Text
+                    style={[styles.tabText, isActive && styles.activeTabText]}
+                  >
+                    {tab}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {showPromotionalOffersButton && activeTab === 'Menu' ? (
@@ -2531,19 +2550,19 @@ const UserViewsScreen = ({ navigation }) => {
         backgroundColor="#F6B041"
         translucent
       />
-      <LinearGradient
-        colors={['#F6B041', '#F69E23']}
-        style={[styles.promoTopGradient, { paddingTop: insets.top }]}
+      <View
+        style={[styles.fixedTopBar, { paddingTop: insets.top }]}
       >
         <View style={styles.topNav}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation?.goBack()}
             activeOpacity={0.85}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MaterialCommunityIcons
               name="chevron-left"
-              size={18}
+              size={22}
               color="#FFF"
             />
             <Text style={styles.backText}>Back</Text>
@@ -2562,7 +2581,7 @@ const UserViewsScreen = ({ navigation }) => {
             />
           </View>
         </View>
-      </LinearGradient>
+      </View>
       {!profileUserId ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Login required</Text>
@@ -2579,6 +2598,7 @@ const UserViewsScreen = ({ navigation }) => {
             ? `grid-3-col-${activeTab}`
             : `list-1-col-${activeTab}`
         }
+        style={styles.mainList}
         data={getListData()}
         keyExtractor={item => String(item.id)}
         renderItem={renderContentItem}
@@ -3671,10 +3691,16 @@ const UserViewsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F6B041',
+  },
+  mainList: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   listContent: {
     paddingBottom: 20,
+    backgroundColor: '#FFFFFF',
+    flexGrow: 1,
   },
   homeDetailsWrap: {
     paddingHorizontal: 16,
@@ -3782,25 +3808,36 @@ const styles = StyleSheet.create({
   promoTopGradient: {
     paddingBottom: 0,
   },
+  fixedTopBar: {
+    backgroundColor: '#F6B041',
+    zIndex: 30,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
   topNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     alignItems: 'center',
+    minHeight: 48,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    minWidth: 78,
+    minHeight: 36,
   },
   backText: {
     color: '#FFF',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     marginLeft: 2,
   },
@@ -3903,30 +3940,38 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   tabsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
     marginTop: 0,
+    paddingTop: 4,
+    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  tabsScrollContent: {
     paddingHorizontal: 8,
-    marginBottom: 16,
+    alignItems: 'flex-end',
   },
   tabItem: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 12,
     borderBottomWidth: 3,
     borderBottomColor: 'transparent',
+    minHeight: 44,
+    marginRight: 2,
   },
   activeTabItem: {
     borderBottomColor: '#F5A623',
   },
   gridTabItem: {
     paddingBottom: 12,
+    minWidth: 44,
   },
   tabText: {
     fontSize: 13,
-    color: '#9CA3AF',
-    fontWeight: '500',
+    color: '#6B7280',
+    fontWeight: '600',
   },
   activeTabText: {
     color: '#F5A623',
@@ -4076,6 +4121,9 @@ const styles = StyleSheet.create({
     aspectRatio: 0.8, // Slightly taller than square exactly as done before
     marginBottom: 8,
     position: 'relative',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#E8E8E8',
   },
   instaGridImageContainer: {
     width: (width - 32 - 16) / 3,
@@ -4083,13 +4131,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#E8E8E8',
     position: 'relative',
   },
   gridImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 0,
     resizeMode: 'cover',
   },
   instaVideoBadge: {

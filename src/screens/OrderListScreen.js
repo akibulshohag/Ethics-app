@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -119,9 +119,14 @@ const OrderListScreen = ({ navigation, route: routeProp }) => {
     load(true);
   }, [user?.token]);
 
+  const ordersFocusAtRef = useRef(0);
   useFocusEffect(
     useCallback(() => {
-      if (user?.token) load(true);
+      if (!user?.token) return;
+      const now = Date.now();
+      if (now - (ordersFocusAtRef.current || 0) < 15_000) return;
+      ordersFocusAtRef.current = now;
+      load(true);
     }, [user?.token, load]),
   );
 

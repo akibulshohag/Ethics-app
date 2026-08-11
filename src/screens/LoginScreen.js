@@ -14,16 +14,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useDispatch } from 'react-redux';
 import { appSetUser } from '../redux/actions/appSlice';
-import {
-  login,
-  isAccountInactiveError,
-} from '../services/authService';
-import {
-  COLORS,
-  FONTS,
-  SPACING,
-  BORDER_RADIUS,
-} from '../constants/theme';
+import { login, isAccountInactiveError } from '../services/authService';
+import { COLORS, FONTS, SPACING, BORDER_RADIUS } from '../constants/theme';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -73,13 +65,17 @@ const LoginScreen = () => {
       const message = error.message || 'Login failed. Please try again.';
 
       if (isAccountInactiveError(message)) {
-        Alert.alert('Account Recovery Required', message.replace(/^ACCOUNT_[A-Z]+:\s*/, ''), [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Recover Account',
-            onPress: () => navigation.navigate('ForgotPassword'),
-          },
-        ]);
+        Alert.alert(
+          'Account Recovery Required',
+          message.replace(/^ACCOUNT_[A-Z]+:\s*/, ''),
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Recover Account',
+              onPress: () => navigation.navigate('ForgotPassword'),
+            },
+          ],
+        );
         return;
       }
 

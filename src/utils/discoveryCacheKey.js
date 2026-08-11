@@ -8,7 +8,7 @@ export function buildDiscoveryCacheKey(locationOpts, userId) {
   return `${latKey}_${lngKey}_${uid}`;
 }
 
-export const DISCOVERY_STALE_MS = 5 * 60 * 1000;
+export const DISCOVERY_STALE_MS = 10 * 60 * 1000;
 
 export function isDiscoveryCacheFresh(fetchedAt, cacheKey, expectedKey) {
   if (!expectedKey || cacheKey !== expectedKey) return false;

@@ -26,7 +26,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.eatwaze.app</string>
+			<string>com.eatwaze.food</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>eatwaze</string>
@@ -43,16 +43,22 @@
 			<string>google-signin</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.236298500212-s19odpqururn1hls4u3o8ebp79o2b726</string>
+				<string>com.googleusercontent.apps.236298500212-iu92gebunhcteiu24ff86umfi3k296mk</string>
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>FacebookAppID</key>
 	<string>1020637567080925</string>
 	<key>FacebookClientToken</key>
 	<string>2490cd089fef0f717b9237884f858cc7</string>
 	<key>FacebookDisplayName</key>
 	<string>Eatwaze</string>
+	<key>GMSApiKey</key>
+	<string>AIzaSyDdAoHeCNbd81rqwMApCne-bB5qYVwCaqk</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>fbapi</string>
@@ -60,14 +66,8 @@
 		<string>fbauth2</string>
 		<string>fbshareextension</string>
 	</array>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>GMSApiKey</key>
-	<string>AIzaSyDdAoHeCNbd81rqwMApCne-bB5qYVwCaqk</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -75,24 +75,20 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Eatwaze uses Face ID or Touch ID to unlock the app and sign you in securely.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Eatwaze uses your camera so you can record short food videos and take photos to post on your restaurant profile or menu.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Eatwaze uses your location to show restaurants and food videos near your UK postcode.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Eatwaze uses Face ID or Touch ID to unlock the app and sign you in securely.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Eatwaze uses your location to show nearby restaurants and food videos in your area. Location is only used while you are using the app.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Eatwaze uses your location to show restaurants and food videos near your UK postcode.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Eatwaze uses your microphone to record audio when you record food videos inside the app.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Eatwaze accesses your photo library so you can choose food photos and short videos from your device to upload to your profile, menu, or restaurant page. For example, you can select a dish photo from your gallery to add to your menu listing.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Eatwaze saves images to your photo library only when you choose to download or save a food photo or video from the app to your device.</string>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Eatwaze accesses your photo library so you can choose food photos and short videos from your device to upload to your profile, menu, or restaurant page. For example, you can select a dish photo from your gallery to add to your menu listing.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>
@@ -116,6 +112,10 @@
 		<string>Octicons.ttf</string>
 		<string>Zocial.ttf</string>
 		<string>Fontisto.ttf</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

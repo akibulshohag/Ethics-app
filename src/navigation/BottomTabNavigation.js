@@ -44,12 +44,17 @@ import { COLORS } from '../constants/theme';
 
 const libraryTabIcon = require('../assets/Group.png');
 
-/** Hide tab bar for these screens (LandingScreen, ProductShortsVideo, etc.) */
+/** Hide tab bar only when the focused nested screen is known to be full-screen. */
 const getTabBarStyle = route => {
   if (route?.name === 'Shorts') return { display: 'none' };
-  const routeName = getFocusedRouteNameFromRoute(route) ?? '';
-  const name = routeName || (route?.name === 'Home1' ? 'LandingScreen' : '');
-  return BottomTabLessScreens.includes(name) ? { display: 'none' } : undefined;
+  const routeName = getFocusedRouteNameFromRoute(route);
+  // Cold start / tab switch: nested focus is often undefined for a tick.
+  // Never treat that as LandingScreen — that left Home with no tabs until
+  // options recomputed (or stuck hidden).
+  if (!routeName) return undefined;
+  return BottomTabLessScreens.includes(routeName)
+    ? { display: 'none' }
+    : undefined;
 };
 
 /** Orders tab: rider → dashboard; owner/admin → live orders; user → own orders */
@@ -104,7 +109,7 @@ const BottomNaivgation = () => {
     const handle = InteractionManager.runAfterInteractions(() => {
       if (cancelled) return;
       loadCounts();
-      timer = setInterval(loadCounts, 45000);
+      timer = setInterval(loadCounts, 90000);
     });
     return () => {
       cancelled = true;

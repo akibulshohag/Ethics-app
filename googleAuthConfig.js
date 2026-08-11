@@ -9,10 +9,10 @@ export const EATWAZE_GOOGLE_ANDROID_CLIENT_ID =
 
 /** iOS OAuth client from Firebase GoogleService-Info.plist (apply-ios-google-service-info.js updates these). */
 export const EATWAZE_GOOGLE_IOS_CLIENT_ID =
-  '236298500212-s19odpqururn1hls4u3o8ebp79o2b726.apps.googleusercontent.com';
+  '236298500212-iu92gebunhcteiu24ff86umfi3k296mk.apps.googleusercontent.com';
 
 export const EATWAZE_GOOGLE_IOS_REVERSED_CLIENT_ID =
-  'com.googleusercontent.apps.236298500212-s19odpqururn1hls4u3o8ebp79o2b726';
+  'com.googleusercontent.apps.236298500212-iu92gebunhcteiu24ff86umfi3k296mk';
 
 /** iOS OAuth client from Firebase GoogleService-Info.plist (after apply-ios-google-service-info.js). */
 export function resolveGoogleIosClientId() {

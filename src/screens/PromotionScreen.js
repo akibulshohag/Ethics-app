@@ -2681,21 +2681,15 @@ const PromotionScreen = ({ onBack }) => {
         translucent
       />
 
-      <LinearGradient
-        colors={['#F6B041', '#F69E23']}
-        style={[styles.promoTopGradient, { paddingTop: insets.top }]}
-      >
+      <View style={[styles.fixedTopBar, { paddingTop: insets.top }]}>
         <View style={styles.topNav}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => (onBack ? onBack() : navigation.goBack())}
+            activeOpacity={0.85}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Icon
-              name="chevron-left"
-              size={18}
-              color="#FFF"
-              style={styles.backIconFlip}
-            />
+            <Icon name="chevron-left" size={22} color="#FFF" />
             <Text style={styles.backText}>Back</Text>
           </TouchableOpacity>
           <Image
@@ -2711,9 +2705,10 @@ const PromotionScreen = ({ onBack }) => {
             <Icon name="bell-outline" size={24} color="#1F2937" />
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
       <ScrollView
+        style={styles.mainScroll}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollPadding}
       >
@@ -4583,28 +4578,43 @@ const PromotionScreen = ({ onBack }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  container: { flex: 1, backgroundColor: '#F6B041' },
+  fixedTopBar: {
+    backgroundColor: '#F6B041',
+    zIndex: 30,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
   promoTopGradient: {
     paddingBottom: 0,
+  },
+  mainScroll: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   topNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     alignItems: 'center',
+    minHeight: 48,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    minWidth: 78,
+    minHeight: 36,
   },
   backIconFlip: { marginRight: 2 },
-  backText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  backText: { color: '#FFF', fontSize: 15, fontWeight: '700', marginLeft: 2 },
   promoHeaderLogo: {
     width: 88,
     height: 28,

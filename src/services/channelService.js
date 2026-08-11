@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../../config';
+import { getChannelProfileCached } from '../utils/channelProfileCache';
 
 const API_URL = `${config.apiBaseUrl}/users`;
 
@@ -20,21 +21,27 @@ const getAuthHeaders = () => {
  * @param {string} [currentUserId] - Logged-in user ID (for isSubscribed)
  */
 export const getChannelProfile = async (channelUserId, currentUserId) => {
-  try {
-    const params = currentUserId ? { currentUserId } : {};
-    const response = await axios.get(
-      `${API_URL}/${channelUserId}/channel-profile`,
-      { params, headers: getAuthHeaders() },
-    );
-    return response.data;
-  } catch (error) {
-    // 404 is expected for mock users or users without channel-profile
-    if (error?.response?.status === 404) {
-      return { isSubscribed: false, subscriberCount: 0 };
-    }
-    console.error('Error fetching channel profile:', error);
-    throw error;
-  }
+  return getChannelProfileCached(
+    async (id, viewerId) => {
+      try {
+        const params = viewerId ? { currentUserId: viewerId } : {};
+        const response = await axios.get(`${API_URL}/${id}/channel-profile`, {
+          params,
+          headers: getAuthHeaders(),
+        });
+        return response.data;
+      } catch (error) {
+        // 404 is expected for mock users or users without channel-profile
+        if (error?.response?.status === 404) {
+          return { isSubscribed: false, subscriberCount: 0 };
+        }
+        console.error('Error fetching channel profile:', error);
+        throw error;
+      }
+    },
+    channelUserId,
+    currentUserId,
+  );
 };
 
 /**

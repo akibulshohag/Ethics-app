@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -83,6 +83,7 @@ export default function LiveOrdersScreen() {
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const liveOrdersFocusAtRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
   const [completeDateFilter, setCompleteDateFilter] = useState('all');
@@ -161,6 +162,9 @@ export default function LiveOrdersScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const now = Date.now();
+      if (now - (liveOrdersFocusAtRef.current || 0) < 12_000) return;
+      liveOrdersFocusAtRef.current = now;
       loadOrders();
     }, [loadOrders]),
   );

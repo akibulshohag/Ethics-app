@@ -140,7 +140,7 @@ import GalleryVideoDetailModal from '../../components/GalleryVideoDetailModal';
 import { ALLERGENS, normalizeAllergens } from '../../constants/allergens';
 import MenuAllergenRow from '../../components/MenuAllergenRow';
 import { mapMenuListRow, normalizeMenuItemFromApi } from '../../utils/menuListItem';
-import { viewerContentParams } from '../../utils/contentVisibility';
+import { viewerProfileContentParams } from '../../utils/contentVisibility';
 
 const { width } = Dimensions.get('window');
 
@@ -687,7 +687,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     if (!profileUserId) return;
     setOwnerVideosLoading(true);
     try {
-      const visibility = viewerContentParams(currentUser, browseLocation);
+      const visibility = viewerProfileContentParams(currentUser, {
+        latitude: profile?.latitude,
+        longitude: profile?.longitude,
+      });
       const [vRes, sRes] = await Promise.all([
         getUserVideos(profileUserId, 1, 50, currentUser?.id, visibility),
         shortsService.getUserShorts(
@@ -732,7 +735,12 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     } finally {
       setOwnerVideosLoading(false);
     }
-  }, [profileUserId, currentUser, browseLocation]);
+  }, [
+    profileUserId,
+    currentUser,
+    profile?.latitude,
+    profile?.longitude,
+  ]);
 
   useEffect(() => {
     const sub = shortsService.onShortUpdated?.(updated => {
@@ -2994,7 +3002,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </TouchableOpacity>
       ) : null}
 
-      {isOwnProfile && isOwnerOrVendor ? (
+      {isOwnProfile ? (
         <View style={styles.profileSocialRow}>
           {(() => {
             const raw = profile?.socialLinks ?? currentUser?.socialLinks ?? [];
@@ -3008,51 +3016,47 @@ const BusinessProfileViewScreen = ({ navigation }) => {
               url: String(l?.url || '').trim(),
             }));
 
-            return BUSINESS_SOCIAL_BAR.map(({ type, icon, image }) => {
+            const linked = BUSINESS_SOCIAL_BAR.map(({ type, icon, image }) => {
               const match = normalized.find(
                 l =>
-                  l.type === type ||
-                  (type === 'google_email' &&
-                    (l.type === 'google' || l.type === 'google_email')),
+                  l.url &&
+                  (l.type === type ||
+                    (type === 'google_email' &&
+                      (l.type === 'google' || l.type === 'google_email'))),
               );
-              const url = match?.url || '';
-              const disabled = !url;
-              return (
-                <TouchableOpacity
-                  key={type}
-                  style={[
-                    styles.profileSocialBtn,
-                    disabled && styles.profileSocialBtnDisabled,
-                  ]}
-                  disabled={disabled}
-                  onPress={() => {
-                    if (!url) return;
-                    Linking.openURL(
-                      url.startsWith('http') ? url : `https://${url}`,
-                    );
-                  }}
-                  activeOpacity={0.8}
-                >
-                  {image ? (
-                    <Image
-                      source={image}
-                      style={{
-                        width: 22,
-                        height: 22,
-                        tintColor: disabled ? '#BDBDBD' : null,
-                      }}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name={icon || getSocialIcon(type)}
-                      size={20}
-                      color={disabled ? '#BDBDBD' : '#111'}
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            });
+              return match
+                ? { type, icon, image, url: match.url }
+                : null;
+            }).filter(Boolean);
+
+            if (!linked.length) return null;
+
+            return linked.map(({ type, icon, image, url }) => (
+              <TouchableOpacity
+                key={type}
+                style={styles.profileSocialBtn}
+                onPress={() => {
+                  Linking.openURL(
+                    url.startsWith('http') ? url : `https://${url}`,
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                {image ? (
+                  <Image
+                    source={image}
+                    style={{ width: 22, height: 22 }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <MaterialCommunityIcons
+                    name={icon || getSocialIcon(type)}
+                    size={20}
+                    color="#111"
+                  />
+                )}
+              </TouchableOpacity>
+            ));
           })()}
         </View>
       ) : null}
@@ -3813,19 +3817,17 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         backgroundColor="#F6B041"
         translucent
       />
-      <LinearGradient
-        colors={['#F6B041', '#F69E23']}
-        style={[styles.promoTopGradient, { paddingTop: insets.top }]}
-      >
+      <View style={[styles.fixedTopBar, { paddingTop: insets.top }]}>
         <View style={styles.topNav}>
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation?.goBack()}
             activeOpacity={0.85}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <MaterialCommunityIcons
               name="chevron-left"
-              size={18}
+              size={22}
               color="#FFF"
             />
             <Text style={styles.topNavBackText}>Back</Text>
@@ -3846,7 +3848,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             />
           </View>
         </View>
-      </LinearGradient>
+      </View>
       {activeTab === 'Posts' && postsLoading && posts.length === 0 ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color="#FF7F0B" />
@@ -3915,6 +3917,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             ? 'menus'
             : `list-1-col-${activeTab}`
         }
+        style={styles.mainList}
         data={getListData()}
         keyExtractor={(item, index) => item.id || `item-${index}`}
         renderItem={renderContentItem}
@@ -5977,7 +5980,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F6B041',
   },
   loadingWrap: {
     position: 'absolute',
@@ -5994,31 +5997,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  mainList: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   listContent: {
     paddingBottom: 20,
+    backgroundColor: '#FFFFFF',
+    flexGrow: 1,
   },
   promoTopGradient: {
     paddingBottom: 0,
   },
+  fixedTopBar: {
+    backgroundColor: '#F6B041',
+    zIndex: 30,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+  },
   topNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     alignItems: 'center',
+    minHeight: 48,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1A1A1A',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    minWidth: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    minWidth: 78,
+    minHeight: 36,
   },
   topNavBackText: {
     color: '#FFF',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     marginLeft: 2,
   },
@@ -6294,25 +6314,31 @@ const styles = StyleSheet.create({
   tabsContainer: {
     marginTop: 0,
     marginBottom: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
+    paddingTop: 4,
     backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
   },
   tabItem: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 5,
+    paddingVertical: 10,
+    marginRight: 4,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   activeTabItem: {
     borderBottomWidth: 3,
-    borderBottomColor: '#FF7F0B',
+    borderBottomColor: '#F5A623',
   },
   tabText: {
-    fontSize: 14,
-    color: '#999',
+    fontSize: 13,
+    color: '#6B7280',
     fontWeight: '600',
   },
   activeTabText: {
-    color: '#FF7F0B',
+    color: '#F5A623',
+    fontWeight: '700',
   },
   promotionSubTabRow: {
     flexDirection: 'row',
@@ -6368,6 +6394,9 @@ const styles = StyleSheet.create({
     aspectRatio: 0.8,
     marginBottom: 8,
     position: 'relative',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#E8E8E8',
   },
   galleryDeleteBadge: {
     position: 'absolute',
@@ -6411,7 +6440,7 @@ const styles = StyleSheet.create({
   gridImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 0,
     resizeMode: 'cover',
   },
   notificationRow: {

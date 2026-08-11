@@ -62,7 +62,7 @@ export const config = {
   facebookLoginAppId: '1020637567080925',
   facebookLoginClientToken: '2490cd089fef0f717b9237884f858cc7',
   /** iOS bundle ID for Sign in with Apple — must match Xcode + Apple Developer. */
-  appleBundleId: 'com.eatwaze.app',
+  appleBundleId: 'com.eatwaze.food',
   /**
    * Leave EMPTY to use standard consumer Facebook Login (public_profile + email),
    * which has Advanced Access by default — no Business Verification / App Review.

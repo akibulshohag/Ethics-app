@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Copy Firebase GoogleService-Info.plist into the iOS app and add the Google URL scheme.
+ * Copy Firebase GoogleService-Info.plist into the iOS app and sync Google Sign-In URL scheme.
  *
  * Usage:
  *   node scripts/apply-ios-google-service-info.js ~/Downloads/GoogleService-Info.plist
  *
- * Firebase: Project eatix-17d2a → Add iOS app → Bundle ID com.eatwaze.app → download plist.
+ * Firebase: Project eatix-17d2a → Add iOS app → Bundle ID com.eatwaze.food → download plist.
  */
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +14,7 @@ const ROOT = path.join(__dirname, '..');
 const TARGET_PLIST = path.join(ROOT, 'ios/Ethics/GoogleService-Info.plist');
 const INFO_PLIST = path.join(ROOT, 'ios/Ethics/Info.plist');
 const GOOGLE_AUTH_CONFIG = path.join(ROOT, 'googleAuthConfig.js');
+const EXPECTED_BUNDLE_ID = 'com.eatwaze.food';
 
 function readPlistValues(xml) {
   const pick = key => {
@@ -37,6 +38,15 @@ function upsertGoogleUrlScheme(infoXml, reversedClientId) {
     return infoXml;
   }
 
+  const googleSignInBlock =
+    /(<key>CFBundleURLName<\/key>\s*<string>google-signin<\/string>\s*<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>)[^<]+(<\/string>)/;
+  if (googleSignInBlock.test(infoXml)) {
+    return infoXml.replace(
+      googleSignInBlock,
+      `$1${reversedClientId}$2`,
+    );
+  }
+
   const googleBlock = `\t\t<dict>
 \t\t\t<key>CFBundleURLName</key>
 \t\t\t<string>google-signin</string>
@@ -47,12 +57,19 @@ function upsertGoogleUrlScheme(infoXml, reversedClientId) {
 \t\t</dict>
 `;
 
-  const marker = '\t</array>\n\t<key>FacebookAppID</key>';
-  if (!infoXml.includes(marker)) {
-    throw new Error('Could not find CFBundleURLTypes block in Info.plist');
+  const markers = [
+    '\t</array>\n\t<key>CFBundleVersion</key>',
+    '\t</array>\n\t<key>FacebookAppID</key>',
+  ];
+  for (const marker of markers) {
+    if (infoXml.includes(marker)) {
+      return infoXml.replace(marker, `${googleBlock}${marker}`);
+    }
   }
 
-  return infoXml.replace(marker, `${googleBlock}\t</array>\n\t<key>FacebookAppID</key>`);
+  throw new Error(
+    'Could not find CFBundleURLTypes block in Info.plist (expected CFBundleVersion or FacebookAppID after URL types)',
+  );
 }
 
 function upsertGoogleAuthConfigIosIds(clientId, reversedClientId) {
@@ -89,9 +106,9 @@ function main() {
     console.error('Invalid plist: CLIENT_ID not found');
     process.exit(1);
   }
-  if (values.bundleId && values.bundleId !== 'com.eatwaze.app') {
+  if (values.bundleId && values.bundleId !== EXPECTED_BUNDLE_ID) {
     console.warn(
-      `Warning: plist BUNDLE_ID is "${values.bundleId}" (expected com.eatwaze.app)`,
+      `Warning: plist BUNDLE_ID is "${values.bundleId}" (expected ${EXPECTED_BUNDLE_ID})`,
     );
   }
 
@@ -105,10 +122,14 @@ function main() {
   upsertGoogleAuthConfigIosIds(values.clientId, values.reversedClientId);
 
   console.log('Installed GoogleService-Info.plist');
+  console.log(`BUNDLE_ID: ${values.bundleId || EXPECTED_BUNDLE_ID}`);
   console.log(`CLIENT_ID: ${values.clientId}`);
   console.log(`REVERSED_CLIENT_ID: ${values.reversedClientId}`);
   console.log('Updated ios/Ethics/Info.plist with Google URL scheme');
-  console.log('Next: open Ethics.xcworkspace → confirm GoogleService-Info.plist is in Ethics target → rebuild');
+  console.log('Updated googleAuthConfig.js iOS client IDs');
+  console.log(
+    'Next: open Ethics.xcworkspace → confirm GoogleService-Info.plist is in Ethics target → rebuild',
+  );
 }
 
 main();

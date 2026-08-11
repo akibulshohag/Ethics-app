@@ -51,6 +51,7 @@ import { navigationRef, safeImageUri, isLocalMediaUri } from '../utils/helper';
 import { buildContentShareMessage } from '../utils/contentLinks';
 import { setShortsMuted } from '../redux/actions/appSlice';
 import { listMySubscribersWhoOrderedFromOwner } from '../services/orderService';
+import { normalizeShortVideoUrl } from '../utils/normalizeShortVideoUrl';
 
 const { width, height: windowHeight } = Dimensions.get('window');
 
@@ -148,6 +149,8 @@ const VideoItem = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [videoError, setVideoError] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const lastProgressUpdate = useRef(0);
   const lastTapMsRef = useRef(0);
   const singleTapTimerRef = useRef(null);
@@ -168,12 +171,19 @@ const VideoItem = ({
     setDescFirstLine('');
     setDescLayoutDone(false);
     setOwnerAvatarBroken(false);
+    setVideoError(null);
+    setDuration(0);
+    setCurrentTime(0);
   }, [item.id]);
 
   // Manage play/pause based on active state
   useEffect(() => {
     setPaused(!isActive);
   }, [isActive]);
+
+  useEffect(() => {
+    if (isActive) setVideoError(null);
+  }, [isActive, item.videoUrl]);
 
   useEffect(() => {
     return () => {
@@ -186,6 +196,14 @@ const VideoItem = ({
 
   const togglePause = () => {
     setPaused(prev => !prev);
+  };
+
+  const retryVideo = () => {
+    setVideoError(null);
+    setDuration(0);
+    setCurrentTime(0);
+    setReloadToken(t => t + 1);
+    setPaused(false);
   };
 
   const onOverlayTap = () => {
@@ -212,6 +230,11 @@ const VideoItem = ({
 
   const hasValidVideo =
     item.videoUrl && String(item.videoUrl).trim().length > 0;
+  const playUri = normalizeShortVideoUrl(item.videoUrl);
+  const posterUri = safeImageUri(
+    item.thumbnailUrl || item.coverUrl || item.thumb || item.img || null,
+    null,
+  );
   const ownerId = item.user?.id ?? item.userId ?? null;
   const isOwnShort = !!(
     currentUser?.id &&
@@ -276,16 +299,23 @@ const VideoItem = ({
     >
       {hasValidVideo && shouldRenderVideo ? (
         <Video
+          key={`${item.id}-${reloadToken}`}
           ref={videoRef}
-          source={{ uri: item.videoUrl }}
+          source={{ uri: playUri }}
+          poster={posterUri || undefined}
+          posterResizeMode="cover"
           style={styles.video}
           resizeMode="cover"
           repeat
-          paused={paused}
+          paused={paused || !!videoError}
           muted={!!shortsMuted}
+          controls={false}
           playInBackground={false}
           playWhenInactive={false}
           ignoreSilentSwitch="ignore"
+          onLoadStart={() => {
+            setVideoError(null);
+          }}
           onLoad={data => {
             const d = Number(data?.duration || 0);
             const api = Number(item?.duration);
@@ -296,9 +326,18 @@ const VideoItem = ({
                 ? api
                 : 0;
             setDuration(use);
+            setVideoError(null);
+          }}
+          onError={e => {
+            const msg =
+              e?.error?.errorString ||
+              e?.error?.localizedDescription ||
+              e?.error?.errorException ||
+              'Video failed to load';
+            setVideoError(String(msg));
           }}
           onProgress={data => {
-            if (!isActive || paused) return;
+            if (!isActive || paused || videoError) return;
             if (isSeeking) return;
             const now = Date.now();
             if (now - lastProgressUpdate.current < 250) return;
@@ -315,6 +354,20 @@ const VideoItem = ({
             color="rgba(255,255,255,0.5)"
           />
           <Text style={styles.videoPlaceholderText}>No video</Text>
+        </View>
+      )}
+
+      {!!videoError && hasValidVideo && shouldRenderVideo && (
+        <View style={styles.videoErrorOverlay} pointerEvents="box-none">
+          <Text style={styles.videoErrorText}>Video unavailable</Text>
+          <TouchableOpacity
+            style={styles.videoRetryBtn}
+            onPress={retryVideo}
+            activeOpacity={0.85}
+          >
+            <Icon name="refresh" size={18} color="#FFF" />
+            <Text style={styles.videoRetryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -785,7 +838,8 @@ const mapShortToItem = s => {
     'Unknown';
   return {
     id: s.id,
-    videoUrl: s.videoUrl,
+    videoUrl: normalizeShortVideoUrl(s.videoUrl || s.mediaUrl || ''),
+    thumbnailUrl: s.thumbnailUrl || s.coverUrl || s.thumb || s.img || '',
     user: {
       id: user.id || s.userId,
       username,
@@ -862,6 +916,11 @@ const ShortsVideoScreen = ({ navigation }) => {
   const hasAppliedInitialShort = useRef(false);
   const listRef = useRef(null);
   const [commentsVisible, setCommentsVisible] = useState(false);
+  const SHORTS_PAGE_SIZE = 10;
+  const [shortsPage, setShortsPage] = useState(1);
+  const [hasMoreShorts, setHasMoreShorts] = useState(true);
+  const [loadingMoreShorts, setLoadingMoreShorts] = useState(false);
+  const loadingMoreShortsRef = useRef(false);
 
   const putInitialShortFirst = useCallback((mapped, targetId, seedItem) => {
     const list = Array.isArray(mapped) ? mapped : [];
@@ -1152,6 +1211,10 @@ const ShortsVideoScreen = ({ navigation }) => {
     try {
       setLoading(true);
       setLoadError('');
+      setShortsPage(1);
+      setHasMoreShorts(true);
+      loadingMoreShortsRef.current = false;
+      setLoadingMoreShorts(false);
       const useOwnerFeed =
         shortsFeedMode === 'owner' &&
         Array.isArray(scopedShortsFeedParam) &&
@@ -1162,6 +1225,7 @@ const ShortsVideoScreen = ({ navigation }) => {
         );
         if (filtered.length === 0) {
           setVideos([]);
+          setHasMoreShorts(false);
         } else {
           const enriched = await enrichShortsWithProfile(filtered);
           let mapped = enriched.map(mapShortToItem);
@@ -1175,11 +1239,12 @@ const ShortsVideoScreen = ({ navigation }) => {
           setVideos(mapped);
           setActiveVideoIndex(0);
           hasAppliedInitialShort.current = true;
+          setHasMoreShorts(false);
         }
       } else {
         const res = await shortsService.getShorts({
           page: 1,
-          limit: 50,
+          limit: SHORTS_PAGE_SIZE,
           viewerRole: user?.role || 'user',
           viewerUserId: user?.id,
         });
@@ -1199,12 +1264,22 @@ const ShortsVideoScreen = ({ navigation }) => {
           setVideos(mapped);
           setActiveVideoIndex(0);
           hasAppliedInitialShort.current = !!initialShortId;
+          const totalPages = Number(res?.pagination?.totalPages || 0);
+          const pageNow = Number(res?.pagination?.page || 1);
+          setShortsPage(pageNow);
+          setHasMoreShorts(
+            totalPages > 0
+              ? pageNow < totalPages
+              : filtered.length >= SHORTS_PAGE_SIZE,
+          );
         } else {
           setVideos([]);
+          setHasMoreShorts(false);
         }
       }
     } catch (e) {
       setVideos([]);
+      setHasMoreShorts(false);
       setLoadError(
         e?.message ||
           'Could not load shorts right now. Please check your connection and try again.',
@@ -1223,9 +1298,82 @@ const ShortsVideoScreen = ({ navigation }) => {
     user?.role,
   ]);
 
+  const loadMoreShorts = useCallback(async () => {
+    if (
+      shortsFeedMode === 'owner' ||
+      !hasMoreShorts ||
+      loading ||
+      loadingMoreShortsRef.current
+    ) {
+      return;
+    }
+    loadingMoreShortsRef.current = true;
+    setLoadingMoreShorts(true);
+    const nextPage = shortsPage + 1;
+    try {
+      const res = await shortsService.getShorts({
+        page: nextPage,
+        limit: SHORTS_PAGE_SIZE,
+        viewerRole: user?.role || 'user',
+        viewerUserId: user?.id,
+      });
+      const incoming = (res?.shorts || []).filter(
+        s => s.videoUrl && String(s.videoUrl).trim(),
+      );
+      if (incoming.length === 0) {
+        setHasMoreShorts(false);
+        return;
+      }
+      const enriched = await enrichShortsWithProfile(incoming);
+      const mapped = enriched.map(mapShortToItem);
+      setVideos(prev => {
+        const seen = new Set(prev.map(v => String(v.id)));
+        const unique = mapped.filter(v => !seen.has(String(v.id)));
+        return unique.length ? [...prev, ...unique] : prev;
+      });
+      const totalPages = Number(res?.pagination?.totalPages || 0);
+      const pageNow = Number(res?.pagination?.page || nextPage);
+      setShortsPage(pageNow);
+      setHasMoreShorts(
+        totalPages > 0
+          ? pageNow < totalPages
+          : incoming.length >= SHORTS_PAGE_SIZE,
+      );
+    } catch (_) {
+      // Keep hasMore so user can retry by scrolling again.
+    } finally {
+      loadingMoreShortsRef.current = false;
+      setLoadingMoreShorts(false);
+    }
+  }, [
+    enrichShortsWithProfile,
+    hasMoreShorts,
+    loading,
+    shortsFeedMode,
+    shortsPage,
+    user?.id,
+    user?.role,
+  ]);
+
   useEffect(() => {
     loadShorts();
   }, [loadShorts, playerSessionId]);
+
+  // Prefetch next page when user is near the end of the vertical reel.
+  useEffect(() => {
+    if (!hasMoreShorts || loading || loadingMoreShorts) return;
+    if (videos.length < 3) return;
+    if (activeVideoIndex >= videos.length - 3) {
+      loadMoreShorts();
+    }
+  }, [
+    activeVideoIndex,
+    videos.length,
+    hasMoreShorts,
+    loading,
+    loadingMoreShorts,
+    loadMoreShorts,
+  ]);
 
   useEffect(() => {
     if (!initialShortId) return;
@@ -2082,7 +2230,7 @@ const ShortsVideoScreen = ({ navigation }) => {
           initialNumToRender={1}
           maxToRenderPerBatch={2}
           windowSize={3}
-          removeClippedSubviews={Platform.OS === 'android'}
+          removeClippedSubviews={false}
           extraData={{
             activeVideoIndex,
             editShortVisible,
@@ -2095,6 +2243,10 @@ const ShortsVideoScreen = ({ navigation }) => {
             offset: screenHeight * index,
             index,
           })}
+          onEndReachedThreshold={0.8}
+          onEndReached={() => {
+            if (hasMoreShorts && !loadingMoreShorts) loadMoreShorts();
+          }}
         />
       )}
       <CommentsModal
@@ -2579,6 +2731,35 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: 14,
     marginTop: 8,
+  },
+  videoErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  videoErrorText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  videoRetryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FF8C00',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 22,
+  },
+  videoRetryText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   gradient: {
     position: 'absolute',

@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>236298500212-s19odpqururn1hls4u3o8ebp79o2b726.apps.googleusercontent.com</string>
+	<string>236298500212-iu92gebunhcteiu24ff86umfi3k296mk.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.236298500212-s19odpqururn1hls4u3o8ebp79o2b726</string>
+	<string>com.googleusercontent.apps.236298500212-iu92gebunhcteiu24ff86umfi3k296mk</string>
 	<key>ANDROID_CLIENT_ID</key>
-	<string>236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com</string>
+	<string>236298500212-6u8h4a10g6rc60rm3n4o3p6sivjnnrll.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
 	<string>AIzaSyBD6o2f5MxDwBHurn895AVmMwjSJ7spxfc</string>
 	<key>GCM_SENDER_ID</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.eatwaze.app</string>
+	<string>com.eatwaze.food</string>
 	<key>PROJECT_ID</key>
 	<string>eatix-17d2a</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:236298500212:ios:3701cda3dc7647cb953921</string>
+	<string>1:236298500212:ios:ba81e5e5af26a742953921</string>
 </dict>
 </plist>

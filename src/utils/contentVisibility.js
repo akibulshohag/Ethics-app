@@ -31,6 +31,29 @@ export const viewerContentParams = (user, browseLocation) => {
   return params;
 };
 
+/**
+ * Params for a specific channel profile's Gallery / Videos / Posts.
+ * Use the channel's coordinates (not the viewer's browse postcode) so content
+ * still loads when the restaurant was opened from Shorts/search but the browse
+ * location is outside that channel's contentAreaKm.
+ */
+export const viewerProfileContentParams = (user, channelLocation) => {
+  const params = { viewerRole: viewerRoleFromUser(user) };
+  if (user?.id) params.viewerUserId = user.id;
+
+  const lat = Number(
+    channelLocation?.lat ?? channelLocation?.latitude ?? NaN,
+  );
+  const lng = Number(
+    channelLocation?.lng ?? channelLocation?.longitude ?? NaN,
+  );
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    params.viewerLat = lat;
+    params.viewerLng = lng;
+  }
+  return params;
+};
+
 /** Client-side safety filter when API returns mixed creators. */
 export const canViewerSeeCreatorContent = (viewerRole, creatorRole) => {
   const viewer = viewerRoleFromUser({ role: viewerRole });

@@ -26,6 +26,7 @@ import {
 } from '@react-navigation/native';
 import { useSelector } from 'react-redux';
 import { shortsService } from '../../services/shortsService';
+import { normalizeShortVideoUrl } from '../../utils/normalizeShortVideoUrl';
 import CommentsModal from '../../components/CommentsModal';
 import ShortsMoreOptionsModal from '../../components/ShortsMoreOptionsModal';
 import ShortsReportModal from '../../components/ShortsReportModal';
@@ -153,7 +154,7 @@ const normalizeShort = s => {
       : s?.user?.role;
   return {
     id: s.id || String(Math.random()),
-    videoUrl: s.videoUrl || s.mediaUrl || '',
+    videoUrl: normalizeShortVideoUrl(s.videoUrl || s.mediaUrl || ''),
     title: s.title || 'Short',
     user: displayUser,
     /** Same intent as ShortsVideoScreen mapShortToItem — used for HomeThreeScreen header + Order flow */

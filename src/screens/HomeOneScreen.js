@@ -1530,13 +1530,17 @@ const HomeOneScreen = () => {
     }
     feedInFlightKeyRef.current = feedCacheKey;
     const run = (async () => {
-    setFeedLoading(true);
+    // Keep cached UI interactive during background refresh — only block-paint
+    // skeletons when we have nothing to show yet.
+    if (!hasHomeCacheData) {
+      setFeedLoading(true);
+    }
     const lat = voBrowse.viewerLat;
     const lng = voBrowse.viewerLng;
     const role = viewerRole(user);
     const baseParams = {
       page: 1,
-      limit: 20,
+      limit: 12,
       sort: 'latest',
       viewerRole: role,
     };
@@ -1590,7 +1594,7 @@ const HomeOneScreen = () => {
           : Promise.resolve({ shorts: [] }),
         getTopRestaurantsByOrders({
           page: 1,
-          limit: 20,
+          limit: 8,
           nearbyLat: lat,
           nearbyLng: lng,
           radiusKm: UK_DEFAULT_RADIUS_KM,
@@ -2056,15 +2060,17 @@ const HomeOneScreen = () => {
               }),
             );
           } catch (_) {}
-        }, 50);
+        }, 800);
       });
     } catch (e) {
       console.error('HomeOne load feed:', e);
-      setFeedVideos([]);
-      setFeedShorts([]);
-      setPopularShorts([]);
-      setNewShorts([]);
-      setMostOrderedRestaurants([]);
+      if (!hasHomeCacheData) {
+        setFeedVideos([]);
+        setFeedShorts([]);
+        setPopularShorts([]);
+        setNewShorts([]);
+        setMostOrderedRestaurants([]);
+      }
     } finally {
       setFeedLoading(false);
       if (feedInFlightKeyRef.current === feedCacheKey) {
@@ -2869,60 +2875,69 @@ const HomeOneScreen = () => {
     }
     if (byOwner.size === 0) return;
     let cancelled = false;
-    (async () => {
-      for (const [ownerKey, videos] of byOwner) {
-        const needsRole = videos.some(v => !normalizeCreatorRole(v?.creatorRole || v?.user?.role));
-        const skipSubscribe =
-          !user?.id || subscribeTouchedOwnersRef.current.has(ownerKey);
-        if (!needsRole && skipSubscribe) continue;
-        try {
-          const p = await getChannelProfile(ownerKey, user?.id);
-          if (cancelled) return;
-          const role = normalizeCreatorRole(p?.role);
-          if (role) {
-            setFeedVideos(prev =>
-              (prev || []).map(entry => {
-                const oid = getSponsoredOwnerId(entry);
-                if (oid == null || String(oid) !== ownerKey) return entry;
-                if (normalizeCreatorRole(entry?.creatorRole || entry?.user?.role)) {
-                  return entry;
-                }
-                return {
-                  ...entry,
-                  creatorRole: role,
-                  user: {
-                    ...(entry.user && typeof entry.user === 'object'
-                      ? entry.user
-                      : {}),
-                    role,
-                  },
-                };
-              }),
-            );
-          }
-          if (skipSubscribe) continue;
-          const sub = !!p?.isSubscribed;
-          setChannelSubscribeByOwnerId(prev => ({
-            ...prev,
-            [ownerKey]: sub,
-          }));
-          setTrendingSubscribeByVideoId(prev => {
-            const next = { ...prev };
-            for (const v of videos) {
-              const vid = String(v.id);
-              if (!Object.prototype.hasOwnProperty.call(prev, vid)) {
-                next[vid] = sub;
-              }
+    const handle = InteractionManager.runAfterInteractions(() => {
+      (async () => {
+        for (const [ownerKey, videos] of byOwner) {
+          const needsRole = videos.some(
+            v => !normalizeCreatorRole(v?.creatorRole || v?.user?.role),
+          );
+          const skipSubscribe =
+            !user?.id || subscribeTouchedOwnersRef.current.has(ownerKey);
+          if (!needsRole && skipSubscribe) continue;
+          try {
+            const p = await getChannelProfile(ownerKey, user?.id);
+            if (cancelled) return;
+            const role = normalizeCreatorRole(p?.role);
+            if (role) {
+              setFeedVideos(prev =>
+                (prev || []).map(entry => {
+                  const oid = getSponsoredOwnerId(entry);
+                  if (oid == null || String(oid) !== ownerKey) return entry;
+                  if (
+                    normalizeCreatorRole(
+                      entry?.creatorRole || entry?.user?.role,
+                    )
+                  ) {
+                    return entry;
+                  }
+                  return {
+                    ...entry,
+                    creatorRole: role,
+                    user: {
+                      ...(entry.user && typeof entry.user === 'object'
+                        ? entry.user
+                        : {}),
+                      role,
+                    },
+                  };
+                }),
+              );
             }
-            return next;
-          });
-        } catch (_) {
-          /* keep card defaults */
+            if (skipSubscribe) continue;
+            const sub = !!p?.isSubscribed;
+            setChannelSubscribeByOwnerId(prev => ({
+              ...prev,
+              [ownerKey]: sub,
+            }));
+            setTrendingSubscribeByVideoId(prev => {
+              const next = { ...prev };
+              for (const v of videos) {
+                const vid = String(v.id);
+                if (!Object.prototype.hasOwnProperty.call(prev, vid)) {
+                  next[vid] = sub;
+                }
+              }
+              return next;
+            });
+          } catch (_) {
+            /* keep card defaults */
+          }
         }
-      }
-    })();
+      })();
+    });
     return () => {
       cancelled = true;
+      handle?.cancel?.();
     };
   }, [trendingTopVideosForHydrate, user?.id, getSponsoredOwnerId]);
 
@@ -4291,6 +4306,11 @@ const HomeOneScreen = () => {
       .slice()
       .sort((a, b) => itemViewCount(b) - itemViewCount(a))
       .slice(0, 3);
+    const showHomeFeedSkeleton =
+      feedLoading &&
+      !featuredForCuisine &&
+      shortsCarouselItems.length === 0 &&
+      trendingTopVideos.length === 0;
     // Future: used to hide trending videos from feed sections below when re-enabled.
     /*
     const trendingVideoIds = new Set(
@@ -4705,6 +4725,8 @@ const HomeOneScreen = () => {
                   )}
                 />
               </>
+            ) : showHomeFeedSkeleton ? (
+              <HomeFeedSkeletonSection kind="featured" />
             ) : null}
 
             {shortsCarouselItems.length > 0 ? (
@@ -4741,6 +4763,8 @@ const HomeOneScreen = () => {
                   ))}
                 </ScrollView>
               </>
+            ) : showHomeFeedSkeleton ? (
+              <HomeFeedSkeletonSection kind="shorts" />
             ) : null}
 
             {sponsoredForCuisine ? (
@@ -4811,6 +4835,8 @@ const HomeOneScreen = () => {
                   );
                 })}
               </>
+            ) : showHomeFeedSkeleton ? (
+              <HomeFeedSkeletonSection kind="trending" />
             ) : null}
 
             {/* Future: re-enable home feed sections below Trending (Most Ordered, Continue watching, Videos, Shorts grid, etc.)
@@ -6278,6 +6304,56 @@ const HomeOneScreen = () => {
 
 // --- SUB-COMPONENT ---
 
+const HomeFeedSkeletonSection = ({ kind }) => {
+  if (kind === 'featured') {
+    return (
+      <View style={styles.skeletonSection} pointerEvents="none">
+        <View style={styles.skeletonTitleRow}>
+          <View style={[styles.skeletonBone, styles.skeletonTitleBone]} />
+          <View style={[styles.skeletonBone, styles.skeletonLinkBone]} />
+        </View>
+        <View style={[styles.skeletonBone, styles.skeletonHeroBone]} />
+      </View>
+    );
+  }
+  if (kind === 'shorts') {
+    return (
+      <View style={styles.skeletonSection} pointerEvents="none">
+        <View style={[styles.skeletonBone, styles.skeletonTitleBone]} />
+        <View style={styles.skeletonShortsRow}>
+          {[0, 1, 2].map(i => (
+            <View
+              key={`sk-short-${i}`}
+              style={[styles.skeletonBone, styles.skeletonShortBone]}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.skeletonSection} pointerEvents="none">
+      <View style={styles.skeletonTitleRow}>
+        <View>
+          <View style={[styles.skeletonBone, styles.skeletonTitleBone]} />
+          <View
+            style={[
+              styles.skeletonBone,
+              styles.skeletonSubtitleBone,
+              { marginTop: 8 },
+            ]}
+          />
+        </View>
+        <View style={[styles.skeletonBone, styles.skeletonLinkBone]} />
+      </View>
+      <View style={[styles.skeletonBone, styles.skeletonCardBone]} />
+      <View
+        style={[styles.skeletonBone, styles.skeletonCardBone, { marginTop: 12 }]}
+      />
+    </View>
+  );
+};
+
 const FeaturedHeroCard = ({
   channelName,
   metaLine,
@@ -6652,6 +6728,51 @@ const styles = StyleSheet.create({
   slogan: { color: '#FFF', marginTop: 20, fontSize: 14, fontWeight: '500' },
   feedLoading: { paddingVertical: 40, alignItems: 'center' },
   feedLoadingText: { marginTop: 10, fontSize: 14, color: '#666' },
+  skeletonSection: {
+    marginBottom: 18,
+  },
+  skeletonTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  skeletonBone: {
+    backgroundColor: '#E8E8E8',
+    borderRadius: 10,
+  },
+  skeletonTitleBone: {
+    width: 140,
+    height: 18,
+  },
+  skeletonSubtitleBone: {
+    width: 180,
+    height: 12,
+  },
+  skeletonLinkBone: {
+    width: 64,
+    height: 14,
+  },
+  skeletonHeroBone: {
+    width: '100%',
+    height: 210,
+    borderRadius: 16,
+  },
+  skeletonShortsRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  skeletonShortBone: {
+    width: SHORT_CAROUSEL_CARD_WIDTH,
+    height: Math.round(SHORT_CAROUSEL_CARD_WIDTH * 1.45),
+    marginRight: SHORT_CAROUSEL_GAP,
+    borderRadius: 14,
+  },
+  skeletonCardBone: {
+    width: '100%',
+    height: 220,
+    borderRadius: 16,
+  },
   mainContainer: { flex: 1, backgroundColor: '#FFF' },
   header: { backgroundColor: '#F5A623', padding: 15 },
   navRow: {

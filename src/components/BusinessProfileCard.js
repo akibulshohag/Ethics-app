@@ -22,8 +22,8 @@ const CARD_INSET = 12;
 const SHEET_OVERLAP = 88;
 const SHEET_GAP = 12;
 const PROFILE_AVATAR_TOP_GAP = 20;
-/** Rounded top where hero meets orange app header */
-const HERO_TOP_RADIUS = 20;
+/** Rounded top where hero meets orange app header — 0 so no white corner gap under nav */
+const HERO_TOP_RADIUS = 0;
 const HEADER_ORANGE = '#F6B041';
 const STATS_SECTION_BG = '#FFFFFF';
 const BIO_SECTION_GRADIENT = {
