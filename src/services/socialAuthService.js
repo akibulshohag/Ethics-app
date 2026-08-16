@@ -29,7 +29,10 @@ function ensureGoogleConfigured() {
 
   const configureOptions = {
     webClientId,
-    offlineAccess: true,
+    // Login only needs an id token. offlineAccess (server auth code) is
+    // reserved for YouTube connect and fails with DEVELOPER_ERROR when SHA-1
+    // is missing from Firebase project eatix-17d2a.
+    offlineAccess: false,
     scopes: ['email', 'profile'],
   };
 
@@ -427,13 +430,12 @@ export function normalizeSocialAuthError(error) {
     );
   }
   if (/DEVELOPER_ERROR/i.test(msg) || code === '10') {
-    if (!config.googleClientId) {
-      return (
-        'Google Sign-In is not configured. Add SHA-1 fingerprints in Firebase, enable Google sign-in, re-download google-services.json, and rebuild.'
-      );
-    }
     return (
-      'Google Sign-In configuration mismatch. Verify Firebase SHA-1, google-services.json, and backend GOOGLE_CLIENT_ID match, then rebuild.'
+      'Google Sign-In SHA-1 is missing in Firebase (eatix-17d2a). ' +
+      'Add this app fingerprint, wait a few minutes, then try again: ' +
+      'B8:C2:D3:45:EF:A9:E4:10:86:6E:E5:BD:46:D2:C9:59:5F:F0:3F:82 ' +
+      '(upload / sideloaded APK). Play Store builds also need Play Console → ' +
+      'App signing → App signing key SHA-1 on the same Android app com.eatix.app.'
     );
   }
   if (/key hash|key hashes/i.test(msg)) {

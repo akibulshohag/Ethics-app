@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "236298500212-27cgcdsbhable71dtsbv37qbkaadh978.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.eatix.app",
+            "certificate_hash": "b8c2d345efa9e410866ee5bd46d2c9595ff03f82"
+          }
+        },
+        {
           "client_id": "236298500212-6u8h4a10g6rc60rm3n4o3p6sivjnnrll.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
@@ -44,7 +52,7 @@
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDfm-dg0mREdAOTmrcPzt5dXZ0kpuMGUb0"
+          "current_key": "AIzaSyButrRfOyrkYjkBn3NTCVctJsFNYuO8wx8"
         }
       ],
       "services": {
@@ -55,10 +63,10 @@
               "client_type": 3
             },
             {
-              "client_id": "236298500212-s19odpqururn1hls4u3o8ebp79o2b726.apps.googleusercontent.com",
+              "client_id": "236298500212-iu92gebunhcteiu24ff86umfi3k296mk.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.eatwaze.app"
+                "bundle_id": "com.eatwaze.food"
               }
             }
           ]

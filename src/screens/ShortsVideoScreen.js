@@ -903,7 +903,16 @@ const ShortsVideoScreen = ({ navigation }) => {
       });
       return;
     }
-    navigation.goBack();
+    // This screen can be the first route when opened from a deep link or the
+    // Shorts tab. In that case GO_BACK is unhandled, so return to Home instead.
+    if (navigationRef.current?.isReady?.()) {
+      navigationRef.current.navigate('Root', {
+        screen: 'Home1',
+        params: { screen: 'HomeScreen' },
+      });
+      return;
+    }
+    navigation.getParent?.()?.navigate?.('Home1', { screen: 'HomeScreen' });
   }, [navigation, returnTo, returnUserId]);
   const insets = useSafeAreaInsets();
   const [videos, setVideos] = useState([]);

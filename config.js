@@ -89,7 +89,7 @@ export const config = {
   googleClientId: resolveGoogleWebClientId() || EATWAZE_GOOGLE_WEB_CLIENT_ID,
   firebaseProjectNumber: getFirebaseProjectNumber(),
   firebaseProjectId: 'eatix-17d2a',
-  firebaseWebApiKey: 'AIzaSyDfm-dg0mREdAOTmrcPzt5dXZ0kpuMGUb0',
+  firebaseWebApiKey: 'AIzaSyButrRfOyrkYjkBn3NTCVctJsFNYuO8wx8',
 };
 
 /**

@@ -2544,7 +2544,11 @@ const UserViewsScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+    <View style={styles.container}>
+      <SafeAreaView
+        style={styles.profileSafeArea}
+        edges={['left', 'right', 'bottom']}
+      >
       <StatusBar
         barStyle="light-content"
         backgroundColor="#F6B041"
@@ -3685,13 +3689,18 @@ const UserViewsScreen = ({ navigation }) => {
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F6B041',
+    backgroundColor: '#FFFFFF',
+  },
+  profileSafeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   mainList: {
     flex: 1,

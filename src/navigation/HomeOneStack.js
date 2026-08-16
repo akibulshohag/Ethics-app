@@ -43,7 +43,10 @@ const HomeOneNavigation = () => {
 
   return (
     <HomeOneStack.Navigator
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#FFFFFF' },
+      }}
       initialRouteName={initialRouteNameRef.current}
     >
       <HomeOneStack.Screen name="LandingScreen" component={LandingScreen} />

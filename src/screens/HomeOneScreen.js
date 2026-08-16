@@ -853,7 +853,6 @@ const HomeOneScreen = () => {
   const feedInFlightPromiseRef = useRef(null);
   const lastPaintedFeedCacheKeyRef = useRef(null);
   const loadFeaturedAndFeedRef = useRef(null);
-  const loadContinueWatchingRef = useRef(null);
   const blockedUserIdsRef = useRef(blockedUserIds);
   blockedUserIdsRef.current = blockedUserIds;
   const selectedLocationRef = useRef(selectedLocation);
@@ -1396,9 +1395,6 @@ const HomeOneScreen = () => {
         if (!fresh) {
           loadFeaturedAndFeedRef.current?.();
         }
-        InteractionManager.runAfterInteractions(() => {
-          loadContinueWatchingRef.current?.();
-        });
       }
       return stopPlaybackOnBlur;
     }, [
@@ -1814,6 +1810,16 @@ const HomeOneScreen = () => {
           sponsoredVideo: pickedSponsored,
         }),
       );
+
+      // The standard Home UI already has everything it renders. Do not start
+      // the expensive discovery/menu hydration pass here: it fans out into
+      // several requests, rebuilds every feed array and persists it a second
+      // time, briefly starving presses/navigation after login or a location
+      // change. Cuisine/search routes still need the enriched menu metadata.
+      if (!isCuisineFilterScreen && !searchTerm) {
+        return;
+      }
+
       // Defer discovery so home taps stay responsive after relaunch.
       InteractionManager.runAfterInteractions(() => {
         setTimeout(() => {
@@ -2089,6 +2095,7 @@ const HomeOneScreen = () => {
     user?.latitude,
     user?.longitude,
     searchDebounced,
+    isCuisineFilterScreen,
     dispatch,
   ]);
 
@@ -2118,8 +2125,6 @@ const HomeOneScreen = () => {
       setContinueData([]);
     }
   }, [user?.id, viewerLocationOpts]);
-  loadContinueWatchingRef.current = loadContinueWatching;
-
   const lastBrowseSyncRef = useRef(Number(browseLocation?.updatedAt || 0));
 
   const applyBrowseLocationToSession = useCallback(loc => {
@@ -2188,14 +2193,6 @@ const HomeOneScreen = () => {
     user?.longitude,
     searchDebounced,
   ]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const handle = InteractionManager.runAfterInteractions(() => {
-      loadContinueWatchingRef.current?.();
-    });
-    return () => handle?.cancel?.();
-  }, [user?.id]);
 
   useEffect(() => {
     setFeaturedChannelMeta(null);
@@ -5842,24 +5839,38 @@ const HomeOneScreen = () => {
     ? '#000'
     : '#F5A623';
 
-  const safeAreaBg = isVideoDetail ? '#000' : statusBarBg;
+  /** Body must stay white — full-screen orange here bled above the tab bar on stacked screens (profile). */
+  const rootBg = isVideoDetail ? '#000' : '#FFFFFF';
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: safeAreaBg }}
-      edges={['top']}
-    >
-      <StatusBar
-        barStyle={barStyle}
-        backgroundColor={statusBarBg}
-        hidden={isVideoDetail}
-        translucent={isVideoDetail}
-      />
-      {isRestaurantDetail
-        ? renderRestaurantDetail()
-        : isVideoDetail
-        ? renderVideoDetail()
-        : renderResults()}
+    <View style={{ flex: 1, backgroundColor: rootBg }}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: rootBg }}
+        edges={['top']}
+      >
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: insets.top,
+            backgroundColor: statusBarBg,
+            zIndex: 2,
+          }}
+        />
+        <StatusBar
+          barStyle={barStyle}
+          backgroundColor={statusBarBg}
+          hidden={isVideoDetail}
+          translucent={isVideoDetail}
+        />
+        {isRestaurantDetail
+          ? renderRestaurantDetail()
+          : isVideoDetail
+          ? renderVideoDetail()
+          : renderResults()}
 
       <SaveModal
         visible={
@@ -6298,7 +6309,8 @@ const HomeOneScreen = () => {
           loadContinueWatching();
         }}
       />
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 };
 

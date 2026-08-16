@@ -12,9 +12,10 @@ Errors on a **physical phone with a built APK** almost always mean the **signing
 | Setting | Value |
 |---------|--------|
 | Package name | `com.eatix.app` |
-| Facebook App ID | `1714809253015158` |
-| Google Web Client ID (`config.js` → `googleClientId`) | `366684605140-q98fauu8rmqjkdhs0turqgljtpsccve3.apps.googleusercontent.com` |
-| Google Android Client ID (Console only — **never** in `googleClientId`) | `366684605140-q4gvcqm95d4i4474gkcbluur1m8nhori.apps.googleusercontent.com` |
+| Firebase project | `eatix-17d2a` (number `236298500212`) |
+| Facebook Login App ID | `1020637567080925` |
+| Google Web Client ID (`config.js` → `googleClientId`) | `236298500212-810ubvv2taqs55m35pgvg0h795so6u68.apps.googleusercontent.com` |
+| Google Android Client ID (Console only — **never** in `googleClientId`) | created per SHA-1 in Firebase |
 
 ---
 
@@ -33,16 +34,14 @@ chmod +x scripts/print-android-signing-keys.sh
 | SHA-1 | `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` |
 | Facebook key hash | `Xo8WBi6jzSxKDVR4drqm84yr9iU=` |
 
-**Release keystore** (`my-upload-key.keystore` — signed APK on phone):
+**Release keystore** (`eatwaze-upload.keystore` — signed APK / AAB upload key):
 
 | Type | Value |
 |------|--------|
 | SHA-1 | `B8:C2:D3:45:EF:A9:E4:10:86:6E:E5:BD:46:D2:C9:59:5F:F0:3F:82` |
 | Facebook key hash | `uMLTRe+p5BCGbuW9RtLJWV/wP4I=` |
 
-Add **both** debug and release hashes in Meta. Add **both** SHA-1 values in Google Cloud (or the release SHA-1 if you only ship release APKs).
-
-If you sign release APKs with `my-upload-key.keystore`, set passwords and run the script again — **you must add that hash too**.
+Add **both** debug and release hashes in Meta. Add **both** SHA-1 values in **Firebase eatix-17d2a** (not an old Google Cloud project). Play Store installs also need the **App signing key** SHA-1 from Play Console.
 
 ---
 
@@ -73,15 +72,13 @@ Copy **Facebook Key hash** and **Google SHA-1** from the log and add them to the
 
 ## Step 4 — Google Sign-In
 
-1. Open [Google Cloud Credentials](https://console.cloud.google.com/apis/credentials?project=366684605140) (project number `366684605140`)
-2. **Create credentials → OAuth client ID → Android**
-   - Package name: `com.eatix.app`
-   - Add **both** SHA-1 fingerprints on the same Android client (Edit client → add fingerprint):
-     - **Debug** (`npm run android`): `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
-     - **Release APK** (`my-upload-key.keystore`): `B8:C2:D3:45:EF:A9:E4:10:86:6E:E5:BD:46:D2:C9:59:5F:F0:3F:82`
-   - **SHA-256 (release):** `16:65:B5:E8:40:6D:31:41:5B:A7:93:52:C6:72:8F:32:51:C0:4C:E7:5E:36:8E:59:F9:9B:E6:2A:DA:07:DE:38`
-3. Confirm **Web application** client exists — Client ID must match `googleClientId` in `Ethics-app/config.js` (ends with `...q98fauu8...`). **Never** put the Android client ID in `config.js`.
-4. **Firebase (recommended):** [Firebase Console](https://console.firebase.google.com) → same Google project → add Android app `com.eatix.app` → add both SHA-1 fingerprints → download **`google-services.json`** → replace `Ethics-app/android/app/google-services.json` → rebuild.
+1. Open [Firebase project eatix-17d2a](https://console.firebase.google.com/project/eatix-17d2a/settings/general) → Android app `com.eatix.app` → **Add fingerprint**
+2. Paste these SHA-1 values (one at a time):
+   - **Debug** (`npm run android`): `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`
+   - **Release / upload key** (`eatwaze-upload.keystore`): `B8:C2:D3:45:EF:A9:E4:10:86:6E:E5:BD:46:D2:C9:59:5F:F0:3F:82`
+   - **Play Store app signing key** from Play Console → App integrity → App signing → **App signing key certificate** SHA-1
+3. Confirm **Web application** client exists — Client ID must match `googleClientId` (ends with `...810ubvv2...`). **Never** put an Android client ID in `config.js`.
+4. Re-download **`google-services.json`** → replace `Ethics-app/android/app/google-services.json` → rebuild for Play. After adding SHA-1, an already-installed APK often starts working in 5–10 minutes without a rebuild.
 5. **OAuth consent screen** → if status is **Testing**, add your Gmail under **Test users**.
 6. **Verify the APK on the phone** matches release SHA-1:
 
@@ -90,7 +87,7 @@ chmod +x Ethics-app/scripts/verify-apk-sha1.sh
 ./Ethics-app/scripts/verify-apk-sha1.sh path/to/your-release.apk
 ```
 
-If the printed SHA-1 is **not** `B8:C2:D3:...`, you registered the wrong key (e.g. APK signed with debug keystore, or **Google Play re-signed** the app — use Play Console → App integrity → **App signing key** SHA-1 instead).
+If the printed SHA-1 is **not** `B8:C2:D3:...`, you registered the wrong key (e.g. APK signed with debug keystore, or **Google Play re-signed** the app — use Play Console → App integrity → **App signing key** SHA-1 instead). That Play signing SHA-1 must also be added in Firebase eatix-17d2a.
 
 ---
 
@@ -99,8 +96,8 @@ If the printed SHA-1 is **not** `B8:C2:D3:...`, you registered the wrong key (e.
 For Play Store / production APKs, set real passwords (do not commit secrets to git):
 
 ```properties
-MYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore
-MYAPP_UPLOAD_KEY_ALIAS=my-key-alias
+MYAPP_UPLOAD_STORE_FILE=eatwaze-upload.keystore
+MYAPP_UPLOAD_KEY_ALIAS=eatwaze-upload
 MYAPP_UPLOAD_STORE_PASSWORD=your_store_password
 MYAPP_UPLOAD_KEY_PASSWORD=your_key_password
 ```

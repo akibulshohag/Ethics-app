@@ -44,13 +44,23 @@ import { COLORS } from '../constants/theme';
 
 const libraryTabIcon = require('../assets/Group.png');
 
-/** Hide tab bar only when the focused nested screen is known to be full-screen. */
-const getTabBarStyle = route => {
+/**
+ * Hide tab bar only when the focused nested screen is known to be full-screen.
+ * @param {object} route
+ * @param {string} [fallbackWhenUnset] Home1 cold-start: LandingScreen vs HomeOneScreen
+ */
+const getTabBarStyle = (route, fallbackWhenUnset) => {
   if (route?.name === 'Shorts') return { display: 'none' };
-  const routeName = getFocusedRouteNameFromRoute(route);
-  // Cold start / tab switch: nested focus is often undefined for a tick.
-  // Never treat that as LandingScreen — that left Home with no tabs until
-  // options recomputed (or stuck hidden).
+  let routeName = getFocusedRouteNameFromRoute(route);
+  // Nested state can exist before getFocusedRouteNameFromRoute resolves.
+  if (!routeName && route?.state?.routes?.length) {
+    const idx = route.state.index ?? 0;
+    routeName = route.state.routes[idx]?.name;
+  }
+  // Cold start: nested focus is often undefined for a tick — use stack initial.
+  if (!routeName && fallbackWhenUnset) {
+    routeName = fallbackWhenUnset;
+  }
   if (!routeName) return undefined;
   return BottomTabLessScreens.includes(routeName)
     ? { display: 'none' }
@@ -77,6 +87,17 @@ function OrdersTabWrapper(props) {
 const BottomNaivgation = () => {
   const tabHeight = Platform.OS === 'ios' ? 82 : 68;
   const user = useSelector(state => state.app?.user);
+  const browseLocation = useSelector(state => state.app?.browseLocation);
+  const browseLat =
+    browseLocation?.lat != null ? Number(browseLocation.lat) : null;
+  const browseLng =
+    browseLocation?.lng != null ? Number(browseLocation.lng) : null;
+  const hasSavedBrowse =
+    Number.isFinite(browseLat) && Number.isFinite(browseLng);
+  /** Match HomeOneStack initial route so cold-start Landing hides tabs. */
+  const home1UnsetFallback = hasSavedBrowse
+    ? 'HomeOneScreen'
+    : 'LandingScreen';
   const navigation = useNavigation(); // Root stack navigation
   const tabState = useNavigationState(state => state); // Bottom tab state
   const currentTabName =
@@ -173,17 +194,18 @@ const BottomNaivgation = () => {
     <SafeAreaView
       style={{
         flex: 1,
-        backgroundColor: isShortsFullScreen ? '#000' : undefined,
+        backgroundColor: isShortsFullScreen ? '#000' : COLORS.white,
       }}
       edges={isShortsFullScreen ? [] : ['bottom']}
     >
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
+        style={{ flex: 1, backgroundColor: COLORS.white }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : -100}
       >
         <Tab.Navigator
           initialRouteName="Home1"
+          sceneContainerStyle={{ backgroundColor: COLORS.white }}
           screenOptions={{
             headerShown: false,
             popToTopOnBlur: true,
@@ -227,7 +249,7 @@ const BottomNaivgation = () => {
               },
             })}
             options={({ route }) => {
-              const hidden = getTabBarStyle(route);
+              const hidden = getTabBarStyle(route, home1UnsetFallback);
               const defaultVisibleStyle = {
                 backgroundColor: COLORS.white,
                 borderTopWidth: 1,

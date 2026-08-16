@@ -4,6 +4,14 @@ import googleServices from './android/app/google-services.json';
 export const EATWAZE_GOOGLE_WEB_CLIENT_ID =
   '236298500212-810ubvv2taqs55m35pgvg0h795so6u68.apps.googleusercontent.com';
 
+/** Debug keystore SHA-1 (already in google-services.json). */
+export const EATWAZE_GOOGLE_DEBUG_SHA1 =
+  '5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25';
+
+/** eatwaze-upload.keystore SHA-1 — must be in Firebase Android app com.eatix.app. */
+export const EATWAZE_GOOGLE_RELEASE_SHA1 =
+  'B8:C2:D3:45:EF:A9:E4:10:86:6E:E5:BD:46:D2:C9:59:5F:F0:3F:82';
+
 export const EATWAZE_GOOGLE_ANDROID_CLIENT_ID =
   '236298500212-hvgs9mkvoio5dnel4uo730if45ap3ipi.apps.googleusercontent.com';
 

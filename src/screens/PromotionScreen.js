@@ -4578,7 +4578,10 @@ const PromotionScreen = ({ onBack }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F6B041' },
+  // Keep the screen/safe-area white so the space above the bottom tabs does
+  // not inherit the orange header colour. The header remains orange via
+  // fixedTopBar below.
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
   fixedTopBar: {
     backgroundColor: '#F6B041',
     zIndex: 30,

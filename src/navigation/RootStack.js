@@ -38,7 +38,12 @@ const Root = createStackNavigator();
 
 const RootStack = () => {
   return (
-    <Root.Navigator screenOptions={{ headerShown: false }}>
+    <Root.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#FFFFFF' },
+      }}
+    >
       <Root.Screen name="Root" component={MainRoot} />
       <Root.Screen name="Login" component={Login} />
       <Root.Screen name="SignUp" component={SignUp} />

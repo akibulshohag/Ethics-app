@@ -35,6 +35,7 @@ import {
   printReceiptOverWifi,
 } from '../services/wifiPrinterService';
 import {
+  orderStatusLabel,
   orderStatusColor,
   customerOrderStatusLabel,
   customerOrderStatusColor,

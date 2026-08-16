@@ -3811,7 +3811,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+    <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <StatusBar
         barStyle="light-content"
         backgroundColor="#F6B041"
@@ -5974,13 +5975,14 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         </View>
       </Modal>
     </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F6B041',
+    backgroundColor: '#FFFFFF',
   },
   loadingWrap: {
     position: 'absolute',
