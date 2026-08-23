@@ -1290,7 +1290,14 @@ const UserViewsScreen = ({ navigation }) => {
 
   const handleBlockUser = useCallback(() => {
     if (requireLogin()) return;
-    if (!profileUserId || !currentUser?.id || isOwnProfile) return;
+    if (!profileUserId) {
+      Alert.alert('Unavailable', 'Could not find this profile to block.');
+      return;
+    }
+    if (isOwnProfile) {
+      Alert.alert('Not allowed', 'You cannot block your own profile.');
+      return;
+    }
     if (profileIsBlocked) {
       Alert.alert(
         'User blocked',
@@ -1943,9 +1950,7 @@ const UserViewsScreen = ({ navigation }) => {
         onSubscribe={handleProfileSubscribe}
         onMessagePress={handleProfileMessagePress}
         subscribeLoading={profileSubscribeLoading}
-        subscribeInExplorerBar={
-          showProfileSubscribe && isViewingBusinessProfile
-        }
+        subscribeInExplorerBar={showProfileSubscribe}
         onPressFollowers={handlePressFollowers}
         onPressFollowing={handlePressFollowing}
         onPressReviews={() => {
@@ -1970,28 +1975,6 @@ const UserViewsScreen = ({ navigation }) => {
             : undefined
         }
       />
-
-      {!isOwnProfile && currentUser?.id ? (
-        <TouchableOpacity
-          style={styles.blockUserRow}
-          onPress={handleBlockUser}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name={profileIsBlocked ? 'account-cancel' : 'account-cancel-outline'}
-            size={18}
-            color={profileIsBlocked ? '#B91C1C' : '#6B7280'}
-          />
-          <Text
-            style={[
-              styles.blockUserText,
-              profileIsBlocked && styles.blockUserTextActive,
-            ]}
-          >
-            {profileIsBlocked ? 'User blocked' : 'Block user'}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
 
       {renderProfilePromotionCarousel()}
 
@@ -2073,7 +2056,9 @@ const UserViewsScreen = ({ navigation }) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsScrollContent}
         >
-          {visibleTabs.map(tab => {
+          {visibleTabs
+            .concat(!isOwnProfile && currentUser?.id ? ['Block'] : [])
+            .map(tab => {
             const isGrid = tab === 'Gallery';
             const isActive = activeTab === tab;
             return (
@@ -2084,7 +2069,13 @@ const UserViewsScreen = ({ navigation }) => {
                   isActive && styles.activeTabItem,
                   isGrid && styles.gridTabItem,
                 ]}
-                onPress={() => setActiveTab(tab)}
+                onPress={() => {
+                  if (tab === 'Block') {
+                    handleBlockUser();
+                    return;
+                  }
+                  setActiveTab(tab);
+                }}
                 activeOpacity={0.85}
               >
                 {isGrid ? (
@@ -2102,7 +2093,7 @@ const UserViewsScreen = ({ navigation }) => {
                 )}
               </TouchableOpacity>
             );
-          })}
+            })}
         </ScrollView>
       </View>
 
@@ -3919,25 +3910,6 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
-  },
-  blockUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E5E7EB',
-  },
-  blockUserText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  blockUserTextActive: {
-    color: '#B91C1C',
   },
   profileSocialBtn: {
     width: 32,

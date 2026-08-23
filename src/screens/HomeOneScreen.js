@@ -406,9 +406,8 @@ const mapToDisplayItem = (v, type, viewerOpts) => {
     },
     userId: v.userId || u.id,
     creatorRole:
-      normalizeCreatorRole(
-        u.role ?? v.creatorRole ?? v.userRole ?? v.role,
-      ) || undefined,
+      normalizeCreatorRole(u.role ?? v.creatorRole ?? v.userRole ?? v.role) ||
+      undefined,
     channelName,
     channelAvatar,
     views: viewsStr,
@@ -571,11 +570,11 @@ const HomeOneScreen = () => {
   const [galleryLoading, setGalleryLoading] = useState(false);
   const [galleryError, setGalleryError] = useState(null);
   const [locationMapVisible, setLocationMapVisible] = useState(false);
-  const [addressText, setAddressText] = useState(
-    () => String(bootBrowseLocation?.addressText || ''),
+  const [addressText, setAddressText] = useState(() =>
+    String(bootBrowseLocation?.addressText || ''),
   );
-  const [browsePostcode, setBrowsePostcode] = useState(
-    () => String(bootBrowseLocation?.postcode || ''),
+  const [browsePostcode, setBrowsePostcode] = useState(() =>
+    String(bootBrowseLocation?.postcode || ''),
   );
   const [homeLocationOverride, setHomeLocationOverride] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
@@ -606,7 +605,11 @@ const HomeOneScreen = () => {
     if (!bootFeedCacheKey || !saved) return false;
     const savedLoc = saved.split('_').slice(0, 2).join('_');
     const bootLoc = bootFeedCacheKey.split('_').slice(0, 2).join('_');
-    return savedLoc === bootLoc && (bootHomeFeed?.feedVideos?.length > 0 || bootHomeFeed?.feedShorts?.length > 0);
+    return (
+      savedLoc === bootLoc &&
+      (bootHomeFeed?.feedVideos?.length > 0 ||
+        bootHomeFeed?.feedShorts?.length > 0)
+    );
   })();
   const persistedHomeFeed = bootFeedMatchesLocation ? bootHomeFeed : null;
   const [featuredVideo, setFeaturedVideo] = useState(
@@ -631,41 +634,35 @@ const HomeOneScreen = () => {
   /** Owners the user toggled on Trending — skip bulk hydrate for their cards */
   const subscribeTouchedOwnersRef = useRef(new Set());
   const [selectedCuisine, setSelectedCuisine] = useState('');
-  const [cuisineOptions, setCuisineOptions] = useState(
-    () =>
-      Array.isArray(persistedHomeFeed?.cuisineOptions)
-        ? persistedHomeFeed.cuisineOptions
-        : [],
+  const [cuisineOptions, setCuisineOptions] = useState(() =>
+    Array.isArray(persistedHomeFeed?.cuisineOptions)
+      ? persistedHomeFeed.cuisineOptions
+      : [],
   );
-  const [feedVideos, setFeedVideos] = useState(
-    () =>
-      Array.isArray(persistedHomeFeed?.feedVideos)
-        ? persistedHomeFeed.feedVideos
-        : [],
+  const [feedVideos, setFeedVideos] = useState(() =>
+    Array.isArray(persistedHomeFeed?.feedVideos)
+      ? persistedHomeFeed.feedVideos
+      : [],
   );
-  const [feedShorts, setFeedShorts] = useState(
-    () =>
-      Array.isArray(persistedHomeFeed?.feedShorts)
-        ? persistedHomeFeed.feedShorts
-        : [],
+  const [feedShorts, setFeedShorts] = useState(() =>
+    Array.isArray(persistedHomeFeed?.feedShorts)
+      ? persistedHomeFeed.feedShorts
+      : [],
   );
-  const [popularShorts, setPopularShorts] = useState(
-    () =>
-      Array.isArray(persistedHomeFeed?.popularShorts)
-        ? persistedHomeFeed.popularShorts
-        : [],
+  const [popularShorts, setPopularShorts] = useState(() =>
+    Array.isArray(persistedHomeFeed?.popularShorts)
+      ? persistedHomeFeed.popularShorts
+      : [],
   );
-  const [newShorts, setNewShorts] = useState(
-    () =>
-      Array.isArray(persistedHomeFeed?.newShorts)
-        ? persistedHomeFeed.newShorts
-        : [],
+  const [newShorts, setNewShorts] = useState(() =>
+    Array.isArray(persistedHomeFeed?.newShorts)
+      ? persistedHomeFeed.newShorts
+      : [],
   );
-  const [mostOrderedRestaurants, setMostOrderedRestaurants] = useState(
-    () =>
-      Array.isArray(persistedHomeFeed?.mostOrderedRestaurants)
-        ? persistedHomeFeed.mostOrderedRestaurants
-        : [],
+  const [mostOrderedRestaurants, setMostOrderedRestaurants] = useState(() =>
+    Array.isArray(persistedHomeFeed?.mostOrderedRestaurants)
+      ? persistedHomeFeed.mostOrderedRestaurants
+      : [],
   );
   const [categoryBrowseRows, setCategoryBrowseRows] = useState([]);
   const [categoryBrowseLoading, setCategoryBrowseLoading] = useState(false);
@@ -935,14 +932,24 @@ const HomeOneScreen = () => {
       };
     };
 
+    let isAlive = true;
+    const runNextTick = work => {
+      setTimeout(() => {
+        if (!isAlive) return;
+        work?.();
+      }, 0);
+    };
+
     const sub = shortsService.onShortUpdated?.(updated => {
       const sid = String(updated?.id || '').trim();
       if (!sid) return;
       if (updated?._deleted) {
         const drop = prev => (prev || []).filter(x => String(x?.id) !== sid);
-        setFeedShorts(drop);
-        setPopularShorts(drop);
-        setNewShorts(drop);
+        runNextTick(() => {
+          setFeedShorts(drop);
+          setPopularShorts(drop);
+          setNewShorts(drop);
+        });
         return;
       }
       const mergeShort = s => {
@@ -970,29 +977,34 @@ const HomeOneScreen = () => {
         }
         return merged;
       };
-      setFeedShorts(prev =>
-        prev
-          .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
-          .filter(onlyPublishedNow),
-      );
-      setPopularShorts(prev =>
-        prev
-          .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
-          .filter(onlyPublishedNow),
-      );
-      setNewShorts(prev =>
-        prev
-          .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
-          .filter(onlyPublishedNow),
-      );
-      setSelectedItem(prev => {
-        if (String(prev?.id) !== sid) return prev;
-        const t = String(prev?.type || prev?._type || '').toLowerCase();
-        if (t && t !== 'short') return prev;
-        return mergeShort(prev);
+      runNextTick(() => {
+        setFeedShorts(prev =>
+          prev
+            .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
+            .filter(onlyPublishedNow),
+        );
+        setPopularShorts(prev =>
+          prev
+            .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
+            .filter(onlyPublishedNow),
+        );
+        setNewShorts(prev =>
+          prev
+            .map(s => (String(s?.id) === sid ? mergeShort(s) : s))
+            .filter(onlyPublishedNow),
+        );
+        setSelectedItem(prev => {
+          if (String(prev?.id) !== sid) return prev;
+          const t = String(prev?.type || prev?._type || '').toLowerCase();
+          if (t && t !== 'short') return prev;
+          return mergeShort(prev);
+        });
       });
     });
-    return () => sub?.remove?.();
+    return () => {
+      isAlive = false;
+      sub?.remove?.();
+    };
   }, []);
   /** When opening video from Library / UserViews Videos, Back returns there */
   const libraryDetailReturnRef = useRef(null);
@@ -1385,13 +1397,10 @@ const HomeOneScreen = () => {
       // Soft refresh only if home cache is stale — avoid dual full reloads on focus.
       if (selectedLocation?.lat != null && selectedLocation?.lng != null) {
         const vo = resolveViewerLocationOpts(selectedLocation, userRef.current);
-        const key = vo
-          ? buildDiscoveryCacheKey(vo, userRef.current?.id)
-          : '';
+        const key = vo ? buildDiscoveryCacheKey(vo, userRef.current?.id) : '';
         const cached = homeFeedCacheRef.current || {};
         const fresh =
-          key &&
-          isHomeFeedCacheFresh(cached.fetchedAt, cached.cacheKey, key);
+          key && isHomeFeedCacheFresh(cached.fetchedAt, cached.cacheKey, key);
         if (!fresh) {
           loadFeaturedAndFeedRef.current?.();
         }
@@ -1526,564 +1535,579 @@ const HomeOneScreen = () => {
     }
     feedInFlightKeyRef.current = feedCacheKey;
     const run = (async () => {
-    // Keep cached UI interactive during background refresh — only block-paint
-    // skeletons when we have nothing to show yet.
-    if (!hasHomeCacheData) {
-      setFeedLoading(true);
-    }
-    const lat = voBrowse.viewerLat;
-    const lng = voBrowse.viewerLng;
-    const role = viewerRole(user);
-    const baseParams = {
-      page: 1,
-      limit: 12,
-      sort: 'latest',
-      viewerRole: role,
-    };
-    const searchTerm = searchDebounced?.trim() || undefined;
-    const videoParams = {
-      ...baseParams,
-      nearbyLat: lat,
-      nearbyLng: lng,
-      radiusKm: UK_DEFAULT_RADIUS_KM,
-      excludeSponsored: true,
-      excludeFeatured: true,
-    };
-    const shortParams = {
-      ...baseParams,
-      viewerUserId: user?.id,
-      nearbyLat: lat,
-      nearbyLng: lng,
-      radiusKm: UK_DEFAULT_RADIUS_KM,
-    };
-
-    try {
-      const needExtraShortLists = !!searchTerm;
-      const [
-        featuredRes,
-        sponsoredRes,
-        videosRes,
-        shortsRes,
-        popularShortsRes,
-        newestShortsRes,
-        topRes,
-      ] = await Promise.all([
-        getFeatured().catch(() => ({ featured: [] })),
-        getSponsored().catch(() => ({ sponsored: [] })),
-        getVideos(videoParams),
-        shortsService.getShorts(shortParams),
-        needExtraShortLists
-          ? shortsService.getShorts({
-              ...shortParams,
-              sort: 'trending',
-              page: 1,
-              limit: 16,
-            })
-          : Promise.resolve({ shorts: [] }),
-        needExtraShortLists
-          ? shortsService.getShorts({
-              ...shortParams,
-              sort: 'newest',
-              page: 1,
-              limit: 16,
-            })
-          : Promise.resolve({ shorts: [] }),
-        getTopRestaurantsByOrders({
-          page: 1,
-          limit: 8,
-          nearbyLat: lat,
-          nearbyLng: lng,
-          radiusKm: UK_DEFAULT_RADIUS_KM,
-        }).catch(() => ({
-          restaurants: [],
-        })),
-      ]);
-      const pickedFeatured = pickHomeFeatured(
-        featuredRes?.featured,
-        user,
-        voBrowse,
-      );
-      const pickedSponsored = pickNearestCampaign(
-        sponsoredRes?.sponsored,
-        voBrowse,
-      );
-      setFeaturedVideo(
-        pickedFeatured && !isFutureScheduledMedia(pickedFeatured)
-          ? pickedFeatured
-          : null,
-      );
-      setSponsoredVideo(
-        pickedSponsored && !isFutureScheduledMedia(pickedSponsored)
-          ? pickedSponsored
-          : null,
-      );
-      const vo = { viewerLat: lat, viewerLng: lng };
-      const mappedVideos = (videosRes?.videos || []).map(v =>
-        mapToDisplayItem(v, 'video', vo),
-      );
-      const rawShorts = (shortsRes?.shorts || []).filter(
-        s => s.videoUrl && String(s.videoUrl).trim(),
-      );
-      const hasShortAvatar = s => {
-        const u = s?.user && typeof s.user === 'object' ? s.user : {};
-        const p0 =
-          Array.isArray(u?.photos) && u.photos.length > 0 ? u.photos[0] : null;
-        return !!(
-          s?.avatar ||
-          s?.channelAvatar ||
-          s?.profileImage ||
-          s?.photoUrl ||
-          u?.avatar ||
-          u?.channelAvatar ||
-          u?.profileImage ||
-          u?.photoUrl ||
-          (typeof p0 === 'string' ? p0 : p0?.src)
-        );
+      // Keep cached UI interactive during background refresh — only block-paint
+      // skeletons when we have nothing to show yet.
+      if (!hasHomeCacheData) {
+        setFeedLoading(true);
+      }
+      const lat = voBrowse.viewerLat;
+      const lng = voBrowse.viewerLng;
+      const role = viewerRole(user);
+      const baseParams = {
+        page: 1,
+        limit: 12,
+        sort: 'latest',
+        viewerRole: role,
       };
-      // Skip avatar profile waits on first paint — patch in background later.
-      const ownerProfileById = {};
-      const mapShortWithOwnerPatch = s => {
-        const oid = String(s?.userId || s?.user?.id || '');
-        const p = oid ? ownerProfileById[oid] : null;
-        if (!p) return mapToDisplayItem(s, 'short', vo);
-        const u = s?.user && typeof s.user === 'object' ? s.user : {};
-        const p0 =
-          Array.isArray(p?.photos) && p.photos.length > 0 ? p.photos[0] : null;
-        const pPhoto =
-          typeof p0 === 'string'
-            ? p0
-            : p0?.src || p?.channelAvatar || p?.profileImage || null;
-        const mergedUser = {
-          ...u,
-          id: u?.id || s?.userId || p?.id,
-          nickname: u?.nickname || p?.nickname || p?.name || s?.nickname,
-          name: u?.name || p?.name || p?.nickname || s?.name,
-          avatar:
+      const searchTerm = searchDebounced?.trim() || undefined;
+      const videoParams = {
+        ...baseParams,
+        nearbyLat: lat,
+        nearbyLng: lng,
+        radiusKm: UK_DEFAULT_RADIUS_KM,
+        excludeSponsored: true,
+        excludeFeatured: true,
+      };
+      const shortParams = {
+        ...baseParams,
+        viewerUserId: user?.id,
+        nearbyLat: lat,
+        nearbyLng: lng,
+        radiusKm: UK_DEFAULT_RADIUS_KM,
+      };
+
+      try {
+        const needExtraShortLists = !!searchTerm;
+        const [
+          featuredRes,
+          sponsoredRes,
+          videosRes,
+          shortsRes,
+          popularShortsRes,
+          newestShortsRes,
+          topRes,
+        ] = await Promise.all([
+          getFeatured().catch(() => ({ featured: [] })),
+          getSponsored().catch(() => ({ sponsored: [] })),
+          getVideos(videoParams),
+          shortsService.getShorts(shortParams),
+          needExtraShortLists
+            ? shortsService.getShorts({
+                ...shortParams,
+                sort: 'trending',
+                page: 1,
+                limit: 16,
+              })
+            : Promise.resolve({ shorts: [] }),
+          needExtraShortLists
+            ? shortsService.getShorts({
+                ...shortParams,
+                sort: 'newest',
+                page: 1,
+                limit: 16,
+              })
+            : Promise.resolve({ shorts: [] }),
+          getTopRestaurantsByOrders({
+            page: 1,
+            limit: 8,
+            nearbyLat: lat,
+            nearbyLng: lng,
+            radiusKm: UK_DEFAULT_RADIUS_KM,
+          }).catch(() => ({
+            restaurants: [],
+          })),
+        ]);
+        const pickedFeatured = pickHomeFeatured(
+          featuredRes?.featured,
+          user,
+          voBrowse,
+        );
+        const pickedSponsored = pickNearestCampaign(
+          sponsoredRes?.sponsored,
+          voBrowse,
+        );
+        setFeaturedVideo(
+          pickedFeatured && !isFutureScheduledMedia(pickedFeatured)
+            ? pickedFeatured
+            : null,
+        );
+        setSponsoredVideo(
+          pickedSponsored && !isFutureScheduledMedia(pickedSponsored)
+            ? pickedSponsored
+            : null,
+        );
+        const vo = { viewerLat: lat, viewerLng: lng };
+        const mappedVideos = (videosRes?.videos || []).map(v =>
+          mapToDisplayItem(v, 'video', vo),
+        );
+        const rawShorts = (shortsRes?.shorts || []).filter(
+          s => s.videoUrl && String(s.videoUrl).trim(),
+        );
+        const hasShortAvatar = s => {
+          const u = s?.user && typeof s.user === 'object' ? s.user : {};
+          const p0 =
+            Array.isArray(u?.photos) && u.photos.length > 0
+              ? u.photos[0]
+              : null;
+          return !!(
+            s?.avatar ||
+            s?.channelAvatar ||
+            s?.profileImage ||
+            s?.photoUrl ||
             u?.avatar ||
             u?.channelAvatar ||
             u?.profileImage ||
             u?.photoUrl ||
-            pPhoto,
-          channelAvatar: u?.channelAvatar || p?.channelAvatar || pPhoto,
-          profileImage: u?.profileImage || p?.profileImage || pPhoto,
-          photoUrl: u?.photoUrl || p?.photoUrl || pPhoto,
-          photos:
-            Array.isArray(u?.photos) && u.photos.length > 0
-              ? u.photos
-              : Array.isArray(p?.photos)
-              ? p.photos
-              : pPhoto
-              ? [{ src: pPhoto }]
-              : [],
-        };
-        return mapToDisplayItem(
-          {
-            ...s,
-            userId: s?.userId || mergedUser?.id,
-            user: mergedUser,
-          },
-          'short',
-          vo,
-        );
-      };
-      const mappedShorts = rawShorts.map(mapShortWithOwnerPatch);
-      const mappedPopularShorts = needExtraShortLists
-        ? (popularShortsRes?.shorts || [])
-            .filter(s => s?.videoUrl && String(s.videoUrl).trim())
-            .map(mapShortWithOwnerPatch)
-        : [...mappedShorts]
-            .slice()
-            .sort(
-              (a, b) => Number(b?.viewCount ?? 0) - Number(a?.viewCount ?? 0),
-            )
-            .slice(0, 16);
-      const mappedNewestShorts = needExtraShortLists
-        ? (newestShortsRes?.shorts || [])
-            .filter(s => s?.videoUrl && String(s.videoUrl).trim())
-            .map(mapShortWithOwnerPatch)
-        : [...mappedShorts]
-            .slice()
-            .sort(
-              (a, b) =>
-                new Date(b?.publishedAt || b?.createdAt || 0).getTime() -
-                new Date(a?.publishedAt || a?.createdAt || 0).getTime(),
-            )
-            .slice(0, 16);
-      const q = String(searchTerm || '')
-        .toLowerCase()
-        .trim();
-      const matchesSearchEarly = item => {
-        if (!q) return true;
-        const haystack = [
-          item?.title,
-          item?.description,
-          item?.channelName,
-          item?.location,
-          item?.creatorAddress,
-          item?.user?.nickname,
-          item?.user?.name,
-          item?.user?.address,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(q);
-      };
-      setFeedVideos(dropBlocked(mappedVideos.filter(matchesSearchEarly)));
-      setFeedShorts(dropBlocked(mappedShorts.filter(matchesSearchEarly)));
-      setPopularShorts(
-        dropBlocked(mappedPopularShorts.filter(matchesSearchEarly)),
-      );
-      setNewShorts(dropBlocked(mappedNewestShorts.filter(matchesSearchEarly)));
-      const topRestaurantsQuick = (topRes?.restaurants || []).map(r => {
-        const firstPhoto =
-          Array.isArray(r?.photos) && r.photos.length > 0 ? r.photos[0] : null;
-        const photo =
-          typeof firstPhoto === 'string' ? firstPhoto : firstPhoto?.src || null;
-        const city =
-          (r?.city && String(r.city).trim()) ||
-          (r?.town && String(r.town).trim()) ||
-          '';
-        const country = r?.country && String(r.country).trim();
-        const locShort =
-          (city && country && `${city}, ${abbrevCountryLabel(country)}`) ||
-          formatShortProfileLocationLine(String(r?.address || '').trim()) ||
-          '';
-        let distanceLabel = '';
-        if (
-          r?.latitude != null &&
-          r?.longitude != null &&
-          lat != null &&
-          lng != null
-        ) {
-          const km = distanceKmBetween(
-            lat,
-            lng,
-            Number(r.latitude),
-            Number(r.longitude),
+            (typeof p0 === 'string' ? p0 : p0?.src)
           );
-          if (km != null) distanceLabel = formatDistanceKm(km);
-        }
-        const oc = Number(r?.orderCount || 0);
-        return {
-          id: r?.id,
-          type: 'restaurant',
-          title: r?.nickname || r?.name || 'Restaurant',
-          location: locShort || 'Near you',
-          distanceLabel,
-          img:
-            photo ||
-            'https://images.unsplash.com/photo-1552566626-52f8b828add9',
-          orderCount: oc,
-          views: `${oc} order${oc === 1 ? '' : 's'}`,
-          _menuTagsLower: [],
         };
-      });
-      setMostOrderedRestaurants(topRestaurantsQuick);
-      setFeedLoading(false);
-      lastPaintedFeedCacheKeyRef.current = feedCacheKey;
-      // Prefetch first screen images so scroll feels instant.
-      try {
-        [pickedFeatured, pickedSponsored, ...mappedVideos, ...mappedShorts]
-          .slice(0, 8)
-          .forEach(item => {
-            const uri =
-              item?.img ||
-              item?.video?.thumbnailUrl ||
-              item?.thumbnailUrl ||
-              '';
-            if (uri && /^https?:\/\//i.test(String(uri))) {
-              Image.prefetch(String(uri)).catch(() => {});
-            }
-          });
-      } catch (_) {}
-      dispatch(
-        setHomeFeedCache({
-          cacheKey: feedCacheKey,
-          feedVideos: mappedVideos.filter(matchesSearchEarly),
-          feedShorts: mappedShorts.filter(matchesSearchEarly),
-          popularShorts: mappedPopularShorts.filter(matchesSearchEarly),
-          newShorts: mappedNewestShorts.filter(matchesSearchEarly),
-          mostOrderedRestaurants: topRestaurantsQuick,
-          cuisineOptions: [],
-          featuredVideo: pickedFeatured,
-          sponsoredVideo: pickedSponsored,
-        }),
-      );
-
-      // The standard Home UI already has everything it renders. Do not start
-      // the expensive discovery/menu hydration pass here: it fans out into
-      // several requests, rebuilds every feed array and persists it a second
-      // time, briefly starving presses/navigation after login or a location
-      // change. Cuisine/search routes still need the enriched menu metadata.
-      if (!isCuisineFilterScreen && !searchTerm) {
-        return;
-      }
-
-      // Defer discovery so home taps stay responsive after relaunch.
-      InteractionManager.runAfterInteractions(() => {
-        setTimeout(() => {
-          dispatch(
-            fetchDiscoveryData({
-              currentUserId: user?.id || null,
-              cacheKey: feedCacheKey,
-              locationOpts: voBrowse,
-              force: false,
-            }),
+        // Skip avatar profile waits on first paint — patch in background later.
+        const ownerProfileById = {};
+        const mapShortWithOwnerPatch = s => {
+          const oid = String(s?.userId || s?.user?.id || '');
+          const p = oid ? ownerProfileById[oid] : null;
+          if (!p) return mapToDisplayItem(s, 'short', vo);
+          const u = s?.user && typeof s.user === 'object' ? s.user : {};
+          const p0 =
+            Array.isArray(p?.photos) && p.photos.length > 0
+              ? p.photos[0]
+              : null;
+          const pPhoto =
+            typeof p0 === 'string'
+              ? p0
+              : p0?.src || p?.channelAvatar || p?.profileImage || null;
+          const mergedUser = {
+            ...u,
+            id: u?.id || s?.userId || p?.id,
+            nickname: u?.nickname || p?.nickname || p?.name || s?.nickname,
+            name: u?.name || p?.name || p?.nickname || s?.name,
+            avatar:
+              u?.avatar ||
+              u?.channelAvatar ||
+              u?.profileImage ||
+              u?.photoUrl ||
+              pPhoto,
+            channelAvatar: u?.channelAvatar || p?.channelAvatar || pPhoto,
+            profileImage: u?.profileImage || p?.profileImage || pPhoto,
+            photoUrl: u?.photoUrl || p?.photoUrl || pPhoto,
+            photos:
+              Array.isArray(u?.photos) && u.photos.length > 0
+                ? u.photos
+                : Array.isArray(p?.photos)
+                ? p.photos
+                : pPhoto
+                ? [{ src: pPhoto }]
+                : [],
+          };
+          return mapToDisplayItem(
+            {
+              ...s,
+              userId: s?.userId || mergedUser?.id,
+              user: mergedUser,
+            },
+            'short',
+            vo,
           );
-        }, 1500);
-      });
-
-      // Menus / cuisine chips — NOT on first-paint critical path (was freezing
-      // taps for 30s+ on slow networks after login).
-      const allMappedMedia = [
-        ...mappedVideos,
-        ...mappedShorts,
-        ...mappedPopularShorts,
-        ...mappedNewestShorts,
-      ];
-      const uniqueOwnerIds = Array.from(
-        new Set(
-          allMappedMedia
-            .map(m => m?.userId ?? m?.user?.id)
+        };
+        const mappedShorts = rawShorts.map(mapShortWithOwnerPatch);
+        const mappedPopularShorts = needExtraShortLists
+          ? (popularShortsRes?.shorts || [])
+              .filter(s => s?.videoUrl && String(s.videoUrl).trim())
+              .map(mapShortWithOwnerPatch)
+          : [...mappedShorts]
+              .slice()
+              .sort(
+                (a, b) => Number(b?.viewCount ?? 0) - Number(a?.viewCount ?? 0),
+              )
+              .slice(0, 16);
+        const mappedNewestShorts = needExtraShortLists
+          ? (newestShortsRes?.shorts || [])
+              .filter(s => s?.videoUrl && String(s.videoUrl).trim())
+              .map(mapShortWithOwnerPatch)
+          : [...mappedShorts]
+              .slice()
+              .sort(
+                (a, b) =>
+                  new Date(b?.publishedAt || b?.createdAt || 0).getTime() -
+                  new Date(a?.publishedAt || a?.createdAt || 0).getTime(),
+              )
+              .slice(0, 16);
+        const q = String(searchTerm || '')
+          .toLowerCase()
+          .trim();
+        const matchesSearchEarly = item => {
+          if (!q) return true;
+          const haystack = [
+            item?.title,
+            item?.description,
+            item?.channelName,
+            item?.location,
+            item?.creatorAddress,
+            item?.user?.nickname,
+            item?.user?.name,
+            item?.user?.address,
+          ]
             .filter(Boolean)
-            .map(String),
-        ),
-      );
-      const topRestaurantOwnerIds = (topRes?.restaurants || [])
-        .map(r => r?.id)
-        .filter(Boolean)
-        .map(String);
-      const promoOwnerIds = [pickedFeatured, pickedSponsored]
-        .map(
-          item =>
-            item?.userId ??
-            item?.user?.id ??
-            item?.video?.userId ??
-            item?.video?.user?.id,
-        )
-        .filter(Boolean)
-        .map(String);
-      const allOwnerIdsForMenus = Array.from(
-        new Set([
-          ...uniqueOwnerIds,
-          ...topRestaurantOwnerIds,
-          ...promoOwnerIds,
-        ]),
-      ).slice(0, 8);
-
-      InteractionManager.runAfterInteractions(() => {
-        setTimeout(async () => {
-          if (lastPaintedFeedCacheKeyRef.current !== feedCacheKey) {
-            return;
+            .join(' ')
+            .toLowerCase();
+          return haystack.includes(q);
+        };
+        setFeedVideos(dropBlocked(mappedVideos.filter(matchesSearchEarly)));
+        setFeedShorts(dropBlocked(mappedShorts.filter(matchesSearchEarly)));
+        setPopularShorts(
+          dropBlocked(mappedPopularShorts.filter(matchesSearchEarly)),
+        );
+        setNewShorts(
+          dropBlocked(mappedNewestShorts.filter(matchesSearchEarly)),
+        );
+        const topRestaurantsQuick = (topRes?.restaurants || []).map(r => {
+          const firstPhoto =
+            Array.isArray(r?.photos) && r.photos.length > 0
+              ? r.photos[0]
+              : null;
+          const photo =
+            typeof firstPhoto === 'string'
+              ? firstPhoto
+              : firstPhoto?.src || null;
+          const city =
+            (r?.city && String(r.city).trim()) ||
+            (r?.town && String(r.town).trim()) ||
+            '';
+          const country = r?.country && String(r.country).trim();
+          const locShort =
+            (city && country && `${city}, ${abbrevCountryLabel(country)}`) ||
+            formatShortProfileLocationLine(String(r?.address || '').trim()) ||
+            '';
+          let distanceLabel = '';
+          if (
+            r?.latitude != null &&
+            r?.longitude != null &&
+            lat != null &&
+            lng != null
+          ) {
+            const km = distanceKmBetween(
+              lat,
+              lng,
+              Number(r.latitude),
+              Number(r.longitude),
+            );
+            if (km != null) distanceLabel = formatDistanceKm(km);
           }
-          try {
-            if (allOwnerIdsForMenus.length > 0) {
-              await Promise.allSettled(
-                allOwnerIdsForMenus.map(async oid => {
-                  try {
-                    const res = await getMenuByUserId(oid);
-                    const rows = Array.isArray(res?.menu)
-                      ? res.menu.map(m => ({
-                          id: m?.id,
-                          itemName: String(m?.itemName || '').trim(),
-                          description: String(m?.description || '').trim(),
-                          categoryName: readCuisineText(
-                            m?.category?.name ?? m?.categoryName ?? m?.category,
-                          ).trim(),
-                          tags: Array.isArray(m?.tags) ? m.tags : [],
-                        }))
-                      : [];
-                    const categories = Array.isArray(res?.categories)
-                      ? res.categories
-                          .map(c =>
-                            readCuisineText(
-                              c?.name ?? c?.label ?? c?.title ?? c,
-                            ).trim(),
-                          )
-                          .filter(Boolean)
-                      : [];
-                    ownerMenuSearchCacheRef.current[oid] = rows;
-                    ownerCategoryCacheRef.current[oid] = categories;
-                  } catch (_) {
-                    ownerMenuSearchCacheRef.current[oid] = [];
-                    ownerCategoryCacheRef.current[oid] = [];
-                  }
-                }),
-              );
-            }
-            const menuCacheSnapshot = {};
-            allOwnerIdsForMenus.forEach(oid => {
-              menuCacheSnapshot[oid] =
-                ownerMenuSearchCacheRef.current[String(oid)] || [];
+          const oc = Number(r?.orderCount || 0);
+          return {
+            id: r?.id,
+            type: 'restaurant',
+            title: r?.nickname || r?.name || 'Restaurant',
+            location: locShort || 'Near you',
+            distanceLabel,
+            img:
+              photo ||
+              'https://images.unsplash.com/photo-1552566626-52f8b828add9',
+            orderCount: oc,
+            views: `${oc} order${oc === 1 ? '' : 's'}`,
+            _menuTagsLower: [],
+          };
+        });
+        setMostOrderedRestaurants(topRestaurantsQuick);
+        setFeedLoading(false);
+        lastPaintedFeedCacheKeyRef.current = feedCacheKey;
+        // Prefetch first screen images so scroll feels instant.
+        try {
+          [pickedFeatured, pickedSponsored, ...mappedVideos, ...mappedShorts]
+            .slice(0, 8)
+            .forEach(item => {
+              const uri =
+                item?.img ||
+                item?.video?.thumbnailUrl ||
+                item?.thumbnailUrl ||
+                '';
+              if (uri && /^https?:\/\//i.test(String(uri))) {
+                Image.prefetch(String(uri)).catch(() => {});
+              }
             });
-            const discoveryOptions =
-              buildDiscoveryCategoriesFromMenuCaches(menuCacheSnapshot);
-            const discoveryKeys = new Set(discoveryOptions.map(o => o.key));
-            const rawCuisineSet = new Set();
-            allOwnerIdsForMenus.forEach(oid => {
-              const rows = ownerMenuSearchCacheRef.current[String(oid)] || [];
-              const categories = ownerCategoryCacheRef.current[String(oid)] || [];
-              categories.forEach(cat => {
-                const c = normalizeCuisine(cat);
-                if (!isValidCuisineKey(c)) return;
-                if (
-                  !discoveryKeys.has(c) &&
-                  !resolveDiscoveryCategoryFromFilter(c)
-                ) {
-                  rawCuisineSet.add(c);
-                }
-              });
-              rows.forEach(m => {
-                const c = normalizeCuisine(m?.categoryName);
-                if (!isValidCuisineKey(c)) return;
-                if (
-                  !discoveryKeys.has(c) &&
-                  !resolveDiscoveryCategoryFromFilter(c)
-                ) {
-                  rawCuisineSet.add(c);
-                }
-              });
-            });
-            const rawOptions = Array.from(rawCuisineSet)
-              .map(key => ({
-                key,
-                label: cuisineLabelFromKey(key) || 'Menu',
-                icon: cuisineIconFromKey(key),
-              }))
-              .sort((a, b) => a.label.localeCompare(b.label));
-            const dynamicOptions = [...discoveryOptions, ...rawOptions];
+        } catch (_) {}
+        dispatch(
+          setHomeFeedCache({
+            cacheKey: feedCacheKey,
+            feedVideos: mappedVideos.filter(matchesSearchEarly),
+            feedShorts: mappedShorts.filter(matchesSearchEarly),
+            popularShorts: mappedPopularShorts.filter(matchesSearchEarly),
+            newShorts: mappedNewestShorts.filter(matchesSearchEarly),
+            mostOrderedRestaurants: topRestaurantsQuick,
+            cuisineOptions: [],
+            featuredVideo: pickedFeatured,
+            sponsoredVideo: pickedSponsored,
+          }),
+        );
+
+        // The standard Home UI already has everything it renders. Do not start
+        // the expensive discovery/menu hydration pass here: it fans out into
+        // several requests, rebuilds every feed array and persists it a second
+        // time, briefly starving presses/navigation after login or a location
+        // change. Cuisine/search routes still need the enriched menu metadata.
+        if (!isCuisineFilterScreen && !searchTerm) {
+          return;
+        }
+
+        // Defer discovery so home taps stay responsive after relaunch.
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(() => {
+            dispatch(
+              fetchDiscoveryData({
+                currentUserId: user?.id || null,
+                cacheKey: feedCacheKey,
+                locationOpts: voBrowse,
+                force: false,
+              }),
+            );
+          }, 1500);
+        });
+
+        // Menus / cuisine chips — NOT on first-paint critical path (was freezing
+        // taps for 30s+ on slow networks after login).
+        const allMappedMedia = [
+          ...mappedVideos,
+          ...mappedShorts,
+          ...mappedPopularShorts,
+          ...mappedNewestShorts,
+        ];
+        const uniqueOwnerIds = Array.from(
+          new Set(
+            allMappedMedia
+              .map(m => m?.userId ?? m?.user?.id)
+              .filter(Boolean)
+              .map(String),
+          ),
+        );
+        const topRestaurantOwnerIds = (topRes?.restaurants || [])
+          .map(r => r?.id)
+          .filter(Boolean)
+          .map(String);
+        const promoOwnerIds = [pickedFeatured, pickedSponsored]
+          .map(
+            item =>
+              item?.userId ??
+              item?.user?.id ??
+              item?.video?.userId ??
+              item?.video?.user?.id,
+          )
+          .filter(Boolean)
+          .map(String);
+        const allOwnerIdsForMenus = Array.from(
+          new Set([
+            ...uniqueOwnerIds,
+            ...topRestaurantOwnerIds,
+            ...promoOwnerIds,
+          ]),
+        ).slice(0, 8);
+
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(async () => {
             if (lastPaintedFeedCacheKeyRef.current !== feedCacheKey) {
               return;
             }
-            setCuisineOptions(dynamicOptions);
-            const withMenuSearchMeta = item => {
-              const ownerId = item?.userId ?? item?.user?.id;
-              if (!ownerId) return item;
-              const menuRows =
-                ownerMenuSearchCacheRef.current[String(ownerId)] || [];
-              if (!Array.isArray(menuRows) || menuRows.length === 0) return item;
-              const menuBlob = menuRows
-                .map(m =>
-                  [
-                    m?.itemName,
-                    m?.description,
-                    ...(Array.isArray(m?.tags) ? m.tags : []),
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                )
-                .join(' ')
-                .toLowerCase();
-              const matchedMenuItems =
-                q && q.length > 0
-                  ? menuRows
-                      .filter(m =>
-                        [
-                          m?.itemName,
-                          m?.description,
-                          ...(Array.isArray(m?.tags) ? m.tags : []),
-                        ]
-                          .filter(Boolean)
-                          .join(' ')
-                          .toLowerCase()
-                          .includes(q),
-                      )
-                      .slice(0, 8)
-                  : [];
-              return {
-                ...item,
-                _menuSearchBlob: menuBlob,
-                _menuTagsLower: buildMenuCuisineTags(
-                  menuRows,
-                  ownerCategoryCacheRef.current[String(ownerId)] || [],
-                ),
-                _matchedMenuItems: matchedMenuItems,
-                _menuSearchKeyword: q,
+            try {
+              if (allOwnerIdsForMenus.length > 0) {
+                await Promise.allSettled(
+                  allOwnerIdsForMenus.map(async oid => {
+                    try {
+                      const res = await getMenuByUserId(oid);
+                      const rows = Array.isArray(res?.menu)
+                        ? res.menu.map(m => ({
+                            id: m?.id,
+                            itemName: String(m?.itemName || '').trim(),
+                            description: String(m?.description || '').trim(),
+                            categoryName: readCuisineText(
+                              m?.category?.name ??
+                                m?.categoryName ??
+                                m?.category,
+                            ).trim(),
+                            tags: Array.isArray(m?.tags) ? m.tags : [],
+                          }))
+                        : [];
+                      const categories = Array.isArray(res?.categories)
+                        ? res.categories
+                            .map(c =>
+                              readCuisineText(
+                                c?.name ?? c?.label ?? c?.title ?? c,
+                              ).trim(),
+                            )
+                            .filter(Boolean)
+                        : [];
+                      ownerMenuSearchCacheRef.current[oid] = rows;
+                      ownerCategoryCacheRef.current[oid] = categories;
+                    } catch (_) {
+                      ownerMenuSearchCacheRef.current[oid] = [];
+                      ownerCategoryCacheRef.current[oid] = [];
+                    }
+                  }),
+                );
+              }
+              const menuCacheSnapshot = {};
+              allOwnerIdsForMenus.forEach(oid => {
+                menuCacheSnapshot[oid] =
+                  ownerMenuSearchCacheRef.current[String(oid)] || [];
+              });
+              const discoveryOptions =
+                buildDiscoveryCategoriesFromMenuCaches(menuCacheSnapshot);
+              const discoveryKeys = new Set(discoveryOptions.map(o => o.key));
+              const rawCuisineSet = new Set();
+              allOwnerIdsForMenus.forEach(oid => {
+                const rows = ownerMenuSearchCacheRef.current[String(oid)] || [];
+                const categories =
+                  ownerCategoryCacheRef.current[String(oid)] || [];
+                categories.forEach(cat => {
+                  const c = normalizeCuisine(cat);
+                  if (!isValidCuisineKey(c)) return;
+                  if (
+                    !discoveryKeys.has(c) &&
+                    !resolveDiscoveryCategoryFromFilter(c)
+                  ) {
+                    rawCuisineSet.add(c);
+                  }
+                });
+                rows.forEach(m => {
+                  const c = normalizeCuisine(m?.categoryName);
+                  if (!isValidCuisineKey(c)) return;
+                  if (
+                    !discoveryKeys.has(c) &&
+                    !resolveDiscoveryCategoryFromFilter(c)
+                  ) {
+                    rawCuisineSet.add(c);
+                  }
+                });
+              });
+              const rawOptions = Array.from(rawCuisineSet)
+                .map(key => ({
+                  key,
+                  label: cuisineLabelFromKey(key) || 'Menu',
+                  icon: cuisineIconFromKey(key),
+                }))
+                .sort((a, b) => a.label.localeCompare(b.label));
+              const dynamicOptions = [...discoveryOptions, ...rawOptions];
+              if (lastPaintedFeedCacheKeyRef.current !== feedCacheKey) {
+                return;
+              }
+              setCuisineOptions(dynamicOptions);
+              const withMenuSearchMeta = item => {
+                const ownerId = item?.userId ?? item?.user?.id;
+                if (!ownerId) return item;
+                const menuRows =
+                  ownerMenuSearchCacheRef.current[String(ownerId)] || [];
+                if (!Array.isArray(menuRows) || menuRows.length === 0)
+                  return item;
+                const menuBlob = menuRows
+                  .map(m =>
+                    [
+                      m?.itemName,
+                      m?.description,
+                      ...(Array.isArray(m?.tags) ? m.tags : []),
+                    ]
+                      .filter(Boolean)
+                      .join(' '),
+                  )
+                  .join(' ')
+                  .toLowerCase();
+                const matchedMenuItems =
+                  q && q.length > 0
+                    ? menuRows
+                        .filter(m =>
+                          [
+                            m?.itemName,
+                            m?.description,
+                            ...(Array.isArray(m?.tags) ? m.tags : []),
+                          ]
+                            .filter(Boolean)
+                            .join(' ')
+                            .toLowerCase()
+                            .includes(q),
+                        )
+                        .slice(0, 8)
+                    : [];
+                return {
+                  ...item,
+                  _menuSearchBlob: menuBlob,
+                  _menuTagsLower: buildMenuCuisineTags(
+                    menuRows,
+                    ownerCategoryCacheRef.current[String(ownerId)] || [],
+                  ),
+                  _matchedMenuItems: matchedMenuItems,
+                  _menuSearchKeyword: q,
+                };
               };
-            };
-            const mappedVideosWithMenu = mappedVideos
-              .filter(onlyPublishedNow)
-              .map(withMenuSearchMeta);
-            const mappedShortsWithMenu = mappedShorts
-              .filter(onlyPublishedNow)
-              .map(withMenuSearchMeta);
-            const mappedPopularShortsWithMenu = mappedPopularShorts
-              .filter(onlyPublishedNow)
-              .map(withMenuSearchMeta);
-            const mappedNewestShortsWithMenu = mappedNewestShorts
-              .filter(onlyPublishedNow)
-              .map(withMenuSearchMeta);
-            const matchesSearch = item => {
-              if (!q) return true;
-              const haystack = [
-                item?.title,
-                item?.description,
-                item?.channelName,
-                item?.location,
-                item?.creatorAddress,
-                item?.user?.nickname,
-                item?.user?.name,
-                item?.user?.address,
-                item?._menuSearchBlob,
-              ]
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
-              return haystack.includes(q);
-            };
-            setFeedVideos(
-              dropBlocked(mappedVideosWithMenu.filter(matchesSearch)),
-            );
-            setFeedShorts(
-              dropBlocked(mappedShortsWithMenu.filter(matchesSearch)),
-            );
-            setPopularShorts(
-              dropBlocked(mappedPopularShortsWithMenu.filter(matchesSearch)),
-            );
-            setNewShorts(
-              dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)),
-            );
-            const topRestaurants = topRestaurantsQuick.map(r => ({
-              ...r,
-              _menuTagsLower: buildMenuCuisineTags(
-                ownerMenuSearchCacheRef.current[String(r?.id)] || [],
-                ownerCategoryCacheRef.current[String(r?.id)] || [],
-              ),
-            }));
-            setMostOrderedRestaurants(topRestaurants);
-            dispatch(
-              setHomeFeedCache({
-                cacheKey: feedCacheKey,
-                feedVideos: mappedVideosWithMenu.filter(matchesSearch),
-                feedShorts: mappedShortsWithMenu.filter(matchesSearch),
-                popularShorts: mappedPopularShortsWithMenu.filter(matchesSearch),
-                newShorts: mappedNewestShortsWithMenu.filter(matchesSearch),
-                mostOrderedRestaurants: topRestaurants,
-                cuisineOptions: dynamicOptions,
-                featuredVideo: pickedFeatured,
-                sponsoredVideo: pickedSponsored,
-              }),
-            );
-          } catch (_) {}
-        }, 800);
-      });
-    } catch (e) {
-      console.error('HomeOne load feed:', e);
-      if (!hasHomeCacheData) {
-        setFeedVideos([]);
-        setFeedShorts([]);
-        setPopularShorts([]);
-        setNewShorts([]);
-        setMostOrderedRestaurants([]);
+              const mappedVideosWithMenu = mappedVideos
+                .filter(onlyPublishedNow)
+                .map(withMenuSearchMeta);
+              const mappedShortsWithMenu = mappedShorts
+                .filter(onlyPublishedNow)
+                .map(withMenuSearchMeta);
+              const mappedPopularShortsWithMenu = mappedPopularShorts
+                .filter(onlyPublishedNow)
+                .map(withMenuSearchMeta);
+              const mappedNewestShortsWithMenu = mappedNewestShorts
+                .filter(onlyPublishedNow)
+                .map(withMenuSearchMeta);
+              const matchesSearch = item => {
+                if (!q) return true;
+                const haystack = [
+                  item?.title,
+                  item?.description,
+                  item?.channelName,
+                  item?.location,
+                  item?.creatorAddress,
+                  item?.user?.nickname,
+                  item?.user?.name,
+                  item?.user?.address,
+                  item?._menuSearchBlob,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+                  .toLowerCase();
+                return haystack.includes(q);
+              };
+              setFeedVideos(
+                dropBlocked(mappedVideosWithMenu.filter(matchesSearch)),
+              );
+              setFeedShorts(
+                dropBlocked(mappedShortsWithMenu.filter(matchesSearch)),
+              );
+              setPopularShorts(
+                dropBlocked(mappedPopularShortsWithMenu.filter(matchesSearch)),
+              );
+              setNewShorts(
+                dropBlocked(mappedNewestShortsWithMenu.filter(matchesSearch)),
+              );
+              const topRestaurants = topRestaurantsQuick.map(r => ({
+                ...r,
+                _menuTagsLower: buildMenuCuisineTags(
+                  ownerMenuSearchCacheRef.current[String(r?.id)] || [],
+                  ownerCategoryCacheRef.current[String(r?.id)] || [],
+                ),
+              }));
+              setMostOrderedRestaurants(topRestaurants);
+              dispatch(
+                setHomeFeedCache({
+                  cacheKey: feedCacheKey,
+                  feedVideos: mappedVideosWithMenu.filter(matchesSearch),
+                  feedShorts: mappedShortsWithMenu.filter(matchesSearch),
+                  popularShorts:
+                    mappedPopularShortsWithMenu.filter(matchesSearch),
+                  newShorts: mappedNewestShortsWithMenu.filter(matchesSearch),
+                  mostOrderedRestaurants: topRestaurants,
+                  cuisineOptions: dynamicOptions,
+                  featuredVideo: pickedFeatured,
+                  sponsoredVideo: pickedSponsored,
+                }),
+              );
+            } catch (_) {}
+          }, 800);
+        });
+      } catch (e) {
+        console.error('HomeOne load feed:', e);
+        if (!hasHomeCacheData) {
+          setFeedVideos([]);
+          setFeedShorts([]);
+          setPopularShorts([]);
+          setNewShorts([]);
+          setMostOrderedRestaurants([]);
+        }
+      } finally {
+        setFeedLoading(false);
+        if (feedInFlightKeyRef.current === feedCacheKey) {
+          feedInFlightKeyRef.current = null;
+          feedInFlightPromiseRef.current = null;
+        }
       }
-    } finally {
-      setFeedLoading(false);
-      if (feedInFlightKeyRef.current === feedCacheKey) {
-        feedInFlightKeyRef.current = null;
-        feedInFlightPromiseRef.current = null;
-      }
-    }
     })();
     feedInFlightPromiseRef.current = run;
     return run;
@@ -2221,7 +2245,11 @@ const HomeOneScreen = () => {
               ? Math.max(0, Math.floor(count))
               : 0,
             phone:
-              p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
+              p?.phone ??
+              p?.mobile ??
+              p?.phoneNumber ??
+              p?.contactPhone ??
+              null,
             email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
             address: p?.address ?? null,
             channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
@@ -2272,7 +2300,11 @@ const HomeOneScreen = () => {
               : 0,
             isSubscribed: !!p?.isSubscribed,
             phone:
-              p?.phone ?? p?.mobile ?? p?.phoneNumber ?? p?.contactPhone ?? null,
+              p?.phone ??
+              p?.mobile ??
+              p?.phoneNumber ??
+              p?.contactPhone ??
+              null,
             email: p?.email ?? p?.contactEmail ?? p?.contact?.email ?? null,
             address: p?.address ?? null,
             channelAbout: p?.channelAbout ?? p?.about ?? p?.bio ?? null,
@@ -4555,9 +4587,15 @@ const HomeOneScreen = () => {
                         styles.cuisineChipText,
                         isActive && styles.cuisineChipTextActive,
                       ]}
-                      numberOfLines={2}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.75}
                     >
-                      {displayCuisineLabel(cuisine.label)}
+                      {displayCuisineLabel(cuisine.label).slice(0, 12) ||
+                        cuisine.label}
+                      {displayCuisineLabel(cuisine.label).length > 12
+                        ? '...'
+                        : ''}
                     </Text>
                     {isActive ? (
                       <View style={styles.cuisineChipUnderline} />
@@ -4660,18 +4698,14 @@ const HomeOneScreen = () => {
                         }
                         isSubscribed={
                           !!channelSubscribeByOwnerId[ownerKey] ||
-                          !!trendingSubscribeByVideoId[
-                            String(r?.mediaId ?? '')
-                          ]
+                          !!trendingSubscribeByVideoId[String(r?.mediaId ?? '')]
                         }
                         subscribeBusy={
                           subscribeTogglingVideoId ===
                           String(r?.mediaId || r?.id || '')
                         }
                         hideSubscribe={
-                          !!user?.id &&
-                          ownerKey &&
-                          String(user.id) === ownerKey
+                          !!user?.id && ownerKey && String(user.id) === ownerKey
                         }
                         showOrderBook={showOrderBook}
                       />
@@ -5872,443 +5906,447 @@ const HomeOneScreen = () => {
           ? renderVideoDetail()
           : renderResults()}
 
-      <SaveModal
-        visible={
-          (resSaveVisible && !!selectedItem?.id) ||
-          (morePlaylistVisible && !!morePlaylistId)
-        }
-        onClose={() => {
-          setResSaveVisible(false);
-          setMorePlaylistVisible(false);
-          setMorePlaylistId(null);
-        }}
-        contentType={morePlaylistVisible ? morePlaylistType : 'video'}
-        contentId={morePlaylistVisible ? morePlaylistId : selectedItem?.id}
-      />
-
-      <HomeMoreOptionModal
-        visible={homeMoreVisible}
-        onClose={closeHomeMore}
-        onPlaylist={onMoreSavePlaylist}
-        onWatchLater={onMoreWatchLater}
-        onDownload={onMoreDownload}
-        onShare={onMoreShare}
-        onNotInterested={onMoreNotInterested}
-        onReport={onMoreOpenReport}
-        onEdit={onMoreEditShort}
-        onDelete={onMoreDelete}
-        showEdit={!!homeMoreTarget?.canEdit}
-        showDelete={!!homeMoreTarget?.canDelete}
-      />
-
-      <RestaurantBookingModal
-        visible={bookingModalVisible}
-        onClose={() => setBookingModalVisible(false)}
-        ownerId={bookingTarget?.ownerId}
-        ownerName={bookingTarget?.ownerName}
-        currentUser={user}
-        defaultAddress={
-          user?.address || addressText || bookingTarget?.address || ''
-        }
-      />
-
-      <NotificationsBottomSheet
-        visible={notificationsVisible}
-        onClose={() => setNotificationsVisible(false)}
-        notifications={notifications}
-        loading={notificationsLoading}
-        unreadCount={unreadCount}
-        onMarkRead={markNotificationReadLocal}
-        onMarkAllRead={markAllNotificationsReadLocal}
-        navigation={navigation}
-        currentUser={user}
-      />
-
-      <ReportContentModal
-        visible={reportVisible}
-        onClose={() => {
-          if (!reportSubmitting) {
-            setReportVisible(false);
-            setReportTarget(null);
+        <SaveModal
+          visible={
+            (resSaveVisible && !!selectedItem?.id) ||
+            (morePlaylistVisible && !!morePlaylistId)
           }
-        }}
-        onSubmit={handleReportSubmit}
-        submitting={reportSubmitting}
-      />
+          onClose={() => {
+            setResSaveVisible(false);
+            setMorePlaylistVisible(false);
+            setMorePlaylistId(null);
+          }}
+          contentType={morePlaylistVisible ? morePlaylistType : 'video'}
+          contentId={morePlaylistVisible ? morePlaylistId : selectedItem?.id}
+        />
 
-      <CommentsModal
-        visible={resCommentsVisible}
-        onClose={() => setResCommentsVisible(false)}
-        contentType={selectedItem?.type === 'short' ? 'short' : 'video'}
-        contentId={selectedItem?.id}
-        videoId={selectedItem?.id}
-        video={{
-          commentCount: selectedItem?.commentCount ?? 0,
-          topLevelCommentCount: selectedItem?.commentCount ?? 0,
-        }}
-        user={{ ...(user || {}), id: actorUserId || authUserId || user?.id }}
-        onCommentAdded={() => {
-          setSelectedItem(prev => {
-            if (!prev?.id) return prev;
-            const newCount = (prev.commentCount ?? 0) + 1;
-            return { ...prev, commentCount: newCount };
-          });
-        }}
-        onCommentDeleted={(_wasTopLevel, deletedCount) => {
-          setSelectedItem(prev => {
-            if (!prev?.id) return prev;
-            const dec = deletedCount || 1;
-            const newCount = Math.max(0, (prev.commentCount ?? 0) - dec);
-            return { ...prev, commentCount: newCount };
-          });
-        }}
-      />
+        <HomeMoreOptionModal
+          visible={homeMoreVisible}
+          onClose={closeHomeMore}
+          onPlaylist={onMoreSavePlaylist}
+          onWatchLater={onMoreWatchLater}
+          onDownload={onMoreDownload}
+          onShare={onMoreShare}
+          onNotInterested={onMoreNotInterested}
+          onReport={onMoreOpenReport}
+          onEdit={onMoreEditShort}
+          onDelete={onMoreDelete}
+          showEdit={!!homeMoreTarget?.canEdit}
+          showDelete={!!homeMoreTarget?.canDelete}
+        />
 
-      <Modal
-        visible={showGalleryModal}
-        animationType="slide"
-        transparent
-        onRequestClose={closeGalleryModal}
-      >
-        <View style={styles.galleryModalOverlay}>
-          <View style={styles.galleryModalContent}>
-            <View style={styles.galleryModalHeader}>
-              <Text style={styles.galleryModalTitle}>Gallery</Text>
-              <TouchableOpacity
-                onPress={closeGalleryModal}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Icon name="close" size={28} color="#333" />
-              </TouchableOpacity>
+        <RestaurantBookingModal
+          visible={bookingModalVisible}
+          onClose={() => setBookingModalVisible(false)}
+          ownerId={bookingTarget?.ownerId}
+          ownerName={bookingTarget?.ownerName}
+          currentUser={user}
+          defaultAddress={
+            user?.address || addressText || bookingTarget?.address || ''
+          }
+        />
+
+        <NotificationsBottomSheet
+          visible={notificationsVisible}
+          onClose={() => setNotificationsVisible(false)}
+          notifications={notifications}
+          loading={notificationsLoading}
+          unreadCount={unreadCount}
+          onMarkRead={markNotificationReadLocal}
+          onMarkAllRead={markAllNotificationsReadLocal}
+          navigation={navigation}
+          currentUser={user}
+        />
+
+        <ReportContentModal
+          visible={reportVisible}
+          onClose={() => {
+            if (!reportSubmitting) {
+              setReportVisible(false);
+              setReportTarget(null);
+            }
+          }}
+          onSubmit={handleReportSubmit}
+          submitting={reportSubmitting}
+        />
+
+        <CommentsModal
+          visible={resCommentsVisible}
+          onClose={() => setResCommentsVisible(false)}
+          contentType={selectedItem?.type === 'short' ? 'short' : 'video'}
+          contentId={selectedItem?.id}
+          videoId={selectedItem?.id}
+          video={{
+            commentCount: selectedItem?.commentCount ?? 0,
+            topLevelCommentCount: selectedItem?.commentCount ?? 0,
+          }}
+          user={{ ...(user || {}), id: actorUserId || authUserId || user?.id }}
+          onCommentAdded={() => {
+            setSelectedItem(prev => {
+              if (!prev?.id) return prev;
+              const newCount = (prev.commentCount ?? 0) + 1;
+              return { ...prev, commentCount: newCount };
+            });
+          }}
+          onCommentDeleted={(_wasTopLevel, deletedCount) => {
+            setSelectedItem(prev => {
+              if (!prev?.id) return prev;
+              const dec = deletedCount || 1;
+              const newCount = Math.max(0, (prev.commentCount ?? 0) - dec);
+              return { ...prev, commentCount: newCount };
+            });
+          }}
+        />
+
+        <Modal
+          visible={showGalleryModal}
+          animationType="slide"
+          transparent
+          onRequestClose={closeGalleryModal}
+        >
+          <View style={styles.galleryModalOverlay}>
+            <View style={styles.galleryModalContent}>
+              <View style={styles.galleryModalHeader}>
+                <Text style={styles.galleryModalTitle}>Gallery</Text>
+                <TouchableOpacity
+                  onPress={closeGalleryModal}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Icon name="close" size={28} color="#333" />
+                </TouchableOpacity>
+              </View>
+              {galleryLoading ? (
+                <View style={styles.galleryModalLoading}>
+                  <ActivityIndicator size="large" color="#F5A623" />
+                  <Text style={styles.galleryModalLoadingText}>
+                    Loading gallery…
+                  </Text>
+                </View>
+              ) : galleryError ? (
+                <View style={styles.galleryModalEmpty}>
+                  <Icon name="image-off" size={48} color="#999" />
+                  <Text style={styles.galleryModalEmptyText}>
+                    {galleryError}
+                  </Text>
+                </View>
+              ) : !galleryImages?.length ? (
+                <View style={styles.galleryModalEmpty}>
+                  <Icon name="image-multiple" size={48} color="#999" />
+                  <Text style={styles.galleryModalEmptyText}>
+                    No gallery images
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={galleryImages}
+                  keyExtractor={item =>
+                    item?.id || item?.src || String(Math.random())
+                  }
+                  numColumns={2}
+                  contentContainerStyle={styles.galleryGridContent}
+                  renderItem={({ item }) => {
+                    const uri =
+                      typeof item === 'string'
+                        ? item
+                        : item?.src ?? item?.url ?? null;
+                    if (!uri) return null;
+                    return (
+                      <View style={styles.galleryGridItem}>
+                        <Image
+                          source={{ uri }}
+                          style={styles.galleryGridImage}
+                          resizeMode="cover"
+                        />
+                      </View>
+                    );
+                  }}
+                />
+              )}
             </View>
-            {galleryLoading ? (
-              <View style={styles.galleryModalLoading}>
-                <ActivityIndicator size="large" color="#F5A623" />
-                <Text style={styles.galleryModalLoadingText}>
-                  Loading gallery…
-                </Text>
-              </View>
-            ) : galleryError ? (
-              <View style={styles.galleryModalEmpty}>
-                <Icon name="image-off" size={48} color="#999" />
-                <Text style={styles.galleryModalEmptyText}>{galleryError}</Text>
-              </View>
-            ) : !galleryImages?.length ? (
-              <View style={styles.galleryModalEmpty}>
-                <Icon name="image-multiple" size={48} color="#999" />
-                <Text style={styles.galleryModalEmptyText}>
-                  No gallery images
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={galleryImages}
-                keyExtractor={item =>
-                  item?.id || item?.src || String(Math.random())
-                }
-                numColumns={2}
-                contentContainerStyle={styles.galleryGridContent}
-                renderItem={({ item }) => {
-                  const uri =
-                    typeof item === 'string'
-                      ? item
-                      : item?.src ?? item?.url ?? null;
-                  if (!uri) return null;
-                  return (
-                    <View style={styles.galleryGridItem}>
-                      <Image
-                        source={{ uri }}
-                        style={styles.galleryGridImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  );
-                }}
-              />
-            )}
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Modal
-        visible={locationModalVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={() => {
-          if (!locationModalLoading) setLocationModalVisible(false);
-        }}
-      >
-        <View style={styles.locationModalOverlay}>
-          <View style={styles.locationModalContent}>
-            <Text style={styles.locationModalTitle}>Choose your area</Text>
-            <TextInput
-              style={styles.locationModalInput}
-              value={locationInput}
-              onChangeText={setLocationInput}
-              placeholder="Type address (e.g. area, city)"
-              placeholderTextColor="#999"
-              editable={!locationModalLoading}
-              returnKeyType="done"
-              onSubmitEditing={async () => {
-                // submit typed address directly (same as tapping suggestion-less confirm)
-                const trimmed = locationInput.trim();
-                if (!trimmed) return;
-                setLocationModalLoading(true);
-                try {
-                  let coords = await geocodeAddress(trimmed);
-                  if (!coords)
-                    coords = await geocodeAddress(`${trimmed}, United Kingdom`);
-                  if (!coords) coords = getFallbackCoordsForUKArea(trimmed);
-                  if (!coords) {
+        <Modal
+          visible={locationModalVisible}
+          animationType="fade"
+          transparent
+          onRequestClose={() => {
+            if (!locationModalLoading) setLocationModalVisible(false);
+          }}
+        >
+          <View style={styles.locationModalOverlay}>
+            <View style={styles.locationModalContent}>
+              <Text style={styles.locationModalTitle}>Choose your area</Text>
+              <TextInput
+                style={styles.locationModalInput}
+                value={locationInput}
+                onChangeText={setLocationInput}
+                placeholder="Type address (e.g. area, city)"
+                placeholderTextColor="#999"
+                editable={!locationModalLoading}
+                returnKeyType="done"
+                onSubmitEditing={async () => {
+                  // submit typed address directly (same as tapping suggestion-less confirm)
+                  const trimmed = locationInput.trim();
+                  if (!trimmed) return;
+                  setLocationModalLoading(true);
+                  try {
+                    let coords = await geocodeAddress(trimmed);
+                    if (!coords)
+                      coords = await geocodeAddress(
+                        `${trimmed}, United Kingdom`,
+                      );
+                    if (!coords) coords = getFallbackCoordsForUKArea(trimmed);
+                    if (!coords) {
+                      Alert.alert(
+                        'Address',
+                        'Could not find that address. Please refine it or use your location.',
+                      );
+                      setLocationModalLoading(false);
+                      return;
+                    }
+                    setSelectedLocation(coords);
+                    setAddressText(trimmed);
+                    await saveLocationSelection(coords, trimmed);
+                    setLocationModalVisible(false);
+                    loadFeaturedAndFeed();
+                    loadContinueWatching();
+                  } catch (e) {
                     Alert.alert(
                       'Address',
-                      'Could not find that address. Please refine it or use your location.',
+                      'Could not find that address. Please try again.',
                     );
+                  } finally {
                     setLocationModalLoading(false);
-                    return;
                   }
-                  setSelectedLocation(coords);
-                  setAddressText(trimmed);
-                  await saveLocationSelection(coords, trimmed);
-                  setLocationModalVisible(false);
-                  loadFeaturedAndFeed();
-                  loadContinueWatching();
-                } catch (e) {
-                  Alert.alert(
-                    'Address',
-                    'Could not find that address. Please try again.',
-                  );
-                } finally {
-                  setLocationModalLoading(false);
-                }
-              }}
-            />
-            {locationInput.trim().length > 0 && (
-              <View style={styles.locationSuggestionsBox}>
-                {locationSuggestionsLoading ? (
-                  <View style={styles.locationSuggestionItem}>
-                    <ActivityIndicator size="small" color="#F5A623" />
-                    <Text style={styles.locationSuggestionText}>
-                      Searching areas...
-                    </Text>
-                  </View>
-                ) : locationSuggestions.length > 0 ? (
-                  <ScrollView
-                    style={{ maxHeight: 200 }}
-                    keyboardShouldPersistTaps="handled"
-                  >
-                    {locationSuggestions.slice(0, 8).map((item, idx) => (
-                      <TouchableOpacity
-                        key={item.place_id || `loc-${idx}`}
-                        style={styles.locationSuggestionItem}
-                        activeOpacity={0.7}
-                        onPress={async () => {
-                          if (locationModalLoading) return;
-                          setLocationInput(item.description);
-                          setLocationSuggestions([]);
-                          setLocationModalLoading(true);
-                          try {
-                            let coords = item.place_id
-                              ? await getCoordsFromPlaceId(item.place_id)
-                              : null;
-                            if (!coords)
-                              coords = await geocodeAddress(item.description);
-                            if (!coords)
-                              coords = await geocodeAddress(
-                                `${item.description}, United Kingdom`,
-                              );
-                            if (!coords)
-                              coords = getFallbackCoordsForUKArea(
+                }}
+              />
+              {locationInput.trim().length > 0 && (
+                <View style={styles.locationSuggestionsBox}>
+                  {locationSuggestionsLoading ? (
+                    <View style={styles.locationSuggestionItem}>
+                      <ActivityIndicator size="small" color="#F5A623" />
+                      <Text style={styles.locationSuggestionText}>
+                        Searching areas...
+                      </Text>
+                    </View>
+                  ) : locationSuggestions.length > 0 ? (
+                    <ScrollView
+                      style={{ maxHeight: 200 }}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {locationSuggestions.slice(0, 8).map((item, idx) => (
+                        <TouchableOpacity
+                          key={item.place_id || `loc-${idx}`}
+                          style={styles.locationSuggestionItem}
+                          activeOpacity={0.7}
+                          onPress={async () => {
+                            if (locationModalLoading) return;
+                            setLocationInput(item.description);
+                            setLocationSuggestions([]);
+                            setLocationModalLoading(true);
+                            try {
+                              let coords = item.place_id
+                                ? await getCoordsFromPlaceId(item.place_id)
+                                : null;
+                              if (!coords)
+                                coords = await geocodeAddress(item.description);
+                              if (!coords)
+                                coords = await geocodeAddress(
+                                  `${item.description}, United Kingdom`,
+                                );
+                              if (!coords)
+                                coords = getFallbackCoordsForUKArea(
+                                  item.description,
+                                );
+                              if (!coords) {
+                                Alert.alert(
+                                  'Address',
+                                  'Could not get location for this address. Try "Use my location".',
+                                );
+                                setLocationModalLoading(false);
+                                return;
+                              }
+                              setSelectedLocation(coords);
+                              setAddressText(item.description);
+                              await saveLocationSelection(
+                                coords,
                                 item.description,
                               );
-                            if (!coords) {
+                              setLocationModalVisible(false);
+                              loadFeaturedAndFeed();
+                              loadContinueWatching();
+                            } catch (e) {
                               Alert.alert(
                                 'Address',
-                                'Could not get location for this address. Try "Use my location".',
+                                'Something went wrong. Try again or use your location.',
                               );
+                            } finally {
                               setLocationModalLoading(false);
-                              return;
                             }
-                            setSelectedLocation(coords);
-                            setAddressText(item.description);
-                            await saveLocationSelection(
-                              coords,
-                              item.description,
-                            );
-                            setLocationModalVisible(false);
-                            loadFeaturedAndFeed();
-                            loadContinueWatching();
-                          } catch (e) {
-                            Alert.alert(
-                              'Address',
-                              'Something went wrong. Try again or use your location.',
-                            );
-                          } finally {
-                            setLocationModalLoading(false);
-                          }
-                        }}
-                      >
-                        <Icon
-                          name="map-marker-outline"
-                          size={18}
-                          color="#666"
-                          style={{ marginRight: 8 }}
-                        />
-                        <Text
-                          style={styles.locationSuggestionText}
-                          numberOfLines={2}
+                          }}
                         >
-                          {item.description}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                ) : (
-                  <View style={styles.locationSuggestionItem}>
-                    <Icon
-                      name="map-marker-outline"
-                      size={18}
-                      color="#999"
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text style={styles.locationSuggestionHint}>
-                      No areas found. Type full address or tap "Use my
-                      location".
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-            <View style={styles.locationModalButtons}>
-              <TouchableOpacity
-                style={styles.locationActionBtn}
-                disabled={locationModalLoading}
-                onPress={() => {
-                  setLocationModalVisible(false);
-                  setLocationMapVisible(true);
-                }}
-                activeOpacity={0.85}
-              >
-                <Icon
-                  name="map-marker-radius"
-                  size={16}
-                  color="#FFF"
-                  style={styles.locationActionIcon}
-                />
-                <Text
-                  style={styles.locationActionText}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
+                          <Icon
+                            name="map-marker-outline"
+                            size={18}
+                            color="#666"
+                            style={{ marginRight: 8 }}
+                          />
+                          <Text
+                            style={styles.locationSuggestionText}
+                            numberOfLines={2}
+                          >
+                            {item.description}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.locationSuggestionItem}>
+                      <Icon
+                        name="map-marker-outline"
+                        size={18}
+                        color="#999"
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={styles.locationSuggestionHint}>
+                        No areas found. Type full address or tap "Use my
+                        location".
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              <View style={styles.locationModalButtons}>
+                <TouchableOpacity
+                  style={styles.locationActionBtn}
+                  disabled={locationModalLoading}
+                  onPress={() => {
+                    setLocationModalVisible(false);
+                    setLocationMapVisible(true);
+                  }}
+                  activeOpacity={0.85}
                 >
-                  Map & postcode
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.locationActionBtn}
-                disabled={locationModalLoading}
-                activeOpacity={0.85}
-                onPress={() => {
-                  setLocationModalLoading(true);
-                  getCurrentPositionSafe(
-                    async pos => {
-                      try {
-                        const lat = pos?.coords?.latitude;
-                        const lng = pos?.coords?.longitude;
-                        if (
-                          lat == null ||
-                          lng == null ||
-                          !Number.isFinite(lat) ||
-                          !Number.isFinite(lng)
-                        ) {
+                  <Icon
+                    name="map-marker-radius"
+                    size={16}
+                    color="#FFF"
+                    style={styles.locationActionIcon}
+                  />
+                  <Text
+                    style={styles.locationActionText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    Map & postcode
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.locationActionBtn}
+                  disabled={locationModalLoading}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setLocationModalLoading(true);
+                    getCurrentPositionSafe(
+                      async pos => {
+                        try {
+                          const lat = pos?.coords?.latitude;
+                          const lng = pos?.coords?.longitude;
+                          if (
+                            lat == null ||
+                            lng == null ||
+                            !Number.isFinite(lat) ||
+                            !Number.isFinite(lng)
+                          ) {
+                            setLocationModalLoading(false);
+                            return;
+                          }
+                          const addr = await reverseGeocode(lat, lng);
+                          const label =
+                            addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                          const coords = { lat, lng };
+                          setLocationInput(label);
+                          setSelectedLocation(coords);
+                          setAddressText(label);
+                          await saveLocationSelection(coords, label);
+                          setLocationModalVisible(false);
+                          loadFeaturedAndFeed();
+                          loadContinueWatching();
+                        } catch (e) {
+                          Alert.alert(
+                            'Location',
+                            'Could not get your location. Check permissions.',
+                          );
+                        } finally {
                           setLocationModalLoading(false);
-                          return;
                         }
-                        const addr = await reverseGeocode(lat, lng);
-                        const label =
-                          addr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-                        const coords = { lat, lng };
-                        setLocationInput(label);
-                        setSelectedLocation(coords);
-                        setAddressText(label);
-                        await saveLocationSelection(coords, label);
-                        setLocationModalVisible(false);
-                        loadFeaturedAndFeed();
-                        loadContinueWatching();
-                      } catch (e) {
+                      },
+                      err => {
+                        setLocationModalLoading(false);
                         Alert.alert(
                           'Location',
-                          'Could not get your location. Check permissions.',
+                          err || 'Could not get your location.',
                         );
-                      } finally {
-                        setLocationModalLoading(false);
-                      }
-                    },
-                    err => {
-                      setLocationModalLoading(false);
-                      Alert.alert(
-                        'Location',
-                        err || 'Could not get your location.',
-                      );
-                    },
-                  );
-                }}
-              >
-                {locationModalLoading ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <>
-                    <Icon
-                      name="crosshairs-gps"
-                      size={16}
-                      color="#FFF"
-                      style={styles.locationActionIcon}
-                    />
-                    <Text
-                      style={styles.locationActionText}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      Use my location
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.locationCancelBtn}
-                onPress={() => {
-                  if (!locationModalLoading) setLocationModalVisible(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.locationCancelText}>Cancel</Text>
-              </TouchableOpacity>
+                      },
+                    );
+                  }}
+                >
+                  {locationModalLoading ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <>
+                      <Icon
+                        name="crosshairs-gps"
+                        size={16}
+                        color="#FFF"
+                        style={styles.locationActionIcon}
+                      />
+                      <Text
+                        style={styles.locationActionText}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        Use my location
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.locationCancelBtn}
+                  onPress={() => {
+                    if (!locationModalLoading) setLocationModalVisible(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.locationCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-      <MapLocationPicker
-        visible={locationMapVisible}
-        onClose={() => setLocationMapVisible(false)}
-        title="Deliver to"
-        initialLat={selectedLocation?.lat}
-        initialLng={selectedLocation?.lng}
-        initialPostcode={browsePostcode}
-        initialAddress={addressText}
-        onConfirm={async browse => {
-          const coords = { lat: browse.lat, lng: browse.lng };
-          setSelectedLocation(coords);
-          setAddressText(browse.addressText || browse.areaLabel);
-          setBrowsePostcode(browse.postcode || '');
-          setLocationInput(browse.addressText || browse.postcode || '');
-          await saveLocationSelection(
-            coords,
-            browse.addressText || browse.areaLabel,
-            browse.postcode,
-          );
-          loadFeaturedAndFeed();
-          loadContinueWatching();
-        }}
-      />
+        </Modal>
+        <MapLocationPicker
+          visible={locationMapVisible}
+          onClose={() => setLocationMapVisible(false)}
+          title="Deliver to"
+          initialLat={selectedLocation?.lat}
+          initialLng={selectedLocation?.lng}
+          initialPostcode={browsePostcode}
+          initialAddress={addressText}
+          onConfirm={async browse => {
+            const coords = { lat: browse.lat, lng: browse.lng };
+            setSelectedLocation(coords);
+            setAddressText(browse.addressText || browse.areaLabel);
+            setBrowsePostcode(browse.postcode || '');
+            setLocationInput(browse.addressText || browse.postcode || '');
+            await saveLocationSelection(
+              coords,
+              browse.addressText || browse.areaLabel,
+              browse.postcode,
+            );
+            loadFeaturedAndFeed();
+            loadContinueWatching();
+          }}
+        />
       </SafeAreaView>
     </View>
   );
@@ -6360,7 +6398,11 @@ const HomeFeedSkeletonSection = ({ kind }) => {
       </View>
       <View style={[styles.skeletonBone, styles.skeletonCardBone]} />
       <View
-        style={[styles.skeletonBone, styles.skeletonCardBone, { marginTop: 12 }]}
+        style={[
+          styles.skeletonBone,
+          styles.skeletonCardBone,
+          { marginTop: 12 },
+        ]}
       />
     </View>
   );
@@ -7019,12 +7061,13 @@ const styles = StyleSheet.create({
     color: '#FFF3D7',
   },
   cuisineScroll: {
-    marginBottom: 2,
+    marginBottom: 4,
   },
   cuisineChipRow: {
-    paddingBottom: 2,
-    paddingRight: 4,
-    gap: 5,
+    paddingBottom: 4,
+    paddingRight: 8,
+    gap: 8,
+    alignItems: 'flex-start',
   },
   cuisineSliderRow: {
     flexDirection: 'row',
@@ -7042,47 +7085,50 @@ const styles = StyleSheet.create({
   cuisineChip: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    width: 64,
-    marginRight: 1,
+    width: Math.floor((width - FEED_HORIZONTAL_PAD * 2) / 4.8),
+    height: 92,
     backgroundColor: '#FFF',
-    borderRadius: 7,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#ECECEC',
-    paddingTop: 3,
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 2,
   },
   cuisineIconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#FFF2D8',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#EBCB8A',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   cuisineIconImage: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   cuisineChipText: {
     color: '#4E4E4E',
-    fontSize: 8,
+    fontSize: 11,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: 5,
     textAlign: 'center',
-    lineHeight: 9,
+    lineHeight: 14,
     width: '100%',
+    paddingHorizontal: 4,
   },
   cuisineChipTextActive: {
     color: '#F5A623',
     fontWeight: '700',
   },
   cuisineChipUnderline: {
-    marginTop: 1,
-    width: 18,
-    height: 2,
+    marginTop: 3,
+    width: 22,
+    height: 2.5,
     borderRadius: 2,
     backgroundColor: '#F5A623',
   },

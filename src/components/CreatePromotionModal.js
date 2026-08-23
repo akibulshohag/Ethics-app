@@ -23,10 +23,15 @@ import VideoCoverSuggestionsRow from './VideoCoverSuggestionsRow';
 import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
 import {
   ORDER_DISCOUNT_MODES,
+  OFFER_TYPES,
   PROMO_BENEFITS,
+  combineDateAndTime,
+  normalizeHhMm,
   parsePromotionTiers,
+  parseScheduleSlots,
 } from '../utils/promotionUtils';
 import { normalizeUploadUri } from '../utils/helper';
+import PromotionScheduleEditor from './PromotionScheduleEditor';
 
 const toMediaAsset = asset => ({
   uri: normalizeUploadUri(asset.uri),
@@ -54,14 +59,21 @@ const CreatePromotionModal = ({
   onSuccess,
   userId,
   promotionToEdit = null,
+  offerType: offerTypeProp = OFFER_TYPES.ORDER,
 }) => {
   const token = useSelector(state => state.app?.user?.token);
   const isEdit = Boolean(promotionToEdit?.id);
+  const offerType =
+    promotionToEdit?.offerType || offerTypeProp || OFFER_TYPES.ORDER;
+  const isBoth = offerType === OFFER_TYPES.BOTH;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [promoCode, setPromoCode] = useState('');
   const [startDate, setStartDate] = useState('');
   const [expireDate, setExpireDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [scheduleSlots, setScheduleSlots] = useState([]);
   const [thumbnail, setThumbnail] = useState(null);
   const [video, setVideo] = useState(null);
   const [videoDuration, setVideoDuration] = useState(0);
@@ -85,6 +97,9 @@ const CreatePromotionModal = ({
     setPromoCode(String(promo.promoCode || ''));
     setStartDate(formatDateForInput(promo.startDate));
     setExpireDate(formatDateForInput(promo.expireDate));
+    setStartTime(normalizeHhMm(promo.startTime) || '');
+    setEndTime(normalizeHhMm(promo.endTime) || '');
+    setScheduleSlots(parseScheduleSlots(promo.scheduleSlots));
     if (promo.thumbnailUrl) {
       setThumbnail({
         uri: normalizeUploadUri(promo.thumbnailUrl),
@@ -180,6 +195,9 @@ const CreatePromotionModal = ({
     setPromoCode('');
     setStartDate('');
     setExpireDate('');
+    setStartTime('');
+    setEndTime('');
+    setScheduleSlots([]);
     setThumbnail(null);
     setVideo(null);
     setVideoDuration(0);
@@ -403,13 +421,13 @@ const CreatePromotionModal = ({
     if (!start || !expire) {
       Alert.alert(
         'Dates required',
-        'Please enter start date and expire date (YYYY-MM-DD).',
+        'Please enter start date and expire date.',
       );
       return;
     }
-    const startD = new Date(start);
-    const expireD = new Date(expire);
-    if (Number.isNaN(startD.getTime()) || Number.isNaN(expireD.getTime())) {
+    const startD = combineDateAndTime(start, startTime, false);
+    const expireD = combineDateAndTime(expire, endTime, true);
+    if (!startD || !expireD) {
       Alert.alert(
         'Invalid dates',
         'Use format YYYY-MM-DD for start and expire date.',
@@ -417,14 +435,17 @@ const CreatePromotionModal = ({
       return;
     }
     if (expireD <= startD) {
-      Alert.alert('Invalid dates', 'Expire date must be after start date.');
+      Alert.alert(
+        'Invalid dates',
+        'Expire date and time must be after start date and time.',
+      );
       return;
     }
 
     let fulfillmentScopes = [];
     let discountTiers = [];
 
-    if (discountMode === ORDER_DISCOUNT_MODES.DELIVERY_FREE) {
+    if (discountMode === ORDER_DISCOUNT_MODES.DELIVERY_FREE && !isBoth) {
       const minOrder = parseFloat(freeDeliveryMinOrder);
       if (!Number.isFinite(minOrder) || minOrder <= 0) {
         Alert.alert(
@@ -475,15 +496,19 @@ const CreatePromotionModal = ({
       const payload = {
         userId,
         token,
-        offerType: 'order',
+        offerType,
         title: trimmedTitle,
         description: description.trim() || undefined,
         promoAmount: 0,
         promoCode: code,
         startDate: startD.toISOString(),
         expireDate: expireD.toISOString(),
+        startTime: normalizeHhMm(startTime) || '',
+        endTime: normalizeHhMm(endTime) || '',
+        scheduleSlots,
         fulfillmentScopes,
         discountTiers,
+        tierMetricType: isBoth ? 'amount' : undefined,
         menuItemIds: selectedMenuIds.length > 0 ? selectedMenuIds : undefined,
         ...(thumbnail?.uri
           ? {
@@ -519,8 +544,6 @@ const CreatePromotionModal = ({
     }
   };
 
-  const today = formatDateForInput(new Date());
-
   return (
     <Modal
       visible={visible}
@@ -541,7 +564,13 @@ const CreatePromotionModal = ({
         <View style={styles.modalBox}>
           <View style={styles.header}>
             <Text style={styles.title}>
-              {isEdit ? 'Edit Promotion' : 'Create Promotion'}
+              {isEdit
+                ? isBoth
+                  ? 'Edit Both Discount'
+                  : 'Edit Promotion'
+                : isBoth
+                ? 'Create Both Discount'
+                : 'Create Promotion'}
             </Text>
             <TouchableOpacity
               onPress={handleClose}
@@ -695,6 +724,7 @@ const CreatePromotionModal = ({
                   Amount Discount
                 </Text>
               </TouchableOpacity>
+              {!isBoth ? (
               <TouchableOpacity
                 style={[
                   styles.typeChip,
@@ -714,9 +744,10 @@ const CreatePromotionModal = ({
                   Delivery Free
                 </Text>
               </TouchableOpacity>
+              ) : null}
             </View>
 
-            {discountMode === ORDER_DISCOUNT_MODES.DELIVERY_FREE ? (
+            {discountMode === ORDER_DISCOUNT_MODES.DELIVERY_FREE && !isBoth ? (
               <>
                 <Text style={styles.sectionHeading}>Delivery free</Text>
                 <Text style={styles.hint}>
@@ -738,8 +769,9 @@ const CreatePromotionModal = ({
               <>
             <Text style={styles.sectionHeading}>Amount discount</Text>
             <Text style={styles.hint}>
-              Bill tiers apply by order total when customers use your promo code
-              or qualify automatically at checkout.
+              {isBoth
+                ? 'This offer applies to order checkout and table bookings when the date and time match. Booking discount uses estimated spend against the same bill tiers.'
+                : 'Bill tiers apply by order total when customers use your promo code or qualify automatically at checkout.'}
             </Text>
 
             <Text style={styles.label}>Applies to *</Text>
@@ -855,24 +887,18 @@ const CreatePromotionModal = ({
               editable={!uploading}
             />
 
-            <Text style={styles.label}>Start date * (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={startDate}
-              onChangeText={setStartDate}
-              placeholder={today || '2025-01-01'}
-              placeholderTextColor="#999"
-              editable={!uploading}
-            />
-
-            <Text style={styles.label}>Expire date * (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={expireDate}
-              onChangeText={setExpireDate}
-              placeholder="2025-12-31"
-              placeholderTextColor="#999"
-              editable={!uploading}
+            <PromotionScheduleEditor
+              startDate={startDate}
+              expireDate={expireDate}
+              startTime={startTime}
+              endTime={endTime}
+              slots={scheduleSlots}
+              onStartDateChange={setStartDate}
+              onExpireDateChange={setExpireDate}
+              onStartTimeChange={setStartTime}
+              onEndTimeChange={setEndTime}
+              onSlotsChange={setScheduleSlots}
+              disabled={uploading}
             />
 
             <Text style={styles.label}>Menu items in this offer</Text>

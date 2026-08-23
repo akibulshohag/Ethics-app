@@ -16,11 +16,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { createRestaurantBooking } from '../services/bookingService';
 import { getPromotionsByUser } from '../services/promotionService';
 import {
+  appliesToBookings,
   findBestBookingDiscount,
+  formatPromotionSchedule,
   formatTierRange,
   isPromotionActive,
-  OFFER_TYPES,
   parseDiscountTiers,
+  promotionAppliesAt,
 } from '../utils/promotionUtils';
 
 const nextBookingTime = () => {
@@ -85,8 +87,7 @@ const RestaurantBookingModal = ({
         if (!cancelled) {
           setOwnerPromotions(
             (res?.promotions ?? []).filter(
-              p =>
-                p.offerType === OFFER_TYPES.BOOKING && isPromotionActive(p),
+              p => appliesToBookings(p.offerType) && isPromotionActive(p),
             ),
           );
         }
@@ -102,16 +103,22 @@ const RestaurantBookingModal = ({
     };
   }, [visible, ownerId]);
 
-  const bookingMetricType = ownerPromotions[0]?.tierMetricType || 'people';
-  const usesAmountMetric = bookingMetricType === 'amount';
+  const usesAmountMetric = ownerPromotions.some(
+    p => (p.tierMetricType || 'people') === 'amount',
+  );
 
   const activeBookingDiscount = useMemo(() => {
     const personsNum = Math.max(1, Number(persons) || 0);
     const amountNum = bookingAmount.trim()
       ? Number(bookingAmount)
       : undefined;
-    return findBestBookingDiscount(ownerPromotions, personsNum, amountNum);
-  }, [ownerPromotions, persons, bookingAmount]);
+    return findBestBookingDiscount(
+      ownerPromotions,
+      personsNum,
+      amountNum,
+      bookingDate,
+    );
+  }, [ownerPromotions, persons, bookingAmount, bookingDate]);
 
   const submit = async () => {
     if (!currentUser?.token) {
@@ -185,14 +192,24 @@ const RestaurantBookingModal = ({
               {ownerPromotions.map(promo => {
                 const tiers = parseDiscountTiers(promo.discountTiers);
                 const metric = promo.tierMetricType || 'people';
+                const schedule = formatPromotionSchedule(promo);
+                const timeOk = promotionAppliesAt(promo, bookingDate);
                 return (
                   <View key={promo.id} style={styles.offerCard}>
                     <Text style={styles.offerName}>{promo.title}</Text>
+                    {schedule ? (
+                      <Text style={styles.offerLine}>{schedule}</Text>
+                    ) : null}
                     {tiers.slice(0, 4).map((tier, idx) => (
                       <Text key={`${promo.id}-${idx}`} style={styles.offerLine}>
                         • {formatTierRange(tier, metric)}
                       </Text>
                     ))}
+                    {!timeOk ? (
+                      <Text style={styles.offerHint}>
+                        Not available at the selected day/time
+                      </Text>
+                    ) : null}
                   </View>
                 );
               })}
@@ -203,8 +220,8 @@ const RestaurantBookingModal = ({
               ) : (
                 <Text style={styles.offerHint}>
                   {usesAmountMetric
-                    ? 'Enter estimated spend to see if you qualify.'
-                    : 'Adjust party size to see if you qualify.'}
+                    ? 'Enter estimated spend and a matching day/time to qualify.'
+                    : 'Choose a matching day/time (and party size) to qualify.'}
                 </Text>
               )}
             </View>

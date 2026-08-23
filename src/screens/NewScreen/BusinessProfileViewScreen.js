@@ -131,6 +131,7 @@ import CreateTierDiscountModal from '../../components/CreateTierDiscountModal';
 import {
   OFFER_TYPES,
   filterPromotionsByType,
+  formatPromotionSchedule,
   formatPromotionSummary,
   getPromotionDisplayImage,
 } from '../../utils/promotionUtils';
@@ -143,6 +144,7 @@ import { mapMenuListRow, normalizeMenuItemFromApi } from '../../utils/menuListIt
 import { viewerProfileContentParams } from '../../utils/contentVisibility';
 
 const { width } = Dimensions.get('window');
+const IS_COMPACT_WIDTH = width < 390;
 
 const BUSINESS_SOCIAL_BAR = [
   { type: 'instagram', icon: 'instagram' },
@@ -450,7 +452,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
     useState(false);
   const [createPromotionModalVisible, setCreatePromotionModalVisible] =
     useState(false);
-  const [promotionSubTab, setPromotionSubTab] = useState('order'); // order | booking
+  const [promotionSubTab, setPromotionSubTab] = useState('order'); // order | booking | both
   const [createTierDiscountModalVisible, setCreateTierDiscountModalVisible] =
     useState(false);
   const [editingPromotion, setEditingPromotion] = useState(null);
@@ -1483,7 +1485,18 @@ const BusinessProfileViewScreen = ({ navigation }) => {
   const profileIsBlocked = isUserBlocked(blockedUserIds, profileUserId);
 
   const handleBlockUser = useCallback(() => {
-    if (!currentUser?.id || !profileUserId || isOwnProfile) return;
+    if (!currentUser?.id) {
+      Alert.alert('Login required', 'Please login to continue.');
+      return;
+    }
+    if (!profileUserId) {
+      Alert.alert('Unavailable', 'Could not find this profile to block.');
+      return;
+    }
+    if (isOwnProfile) {
+      Alert.alert('Not allowed', 'You cannot block your own profile.');
+      return;
+    }
     if (profileIsBlocked) {
       Alert.alert(
         'User blocked',
@@ -2980,28 +2993,6 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         subscribeLoading={profileSubscribeLoading}
       />
 
-      {!isOwnProfile && currentUser?.id ? (
-        <TouchableOpacity
-          style={styles.blockUserRow}
-          onPress={handleBlockUser}
-          activeOpacity={0.8}
-        >
-          <MaterialCommunityIcons
-            name={profileIsBlocked ? 'account-cancel' : 'account-cancel-outline'}
-            size={18}
-            color={profileIsBlocked ? '#B91C1C' : '#6B7280'}
-          />
-          <Text
-            style={[
-              styles.blockUserText,
-              profileIsBlocked && styles.blockUserTextActive,
-            ]}
-          >
-            {profileIsBlocked ? 'User blocked' : 'Block user'}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-
       {isOwnProfile ? (
         <View style={styles.profileSocialRow}>
           {(() => {
@@ -3086,7 +3077,9 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 'Settings',
               ]
             : BASE_TABS
-          ).map(tab => {
+          )
+            .concat(!isOwnProfile && currentUser?.id ? ['Block'] : [])
+            .map(tab => {
             const isGrid = tab === 'Gallery';
             const isActive = activeTab === tab;
 
@@ -3103,6 +3096,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                     tabLayoutsRef.current[tab] = { x: l.x, width: l.width };
                 }}
                 onPress={() => {
+                  if (tab === 'Block') {
+                    handleBlockUser();
+                    return;
+                  }
                   setActiveTab(tab);
                   scrollActiveTabIntoView(tab);
                 }}
@@ -3128,15 +3125,22 @@ const BusinessProfileViewScreen = ({ navigation }) => {
 
       {/* Promotions sub-tabs: Order | Booking Discount */}
       {activeTab === 'Promotions' ? (
-        <View style={styles.promotionSubTabRow}>
-          {[
+        (() => {
+          const promotionTabs = [
             { key: 'order', label: 'Order' },
-            { key: 'booking', label: 'Booking Discount' },
-          ].map(tab => (
+            {
+              key: 'booking',
+              label: IS_COMPACT_WIDTH ? 'Booking' : 'Booking Discount',
+            },
+            { key: 'both', label: 'Both' },
+          ];
+          const renderPromotionTab = (tab, tabIndex, tabs) => (
             <TouchableOpacity
               key={tab.key}
               style={[
                 styles.promotionSubTabBtn,
+                !IS_COMPACT_WIDTH && styles.promotionSubTabBtnEqual,
+                tabIndex < tabs.length - 1 && styles.promotionSubTabBtnSpacing,
                 promotionSubTab === tab.key && styles.promotionSubTabBtnActive,
               ]}
               onPress={() => setPromotionSubTab(tab.key)}
@@ -3146,17 +3150,38 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                   styles.promotionSubTabText,
                   promotionSubTab === tab.key && styles.promotionSubTabTextActive,
                 ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.78}
               >
                 {tab.label}
               </Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          );
+
+          if (IS_COMPACT_WIDTH) {
+            return (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.promotionSubTabRow}
+              >
+                {promotionTabs.map(renderPromotionTab)}
+              </ScrollView>
+            );
+          }
+
+          return (
+            <View style={styles.promotionSubTabRow}>
+              {promotionTabs.map(renderPromotionTab)}
+            </View>
+          );
+        })()
       ) : null}
 
       {/* Section Header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
+        <Text style={styles.sectionTitle} numberOfLines={1}>
           {activeTab === 'Gallery'
             ? 'Gallery'
             : activeTab === 'Photos'
@@ -3170,6 +3195,8 @@ const BusinessProfileViewScreen = ({ navigation }) => {
             : activeTab === 'Promotions'
             ? promotionSubTab === 'booking'
               ? 'Booking Discounts'
+              : promotionSubTab === 'both'
+              ? 'Order & Booking'
               : 'Order Promotions'
             : activeTab === 'Settings'
             ? 'Delivery Settings'
@@ -3207,10 +3234,10 @@ const BusinessProfileViewScreen = ({ navigation }) => {
           <TouchableOpacity
             onPress={() => {
               setEditingPromotion(null);
-              if (promotionSubTab === 'order') {
-                setCreatePromotionModalVisible(true);
-              } else {
+              if (promotionSubTab === 'booking') {
                 setCreateTierDiscountModalVisible(true);
+              } else {
+                setCreatePromotionModalVisible(true);
               }
             }}
           >
@@ -3285,6 +3312,7 @@ const BusinessProfileViewScreen = ({ navigation }) => {
         const typeMap = {
           order: OFFER_TYPES.ORDER,
           booking: OFFER_TYPES.BOOKING,
+          both: OFFER_TYPES.BOTH,
         };
         const list = filterPromotionsByType(
           promotions,
@@ -4770,6 +4798,13 @@ const BusinessProfileViewScreen = ({ navigation }) => {
       </Modal>
       <CreatePromotionModal
         visible={createPromotionModalVisible}
+        offerType={
+          (editingPromotion?.offerType === OFFER_TYPES.BOTH
+            ? OFFER_TYPES.BOTH
+            : promotionSubTab === 'both'
+            ? OFFER_TYPES.BOTH
+            : OFFER_TYPES.ORDER)
+        }
         promotionToEdit={
           editingPromotion &&
           (editingPromotion.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.BOOKING
@@ -4925,6 +4960,11 @@ const BusinessProfileViewScreen = ({ navigation }) => {
                 <Text style={styles.promotionDetailDate}>
                   Expires:{' '}
                   {new Date(selectedPromotion.expireDate).toLocaleDateString()}
+                </Text>
+              ) : null}
+              {formatPromotionSchedule(selectedPromotion) ? (
+                <Text style={styles.promotionDetailDate}>
+                  Schedule: {formatPromotionSchedule(selectedPromotion)}
                 </Text>
               ) : null}
               {selectedPromotion?.user?.nickname ||
@@ -6059,25 +6099,6 @@ const styles = StyleSheet.create({
     paddingBottom: 0,
     backgroundColor: '#FFFFFF',
   },
-  blockUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E5E7EB',
-  },
-  blockUserText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  blockUserTextActive: {
-    color: '#B91C1C',
-  },
   profileSocialRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -6323,7 +6344,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
   },
   tabItem: {
-    paddingHorizontal: 12,
+    paddingHorizontal: IS_COMPACT_WIDTH ? 8 : 12,
     paddingVertical: 10,
     marginRight: 4,
     minHeight: 44,
@@ -6334,7 +6355,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F5A623',
   },
   tabText: {
-    fontSize: 13,
+    fontSize: IS_COMPACT_WIDTH ? 12 : 13,
     color: '#6B7280',
     fontWeight: '600',
   },
@@ -6344,19 +6365,28 @@ const styles = StyleSheet.create({
   },
   promotionSubTabRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: IS_COMPACT_WIDTH ? 12 : 16,
     paddingVertical: 8,
-    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    flexGrow: 1,
   },
   promotionSubTabBtn: {
-    flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 8,
+    justifyContent: 'center',
+    minWidth: IS_COMPACT_WIDTH ? 96 : 0,
+    minHeight: 36,
+    paddingHorizontal: IS_COMPACT_WIDTH ? 10 : 8,
     paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: '#f5f5f5',
+  },
+  promotionSubTabBtnEqual: {
+    flex: 1,
+    minWidth: 0,
+  },
+  promotionSubTabBtnSpacing: {
+    marginRight: 8,
   },
   promotionSubTabBtnActive: {
     backgroundColor: '#FF7F0B',
@@ -6378,6 +6408,8 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   sectionTitle: {
+    flex: 1,
+    marginRight: 8,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#212121',

@@ -479,99 +479,58 @@ const ProductShortsVideo = () => {
         } catch (_) {}
       }
 
+      // Keep only 1 short per user — like TikTok feed (each swipe = different user)
+      const onePerUser = (normalizedList, pinnedId) => {
+        const seen = new Set();
+        const result = [];
+        for (const v of normalizedList) {
+          const uid = String(v.userId || v.user?.id || v.id);
+          // Always keep the pinned (tapped) short even if same owner seen later
+          if (String(v.id) === String(pinnedId)) {
+            result.push(v);
+            seen.add(uid);
+            continue;
+          }
+          if (!seen.has(uid)) {
+            seen.add(uid);
+            result.push(v);
+          }
+        }
+        return result;
+      };
+
       try {
-        if (!ownerId && !initialItem) {
-          const res = await shortsService.getShorts({
-            page: 1,
-            limit: 30,
-            viewerRole: user?.role || 'user',
-            viewerUserId: user?.id,
-          });
-          const list = (res?.shorts || []).filter(
-            s => s.videoUrl && String(s.videoUrl).trim(),
-          );
-          const enriched = await enrichShortsWithProfile(list);
-          if (!cancelled) setVideos(enriched.map(normalizeShort));
-          return;
-        }
-
-        if (ownerId && currentNormalized) {
-          const [userRes, feedRes] = await Promise.all([
-            shortsService.getUserShorts(ownerId, 1, 30, user?.id),
-            shortsService.getShorts({
-              page: 1,
-              limit: 30,
-              viewerRole: user?.role || 'user',
-              viewerUserId: user?.id,
-            }),
-          ]);
-          const sameUserRaw = (userRes?.shorts || []).filter(
-            s => s.videoUrl && String(s.videoUrl).trim(),
-          );
-          const feedRaw = (feedRes?.shorts || []).filter(
-            s => s.videoUrl && String(s.videoUrl).trim(),
-          );
-          const [sameUserEnriched, feedEnriched] = await Promise.all([
-            enrichShortsWithProfile(sameUserRaw),
-            enrichShortsWithProfile(feedRaw),
-          ]);
-          const sameUserOther = sameUserEnriched
-            .filter(s => String(s.id) !== String(currentShortId))
-            .map(normalizeShort);
-          const seen = new Set([
-            currentShortId,
-            ...sameUserOther.map(v => v.id),
-          ]);
-          const others = feedEnriched
-            .filter(s => !seen.has(String(s.id)))
-            .map(normalizeShort);
-          if (!cancelled) {
-            setVideos(prev => {
-              const primary =
-                prev.find(v => String(v.id) === String(currentShortId)) ||
-                currentNormalized;
-              return [primary, ...sameUserOther, ...others];
-            });
-          }
-          return;
-        }
-
-        if (currentNormalized) {
-          const res = await shortsService.getShorts({
-            page: 1,
-            limit: 30,
-            viewerRole: user?.role || 'user',
-            viewerUserId: user?.id,
-          });
-          const list = (res?.shorts || []).filter(
-            s => s.videoUrl && String(s.videoUrl).trim(),
-          );
-          const enriched = await enrichShortsWithProfile(list);
-          const others = enriched
-            .filter(s => String(s.id) !== String(currentShortId))
-            .map(normalizeShort);
-          if (!cancelled) {
-            setVideos(prev => {
-              const primary =
-                prev.find(v => String(v.id) === String(currentShortId)) ||
-                currentNormalized;
-              return [primary, ...others];
-            });
-          }
-          return;
-        }
-
-        const res = await shortsService.getShorts({
+        const feedRes = await shortsService.getShorts({
           page: 1,
-          limit: 30,
+          limit: 50,
           viewerRole: user?.role || 'user',
           viewerUserId: user?.id,
         });
-        const list = (res?.shorts || []).filter(
+        const feedRaw = (feedRes?.shorts || []).filter(
           s => s.videoUrl && String(s.videoUrl).trim(),
         );
-        const enriched = await enrichShortsWithProfile(list);
-        if (!cancelled) setVideos(enriched.map(normalizeShort));
+        const feedEnriched = await enrichShortsWithProfile(feedRaw);
+        const feedNormalized = feedEnriched.map(normalizeShort);
+
+        if (!currentNormalized) {
+          // No tapped item — just show one-per-user feed
+          if (!cancelled) setVideos(onePerUser(feedNormalized, null));
+          return;
+        }
+
+        // Put the tapped short first, then one-per-user from feed (excluding tapped)
+        const others = feedNormalized.filter(
+          s => String(s.id) !== String(currentShortId),
+        );
+        const merged = [currentNormalized, ...others];
+        if (!cancelled) {
+          setVideos(prev => {
+            const primary =
+              prev.find(v => String(v.id) === String(currentShortId)) ||
+              currentNormalized;
+            return onePerUser([primary, ...others], currentShortId);
+          });
+        }
       } catch (_) {
         if (!cancelled && initialItem) {
           setVideos([

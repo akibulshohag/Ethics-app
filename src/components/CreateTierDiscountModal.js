@@ -20,8 +20,9 @@ import { uploadPromotion, updatePromotionUpload } from '../services/promotionSer
 import VideoCoverPickerModal from './VideoCoverPickerModal';
 import VideoCoverSuggestionsRow from './VideoCoverSuggestionsRow';
 import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../utils/videoThumbnail';
-import { OFFER_TYPES, parsePromotionTiers } from '../utils/promotionUtils';
+import { OFFER_TYPES, parsePromotionTiers, combineDateAndTime, normalizeHhMm, parseScheduleSlots } from '../utils/promotionUtils';
 import { normalizeUploadUri } from '../utils/helper';
+import PromotionScheduleEditor from './PromotionScheduleEditor';
 
 const toMediaAsset = asset => ({
   uri: normalizeUploadUri(asset.uri),
@@ -55,6 +56,9 @@ const CreateTierDiscountModal = ({
   const [title, setTitle] = useState('');
   const [startDate, setStartDate] = useState('');
   const [expireDate, setExpireDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [scheduleSlots, setScheduleSlots] = useState([]);
   const [thumbnail, setThumbnail] = useState(null);
   const [video, setVideo] = useState(null);
   const [videoDuration, setVideoDuration] = useState(0);
@@ -73,6 +77,9 @@ const CreateTierDiscountModal = ({
       setTitle(String(promo.title || ''));
       setStartDate(formatDateForInput(promo.startDate));
       setExpireDate(formatDateForInput(promo.expireDate));
+      setStartTime(normalizeHhMm(promo.startTime) || '');
+      setEndTime(normalizeHhMm(promo.endTime) || '');
+      setScheduleSlots(parseScheduleSlots(promo.scheduleSlots));
       if (promo.thumbnailUrl) {
         setThumbnail({
           uri: normalizeUploadUri(promo.thumbnailUrl),
@@ -122,6 +129,9 @@ const CreateTierDiscountModal = ({
     setTitle('');
     setStartDate('');
     setExpireDate('');
+    setStartTime('');
+    setEndTime('');
+    setScheduleSlots([]);
     setThumbnail(null);
     setVideo(null);
     setVideoDuration(0);
@@ -306,14 +316,17 @@ const CreateTierDiscountModal = ({
     }
     const start = startDate.trim();
     const expire = expireDate.trim();
-    const startD = new Date(start);
-    const expireD = new Date(expire);
-    if (!start || !expire || Number.isNaN(startD.getTime()) || Number.isNaN(expireD.getTime())) {
-      Alert.alert('Invalid dates', 'Use YYYY-MM-DD for start and expire date.');
+    const startD = combineDateAndTime(start, startTime, false);
+    const expireD = combineDateAndTime(expire, endTime, true);
+    if (!start || !expire || !startD || !expireD) {
+      Alert.alert('Invalid dates', 'Select start and expire date.');
       return;
     }
     if (expireD <= startD) {
-      Alert.alert('Invalid dates', 'Expire date must be after start date.');
+      Alert.alert(
+        'Invalid dates',
+        'Expire date and time must be after start date and time.',
+      );
       return;
     }
 
@@ -326,6 +339,9 @@ const CreateTierDiscountModal = ({
         offerType,
         startDate: startD.toISOString(),
         expireDate: expireD.toISOString(),
+        startTime: normalizeHhMm(startTime) || '',
+        endTime: normalizeHhMm(endTime) || '',
+        scheduleSlots,
         discountTiers: parsedTiers,
         fulfillmentScopes: isBooking ? [] : buildFulfillmentScopes(),
         tierMetricType: isBooking ? tierMetricType : undefined,
@@ -592,10 +608,19 @@ const CreateTierDiscountModal = ({
               <Text style={styles.addTierText}>Add another tier</Text>
             </TouchableOpacity>
 
-            <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
-            <TextInput style={styles.input} value={startDate} onChangeText={setStartDate} />
-            <Text style={styles.label}>Expire date (YYYY-MM-DD)</Text>
-            <TextInput style={styles.input} value={expireDate} onChangeText={setExpireDate} />
+            <PromotionScheduleEditor
+              startDate={startDate}
+              expireDate={expireDate}
+              startTime={startTime}
+              endTime={endTime}
+              slots={scheduleSlots}
+              onStartDateChange={setStartDate}
+              onExpireDateChange={setExpireDate}
+              onStartTimeChange={setStartTime}
+              onEndTimeChange={setEndTime}
+              onSlotsChange={setScheduleSlots}
+              disabled={submitting}
+            />
           </ScrollView>
           <TouchableOpacity
             style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}

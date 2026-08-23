@@ -521,7 +521,8 @@ const styles = StyleSheet.create({
   /** Figma: icon in white slot, label in colored pill (not inside same fill) */
   splitBadge: {
     flex: 1,
-    maxWidth: 158,
+    flexBasis: 0,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'stretch',
     minHeight: 36,
@@ -562,7 +563,7 @@ const styles = StyleSheet.create({
   },
   splitBadgeLabelText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
 });

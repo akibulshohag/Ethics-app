@@ -154,6 +154,33 @@ export const getChannelFollowing = async (
 };
 
 /**
+ * Suggested owners to follow (You May Know) — paginated, owners only.
+ * GET /users/:userId/suggested-following?page=&limit=&nearbyLat=&nearbyLng=
+ */
+export const getSuggestedFollowingOwners = async (
+  userId,
+  { page = 1, limit = 20, nearbyLat, nearbyLng, radiusKm } = {},
+) => {
+  try {
+    const params = { page, limit };
+    if (nearbyLat != null) params.nearbyLat = nearbyLat;
+    if (nearbyLng != null) params.nearbyLng = nearbyLng;
+    if (radiusKm != null) params.radiusKm = radiusKm;
+    const response = await axios.get(
+      `${API_URL}/${userId}/suggested-following`,
+      {
+        params,
+        headers: getAuthHeaders(),
+      },
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching suggested following:', error);
+    throw error;
+  }
+};
+
+/**
  * Subscribe to a channel
  */
 export const subscribeToChannel = async (subscriberId, channelUserId) => {

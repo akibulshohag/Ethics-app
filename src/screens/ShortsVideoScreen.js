@@ -1216,6 +1216,25 @@ const ShortsVideoScreen = ({ navigation }) => {
   const displayVideos = videos;
   const firstRowShortId = videos[0]?.id;
 
+  // Keep only 1 short per user — like TikTok/Reels (each swipe = different user)
+  const dedupeOnePerUser = useCallback((list, pinnedId) => {
+    const seen = new Set();
+    const result = [];
+    for (const v of list) {
+      const uid = String(v.userId || v.user?.id || v.id);
+      if (String(v.id) === String(pinnedId ?? '')) {
+        result.push(v);
+        seen.add(uid);
+        continue;
+      }
+      if (!seen.has(uid)) {
+        seen.add(uid);
+        result.push(v);
+      }
+    }
+    return result;
+  }, []);
+
   const loadShorts = useCallback(async () => {
     try {
       setLoading(true);
@@ -1270,6 +1289,8 @@ const ShortsVideoScreen = ({ navigation }) => {
               initialShortItem,
             );
           }
+          // One short per user — like TikTok/Reels feed
+          mapped = dedupeOnePerUser(mapped, initialShortId);
           setVideos(mapped);
           setActiveVideoIndex(0);
           hasAppliedInitialShort.current = !!initialShortId;
@@ -1336,8 +1357,19 @@ const ShortsVideoScreen = ({ navigation }) => {
       const enriched = await enrichShortsWithProfile(incoming);
       const mapped = enriched.map(mapShortToItem);
       setVideos(prev => {
-        const seen = new Set(prev.map(v => String(v.id)));
-        const unique = mapped.filter(v => !seen.has(String(v.id)));
+        // Dedupe by short id AND by userId — one short per user across entire feed
+        const seenIds = new Set(prev.map(v => String(v.id)));
+        const seenUsers = new Set(
+          prev.map(v => String(v.userId || v.user?.id || v.id)),
+        );
+        const unique = mapped.filter(v => {
+          const vid = String(v.id);
+          const uid = String(v.userId || v.user?.id || v.id);
+          if (seenIds.has(vid) || seenUsers.has(uid)) return false;
+          seenIds.add(vid);
+          seenUsers.add(uid);
+          return true;
+        });
         return unique.length ? [...prev, ...unique] : prev;
       });
       const totalPages = Number(res?.pagination?.totalPages || 0);

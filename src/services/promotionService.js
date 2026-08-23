@@ -71,6 +71,15 @@ const appendPromotionFields = (formData, prepared) => {
   formData.append('promoCode', (prepared.promoCode || '').trim());
   formData.append('startDate', prepared.startDate);
   formData.append('expireDate', prepared.expireDate);
+  if (prepared.startTime !== undefined) {
+    formData.append('startTime', prepared.startTime || '');
+  }
+  if (prepared.endTime !== undefined) {
+    formData.append('endTime', prepared.endTime || '');
+  }
+  if (Array.isArray(prepared.scheduleSlots)) {
+    formData.append('scheduleSlots', JSON.stringify(prepared.scheduleSlots));
+  }
   if (prepared.offerType) formData.append('offerType', prepared.offerType);
   if (
     Array.isArray(prepared.fulfillmentScopes) &&
@@ -161,6 +170,18 @@ const buildPromotionBlobParts = async prepared => {
   parts.push({ name: 'promoCode', data: (prepared.promoCode || '').trim() });
   parts.push({ name: 'startDate', data: String(prepared.startDate) });
   parts.push({ name: 'expireDate', data: String(prepared.expireDate) });
+  if (prepared.startTime !== undefined) {
+    parts.push({ name: 'startTime', data: String(prepared.startTime || '') });
+  }
+  if (prepared.endTime !== undefined) {
+    parts.push({ name: 'endTime', data: String(prepared.endTime || '') });
+  }
+  if (Array.isArray(prepared.scheduleSlots)) {
+    parts.push({
+      name: 'scheduleSlots',
+      data: JSON.stringify(prepared.scheduleSlots),
+    });
+  }
   if (prepared.offerType) {
     parts.push({ name: 'offerType', data: String(prepared.offerType) });
   }
@@ -504,6 +525,9 @@ export const updatePromotionUpload = async (promotionId, data) => {
     promoCode: prepared.promoCode,
     startDate: prepared.startDate,
     expireDate: prepared.expireDate,
+    startTime: prepared.startTime,
+    endTime: prepared.endTime,
+    scheduleSlots: prepared.scheduleSlots,
     offerType: prepared.offerType,
     fulfillmentScopes: prepared.fulfillmentScopes,
     discountTiers: prepared.discountTiers,

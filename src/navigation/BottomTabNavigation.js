@@ -221,6 +221,10 @@ const BottomNaivgation = () => {
             tabBarInactiveTintColor: COLORS.gray500,
             tabBarLabelStyle: styles.tabBarLabelStyle,
             tabBarShowLabel: false,
+            tabBarBadgeStyle: {
+              backgroundColor: '#F97507',
+              color: '#FFFFFF',
+            },
           }}
         >
           <Tab.Screen

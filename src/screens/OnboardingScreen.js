@@ -26,7 +26,9 @@ const SLIDES = [
   { key: 'slide-3', image: onboard3, isLast: true },
 ];
 
-const ORANGE = '#F97507';
+const ORANGE = '#F6A421';
+const MUTED_BROWN = '#6E6259';
+const DOT_INACTIVE = '#C8C0B8';
 
 const PrimaryActionButton = ({
   label,
@@ -66,7 +68,7 @@ const PreviousButton = ({ onPress, top, left }) => (
     accessibilityRole="button"
     accessibilityLabel="Previous"
   >
-    <Icon name="arrow-left" size={18} color="#FFFFFF" />
+    <Icon name="arrow-left" size={16} color={MUTED_BROWN} />
     <Text style={styles.prevText}>Previous</Text>
   </TouchableOpacity>
 );
@@ -80,11 +82,11 @@ const SkipButton = ({ onPress, top, right }) => (
     accessibilityLabel="Skip onboarding"
   >
     <Text style={styles.skipText}>Skip</Text>
-    <Icon name="arrow-right" size={18} color="#FFFFFF" />
+    <Icon name="arrow-right" size={16} color={ORANGE} />
   </TouchableOpacity>
 );
 
-const OnboardingDots = ({ total, activeCount, bottom }) => (
+const OnboardingDots = ({ total, activeIndex, bottom }) => (
   <View style={[styles.dotsRow, { bottom }]} pointerEvents="none">
     {Array.from({ length: total }).map((_, index) => (
       <View
@@ -92,7 +94,7 @@ const OnboardingDots = ({ total, activeCount, bottom }) => (
         style={[
           styles.dot,
           index > 0 && styles.dotSpacing,
-          index < activeCount ? styles.dotActive : styles.dotInactive,
+          index === activeIndex ? styles.dotActive : styles.dotInactive,
         ]}
       />
     ))}
@@ -145,15 +147,15 @@ const OnboardingScreen = () => {
     dispatch(setOnboardingDone(true));
   }, [dispatch]);
 
-  const actionBottom = insets.bottom + 24;
-  const dotsBottom = insets.bottom + 92;
+  const dotsBottom = insets.bottom + 16;
+  const actionBottom = insets.bottom + 44;
   const headerTop = insets.top + 10;
   const actionHorizontal = 24;
 
   return (
     <View style={styles.container}>
       <StatusBar
-        barStyle="light-content"
+        barStyle="dark-content"
         translucent
         backgroundColor="transparent"
       />
@@ -176,22 +178,14 @@ const OnboardingScreen = () => {
             />
 
             {index > 0 ? (
-              <PreviousButton
-                onPress={handleBack}
-                top={headerTop}
-                left={20}
-              />
+              <PreviousButton onPress={handleBack} top={headerTop} left={20} />
             ) : null}
 
-            <SkipButton
-              onPress={handleSkip}
-              top={headerTop}
-              right={20}
-            />
+            <SkipButton onPress={handleSkip} top={headerTop} right={20} />
 
             <OnboardingDots
               total={SLIDES.length}
-              activeCount={index + 1}
+              activeIndex={index}
               bottom={dotsBottom}
             />
 
@@ -238,24 +232,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 4,
     zIndex: 12,
+    marginTop: -12,
   },
   prevText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: MUTED_BROWN,
+    fontSize: 15,
     fontWeight: '600',
   },
   skipBtn: {
     position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    gap: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: ORANGE,
     zIndex: 12,
+    marginTop: -8,
   },
   skipText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+    color: ORANGE,
+    fontSize: 15,
     fontWeight: '600',
   },
   primaryBtn: {
@@ -280,7 +279,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#111111',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -303,7 +302,7 @@ const styles = StyleSheet.create({
     backgroundColor: ORANGE,
   },
   dotInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    backgroundColor: DOT_INACTIVE,
   },
 });
 

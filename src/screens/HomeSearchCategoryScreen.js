@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -44,7 +45,12 @@ import { UK_DEFAULT_RADIUS_KM } from '../utils/ukPostcode';
 import logo from '../assets/logo.png';
 import { HEADER_LOGO_STYLE } from '../constants/headerLogo';
 
+const { width } = Dimensions.get('window');
 const FEED_HORIZONTAL_PAD = 15;
+/** Same 4-and-a-half chip peek as HomeOneScreen. */
+const CATEGORY_CHIP_WIDTH = Math.floor(
+  (width - FEED_HORIZONTAL_PAD * 2) / 4.8,
+);
 
 const DEFAULT_IMG =
   'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600';
@@ -618,6 +624,7 @@ export default function HomeSearchCategoryScreen() {
             >
               {homeMenuCategories.map(cat => {
                 const active = cat.key === categoryKey;
+                const chipLabel = String(cat.label || '').trim();
                 return (
                   <TouchableOpacity
                     key={cat.key}
@@ -632,6 +639,7 @@ export default function HomeSearchCategoryScreen() {
                       <Image
                         source={{ uri: cat.imageUri }}
                         style={styles.categoryIcon}
+                        resizeMode="cover"
                       />
                     </View>
                     <Text
@@ -639,9 +647,12 @@ export default function HomeSearchCategoryScreen() {
                         styles.categoryLabel,
                         active && styles.categoryLabelActive,
                       ]}
-                      numberOfLines={2}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.75}
                     >
-                      {cat.label}
+                      {chipLabel.slice(0, 12) || cat.label}
+                      {chipLabel.length > 12 ? '...' : ''}
                     </Text>
                     {active ? <View style={styles.categoryUnderline} /> : null}
                   </TouchableOpacity>
@@ -848,44 +859,66 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: FEED_HORIZONTAL_PAD, paddingBottom: 32 },
-  title: { fontSize: 22, fontWeight: '700', color: '#111', marginTop: 4 },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111',
+    marginTop: 4,
+    marginBottom: 10,
+  },
   subtitle: { fontSize: 14, color: '#6B7280', marginTop: 4, marginBottom: 8 },
-  categoryScroll: { marginBottom: 8, marginHorizontal: -4 },
-  categoryRow: { gap: 6, paddingRight: 6, paddingVertical: 2 },
+  categoryScroll: { marginBottom: 4 },
+  categoryRow: {
+    paddingBottom: 4,
+    paddingRight: 8,
+    gap: 8,
+    alignItems: 'flex-start',
+  },
   categoryChip: {
     alignItems: 'center',
-    width: 68,
-    paddingTop: 4,
-    paddingBottom: 5,
-    paddingHorizontal: 3,
-    borderRadius: 8,
+    justifyContent: 'flex-start',
+    width: CATEGORY_CHIP_WIDTH,
+    height: 92,
+    backgroundColor: '#FFF',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#ECECEC',
-    backgroundColor: '#FFF',
+    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 2,
   },
   categoryChipActive: { borderColor: '#F5A623' },
   categoryIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFF2D8',
+    borderWidth: 1.5,
+    borderColor: '#EBCB8A',
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  categoryIcon: { width: '100%', height: '100%' },
+  categoryIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
   categoryLabel: {
-    fontSize: 9,
-    fontWeight: '600',
     color: '#4E4E4E',
-    marginTop: 3,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 5,
     textAlign: 'center',
-    lineHeight: 11,
+    lineHeight: 14,
     width: '100%',
+    paddingHorizontal: 4,
   },
   categoryLabelActive: { color: '#F5A623', fontWeight: '700' },
   categoryUnderline: {
-    marginTop: 2,
-    width: 20,
-    height: 2,
+    marginTop: 3,
+    width: 22,
+    height: 2.5,
     borderRadius: 2,
     backgroundColor: '#F5A623',
   },

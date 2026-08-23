@@ -13,6 +13,7 @@ import {
   OFFER_TYPES,
   formatFulfillmentScopes,
   formatFreeTaxChargeSummary,
+  formatPromotionSchedule,
   formatPromotionSummary,
   formatTierRange,
   getFreeTaxChargeTier,
@@ -37,9 +38,15 @@ const PromotionalOffersModal = ({
 }) => {
   const list = Array.isArray(promotions) ? promotions : [];
   const active = includeInactive ? list : list.filter(isPromotionActive);
-  const orderOffers = active.filter(p => (p.offerType || OFFER_TYPES.ORDER) === OFFER_TYPES.ORDER);
+  const orderOffers = active.filter(
+    p =>
+      (p.offerType || OFFER_TYPES.ORDER) === OFFER_TYPES.ORDER ||
+      p.offerType === OFFER_TYPES.BOTH,
+  );
   const amountOffers = active.filter(p => p.offerType === OFFER_TYPES.AMOUNT);
-  const bookingOffers = active.filter(p => p.offerType === OFFER_TYPES.BOOKING);
+  const bookingOffers = active.filter(
+    p => p.offerType === OFFER_TYPES.BOOKING || p.offerType === OFFER_TYPES.BOTH,
+  );
 
   const renderSection = (type, items) => {
     if (!items.length) return null;
@@ -56,6 +63,10 @@ const PromotionalOffersModal = ({
             promo.offerType === OFFER_TYPES.BOOKING
               ? promo.tierMetricType || 'people'
               : 'amount';
+          const isOrderLike =
+            (promo.offerType || OFFER_TYPES.ORDER) === OFFER_TYPES.ORDER ||
+            promo.offerType === OFFER_TYPES.BOTH;
+          const schedule = formatPromotionSchedule(promo);
           return (
             <View key={promo.id} style={styles.card}>
               <View style={styles.cardTitleRow}>
@@ -64,7 +75,10 @@ const PromotionalOffersModal = ({
                   <Text style={styles.inactiveBadge}>Inactive</Text>
                 ) : null}
               </View>
-              {promo.offerType === OFFER_TYPES.ORDER ? (
+              {promo.offerType === OFFER_TYPES.BOTH ? (
+                <Text style={styles.cardSub}>Order & booking</Text>
+              ) : null}
+              {isOrderLike ? (
                 <>
                   <Text style={styles.cardSub}>
                     Code: <Text style={styles.bold}>{promo.promoCode}</Text>
@@ -99,7 +113,7 @@ const PromotionalOffersModal = ({
               {promo.offerType === OFFER_TYPES.AMOUNT ? (
                 <Text style={styles.cardSub}>{formatFulfillmentScopes(promo.fulfillmentScopes)}</Text>
               ) : null}
-              {promo.offerType !== OFFER_TYPES.ORDER ? (
+              {!isOrderLike ? (
                 percentTiers.length ? (
                   <View style={styles.tierList}>
                     {percentTiers.map((tier, idx) => (
@@ -111,6 +125,9 @@ const PromotionalOffersModal = ({
                 ) : (
                   <Text style={styles.cardSub}>{formatPromotionSummary(promo)}</Text>
                 )
+              ) : null}
+              {schedule ? (
+                <Text style={styles.cardSub}>{schedule}</Text>
               ) : null}
               {promo.description ? (
                 <Text style={styles.cardDesc}>{promo.description}</Text>

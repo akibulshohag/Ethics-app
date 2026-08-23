@@ -12,7 +12,10 @@ import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import profileCardBg from '../assets/img/bg.png';
 import { safeImageUri } from '../utils/helper';
-import { formatShortProfileLocationLine, formatCityCountryPostcodeLine } from '../utils/locationFormat';
+import {
+  formatShortProfileLocationLine,
+  formatCityCountryPostcodeLine,
+} from '../utils/locationFormat';
 import BiometricLockToggle from './BiometricLockToggle';
 
 /** Figma fill 351px on ~375 → 12px side inset */
@@ -52,24 +55,6 @@ const formatCount = n => {
     return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
   if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   return String(Math.floor(num));
-};
-
-const renderStarRow = rating => {
-  const r = Math.min(5, Math.max(0, Number(rating) || 0));
-  const filled = Math.round(r);
-  return (
-    <View style={styles.starRow}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <Icon
-          key={`star-${i}`}
-          name={i <= filled ? 'star' : 'star-outline'}
-          size={10}
-          color="#F5A623"
-          style={styles.starIcon}
-        />
-      ))}
-    </View>
-  );
 };
 
 const UserProfileCard = ({
@@ -162,11 +147,11 @@ const UserProfileCard = ({
     !!(onOrderNowPress || onBookNowPress);
   const showExplorerBar =
     !showSelfEditHero &&
-    (isFoodExplorerUser || showRating || (subscribeInExplorerBar && showSubscribe));
+    (isFoodExplorerUser ||
+      showRating ||
+      (subscribeInExplorerBar && showSubscribe));
   const showExplorerSubscribe = subscribeInExplorerBar && showSubscribe;
-  const compactExplorer =
-    Platform.OS === 'ios' && showExplorerSubscribe && showRating;
-  const explorerLabel = 'Food Explorer';
+  const explorerLabel = isFoodExplorerUser ? 'Food Explorer' : 'Food Explorer';
   const isJoined = isSubscribed || ctaText === 'Subscribed';
   const explorerSubscribeLabel = isJoined ? 'Subscribed' : 'Subscribe';
 
@@ -345,7 +330,6 @@ const UserProfileCard = ({
               <View
                 style={[
                   styles.explorerRatingBarOuter,
-                  compactExplorer && styles.explorerRatingBarCompact,
                   !showRating &&
                     !showExplorerSubscribe &&
                     styles.explorerRatingBarSolo,
@@ -355,7 +339,8 @@ const UserProfileCard = ({
                   <Text
                     style={styles.foodExplorerText}
                     numberOfLines={1}
-                    allowFontScaling={false}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
                   >
                     {explorerLabel}
                   </Text>
@@ -368,30 +353,26 @@ const UserProfileCard = ({
                       activeOpacity={0.85}
                       style={[
                         styles.subscribeHeroSegment,
-                        styles.subscribeHeroSegmentFixed,
                         styles.subscribeHeroSegmentJoined,
                       ]}
                     >
                       {subscribeLoading ? (
                         <ActivityIndicator size="small" color="#FFF" />
                       ) : (
-                        <View style={styles.subscribeJoinedInner}>
-                          <Icon name="check-bold" size={12} color="#FFF" />
-                          <Text
-                            style={styles.subscribeHeroText}
-                            numberOfLines={1}
-                            allowFontScaling={false}
-                          >
-                            {explorerSubscribeLabel}
-                          </Text>
-                        </View>
+                        <Text
+                          style={styles.subscribeHeroText}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.85}
+                        >
+                          {explorerSubscribeLabel}
+                        </Text>
                       )}
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity
                       style={[
                         styles.subscribeHeroSegment,
-                        styles.subscribeHeroSegmentFixed,
                         styles.subscribeHeroSegmentActive,
                         (subscribeLoading || buttonDisabled) &&
                           styles.subscribeBtnDisabled,
@@ -406,7 +387,8 @@ const UserProfileCard = ({
                         <Text
                           style={styles.subscribeHeroText}
                           numberOfLines={1}
-                          allowFontScaling={false}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.85}
                         >
                           {explorerSubscribeLabel}
                         </Text>
@@ -416,19 +398,15 @@ const UserProfileCard = ({
                 ) : null}
                 {showRating ? (
                   <TouchableOpacity
-                    style={[
-                      styles.ratingSegment,
-                      compactExplorer && styles.ratingSegmentCompact,
-                    ]}
+                    style={styles.ratingSegment}
                     onPress={onPressReviews}
                     disabled={!onPressReviews}
                     activeOpacity={onPressReviews ? 0.85 : 1}
                   >
-                    <Icon name="star" size={12} color="#F5A623" />
+                    <Icon name="star" size={14} color="#F97507" />
                     <Text style={styles.ratingPillValue}>
                       {profileRatingText}
                     </Text>
-                    {compactExplorer ? null : renderStarRow(averageRating)}
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -481,7 +459,7 @@ const UserProfileCard = ({
           >
             <View style={styles.bioSection}>
               <Text style={styles.profileCtaText}>{statusText}</Text>
-              {(showBioActions) ? (
+              {showBioActions ? (
                 <View style={styles.bioActionRow}>
                   {showPromotionsButton ? (
                     <TouchableOpacity
@@ -783,6 +761,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     marginBottom: 8,
+    paddingHorizontal: 20,
   },
   explorerBlockAboveSheet: {
     marginBottom: 10,
@@ -791,110 +770,76 @@ const styles = StyleSheet.create({
   explorerRatingBarOuter: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     alignSelf: 'stretch',
+    width: '100%',
+    maxWidth: 340,
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-    gap: 4,
-    flexWrap: 'nowrap',
-    overflow: 'visible',
-  },
-  explorerRatingBarCompact: {
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 4,
+    borderRadius: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 5,
+    gap: 5,
   },
   explorerRatingBarSolo: {
     alignSelf: 'center',
   },
   explorerSegment: {
-    backgroundColor: '#F5A623',
-    borderRadius: 7,
-    paddingVertical: 7,
+    flex: 1,
+    backgroundColor: '#F6A421',
+    borderRadius: 8,
+    paddingVertical: 9,
     paddingHorizontal: 8,
-    minHeight: 32,
+    minHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
-    flexGrow: 0,
-    flexShrink: 0,
+    minWidth: 0,
   },
   foodExplorerText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    lineHeight: 14,
+    lineHeight: 15,
+    textAlign: 'center',
   },
   ratingSegment: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 7,
-    paddingVertical: 7,
-    paddingHorizontal: 6,
-    minHeight: 32,
-    gap: 2,
-    flexGrow: 0,
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    minHeight: 36,
+    gap: 4,
     flexShrink: 0,
-  },
-  ratingSegmentCompact: {
-    paddingVertical: 6,
-    paddingHorizontal: 6,
-    minHeight: 32,
   },
   ratingPillValue: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#1A1A1A',
-    lineHeight: 14,
+    lineHeight: 16,
   },
   subscribeHeroSegment: {
-    borderRadius: 7,
-    overflow: 'hidden',
-    minHeight: 32,
+    flex: 1,
+    borderRadius: 8,
+    minHeight: 36,
+    minWidth: 0,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  /** Fixed size so full "Subscribe" / "Subscribed" always fits */
-  subscribeHeroSegmentFixed: {
-    width: 108,
-    minWidth: 108,
-    flexGrow: 0,
-    flexShrink: 0,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
   },
   subscribeHeroSegmentJoined: {
-    backgroundColor: '#9AA3AF',
-    paddingVertical: 6,
-  },
-  subscribeJoinedInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
+    backgroundColor: '#1F2937',
   },
   subscribeHeroSegmentActive: {
-    backgroundColor: '#F5A623',
-    paddingVertical: 6,
-    minHeight: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#F97507',
   },
   subscribeHeroText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    lineHeight: 14,
+    lineHeight: 15,
     textAlign: 'center',
-  },
-  starRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  starIcon: {
-    marginHorizontal: 0.5,
   },
   profileSheetWrap: {
     marginTop: -SHEET_OVERLAP,

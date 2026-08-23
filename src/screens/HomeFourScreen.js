@@ -60,6 +60,7 @@ import {
   validUkPhoneNumber,
 } from '../utils/ukPhone';
 import {
+  appliesToOrders,
   calcPercentDiscount,
   findBestAmountDiscount,
   findMatchingTier,
@@ -70,6 +71,7 @@ import {
   OFFER_TYPES,
   parsePercentDiscountTiers,
   parsePromotionTiers,
+  promotionAppliesAt,
 } from '../utils/promotionUtils';
 
 const ORDER_NOTE_MARKER = '||NOTE||';
@@ -394,7 +396,13 @@ const HomeFourScreen = ({ onBack }) => {
       const list = res?.promotions ?? [];
       const now = new Date();
       const match = list.find(p => {
-        if ((p.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER) {
+        if (!appliesToOrders(p.offerType) || p.offerType === OFFER_TYPES.AMOUNT) {
+          return false;
+        }
+        if (
+          (p.offerType || OFFER_TYPES.ORDER) !== OFFER_TYPES.ORDER &&
+          p.offerType !== OFFER_TYPES.BOTH
+        ) {
           return false;
         }
         const pCode = (p.promoCode || '').trim().toUpperCase();
@@ -406,6 +414,13 @@ const HomeFourScreen = ({ onBack }) => {
         return true;
       });
       if (match) {
+        if (!promotionAppliesAt(match)) {
+          setAppliedPromotion(null);
+          setPromoApplyError(
+            'This promo is not valid at the current day or time',
+          );
+          return;
+        }
         const allTiers = parsePromotionTiers(match.discountTiers);
         const freeTaxTier = getFreeTaxChargeTier(match, subtotal);
         const percentTiers = parsePercentDiscountTiers(match.discountTiers);
@@ -451,9 +466,14 @@ const HomeFourScreen = ({ onBack }) => {
           id: match.id,
           promoCode: match.promoCode,
           promoAmount: tier?.percent ?? match.promoAmount,
-          offerType: OFFER_TYPES.ORDER,
+          offerType: match.offerType || OFFER_TYPES.ORDER,
           discountTiers: match.discountTiers,
           fulfillmentScopes: match.fulfillmentScopes,
+          startTime: match.startTime,
+          endTime: match.endTime,
+          scheduleSlots: match.scheduleSlots,
+          startDate: match.startDate,
+          expireDate: match.expireDate,
           tierPercent: tier?.percent,
           freeTaxTier,
         });
@@ -499,7 +519,7 @@ const HomeFourScreen = ({ onBack }) => {
   ]);
 
   const discountAmount = useMemo(() => {
-    if (appliedPromotion?.offerType === OFFER_TYPES.ORDER) {
+    if (appliedPromotion && appliesToOrders(appliedPromotion.offerType)) {
       const percentTiers = parsePercentDiscountTiers(
         appliedPromotion.discountTiers,
       );
