@@ -24,6 +24,12 @@ import { normalizeAnchor } from '../../constants/overlayTextAnchor';
 import { resolveReelUploadFilterId } from '../../constants/reelStylePresets';
 import { thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
 import { clearReelEditorDraft } from '../../utils/reelDraftStorage';
+import {
+  clipsFromDraft,
+  uniqueClipFiles,
+  clipUploadPart,
+  totalTimelineDuration,
+} from '../../utils/postClips';
 
 const defaultScheduleTime = () => {
   const d = new Date();
@@ -512,8 +518,9 @@ const ScheduleScreen = () => {
       Alert.alert('Login required', 'Please log in first.');
       return;
     }
-    if (!draft?.video?.uri) {
-      Alert.alert('Video required', 'Please select or record a reel first.');
+    const publishClips = clipsFromDraft(draft);
+    if (!draft?.video?.uri && !publishClips.length) {
+      Alert.alert('Media required', 'Please select a photo or video first.');
       return;
     }
     if (!postNow && scheduleAt.getTime() <= Date.now() + 60_000) {
@@ -553,11 +560,23 @@ const ScheduleScreen = () => {
       draftSource = draft,
     } = {}) => {
       const formData = new FormData();
-      formData.append('files', {
-        uri: draftSource.video.uri,
-        type: draftSource.video.type || 'video/mp4',
-        name: draftSource.video.name || 'reel.mp4',
-      });
+      const packed = uniqueClipFiles(clipsFromDraft(draftSource));
+      if (packed.files.length) {
+        packed.files.forEach((clip, i) => {
+          formData.append('files', clipUploadPart(clip, i));
+        });
+        formData.append('clipCount', String(packed.files.length));
+        formData.append('clips', JSON.stringify(packed.clips));
+        if (packed.files.length > 1 || packed.clips.length > 1) {
+          formData.append('joinClips', 'true');
+        }
+      } else {
+        formData.append('files', {
+          uri: draftSource.video.uri,
+          type: draftSource.video.type || 'video/mp4',
+          name: draftSource.video.name || 'reel.mp4',
+        });
+      }
       if (draftSource?.thumbnail?.uri) {
         formData.append('files', {
           uri: draftSource.thumbnail.uri,
@@ -565,6 +584,7 @@ const ScheduleScreen = () => {
           name: draftSource.thumbnail.name || 'thumb.jpg',
         });
       }
+      formData.append('watermark', 'true');
       formData.append('userId', String(user.id));
       formData.append('title', (draft.caption || 'Untitled Reel').trim());
       formData.append('description', (draft.caption || '').trim());
@@ -578,12 +598,27 @@ const ScheduleScreen = () => {
           .filter(Boolean);
         if (clean.length) formData.append('hashtags', JSON.stringify(clean));
       }
-      const sourceDur = Math.max(0.05, Number(draft?.video?.durationSec || 30));
+      const sourceDur = Math.max(
+        0.05,
+        totalTimelineDuration(clipsFromDraft(draft)) ||
+          Number(draft?.video?.durationSec || 30),
+      );
       formData.append('duration', String(Math.floor(sourceDur)));
 
       const ed = draft?.edits || {};
-      const trimStart = ed.trimStartSec != null ? Number(ed.trimStartSec) : 0;
-      let trimEnd = ed.trimEndSec != null ? Number(ed.trimEndSec) : sourceDur;
+      const joiningClips = packed.files.length > 1 || packed.clips.length > 1;
+      // Per-clip trim/speed live in clips JSON. Do not re-cut the joined file
+      // down to the selected clip's range.
+      const trimStart = joiningClips
+        ? 0
+        : ed.trimStartSec != null
+          ? Number(ed.trimStartSec)
+          : 0;
+      let trimEnd = joiningClips
+        ? sourceDur
+        : ed.trimEndSec != null
+          ? Number(ed.trimEndSec)
+          : sourceDur;
       formData.append(
         'trimStartSec',
         !Number.isFinite(trimStart) || trimStart < 0 ? '0' : String(trimStart),
@@ -592,7 +627,11 @@ const ScheduleScreen = () => {
         trimEnd = sourceDur;
       formData.append('trimEndSec', String(trimEnd));
 
-      const speedVal = ed.speedFactor != null ? Number(ed.speedFactor) : 1;
+      const speedVal = joiningClips
+        ? 1
+        : ed.speedFactor != null
+          ? Number(ed.speedFactor)
+          : 1;
       if (Number.isFinite(speedVal) && speedVal > 0) {
         formData.append('speedFactor', String(speedVal));
       }

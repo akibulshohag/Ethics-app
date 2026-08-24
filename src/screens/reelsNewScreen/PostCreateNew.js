@@ -19,6 +19,16 @@ import VideoCoverPickerModal from '../../components/VideoCoverPickerModal';
 import VideoCoverSuggestionsRow from '../../components/VideoCoverSuggestionsRow';
 import { frameToThumbnailAsset, thumbnailFromVideoFrame } from '../../utils/videoThumbnail';
 import { getSocialAccounts } from '../../services/postService';
+import {
+  MAX_CLIPS,
+  clipFromPickerAsset,
+  clipsFromDraft,
+  mediaKindFromClips,
+  primaryVideoFromClips,
+  thumbnailFromClips,
+  totalTimelineDuration,
+} from '../../utils/postClips';
+import EatwazeWatermark from '../../components/EatwazeWatermark';
 
 const { width } = Dimensions.get('window');
 
@@ -36,6 +46,7 @@ const CreateReelScreen = () => {
   const insets = useSafeAreaInsets();
   const user = useSelector(state => state?.app?.user);
   const [videoAsset, setVideoAsset] = useState(null);
+  const [clips, setClips] = useState([]);
   const [thumbnailAsset, setThumbnailAsset] = useState(null);
   const [coverModalVisible, setCoverModalVisible] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(false);
@@ -104,35 +115,169 @@ const CreateReelScreen = () => {
     { id: 5, label: 'Schedule' },
   ];
 
+  const applyClips = nextClips => {
+    const list = (Array.isArray(nextClips) ? nextClips : []).slice(0, MAX_CLIPS);
+    setClips(list);
+    const primary = primaryVideoFromClips(list);
+    setVideoAsset(primary);
+    const firstVideo = list.find(c => c.type === 'video');
+    if (firstVideo?.uri) {
+      setThumbLoading(true);
+      thumbnailFromVideoFrame(firstVideo.uri)
+        .then(thumb => {
+          if (thumb) setThumbnailAsset(thumb);
+        })
+        .finally(() => setThumbLoading(false));
+    } else {
+      setThumbnailAsset(thumbnailFromClips(list, null));
+    }
+  };
+
+  const appendPickerAssets = (assets, kind) => {
+    const incoming = (Array.isArray(assets) ? assets : [])
+      .filter(a => a?.uri)
+      .map(a => clipFromPickerAsset(a, kind));
+    if (!incoming.length) return;
+    setClips(prev => {
+      const room = Math.max(0, MAX_CLIPS - prev.length);
+      if (room <= 0) {
+        Alert.alert('Clip limit', `You can add up to ${MAX_CLIPS} clips.`);
+        return prev;
+      }
+      const next = [...prev, ...incoming.slice(0, room)];
+      const primary = primaryVideoFromClips(next);
+      setVideoAsset(primary);
+      const firstVideo = next.find(c => c.type === 'video');
+      if (firstVideo?.uri && !thumbnailAsset?.uri) {
+        setThumbLoading(true);
+        thumbnailFromVideoFrame(firstVideo.uri)
+          .then(thumb => {
+            if (thumb) setThumbnailAsset(thumb);
+          })
+          .finally(() => setThumbLoading(false));
+      } else if (!thumbnailAsset?.uri) {
+        setThumbnailAsset(thumbnailFromClips(next, thumbnailAsset));
+      }
+      return next;
+    });
+  };
+
+  const pickOneVideo = () =>
+    new Promise(resolve => {
+      launchImageLibrary(
+        { mediaType: 'video', selectionLimit: 1, videoMaxDuration: 180, quality: 1 },
+        res => {
+          if (res.didCancel) {
+            resolve(null);
+            return;
+          }
+          if (res.errorCode) {
+            Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+            resolve(null);
+            return;
+          }
+          resolve(res.assets?.[0] || null);
+        },
+      );
+    });
+
+  const confirmJoinStep = (title, message, confirmText, cancelText) =>
+    new Promise(resolve => {
+      Alert.alert(title, message, [
+        { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
+        { text: confirmText, onPress: () => resolve(true) },
+      ]);
+    });
+
   const pickVideo = () => {
     launchImageLibrary(
-      { mediaType: 'video', videoMaxDuration: 180, quality: 1 },
+      { mediaType: 'video', selectionLimit: MAX_CLIPS, videoMaxDuration: 180, quality: 1 },
       res => {
         if (res.didCancel) return;
         if (res.errorCode) {
           Alert.alert('Error', res.errorMessage || 'Failed to pick video');
           return;
         }
-        const a = res.assets?.[0];
-        if (!a?.uri) return;
-        setVideoAsset({
-          uri: a.uri,
-          type: a.type || 'video/mp4',
-          name: a.fileName || 'reel.mp4',
-          durationSec:
-            a.duration != null ? Math.max(0, Math.round(Number(a.duration))) : 0,
-          width: a.width || 0,
-          height: a.height || 0,
-        });
-        setThumbnailAsset(null);
-        setThumbLoading(true);
-        thumbnailFromVideoFrame(a.uri)
-          .then(thumb => {
-            if (thumb) setThumbnailAsset(thumb);
-          })
-          .finally(() => setThumbLoading(false));
+        const picked = (Array.isArray(res.assets) ? res.assets : []).filter(a => a?.uri);
+        appendPickerAssets(picked, 'video');
+        if (picked.length >= 2) {
+          Alert.alert(
+            'Joined into one video',
+            `${picked.length} videos will play as one reel, like CapCut. Publish exports a single video.`,
+          );
+        }
       },
     );
+  };
+
+  const pickJoinVideos = async () => {
+    const room = Math.max(0, MAX_CLIPS - clips.length);
+    if (room <= 0) {
+      Alert.alert('Clip limit', `You can add up to ${MAX_CLIPS} clips.`);
+      return;
+    }
+    const assets = [];
+    if (clips.length === 0) {
+      const first = await pickOneVideo();
+      if (!first?.uri) return;
+      assets.push(first);
+    }
+    const nextLabel = clips.length + assets.length + 1;
+    const wantNext = await confirmJoinStep(
+      'Join videos',
+      clips.length + assets.length === 0
+        ? 'Add a 2nd video. Eatwaze stitches them into one reel, like CapCut.'
+        : `Add video ${nextLabel} to join into one reel, like CapCut.`,
+      `Add video ${nextLabel}`,
+      clips.length + assets.length >= 2 ? 'Join these' : 'Just this one',
+    );
+    if (wantNext) {
+      await new Promise(r => setTimeout(r, 350));
+      const next = await pickOneVideo();
+      if (next?.uri) assets.push(next);
+    }
+    const totalAfter = clips.length + assets.length;
+    if (totalAfter >= 2 && assets.length < room && totalAfter < 3) {
+      const wantThird = await confirmJoinStep(
+        'Join videos',
+        'Add a 3rd video, or continue — they export as one video.',
+        'Add 3rd video',
+        'Join these',
+      );
+      if (wantThird) {
+        await new Promise(r => setTimeout(r, 350));
+        const third = await pickOneVideo();
+        if (third?.uri) assets.push(third);
+      }
+    }
+    if (!assets.length) return;
+    appendPickerAssets(assets, 'video');
+    const joined = clips.length + assets.length;
+    if (joined >= 2) {
+      Alert.alert(
+        'Joined into one video',
+        `${joined} videos will play in order as one reel. Publish exports a single 9:16 video.`,
+      );
+    }
+  };
+
+  const pickPhoto = () => {
+    launchImageLibrary(
+      { mediaType: 'photo', selectionLimit: MAX_CLIPS, quality: 0.92 },
+      res => {
+        if (res.didCancel) return;
+        if (res.errorCode) {
+          Alert.alert('Error', res.errorMessage || 'Failed to pick photo');
+          return;
+        }
+        appendPickerAssets(res.assets, 'photo');
+      },
+    );
+  };
+
+  const removeClip = id => {
+    const next = clips.filter(c => c.id !== id);
+    applyClips(next);
   };
 
   const pickThumbnail = () => {
@@ -153,11 +298,11 @@ const CreateReelScreen = () => {
   };
 
   const durationText = useMemo(() => {
-    const sec = Number(videoAsset?.durationSec || 0);
+    const sec = Math.round(totalTimelineDuration(clips) || Number(videoAsset?.durationSec || 0));
     const mm = Math.floor(sec / 60);
     const ss = String(sec % 60).padStart(2, '0');
     return sec > 0 ? `${mm}:${ss}` : '--:--';
-  }, [videoAsset?.durationSec]);
+  }, [clips, videoAsset?.durationSec]);
 
   const formatText = useMemo(() => {
     const w = Number(videoAsset?.width || 0);
@@ -175,7 +320,9 @@ const CreateReelScreen = () => {
     return h ? `${h}p` : 'Auto';
   }, [videoAsset?.height]);
 
-  const canGoNext = Boolean(String(videoAsset?.uri || '').trim());
+  const canGoNext = clips.length > 0 || Boolean(String(videoAsset?.uri || '').trim());
+  const hasVideoClip = clips.some(c => c.type === 'video');
+  const firstVideoClip = clips.find(c => c.type === 'video');
 
   useEffect(() => {
     if (seedLoaded) return;
@@ -183,18 +330,17 @@ const CreateReelScreen = () => {
       setSeedLoaded(true);
       return;
     }
-    const seededVideoUri = String(incomingSeed?.video?.uri || '').trim();
-    const seededThumbUri = String(incomingSeed?.thumbnail?.uri || '').trim();
-    if (seededVideoUri) {
-      setVideoAsset({
-        uri: seededVideoUri,
-        type: incomingSeed?.video?.type || 'video/mp4',
-        name: incomingSeed?.video?.name || 'reel.mp4',
-        durationSec: Number(incomingSeed?.video?.durationSec || 0),
-        width: Number(incomingSeed?.video?.width || 0),
-        height: Number(incomingSeed?.video?.height || 0),
-      });
+    const seededClips = clipsFromDraft(incomingSeed);
+    if (seededClips.length) {
+      setClips(seededClips);
+      setVideoAsset(primaryVideoFromClips(seededClips));
     }
+    const seededVideoUri = String(
+      seededClips.find(c => c.type === 'video')?.uri ||
+        (incomingSeed?.video?.isPhoto ? '' : incomingSeed?.video?.uri) ||
+        '',
+    ).trim();
+    const seededThumbUri = String(incomingSeed?.thumbnail?.uri || '').trim();
     if (seededThumbUri) {
       setThumbnailAsset({
         uri: seededThumbUri,
@@ -218,6 +364,7 @@ const CreateReelScreen = () => {
     if (lastFreshSessionRef.current === freshSession) return;
     lastFreshSessionRef.current = freshSession;
     setVideoAsset(null);
+    setClips([]);
     setThumbnailAsset(null);
     setCoverModalVisible(false);
     setThumbLoading(false);
@@ -246,14 +393,15 @@ const CreateReelScreen = () => {
 
   const onNext = async () => {
     if (!canGoNext) {
-      Alert.alert('Video required', 'Please upload a reel video before continuing.');
+      Alert.alert('Media required', 'Please upload a video or photo before continuing.');
       return;
     }
     let thumb = thumbnailAsset;
-    if (videoAsset?.uri && !String(thumb?.uri || '').trim()) {
+    const firstVideo = clips.find(c => c.type === 'video');
+    if (firstVideo?.uri && !String(thumb?.uri || '').trim()) {
       setThumbLoading(true);
       try {
-        thumb = await thumbnailFromVideoFrame(videoAsset.uri);
+        thumb = await thumbnailFromVideoFrame(firstVideo.uri);
         if (thumb) setThumbnailAsset(thumb);
       } catch (_) {
         // PostScheduleNew will retry before upload
@@ -261,10 +409,22 @@ const CreateReelScreen = () => {
         setThumbLoading(false);
       }
     }
+    if (!String(thumb?.uri || '').trim()) {
+      thumb = thumbnailFromClips(clips, thumb);
+    }
     navigation.navigate('PostEditNew', {
       draft: {
         ...(incomingSeed && typeof incomingSeed === 'object' ? incomingSeed : {}),
-        video: videoAsset,
+        clips,
+        mediaKind: mediaKindFromClips(clips),
+        video: primaryVideoFromClips(clips) || videoAsset,
+        photo: clips.find(c => c.type === 'photo')
+          ? {
+              uri: clips.find(c => c.type === 'photo').uri,
+              type: clips.find(c => c.type === 'photo').mime,
+              name: clips.find(c => c.type === 'photo').name,
+            }
+          : undefined,
         thumbnail: thumb || undefined,
       },
     });
@@ -344,8 +504,8 @@ const CreateReelScreen = () => {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Start here</Text>
           <Text style={styles.sectionSubtitle}>
-            Upload your reel to get started. You can trim, add music, text, and
-            more in the next step
+            Upload photos, videos, or both. Trim, add music, text, and more in
+            the next step
           </Text>
 
           {/* Upload Area */}
@@ -353,38 +513,98 @@ const CreateReelScreen = () => {
             <View style={styles.uploadIconCircle}>
               <Icon name="upload" color="#F5A623" size={30} />
             </View>
-            <Text style={styles.uploadTitle}>Upload Video</Text>
+            <Text style={styles.uploadTitle}>Upload media</Text>
             <Text style={styles.uploadMeta}>
-              MP4, MOV or WebM Max 2GB 60seconds
+              Photos and videos · MP4, MOV, JPG, PNG · up to {MAX_CLIPS} clips
             </Text>
             <Text style={styles.uploadHint}>
-              vertical video (9:16) perform better
+              Pick 2 or 3 videos to join into one reel, like CapCut.
             </Text>
 
-            <TouchableOpacity style={styles.uploadButton} onPress={pickVideo}>
-              <Icon name="upload" color="white" size={18} />
-              <Text style={styles.uploadButtonText}>
-                {videoAsset?.uri ? 'Change Video' : 'Tap to Upload'}
-              </Text>
+            <View style={styles.uploadBtnRow}>
+              <TouchableOpacity style={styles.uploadButton} onPress={pickVideo}>
+                <Icon name="video-plus" color="white" size={18} />
+                <Text style={styles.uploadButtonText}>Video</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.uploadButtonPhoto} onPress={pickPhoto}>
+                <Icon name="image-plus" color="white" size={18} />
+                <Text style={styles.uploadButtonText}>Photo</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.uploadButtonJoin} onPress={pickJoinVideos}>
+              <Icon name="call-merge" color="white" size={18} />
+              <Text style={styles.uploadButtonText}>Join 2–3 videos</Text>
             </TouchableOpacity>
             <Text style={styles.dragDropText}>
-              or drag and drop your file here
+              {clips.length >= 2
+                ? `${clips.length} clips will join into 1 video on publish`
+                : 'Join 2–3 videos, or add clips one by one — they play as one'}
             </Text>
           </View>
+
+          {clips.length ? (
+            <View style={styles.clipList}>
+              {clips.length >= 2 ? (
+                <View style={styles.joinBanner}>
+                  <Icon name="call-merge" size={18} color="#F5A623" />
+                  <Text style={styles.joinBannerText}>
+                    {clips.length} clips join into 1 video, like CapCut
+                  </Text>
+                </View>
+              ) : null}
+              {clips.map((clip, idx) => (
+                <View key={clip.id} style={styles.clipCard}>
+                  <View style={styles.clipThumbWrap}>
+                    <Image source={{ uri: clip.uri }} style={styles.clipThumb} />
+                    <EatwazeWatermark size={36} />
+                  </View>
+                  <View style={styles.clipMeta}>
+                    <Text style={styles.clipTitle} numberOfLines={1}>
+                      {idx + 1}. {clip.type === 'photo' ? 'Photo' : 'Video'}
+                    </Text>
+                    <Text style={styles.clipSub} numberOfLines={1}>
+                      {clip.name}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => removeClip(clip.id)} hitSlop={8}>
+                    <Icon name="close-circle" size={22} color="#C44" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {/* Thumbnail Section — pick a frame from THIS upload or a gallery image */}
           <Text style={styles.sectionTitle}>Thumbnail</Text>
           <Text style={styles.sectionSubtitle}>
-            Default is a frame from your video. Tap the preview or{' '}
-            <Text style={styles.sectionSubtitleEm}>From video</Text> to choose a
-            different moment. Use <Text style={styles.sectionSubtitleEm}>Gallery</Text>{' '}
-            for a custom image.
+            {hasVideoClip
+              ? 'Default is a frame from your video. Tap the preview or '
+              : 'Using your first photo as the cover. You can still pick a '}
+            {hasVideoClip ? (
+              <Text style={styles.sectionSubtitleEm}>From video</Text>
+            ) : (
+              <Text style={styles.sectionSubtitleEm}>Gallery</Text>
+            )}
+            {hasVideoClip ? (
+              <>
+                {' '}
+                to choose a different moment. Use{' '}
+                <Text style={styles.sectionSubtitleEm}>Gallery</Text> for a custom
+                image.
+              </>
+            ) : (
+              ' image instead.'
+            )}
           </Text>
 
           <TouchableOpacity
             style={[styles.thumbnailPreviewCard, !canGoNext && styles.thumbnailPreviewCardDisabled]}
             activeOpacity={canGoNext ? 0.92 : 1}
-            onPress={() => canGoNext && setCoverModalVisible(true)}
+            onPress={() => {
+              if (!canGoNext) return;
+              if (hasVideoClip) setCoverModalVisible(true);
+              else pickThumbnail();
+            }}
             disabled={!canGoNext}
           >
             <View style={styles.thumbnailPreviewInner}>
@@ -402,12 +622,12 @@ const CreateReelScreen = () => {
                 <View style={styles.thumbnailPlaceholder}>
                   <Icon name="motion-play-outline" size={40} color="#CCC" />
                   <Text style={styles.thumbnailPlaceholderText}>
-                    {canGoNext ? 'Tap to choose a frame' : 'Upload a video first'}
+                    {canGoNext ? 'Tap to choose a cover' : 'Upload a photo or video first'}
                   </Text>
                 </View>
               )}
             </View>
-            {canGoNext ? (
+            {canGoNext && hasVideoClip ? (
               <View style={styles.thumbnailPreviewBadge} pointerEvents="none">
                 <Icon
                   name="movie-open-outline"
@@ -422,10 +642,10 @@ const CreateReelScreen = () => {
             ) : null}
           </TouchableOpacity>
 
-          {canGoNext ? (
+          {canGoNext && hasVideoClip ? (
             <VideoCoverSuggestionsRow
-              videoUri={videoAsset?.uri}
-              durationSec={videoAsset?.durationSec}
+              videoUri={firstVideoClip?.uri}
+              durationSec={firstVideoClip?.durationSec}
               selectedUri={thumbnailAsset?.uri}
               onSelect={frame => {
                 const asset = frameToThumbnailAsset(frame);
@@ -441,13 +661,13 @@ const CreateReelScreen = () => {
               style={[
                 styles.thumbnailBtnHalf,
                 styles.thumbnailBtnHalfLeft,
-                !canGoNext && styles.thumbnailPickerDisabled,
+                (!canGoNext || !hasVideoClip) && styles.thumbnailPickerDisabled,
               ]}
-              onPress={() => canGoNext && setCoverModalVisible(true)}
-              disabled={!canGoNext}
+              onPress={() => canGoNext && hasVideoClip && setCoverModalVisible(true)}
+              disabled={!canGoNext || !hasVideoClip}
               activeOpacity={0.85}
             >
-              <Icon name="filmstrip" color={canGoNext ? '#F5A623' : '#AAA'} size={26} />
+                  <Icon name="filmstrip" color={canGoNext && hasVideoClip ? '#F5A623' : '#AAA'} size={26} />
               <Text
                 style={[styles.thumbnailBtnTitle, !canGoNext && styles.thumbPickerTitleDisabled]}
               >
@@ -534,7 +754,7 @@ const CreateReelScreen = () => {
           ]}
         >
           {!canGoNext ? (
-            <Text style={styles.stickyFooterHint}>Upload a video to go to Edit</Text>
+            <Text style={styles.stickyFooterHint}>Upload a photo or video to go to Edit</Text>
           ) : null}
           <TouchableOpacity
             style={[styles.stickyNextButton, !canGoNext && styles.nextButtonDisabled]}
@@ -554,8 +774,8 @@ const CreateReelScreen = () => {
         <VideoCoverPickerModal
           visible={coverModalVisible}
           onClose={() => setCoverModalVisible(false)}
-          videoUri={videoAsset?.uri}
-          durationSec={videoAsset?.durationSec}
+          videoUri={firstVideoClip?.uri}
+          durationSec={firstVideoClip?.durationSec}
           title="Choose thumbnail frame"
           onSelect={item => {
             const asset = frameToThumbnailAsset(item);
@@ -692,9 +912,79 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 10,
     alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  uploadButtonPhoto: {
+    backgroundColor: '#E8890C',
+    flexDirection: 'row',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 10,
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  uploadButtonJoin: {
+    backgroundColor: '#1C1C1C',
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  uploadBtnRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginTop: 4,
   },
   uploadButtonText: { color: 'white', fontWeight: 'bold', marginLeft: 8 },
   dragDropText: { fontSize: 10, color: '#AAA', marginTop: 6 },
+  joinBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    gap: 8,
+  },
+  joinBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8A5A00',
+  },
+
+  clipList: { marginBottom: 12 },
+  clipCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF9F0',
+    borderWidth: 1,
+    borderColor: '#F5E2BE',
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 8,
+  },
+  clipThumbWrap: {
+    width: 54,
+    height: 72,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+  },
+  clipThumb: { width: '100%', height: '100%' },
+  clipMeta: { flex: 1, marginHorizontal: 10 },
+  clipTitle: { fontSize: 14, fontWeight: '700', color: '#333' },
+  clipSub: { fontSize: 11, color: '#777', marginTop: 2 },
 
   thumbnailPreviewCard: {
     borderRadius: 14,

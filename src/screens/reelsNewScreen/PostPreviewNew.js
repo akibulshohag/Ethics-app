@@ -13,10 +13,11 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Video from 'react-native-video';
 import { getFilterOverlayStyle } from '../../constants/filterEffects';
 import { computeOverlayPositionStyle } from '../../constants/overlayTextAnchor';
 import SoundsModal from '../../components/SoundsModal';
+import PostMediaPlayer from '../../components/PostMediaPlayer';
+import { clipsFromDraft, totalTimelineDuration } from '../../utils/postClips';
 
 const { width, height } = Dimensions.get('window');
 
@@ -133,6 +134,7 @@ const PreviewReelScreen = () => {
     [insets.top, insets.bottom],
   );
   const draft = route.params?.draft || {};
+  const clips = React.useMemo(() => clipsFromDraft(draft), [draft]);
   const [selectedSound, setSelectedSound] = React.useState(
     draft?.edits?.selectedSound || null,
   );
@@ -147,6 +149,7 @@ const PreviewReelScreen = () => {
   const [currentSec, setCurrentSec] = React.useState(0);
   const [playing, setPlaying] = React.useState(true);
   const resumePlayingRef = React.useRef(true);
+  const playingRef = React.useRef(true);
   const [muteOriginal, setMuteOriginal] = React.useState(
     Boolean(draft?.edits?.previewMuteOriginal ?? Number(draft?.edits?.originalVolume ?? 1) <= 0),
   );
@@ -155,7 +158,10 @@ const PreviewReelScreen = () => {
   const lastMusicVolumeRef = React.useRef(Math.max(0.1, Number(draft?.edits?.musicVolume ?? 1)));
   const videoRef = React.useRef(null);
   const musicRef = React.useRef(null);
-  const durationSec = Math.max(1, Number(draft?.video?.durationSec || 30));
+  const durationSec = Math.max(
+    1,
+    totalTimelineDuration(clips) || Number(draft?.video?.durationSec || 30),
+  );
   const selectedSoundUrl = String(
     selectedSound?.soundUrl || selectedSound?.previewUrl || selectedSound?.url || '',
   ).trim();
@@ -242,13 +248,18 @@ const PreviewReelScreen = () => {
   }, [draft?.video?.uri, seekVideo, trimPreviewActive, trimStartSec]);
 
   React.useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+
+  React.useEffect(() => {
     if (isFocused) {
       setPlaying(Boolean(resumePlayingRef.current));
-      return;
+      return undefined;
     }
-    resumePlayingRef.current = playing;
+    resumePlayingRef.current = playingRef.current;
     setPlaying(false);
-  }, [isFocused, playing]);
+    return undefined;
+  }, [isFocused]);
 
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
 
@@ -316,61 +327,26 @@ const PreviewReelScreen = () => {
             if (w > 0 && h > 0) setVideoBoxSize({ width: w, height: h });
           }}
         >
-          {draft?.video?.uri ? (
-            <Video
-              ref={videoRef}
-              source={{ uri: draft.video.uri }}
-              style={StyleSheet.absoluteFillObject}
-              resizeMode="cover"
-              repeat={!trimPreviewActive}
-              muted={muteOriginal || originalVolume <= 0}
-              volume={originalVolume}
-              paused={!playing || !isFocused}
-              rate={Number(draft?.edits?.speedFactor || 1)}
-              progressUpdateInterval={100}
-              onLoad={() => {
-                if (trimPreviewActive) seekVideo(trimStartSec);
-              }}
-              onProgress={p => {
-                const t = Number(p?.currentTime || 0);
-                if (!Number.isFinite(t)) return;
-                setCurrentSec(t);
-                if (
-                  trimPreviewActive &&
-                  t >= trimEndSec - 0.12
-                ) {
-                  seekVideo(trimStartSec);
-                  setCurrentSec(trimStartSec);
-                }
-              }}
-            />
-          ) : null}
-          {selectedSoundUrl && musicVolume > 0 ? (
-            <Video
-              ref={musicRef}
-              source={{ uri: selectedSoundUrl }}
-              style={styles.hiddenAudioTrack}
-              audioOnly
-              repeat
-              paused={!playing || !isFocused}
-              muted={false}
-              volume={musicVolume}
-              ignoreSilentSwitch="ignore"
-              onLoad={() => {
-                try {
-                  const t = Math.max(0, Number(currentSec || 0));
-                  musicRef.current?.seek?.(t);
-                } catch {
-                  /* noop */
-                }
-              }}
-              onError={e => {
-                const err = e?.nativeEvent || e;
-                console.warn('PostPreviewNew music playback error:', err);
-              }}
-            />
-          ) : null}
-          {trimPreviewActive ? (
+          <PostMediaPlayer
+            draft={draft}
+            clips={clips}
+            playing={playing}
+            onPlayingChange={setPlaying}
+            isFocused={isFocused}
+            muted={muteOriginal || originalVolume <= 0}
+            volume={originalVolume}
+            selectedSoundUrl={selectedSoundUrl}
+            musicVolume={musicVolume}
+            filterOverlay={filterOverlay}
+            onProgress={p => {
+              const t = Number(p?.timelineSec ?? p?.currentTime ?? 0);
+              if (Number.isFinite(t)) setCurrentSec(t);
+            }}
+            videoRef={videoRef}
+            musicRef={musicRef}
+            style={StyleSheet.absoluteFillObject}
+          />
+          {trimPreviewActive && clips.length <= 1 ? (
             <View style={styles.trimPreviewBadge} pointerEvents="none">
               <Icon name="movie-open-outline" size={14} color="#fff" />
               <Text style={styles.trimPreviewBadgeText}>
@@ -378,27 +354,6 @@ const PreviewReelScreen = () => {
               </Text>
             </View>
           ) : null}
-          {filterOverlay ? (
-            <View
-              pointerEvents="none"
-              style={[
-                StyleSheet.absoluteFillObject,
-                {
-                  backgroundColor: filterOverlay.backgroundColor,
-                  opacity: filterOverlay.opacity,
-                },
-              ]}
-            />
-          ) : null}
-          <View style={styles.playOverlay}>
-            <TouchableOpacity
-              style={styles.pauseCircle}
-              activeOpacity={0.85}
-              onPress={() => setPlaying(prev => !prev)}
-            >
-              <Icon name={playing ? 'pause' : 'play'} color="black" size={24} />
-            </TouchableOpacity>
-          </View>
           <TouchableOpacity
             style={styles.audioToggle}
             onPress={toggleOriginalAudio}
@@ -503,6 +458,7 @@ const PreviewReelScreen = () => {
               navigation.navigate('PostScheduleNew', {
                 draft: {
                   ...draft,
+                  clips,
                   edits: {
                     ...draft?.edits,
                     selectedSound,
@@ -682,6 +638,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 10,
     top: 10,
+    zIndex: 12,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.55)',

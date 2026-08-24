@@ -12,8 +12,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import PostMediaPlayer from '../../components/PostMediaPlayer';
+import { getFilterOverlayStyle } from '../../constants/filterEffects';
+import { clipsFromDraft } from '../../utils/postClips';
 
 const { width } = Dimensions.get('window');
 const CAPTION_PREVIEW_HEIGHT = Math.min(width * 0.9, 340);
@@ -35,8 +38,11 @@ const extractCaptionHashtags = text => {
 const WriteCaptionScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const isFocused = useIsFocused();
   const incomingDraft = route.params?.draft || {};
+  const clips = clipsFromDraft(incomingDraft);
   const [caption, setCaption] = useState('');
+  const [playing, setPlaying] = useState(false);
   const [isOrderButtonEnabled, setIsOrderButtonEnabled] = useState(true);
   const [hashtagInput, setHashtagInput] = useState('');
   const [hashtags, setHashtags] = useState(
@@ -44,6 +50,13 @@ const WriteCaptionScreen = () => {
       ? incomingDraft.hashtags
       : ['#curry', '#biryani', '#LondonEats', '#foodie'],
   );
+  const filterOverlay = getFilterOverlayStyle(incomingDraft?.edits?.selectedFilter);
+  const selectedSoundUrl = String(
+    incomingDraft?.edits?.selectedSound?.soundUrl ||
+      incomingDraft?.edits?.selectedSound?.previewUrl ||
+      incomingDraft?.edits?.selectedSound?.url ||
+      '',
+  ).trim();
 
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
   React.useEffect(() => {
@@ -52,6 +65,10 @@ const WriteCaptionScreen = () => {
       setIsOrderButtonEnabled(Boolean(incomingDraft.orderNow));
     }
   }, [incomingDraft.caption, incomingDraft.orderNow]);
+
+  React.useEffect(() => {
+    if (!isFocused) setPlaying(false);
+  }, [isFocused]);
 
   const addHashtag = React.useCallback(() => {
     const tag = normalizeHashtag(hashtagInput);
@@ -113,21 +130,19 @@ const WriteCaptionScreen = () => {
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.videoPreviewContainer}>
-          <Image
-            source={{
-              uri:
-                incomingDraft?.thumbnail?.uri ||
-                'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=800',
-            }}
-            style={styles.previewImage}
-          />
-          <View style={styles.playOverlay}>
-            <View style={styles.pauseCircle}>
-              <Icon name="pause" color="black" size={20} />
-            </View>
-          </View>
-        </View>
+        <PostMediaPlayer
+          draft={incomingDraft}
+          clips={clips}
+          playing={playing}
+          onPlayingChange={setPlaying}
+          isFocused={isFocused}
+          muted={Boolean(incomingDraft?.edits?.previewMuteOriginal)}
+          volume={Number(incomingDraft?.edits?.originalVolume ?? 1)}
+          selectedSoundUrl={selectedSoundUrl}
+          musicVolume={Number(incomingDraft?.edits?.musicVolume ?? 1)}
+          filterOverlay={filterOverlay}
+          style={styles.videoPreviewContainer}
+        />
 
         <View style={styles.inputSection}>
           <View style={styles.captionHeader}>
@@ -209,9 +224,11 @@ const WriteCaptionScreen = () => {
                     finalTags.push(tag);
                   }
                 });
+                setPlaying(false);
                 navigation.navigate('PostPreviewNew', {
                   draft: {
                     ...incomingDraft,
+                    clips,
                     caption: caption.trim(),
                     hashtags: finalTags,
                     orderNow: isOrderButtonEnabled,
@@ -278,25 +295,10 @@ const styles = StyleSheet.create({
     width: CAPTION_PREVIEW_WIDTH,
     height: CAPTION_PREVIEW_HEIGHT,
     alignSelf: 'center',
-    position: 'relative',
     overflow: 'hidden',
     backgroundColor: '#000',
     borderRadius: 12,
     marginTop: 8,
-  },
-  previewImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pauseCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 
   inputSection: { padding: 20 },

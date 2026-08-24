@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import EatwazeWatermark from './EatwazeWatermark';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2; // 2 columns with padding (16*2 + 16 gap) / 2
@@ -8,6 +9,7 @@ const ShortsVideoCard = ({ video, onPress }) => {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <Image source={{ uri: video.thumbnail }} style={styles.thumbnail} />
+      <EatwazeWatermark size={48} top={8} right={8} />
       <View style={styles.overlay}>
         <Text style={styles.title} numberOfLines={2}>
           {video.title}

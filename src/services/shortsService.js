@@ -76,20 +76,36 @@ const filterUserShortsForViewer = (data, userId, viewerUserId) => {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const parseUploadFormDataParts = formData => {
-  const out = { fields: {}, video: null, thumbnail: null };
+  const out = { fields: {}, video: null, thumbnail: null, clipCount: 0 };
   const parts = Array.isArray(formData?._parts) ? formData._parts : [];
+  const mediaFiles = [];
   for (const part of parts) {
     const key = part?.[0];
     const value = part?.[1];
     if (!key) continue;
     if (key === 'files' && value && typeof value === 'object' && typeof value.uri === 'string') {
+      mediaFiles.push(value);
+      continue;
+    }
+    out.fields[key] = value;
+  }
+  const clipCount = Math.max(0, Number(out.fields.clipCount || 0) || 0);
+  out.clipCount = clipCount;
+  if (clipCount > 0 && mediaFiles.length >= clipCount) {
+    const clips = mediaFiles.slice(0, clipCount);
+    const rest = mediaFiles.slice(clipCount);
+    out.video = clips.find(f => String(f.type || '').startsWith('video/')) || clips[0];
+    out.thumbnail =
+      rest.find(f => String(f.type || '').startsWith('image/')) ||
+      clips.find(f => String(f.type || '').startsWith('image/')) ||
+      null;
+  } else {
+    for (const value of mediaFiles) {
       const type = String(value.type || '').toLowerCase();
       if (type.startsWith('video/')) out.video = value;
       else if (type.startsWith('image/')) out.thumbnail = value;
       else if (!out.video) out.video = value;
-      continue;
     }
-    out.fields[key] = value;
   }
   return out;
 };
@@ -177,8 +193,21 @@ export const shortsService = {
     // Prefer direct-to-R2 upload when backend supports it (bypasses Cloudflare upload limits).
     let directAttempted = false;
     try {
-      const { fields, video, thumbnail } = parseUploadFormDataParts(formData);
-      if (video?.uri && isLocalMediaUri(video.uri)) {
+      const { fields, video, thumbnail, clipCount } = parseUploadFormDataParts(formData);
+      let parsedClipLen = 0;
+      try {
+        const raw = fields.clips;
+        const parsed = Array.isArray(raw) ? raw : JSON.parse(String(raw || '[]'));
+        parsedClipLen = Array.isArray(parsed) ? parsed.length : 0;
+      } catch {
+        parsedClipLen = 0;
+      }
+      const skipDirect =
+        Number(clipCount) > 1 ||
+        parsedClipLen > 1 ||
+        String(fields.joinClips || '').toLowerCase() === 'true' ||
+        String(video?.type || '').toLowerCase().startsWith('image/');
+      if (video?.uri && isLocalMediaUri(video.uri) && !skipDirect) {
         directAttempted = true;
         const presignRes = await fetch(`${API_URL}/upload-url`, {
           method: 'POST',

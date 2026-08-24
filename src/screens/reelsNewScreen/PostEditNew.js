@@ -34,6 +34,20 @@ import {
   computeOverlayPositionStyle,
   normalizeAnchor,
 } from '../../constants/overlayTextAnchor';
+import EatwazeWatermark from '../../components/EatwazeWatermark';
+import MediaPlayTapOverlay from '../../components/MediaPlayTapOverlay';
+import {
+  MAX_CLIPS,
+  PHOTO_MAX_SEC,
+  clipFromPickerAsset,
+  clipPlayDuration,
+  clipsFromDraft,
+  mediaKindFromClips,
+  primaryVideoFromClips,
+  splitClipAtSourceTime,
+  thumbnailFromClips,
+  totalTimelineDuration,
+} from '../../utils/postClips';
 
 const { width, height: SCREEN_H } = Dimensions.get('window');
 const EDIT_DRAFT_STORAGE_KEY = 'reel-editor-draft-v2';
@@ -179,6 +193,10 @@ const EditReelScreen = () => {
   const isFocused = useIsFocused();
   const incomingDraft = route.params?.draft || {};
   const [draft, setDraft] = React.useState(incomingDraft);
+  const [clips, setClips] = React.useState(() => clipsFromDraft(incomingDraft));
+  const [selectedClipIndex, setSelectedClipIndex] = React.useState(0);
+  const [controlsVisible, setControlsVisible] = React.useState(true);
+  const hideControlsTimerRef = React.useRef(null);
   const [soundsVisible, setSoundsVisible] = React.useState(false);
   const [filterVisible, setFilterVisible] = React.useState(false);
   const [selectedSound, setSelectedSound] = React.useState(
@@ -275,6 +293,7 @@ const EditReelScreen = () => {
   const [savedDrafts, setSavedDrafts] = React.useState([]);
   const [playing, setPlaying] = React.useState(true);
   const resumePlayingRef = React.useRef(true);
+  const playingRef = React.useRef(true);
   const [activePanel, setActivePanel] = React.useState(null);
   const [timelineTrackW, setTimelineTrackW] = React.useState(1);
   const [scrubBarW, setScrubBarW] = React.useState(1);
@@ -320,17 +339,27 @@ const EditReelScreen = () => {
   }, [trimEndSec]);
 
   React.useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+
+  React.useEffect(() => {
     if (isFocused) {
       setPlaying(Boolean(resumePlayingRef.current));
-      return;
+      return undefined;
     }
-    resumePlayingRef.current = playing;
+    resumePlayingRef.current = playingRef.current;
     setPlaying(false);
-  }, [isFocused, playing]);
+    return undefined;
+  }, [isFocused]);
   const steps = ['Upload', 'Edit', 'Caption', 'Preview', 'Schedule'];
 
-  const videoUri = draft?.video?.uri;
+  const selectedClip = clips[selectedClipIndex] || clips[0] || null;
   const thumbnailUri = draft?.thumbnail?.uri;
+  const videoUri = selectedClip?.type === 'video' ? selectedClip.uri : null;
+  const photoUri =
+    selectedClip?.type === 'photo'
+      ? selectedClip.uri
+      : thumbnailUri || null;
   const selectedSoundUrl = React.useMemo(
     () =>
       String(
@@ -338,11 +367,15 @@ const EditReelScreen = () => {
       ).trim(),
     [selectedSound],
   );
-  const durationSec = Math.max(1, Number(draft?.video?.durationSec || 30));
+  const durationSec = Math.max(
+    1,
+    Number(selectedClip?.durationSec || draft?.video?.durationSec || 30),
+  );
   const filterOverlay = getFilterOverlayStyle(selectedFilter);
   const beautyOverlay = getBeautyOverlayStyle(beautyLevel);
   const trimLoopActive =
-    trimStartSec > 0.08 || trimEndSec < durationSec - 0.08;
+    clips.length <= 1 &&
+    (trimStartSec > 0.08 || trimEndSec < durationSec - 0.08);
   const [videoBoxSize, setVideoBoxSize] = React.useState({
     width: width * 0.65,
     height: width * 0.8,
@@ -359,6 +392,77 @@ const EditReelScreen = () => {
       setTrimEndSec(durationSec);
     }
   }, [durationSec, trimEndSec]);
+
+  React.useEffect(() => {
+    const clip = clips[selectedClipIndex];
+    if (!clip) return;
+    setTrimStartSec(Number(clip.trimStartSec || 0));
+    setTrimEndSec(Number(clip.trimEndSec || clip.durationSec || durationSec));
+    setSpeedFactor(Number(clip.speedFactor || 1));
+    setPreviewSec(Number(clip.trimStartSec || 0));
+    setPlaying(true);
+  }, [selectedClipIndex, selectedClip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    setClips(prev => {
+      if (!prev[selectedClipIndex]) return prev;
+      const cur = prev[selectedClipIndex];
+      if (
+        cur.trimStartSec === trimStartSec &&
+        cur.trimEndSec === trimEndSec &&
+        cur.speedFactor === speedFactor
+      ) {
+        return prev;
+      }
+      const next = [...prev];
+      next[selectedClipIndex] = {
+        ...cur,
+        trimStartSec,
+        trimEndSec,
+        speedFactor,
+      };
+      return next;
+    });
+  }, [trimStartSec, trimEndSec, speedFactor, selectedClipIndex]);
+
+  React.useEffect(() => {
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    if (!playing || !isFocused) {
+      setControlsVisible(true);
+      return undefined;
+    }
+    hideControlsTimerRef.current = setTimeout(() => setControlsVisible(false), 900);
+    return () => {
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    };
+  }, [playing, isFocused]);
+
+  React.useEffect(() => {
+    if (selectedClip?.type !== 'photo' || !playing || !isFocused) return undefined;
+    const id = setInterval(() => {
+      setPreviewSec(prev => {
+        const next = prev + 0.12;
+        if (clips.length > 1 && next >= trimEndSec - 0.05) {
+          goToNextClip();
+          return trimStartSec;
+        }
+        if (trimLoopActive && next >= trimEndSec - 0.05) return trimStartSec;
+        if (next >= durationSec) return trimStartSec;
+        return next;
+      });
+    }, 120);
+    return () => clearInterval(id);
+  }, [
+    selectedClip?.type,
+    playing,
+    isFocused,
+    trimLoopActive,
+    trimEndSec,
+    trimStartSec,
+    durationSec,
+    clips.length,
+    goToNextClip,
+  ]);
 
   React.useEffect(() => {
     setPreviewSec(prev => Math.max(0, Math.min(durationSec, prev)));
@@ -394,6 +498,17 @@ const EditReelScreen = () => {
       ),
     );
   }, [trimStartSec, trimEndSec]);
+
+  const advancingClipRef = React.useRef(false);
+  const goToNextClip = React.useCallback(() => {
+    if (clips.length <= 1 || advancingClipRef.current) return false;
+    advancingClipRef.current = true;
+    setSelectedClipIndex(i => (i + 1) % clips.length);
+    setTimeout(() => {
+      advancingClipRef.current = false;
+    }, 450);
+    return true;
+  }, [clips.length]);
 
   const seekVideo = React.useCallback(t => {
     const x = Math.max(0, Number(t) || 0);
@@ -453,6 +568,10 @@ const EditReelScreen = () => {
   const buildDraftPayload = React.useCallback(
     () => ({
       ...draft,
+      clips,
+      mediaKind: mediaKindFromClips(clips),
+      video: primaryVideoFromClips(clips) || draft?.video,
+      thumbnail: draft?.thumbnail || thumbnailFromClips(clips, draft?.thumbnail),
       edits: {
         ...draft?.edits,
         selectedSound: selectedSound
@@ -479,6 +598,7 @@ const EditReelScreen = () => {
     }),
     [
       beautyLevel,
+      clips,
       draft,
       exportFps,
       exportResolution,
@@ -500,8 +620,13 @@ const EditReelScreen = () => {
 
   const applyPersistedDraft = React.useCallback((parsed, keepCurrentVideo = false) => {
     if (!parsed) return;
-    if (!keepCurrentVideo && parsed?.video?.uri) {
+    if (!keepCurrentVideo && (parsed?.video?.uri || parsed?.clips?.length)) {
       setDraft(parsed);
+      const nextClips = clipsFromDraft(parsed);
+      if (nextClips.length) {
+        setClips(nextClips);
+        setSelectedClipIndex(0);
+      }
     } else if (keepCurrentVideo) {
       setDraft(prev => ({
         ...parsed,
@@ -742,23 +867,23 @@ const EditReelScreen = () => {
   );
 
   const splitAtPlayhead = React.useCallback(() => {
-    const t = previewSec;
-    const min = trimStartSec + MIN_TRIM_GAP;
-    const max = trimEndSec - MIN_TRIM_GAP;
-    if (t <= min || t >= max) {
+    const clip = clips[selectedClipIndex];
+    if (!clip) return;
+    const parts = splitClipAtSourceTime(clip, previewSec);
+    if (!parts) {
       Alert.alert(
         'Split',
         'Move the playhead inside the orange trim range (not on the edges).',
       );
       return;
     }
-    const collides = splitPoints.some(p => Math.abs(p - t) < 0.22);
-    if (collides) {
-      Alert.alert('Split', 'Too close to another cut. Scrub slightly and try again.');
-      return;
-    }
-    setSplitPoints(prev => [...prev, t].sort((a, b) => a - b));
-  }, [previewSec, splitPoints, trimEndSec, trimStartSec]);
+    setClips(prev => {
+      const next = [...prev];
+      next.splice(selectedClipIndex, 1, parts[0], parts[1]);
+      return next;
+    });
+    setSplitPoints(prev => [...prev, previewSec].sort((a, b) => a - b));
+  }, [clips, previewSec, selectedClipIndex]);
 
   const applyStylePreset = React.useCallback(presetId => {
     setSelectedStylePreset(presetId);
@@ -773,32 +898,97 @@ const EditReelScreen = () => {
     setSpeedFactor(Number(preset.speed || 1));
   }, []);
 
-  const pickVideo = () => {
-    launchImageLibrary(
-      { mediaType: 'video', videoMaxDuration: 180, quality: 1 },
-      res => {
-        if (res.didCancel) return;
-        if (res.errorCode) {
-          Alert.alert('Error', res.errorMessage || 'Failed to pick video');
-          return;
-        }
-        const a = res.assets?.[0];
-        if (!a?.uri) return;
-        setDraft(prev => ({
-          ...prev,
-          video: {
-            uri: a.uri,
-            type: a.type || 'video/mp4',
-            name: a.fileName || 'reel.mp4',
-            durationSec:
-              a.duration != null ? Math.max(0, Math.round(Number(a.duration))) : 0,
-            width: a.width || 0,
-            height: a.height || 0,
-          },
-        }));
-      },
-    );
+  const appendClipsFromAssets = (assets, kind) => {
+    const incoming = (Array.isArray(assets) ? assets : [])
+      .filter(a => a?.uri)
+      .map(a => clipFromPickerAsset(a, kind));
+    if (!incoming.length) return;
+    setClips(prev => {
+      const room = Math.max(0, MAX_CLIPS - prev.length);
+      if (room <= 0) {
+        Alert.alert('Clip limit', `You can add up to ${MAX_CLIPS} clips.`);
+        return prev;
+      }
+      const next = [...prev, ...incoming.slice(0, room)];
+      setSelectedClipIndex(next.length - 1);
+      setDraft(d => ({
+        ...d,
+        clips: next,
+        video: primaryVideoFromClips(next) || d.video,
+        mediaKind: mediaKindFromClips(next),
+      }));
+      return next;
+    });
   };
+
+  const addClip = () => {
+    Alert.alert('Add clip', 'Choose media to add on the timeline', [
+      {
+        text: 'Video',
+        onPress: () =>
+          launchImageLibrary(
+            { mediaType: 'video', selectionLimit: 4, videoMaxDuration: 180, quality: 1 },
+            res => {
+              if (res.didCancel || res.errorCode) {
+                if (res.errorCode) Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+                return;
+              }
+              appendClipsFromAssets(res.assets, 'video');
+              const n = (res.assets || []).filter(a => a?.uri).length;
+              if (n >= 2) {
+                Alert.alert(
+                  'Joined into one video',
+                  `${n} videos will play as one reel. Publish exports a single video.`,
+                );
+              }
+            },
+          ),
+      },
+      {
+        text: 'Photo',
+        onPress: () =>
+          launchImageLibrary(
+            { mediaType: 'photo', selectionLimit: 4, quality: 0.92 },
+            res => {
+              if (res.didCancel || res.errorCode) {
+                if (res.errorCode) Alert.alert('Error', res.errorMessage || 'Failed to pick photo');
+                return;
+              }
+              appendClipsFromAssets(res.assets, 'photo');
+            },
+          ),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const moveSelectedClip = dir => {
+    setClips(prev => {
+      const i = selectedClipIndex;
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      const tmp = next[i];
+      next[i] = next[j];
+      next[j] = tmp;
+      setSelectedClipIndex(j);
+      return next;
+    });
+  };
+
+  const removeSelectedClip = () => {
+    if (clips.length <= 1) {
+      Alert.alert('Clips', 'Keep at least one clip.');
+      return;
+    }
+    setClips(prev => {
+      const next = prev.filter((_, i) => i !== selectedClipIndex);
+      setSelectedClipIndex(Math.max(0, Math.min(selectedClipIndex, next.length - 1)));
+      return next;
+    });
+  };
+
+  const pickVideo = addClip;
 
   /** Cap preview height so timeline + toolbar stay on screen (tall 9:16 was collapsing the ScrollView). */
   const maxPreviewH = Math.max(200, Math.min(SCREEN_H * 0.36, SCREEN_H - 320));
@@ -873,20 +1063,28 @@ const EditReelScreen = () => {
           {videoUri ? (
             <>
               <Video
+                key={selectedClip?.id || videoUri}
                 ref={videoRef}
                 source={{ uri: videoUri }}
                 style={styles.mainVideo}
                 resizeMode="cover"
-                repeat={!trimLoopActive}
+                repeat={clips.length <= 1 && !trimLoopActive}
                 muted={previewMuteOriginal || Number(originalVolume) <= 0}
                 volume={Math.max(0, Math.min(2, Number(originalVolume) || 0))}
                 paused={!playing || !isFocused}
                 rate={Number(speedFactor) || 1}
                 progressUpdateInterval={120}
+                onEnd={() => {
+                  if (clips.length > 1) goToNextClip();
+                }}
                 onProgress={p => {
                   if (isScrubbing) return;
                   const t = Number(p?.currentTime || 0);
                   if (!Number.isFinite(t)) return;
+                  if (clips.length > 1 && t >= trimEndSec - 0.12) {
+                    goToNextClip();
+                    return;
+                  }
                   if (trimLoopActive && t >= trimEndSec - 0.1) {
                     seekVideo(trimStartSec);
                     setPreviewSec(trimStartSec);
@@ -922,13 +1120,30 @@ const EditReelScreen = () => {
               ) : null}
             </>
           ) : (
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=600',
-              }}
-              style={styles.mainVideo}
-              resizeMode="cover"
-            />
+            <>
+              <Image
+                source={{
+                  uri:
+                    photoUri ||
+                    'https://images.unsplash.com/photo-1547584370-2cc98b8b8dc8?q=80&w=600',
+                }}
+                style={styles.mainVideo}
+                resizeMode="cover"
+              />
+              {selectedSoundUrl && Number(musicVolume) > 0 ? (
+                <Video
+                  ref={musicRef}
+                  source={{ uri: selectedSoundUrl }}
+                  style={styles.hiddenAudioTrack}
+                  audioOnly
+                  repeat
+                  paused={!playing || !isFocused}
+                  volume={Math.max(0, Math.min(2, Number(musicVolume) || 0))}
+                  muted={false}
+                  ignoreSilentSwitch="ignore"
+                />
+              ) : null}
+            </>
           )}
           {filterOverlay ? (
             <View
@@ -954,15 +1169,12 @@ const EditReelScreen = () => {
               ]}
             />
           ) : null}
-          <View style={styles.playOverlay} pointerEvents="box-none">
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setPlaying(p => !p)}
-              style={styles.pauseCircle}
-            >
-              <Icon name={playing ? 'pause' : 'play'} color="#222" size={28} />
-            </TouchableOpacity>
-          </View>
+          <EatwazeWatermark />
+          <MediaPlayTapOverlay
+            playing={playing && isFocused}
+            onToggle={() => setPlaying(p => !p)}
+            visible={controlsVisible || !(playing && isFocused)}
+          />
           <View style={styles.audioToggleColumn} pointerEvents="box-none">
             <TouchableOpacity
               style={styles.audioTogglePill}
@@ -1084,11 +1296,41 @@ const EditReelScreen = () => {
               ]}
             />
           </View>
-          <TouchableOpacity style={styles.addButton} onPress={pickVideo}>
+          <TouchableOpacity style={styles.addButton} onPress={addClip}>
             <Icon name="plus" color="white" size={12} />
             <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.clipStrip}
+        >
+          {clips.map((clip, idx) => {
+            const active = idx === selectedClipIndex;
+            return (
+              <TouchableOpacity
+                key={clip.id}
+                style={[styles.clipChip, active && styles.clipChipOn]}
+                onPress={() => setSelectedClipIndex(idx)}
+                activeOpacity={0.85}
+              >
+                <Image source={{ uri: clip.uri }} style={styles.clipChipImg} />
+                <Text style={styles.clipChipLabel}>
+                  {clip.type === 'photo' ? 'Photo' : 'Clip'} {idx + 1}
+                </Text>
+                <Text style={styles.clipChipTime}>
+                  {clipPlayDuration(clip).toFixed(1)}s
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+        {clips.length > 1 ? (
+          <Text style={styles.clipJoinHint}>
+            {clips.length} clips join into 1 video on publish · CapCut style
+          </Text>
+        ) : null}
         <View style={styles.filmstripSection}>
           <View
             style={styles.filmstripTrack}
@@ -1218,6 +1460,14 @@ const EditReelScreen = () => {
 
         <View style={styles.toolbar}>
           <ToolbarItem
+            iconName="animation-play-outline"
+            label="Clips"
+            active={activePanel === 'clips'}
+            onPress={() =>
+              setActivePanel(activePanel === 'clips' ? null : 'clips')
+            }
+          />
+          <ToolbarItem
             iconName="magic-staff"
             label="Quality"
             active={activePanel === 'quality'}
@@ -1260,17 +1510,24 @@ const EditReelScreen = () => {
         <View style={styles.footer}>
           <TouchableOpacity
             style={styles.nextButton}
-            onPress={() =>
+            onPress={() => {
+              const joining = clips.length > 1;
+              const timelineDur = totalTimelineDuration(clips);
               navigation.navigate('PostCaptionNew', {
                 draft: {
                   ...draft,
+                  clips,
+                  mediaKind: mediaKindFromClips(clips),
+                  video: primaryVideoFromClips(clips) || draft.video,
+                  thumbnail:
+                    draft.thumbnail || thumbnailFromClips(clips, draft.thumbnail),
                   edits: {
                     ...draft.edits,
                     selectedSound,
                     selectedFilter,
-                    speedFactor,
-                    trimStartSec,
-                    trimEndSec,
+                    speedFactor: joining ? 1 : speedFactor,
+                    trimStartSec: joining ? 0 : trimStartSec,
+                    trimEndSec: joining ? timelineDur : trimEndSec,
                     overlayText: overlayText.trim(),
                     overlayTextSize: Math.round(overlayTextSize),
                     overlayTextColor,
@@ -1282,7 +1539,7 @@ const EditReelScreen = () => {
                     originalVolume,
                     musicVolume,
                     previewMuteOriginal,
-                    splitPoints,
+                    splitPoints: joining ? [] : splitPoints,
                     stylePresetId: selectedStylePreset,
                     exportQuality: { preset: exportResolution, fps: exportFps },
                     transitionId,
@@ -1290,8 +1547,8 @@ const EditReelScreen = () => {
                     beautyLevel: Math.round(Number(beautyLevel) || 0),
                   },
                 },
-              })
-            }
+              });
+            }}
           >
             <Text style={styles.nextButtonText}>Next</Text>
             <Icon name="arrow-right" color="white" size={20} />
@@ -1319,6 +1576,7 @@ const EditReelScreen = () => {
               <View style={styles.panelHeaderRow}>
                 <Text style={styles.panelTitle}>
                   {activePanel === 'quality' && 'Quality'}
+                  {activePanel === 'clips' && 'Adjust clip'}
                   {activePanel === 'audio' && 'Audio & speed'}
                   {activePanel === 'text' && 'Text & captions'}
                 </Text>
@@ -1334,6 +1592,79 @@ const EditReelScreen = () => {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
+                {activePanel === 'clips' ? (
+                  <View>
+                    <Text style={styles.panelSectionLabel}>
+                      Clip {selectedClipIndex + 1} of {clips.length} ·{' '}
+                      {selectedClip?.type === 'photo' ? 'Photo' : 'Video'}
+                    </Text>
+                    <View style={styles.chipRow}>
+                      <TouchableOpacity
+                        style={styles.optChip}
+                        onPress={() => moveSelectedClip(-1)}
+                      >
+                        <Text style={styles.optChipText}>Move left</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.optChip}
+                        onPress={() => moveSelectedClip(1)}
+                      >
+                        <Text style={styles.optChipText}>Move right</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.optChip} onPress={addClip}>
+                        <Text style={styles.optChipText}>Add clip</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.optChip}
+                        onPress={removeSelectedClip}
+                      >
+                        <Text style={styles.optChipText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {selectedClip?.type === 'photo' ? (
+                      <>
+                        <Text style={styles.sliderLabel}>
+                          Photo length: {clipPlayDuration(selectedClip).toFixed(1)}s
+                        </Text>
+                        <Slider
+                          value={Number(selectedClip.durationSec || 3)}
+                          minimumValue={1}
+                          maximumValue={PHOTO_MAX_SEC}
+                          step={0.5}
+                          onValueChange={val => {
+                            setClips(prev => {
+                              const next = [...prev];
+                              const cur = next[selectedClipIndex];
+                              if (!cur) return prev;
+                              next[selectedClipIndex] = {
+                                ...cur,
+                                durationSec: val,
+                                trimStartSec: 0,
+                                trimEndSec: val,
+                              };
+                              return next;
+                            });
+                            setTrimStartSec(0);
+                            setTrimEndSec(val);
+                          }}
+                          minimumTrackTintColor="#F5A623"
+                          maximumTrackTintColor="#555"
+                          thumbTintColor="#fff"
+                        />
+                      </>
+                    ) : (
+                      <Text style={styles.panelHint}>
+                        Drag the orange handles to trim this clip. Split cuts it
+                        into two clips at the playhead.
+                      </Text>
+                    )}
+                    <Text style={styles.panelHint}>
+                      Total timeline: {totalTimelineDuration(clips).toFixed(1)}s ·
+                      Eatwaze logo is added on publish.
+                    </Text>
+                  </View>
+                ) : null}
+
                 {activePanel === 'quality' ? (
                   <View>
                     <Text style={styles.panelSectionLabel}>Export resolution</Text>
@@ -2232,6 +2563,50 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   addButtonText: { color: 'white', fontSize: 10, marginLeft: 4 },
+  clipStrip: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    alignItems: 'center',
+  },
+  clipChip: {
+    width: 72,
+    marginRight: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#333',
+    backgroundColor: '#1a1a1a',
+  },
+  clipChipOn: {
+    borderColor: '#F5A623',
+  },
+  clipChipImg: {
+    width: '100%',
+    height: 88,
+    backgroundColor: '#111',
+  },
+  clipChipLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+    paddingTop: 4,
+  },
+  clipChipTime: {
+    color: '#F5A623',
+    fontSize: 10,
+    paddingHorizontal: 4,
+    paddingBottom: 6,
+  },
+  clipJoinHint: {
+    color: '#F5A623',
+    fontSize: 11,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 2,
+  },
   sliderWrap: {
     marginTop: 8,
     paddingHorizontal: 20,
@@ -2263,6 +2638,7 @@ const styles = StyleSheet.create({
     right: 10,
     top: 10,
     alignItems: 'flex-end',
+    zIndex: 12,
   },
   audioTogglePill: {
     flexDirection: 'row',
