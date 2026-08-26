@@ -9,6 +9,8 @@ import {
   ScrollView,
   Dimensions,
   ActivityIndicator,
+  InteractionManager,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -31,6 +33,14 @@ import {
 import EatwazeWatermark from '../../components/EatwazeWatermark';
 
 const { width } = Dimensions.get('window');
+
+/** Android crashes if the gallery opens while an Alert is still dismissing. */
+const waitForUiIdle = (ms = Platform.OS === 'android' ? 550 : 250) =>
+  new Promise(resolve => {
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(resolve, ms);
+    });
+  });
 
 const firstNonEmpty = (...vals) => {
   for (let i = 0; i < vals.length; i += 1) {
@@ -154,6 +164,9 @@ const CreateReelScreen = () => {
           .then(thumb => {
             if (thumb) setThumbnailAsset(thumb);
           })
+          .catch(err => {
+            console.warn('thumbnailFromVideoFrame failed', err);
+          })
           .finally(() => setThumbLoading(false));
       } else if (!thumbnailAsset?.uri) {
         setThumbnailAsset(thumbnailFromClips(next, thumbnailAsset));
@@ -210,55 +223,60 @@ const CreateReelScreen = () => {
     );
   };
 
-  const pickJoinVideos = async () => {
+  const pickJoinVideos = () => {
     const room = Math.max(0, MAX_CLIPS - clips.length);
     if (room <= 0) {
       Alert.alert('Clip limit', `You can add up to ${MAX_CLIPS} clips.`);
       return;
     }
-    const assets = [];
-    if (clips.length === 0) {
-      const first = await pickOneVideo();
-      if (!first?.uri) return;
-      assets.push(first);
-    }
-    const nextLabel = clips.length + assets.length + 1;
-    const wantNext = await confirmJoinStep(
-      'Join videos',
-      clips.length + assets.length === 0
-        ? 'Add a 2nd video. Eatwaze stitches them into one reel, like CapCut.'
-        : `Add video ${nextLabel} to join into one reel, like CapCut.`,
-      `Add video ${nextLabel}`,
-      clips.length + assets.length >= 2 ? 'Join these' : 'Just this one',
-    );
-    if (wantNext) {
-      await new Promise(r => setTimeout(r, 350));
-      const next = await pickOneVideo();
-      if (next?.uri) assets.push(next);
-    }
-    const totalAfter = clips.length + assets.length;
-    if (totalAfter >= 2 && assets.length < room && totalAfter < 3) {
-      const wantThird = await confirmJoinStep(
-        'Join videos',
-        'Add a 3rd video, or continue — they export as one video.',
-        'Add 3rd video',
-        'Join these',
-      );
-      if (wantThird) {
-        await new Promise(r => setTimeout(r, 350));
-        const third = await pickOneVideo();
-        if (third?.uri) assets.push(third);
+    // Single gallery open (multi-select). Avoids Alert→picker chains that crash
+    // on first install / first permission grant on Android.
+    const limit = Math.min(3, Math.max(1, room));
+    waitForUiIdle(Platform.OS === 'android' ? 200 : 50).then(() => {
+      try {
+        launchImageLibrary(
+          {
+            mediaType: 'video',
+            selectionLimit: limit,
+            videoMaxDuration: 180,
+            quality: 1,
+          },
+          res => {
+            if (res?.didCancel) return;
+            if (res?.errorCode) {
+              Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+              return;
+            }
+            const picked = (Array.isArray(res?.assets) ? res.assets : []).filter(
+              a => a?.uri,
+            );
+            if (!picked.length) return;
+            try {
+              appendPickerAssets(picked, 'video');
+            } catch (e) {
+              console.warn('appendPickerAssets failed', e);
+              Alert.alert('Error', 'Could not add videos. Please try again.');
+              return;
+            }
+            const total = clips.length + picked.length;
+            if (total >= 2 || picked.length >= 2) {
+              setTimeout(() => {
+                Alert.alert(
+                  'Joined into one video',
+                  `${Math.min(MAX_CLIPS, total)} videos will play in order as one reel. Publish exports a single 9:16 video.`,
+                );
+              }, 400);
+            }
+          },
+        );
+      } catch (e) {
+        console.warn('pickJoinVideos launch failed', e);
+        Alert.alert(
+          'Could not open gallery',
+          'Please try again, or use Video to add clips one at a time.',
+        );
       }
-    }
-    if (!assets.length) return;
-    appendPickerAssets(assets, 'video');
-    const joined = clips.length + assets.length;
-    if (joined >= 2) {
-      Alert.alert(
-        'Joined into one video',
-        `${joined} videos will play in order as one reel. Publish exports a single 9:16 video.`,
-      );
-    }
+    });
   };
 
   const pickPhoto = () => {

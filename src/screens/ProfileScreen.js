@@ -325,6 +325,11 @@ const ProfileScreen = () => {
             onPress={() => navigation.navigate('SubscriptionScreen')}
           />
           <MenuItem
+            iconName="image-off-outline"
+            title="No-logo uploads"
+            onPress={() => navigation.navigate('NoLogoCreditsScreen')}
+          />
+          <MenuItem
             iconName="play-circle-outline"
             title="Your Channel"
             onPress={() =>

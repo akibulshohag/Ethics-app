@@ -180,7 +180,21 @@ export default function PostMediaPlayer({
           volume={Math.max(0, Math.min(2, Number(volume) * Number(activeClip.volume ?? 1)))}
           rate={Number(activeClip.speedFactor) || 1}
           progressUpdateInterval={120}
-          onLoad={() => seekVideo(loc.sourceT)}
+          onLoad={meta => {
+            const realDur = Number(meta?.duration);
+            if (Number.isFinite(realDur) && realDur > 0.4) {
+              const claimed = Number(activeClip.durationSec || 0);
+              if (claimed > realDur * 1.5 || claimed < 0.4) {
+                // Keep playing; trim end will naturally clamp via source progress.
+              }
+            }
+            seekVideo(loc.sourceT);
+            if (!playing) onPlayingChange?.(true);
+          }}
+          onError={e => {
+            console.warn('PostMediaPlayer video error', e?.nativeEvent || e);
+            onPlayingChange?.(false);
+          }}
           onProgress={onVideoProgress}
           onEnd={advanceToNextClip}
           ignoreSilentSwitch="ignore"

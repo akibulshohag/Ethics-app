@@ -14,6 +14,8 @@ import {
   Modal,
   Pressable,
   Switch,
+  InteractionManager,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
@@ -50,6 +52,14 @@ import {
 } from '../../utils/postClips';
 
 const { width, height: SCREEN_H } = Dimensions.get('window');
+
+const waitForUiIdle = (ms = Platform.OS === 'android' ? 550 : 250) =>
+  new Promise(resolve => {
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(resolve, ms);
+    });
+  });
+
 const EDIT_DRAFT_STORAGE_KEY = 'reel-editor-draft-v2';
 const EDIT_DRAFT_LIST_KEY = 'reel-editor-draft-list-v1';
 const EDIT_DRAFT_ITEM_PREFIX = 'reel-editor-draft-item-v1:';
@@ -925,38 +935,55 @@ const EditReelScreen = () => {
     Alert.alert('Add clip', 'Choose media to add on the timeline', [
       {
         text: 'Video',
-        onPress: () =>
-          launchImageLibrary(
-            { mediaType: 'video', selectionLimit: 4, videoMaxDuration: 180, quality: 1 },
-            res => {
-              if (res.didCancel || res.errorCode) {
-                if (res.errorCode) Alert.alert('Error', res.errorMessage || 'Failed to pick video');
-                return;
-              }
-              appendClipsFromAssets(res.assets, 'video');
-              const n = (res.assets || []).filter(a => a?.uri).length;
-              if (n >= 2) {
-                Alert.alert(
-                  'Joined into one video',
-                  `${n} videos will play as one reel. Publish exports a single video.`,
-                );
-              }
-            },
-          ),
+        onPress: () => {
+          waitForUiIdle().then(() => {
+            launchImageLibrary(
+              {
+                mediaType: 'video',
+                selectionLimit: 4,
+                videoMaxDuration: 180,
+                quality: 1,
+              },
+              res => {
+                if (res.didCancel || res.errorCode) {
+                  if (res.errorCode) {
+                    Alert.alert('Error', res.errorMessage || 'Failed to pick video');
+                  }
+                  return;
+                }
+                appendClipsFromAssets(res.assets, 'video');
+                const n = (res.assets || []).filter(a => a?.uri).length;
+                if (n >= 2) {
+                  waitForUiIdle(200).then(() => {
+                    Alert.alert(
+                      'Joined into one video',
+                      `${n} videos will play as one reel. Publish exports a single video.`,
+                    );
+                  });
+                }
+              },
+            );
+          });
+        },
       },
       {
         text: 'Photo',
-        onPress: () =>
-          launchImageLibrary(
-            { mediaType: 'photo', selectionLimit: 4, quality: 0.92 },
-            res => {
-              if (res.didCancel || res.errorCode) {
-                if (res.errorCode) Alert.alert('Error', res.errorMessage || 'Failed to pick photo');
-                return;
-              }
-              appendClipsFromAssets(res.assets, 'photo');
-            },
-          ),
+        onPress: () => {
+          waitForUiIdle().then(() => {
+            launchImageLibrary(
+              { mediaType: 'photo', selectionLimit: 4, quality: 0.92 },
+              res => {
+                if (res.didCancel || res.errorCode) {
+                  if (res.errorCode) {
+                    Alert.alert('Error', res.errorMessage || 'Failed to pick photo');
+                  }
+                  return;
+                }
+                appendClipsFromAssets(res.assets, 'photo');
+              },
+            );
+          });
+        },
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
@@ -1074,6 +1101,42 @@ const EditReelScreen = () => {
                 paused={!playing || !isFocused}
                 rate={Number(speedFactor) || 1}
                 progressUpdateInterval={120}
+                onLoad={meta => {
+                  const realDur = Number(meta?.duration);
+                  if (Number.isFinite(realDur) && realDur > 0.4) {
+                    setClips(prev => {
+                      const i = selectedClipIndex;
+                      const cur = prev[i];
+                      if (!cur || cur.type !== 'video') return prev;
+                      const prevDur = Number(cur.durationSec || 0);
+                      // Fix bad picker durations (ms) so trim/end don't blank the preview.
+                      if (prevDur > realDur * 1.5 || prevDur < 0.4) {
+                        const next = [...prev];
+                        next[i] = {
+                          ...cur,
+                          durationSec: realDur,
+                          trimEndSec: Math.min(
+                            Number(cur.trimEndSec || realDur),
+                            realDur,
+                          ),
+                        };
+                        return next;
+                      }
+                      return prev;
+                    });
+                    setTrimEndSec(prev =>
+                      !prev || prev > realDur + 0.05 ? realDur : prev,
+                    );
+                  }
+                  const start = Math.max(0, Number(trimStartRef.current || 0));
+                  seekVideo(start);
+                  setPreviewSec(start);
+                  setPlaying(true);
+                }}
+                onError={e => {
+                  console.warn('PostEditNew video error', e?.nativeEvent || e);
+                  setPlaying(false);
+                }}
                 onEnd={() => {
                   if (clips.length > 1) goToNextClip();
                 }}
@@ -1081,11 +1144,15 @@ const EditReelScreen = () => {
                   if (isScrubbing) return;
                   const t = Number(p?.currentTime || 0);
                   if (!Number.isFinite(t)) return;
-                  if (clips.length > 1 && t >= trimEndSec - 0.12) {
+                  const end = Math.max(
+                    trimStartSec + 0.2,
+                    Number(trimEndSec) || durationSec,
+                  );
+                  if (clips.length > 1 && t >= end - 0.12) {
                     goToNextClip();
                     return;
                   }
-                  if (trimLoopActive && t >= trimEndSec - 0.1) {
+                  if (trimLoopActive && t >= end - 0.1) {
                     seekVideo(trimStartSec);
                     setPreviewSec(trimStartSec);
                     return;

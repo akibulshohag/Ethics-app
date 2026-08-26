@@ -19,6 +19,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { shortsService } from '../../services/shortsService';
+import { noLogoCreditsService } from '../../services/noLogoCreditsService';
 import { getSocialAccounts } from '../../services/postService';
 import { normalizeAnchor } from '../../constants/overlayTextAnchor';
 import { resolveReelUploadFilterId } from '../../constants/reelStylePresets';
@@ -214,6 +215,10 @@ const ScheduleScreen = () => {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadStage, setUploadStage] = useState('');
+  const [withLogo, setWithLogo] = useState(
+    draft?.withLogo !== false && draft?.edits?.withLogo !== false,
+  );
+  const [noLogoCredits, setNoLogoCredits] = useState(0);
   const [hasPlatformPrefill, setHasPlatformPrefill] = useState(false);
   const [prefilledFromDraft, setPrefilledFromDraft] = useState(false);
   const [prefilledFromBackend, setPrefilledFromBackend] = useState(false);
@@ -450,6 +455,26 @@ const ScheduleScreen = () => {
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadCredits = async () => {
+      if (!user?.token) {
+        setNoLogoCredits(0);
+        return;
+      }
+      try {
+        const bal = await noLogoCreditsService.getBalance(user.token);
+        if (!cancelled) setNoLogoCredits(Number(bal?.credits || 0));
+      } catch {
+        if (!cancelled) setNoLogoCredits(0);
+      }
+    };
+    loadCredits();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.token, uploading]);
+
   const accountByPlatform = useMemo(() => {
     const out = Object.create(null);
     for (const row of socialAccounts) {
@@ -513,6 +538,24 @@ const ScheduleScreen = () => {
   });
 
   const onPublish = async () => {
+    if (!withLogo && noLogoCredits < 1) {
+      Alert.alert(
+        'No-logo credits needed',
+        'Uploading without the Eatwaze logo uses 1 credit. Buy a pack (10 / 20 / 30) or publish with logo for free.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Buy packs',
+            onPress: () => navigation.navigate('NoLogoCreditsScreen'),
+          },
+          {
+            text: 'Use logo (free)',
+            onPress: () => setWithLogo(true),
+          },
+        ],
+      );
+      return;
+    }
     if (uploading) return;
     if (!user?.id) {
       Alert.alert('Login required', 'Please log in first.');
@@ -584,7 +627,7 @@ const ScheduleScreen = () => {
           name: draftSource.thumbnail.name || 'thumb.jpg',
         });
       }
-      formData.append('watermark', 'true');
+      formData.append('watermark', withLogo ? 'true' : 'false');
       formData.append('userId', String(user.id));
       formData.append('title', (draft.caption || 'Untitled Reel').trim());
       formData.append('description', (draft.caption || '').trim());
@@ -1076,6 +1119,55 @@ const ScheduleScreen = () => {
           </View>
 
           <View style={styles.card}>
+            <Text style={styles.cardTitle}>Eatwaze logo</Text>
+            <View style={styles.logoRow}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.platformName}>
+                  {withLogo ? 'With logo (free)' : 'Without logo (1 credit)'}
+                </Text>
+                <Text style={styles.platformAccount}>
+                  {withLogo
+                    ? 'Logo is burned into the center of your upload'
+                    : `Credits left: ${noLogoCredits}. Buy packs if you need more.`}
+                </Text>
+              </View>
+              <Switch
+                trackColor={{ false: '#EEE', true: '#F5A623' }}
+                thumbColor="white"
+                value={withLogo}
+                onValueChange={val => {
+                  if (!val && noLogoCredits < 1) {
+                    Alert.alert(
+                      'Buy no-logo credits',
+                      '10 uploads £2 · 20 uploads £3.50 · 30 uploads £5',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'View packs',
+                          onPress: () =>
+                            navigation.navigate('NoLogoCreditsScreen'),
+                        },
+                      ],
+                    );
+                    return;
+                  }
+                  setWithLogo(val);
+                }}
+              />
+            </View>
+            {!withLogo ? (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('NoLogoCreditsScreen')}
+                style={{ marginTop: 8 }}
+              >
+                <Text style={{ color: '#F5A623', fontWeight: '600' }}>
+                  Buy no-logo packs →
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Auto-Post Platforms</Text>
               <View style={styles.badge}>
@@ -1357,6 +1449,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginVertical: 8,
+  },
+  logoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
   },
   platformInfo: { flexDirection: 'row', alignItems: 'center' },
   platformIcon: { width: 24, height: 24, borderRadius: 6, marginRight: 12 },

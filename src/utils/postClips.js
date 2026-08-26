@@ -7,6 +7,14 @@ export const makeClipId = () =>
 
 const isImageMime = mime => String(mime || '').toLowerCase().startsWith('image/');
 
+/** Image picker sometimes returns duration in ms on Android. */
+export function normalizePickerDurationSec(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 3;
+  if (n > 1000) return Math.max(0.5, n / 1000);
+  return Math.max(0.5, n);
+}
+
 export function clipFromPickerAsset(asset, kind) {
   const isPhoto =
     kind === 'photo' ||
@@ -14,7 +22,7 @@ export function clipFromPickerAsset(asset, kind) {
     isImageMime(asset?.mime);
   const durationSec = isPhoto
     ? PHOTO_DEFAULT_SEC
-    : Math.max(0.5, Number(asset?.duration ?? asset?.durationSec) || 3);
+    : normalizePickerDurationSec(asset?.duration ?? asset?.durationSec);
   return {
     id: makeClipId(),
     type: isPhoto ? 'photo' : 'video',
@@ -33,7 +41,9 @@ export function clipFromPickerAsset(asset, kind) {
 
 export function clipFromVideoAsset(video) {
   if (!video?.uri) return null;
-  const durationSec = Math.max(0.5, Number(video.durationSec || video.duration) || 3);
+  const durationSec = normalizePickerDurationSec(
+    video.durationSec ?? video.duration,
+  );
   return {
     id: makeClipId(),
     type: 'video',

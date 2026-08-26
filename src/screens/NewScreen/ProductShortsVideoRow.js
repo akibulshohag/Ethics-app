@@ -19,8 +19,6 @@ import { subscribeToChannel, getChannelProfile } from '../../services/channelSer
 import { setShortsMuted } from '../../redux/actions/appSlice';
 import { safeImageUri } from '../../utils/helper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import EatwazeWatermark from '../../components/EatwazeWatermark';
-
 const formatShortsTime = sec => {
   const s = Math.floor(Number(sec) || 0);
   if (!Number.isFinite(s) || s < 0) return '0:00';
@@ -292,12 +290,6 @@ function ProductShortsVideoRow({
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
       )}
-
-      <EatwazeWatermark
-        size={72}
-        top={(insets?.top || 0) + 52}
-        right={12}
-      />
 
       <View
         style={[

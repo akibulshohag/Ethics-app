@@ -4,6 +4,7 @@ import LibraryScreen from '../screens/LibraryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import AccountScreen from '../screens/AccountScreen';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
+import NoLogoCreditsScreen from '../screens/NoLogoCreditsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import GeneralSettingsScreen from '../screens/GeneralSettingsScreen';
 import DataSavingScreen from '../screens/DataSavingScreen';
@@ -31,6 +32,10 @@ const ProfileNavigation = () => {
       <ProfileStack.Screen
         name="SubscriptionScreen"
         component={SubscriptionScreen}
+      />
+      <ProfileStack.Screen
+        name="NoLogoCreditsScreen"
+        component={NoLogoCreditsScreen}
       />
 
       <ProfileStack.Screen name="SettingsScreen" component={SettingsScreen} />

@@ -52,8 +52,6 @@ import { buildContentShareMessage } from '../utils/contentLinks';
 import { setShortsMuted } from '../redux/actions/appSlice';
 import { listMySubscribersWhoOrderedFromOwner } from '../services/orderService';
 import { normalizeShortVideoUrl } from '../utils/normalizeShortVideoUrl';
-import EatwazeWatermark from '../components/EatwazeWatermark';
-
 const { width, height: windowHeight } = Dimensions.get('window');
 
 const formatCount = n => {
@@ -357,12 +355,6 @@ const VideoItem = ({
           <Text style={styles.videoPlaceholderText}>No video</Text>
         </View>
       )}
-
-      <EatwazeWatermark
-        size={72}
-        top={(insets?.top || 0) + 52}
-        right={12}
-      />
 
       {!!videoError && hasValidVideo && shouldRenderVideo && (
         <View style={styles.videoErrorOverlay} pointerEvents="box-none">

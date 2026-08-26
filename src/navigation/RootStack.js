@@ -31,6 +31,7 @@ import PostEditNew from '../screens/reelsNewScreen/PostEditNew';
 import PostCaptionNew from '../screens/reelsNewScreen/PostCaptionNew';
 import PostPreviewNew from '../screens/reelsNewScreen/PostPreviewNew';
 import PostScheduleNew from '../screens/reelsNewScreen/PostScheduleNew';
+import NoLogoCreditsScreen from '../screens/NoLogoCreditsScreen';
 import PrinterSettingsScreen from '../screens/PrinterSettingsScreen';
 import PhoneAuthScreen from '../screens/PhoneAuthScreen';
 
@@ -95,6 +96,7 @@ const RootStack = () => {
       <Root.Screen name="PostCaptionNew" component={PostCaptionNew} />
       <Root.Screen name="PostPreviewNew" component={PostPreviewNew} />
       <Root.Screen name="PostScheduleNew" component={PostScheduleNew} />
+      <Root.Screen name="NoLogoCreditsScreen" component={NoLogoCreditsScreen} />
     </Root.Navigator>
   );
 };
